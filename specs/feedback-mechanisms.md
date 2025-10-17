@@ -29,6 +29,10 @@ AI agents (Claude Code, Cursor, etc.) analyze specs during implementation and pr
 - Test coverage validation
 - Documentation completeness
 
+**Informational Feedback**
+- High-level implementation descriptions
+- Supplementary information that is relevant to a user monitoring a spec
+
 #### Storage Model
 
 Feedback is stored as structured comments in a dedicated section:

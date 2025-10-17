@@ -84,6 +84,54 @@ export type EventType =
   | 'tag_removed';
 
 /**
+ * Issue-based spec feedback types
+ */
+
+export interface IssueFeedback {
+  id: string;
+  issue_id: string;
+  spec_id: string;
+  feedback_type: FeedbackType;
+  content: string;
+  agent: string;
+  anchor: string; // JSON-serialized FeedbackAnchor
+  status: FeedbackStatus;
+  created_at: string;
+  updated_at: string;
+  resolution: string | null;
+}
+
+export interface FeedbackAnchor {
+  section_heading?: string;
+  section_level?: number;
+  line_number?: number;
+  line_offset?: number;
+  text_snippet?: string;
+  context_before?: string;
+  context_after?: string;
+  content_hash?: string;
+  anchor_status: 'valid' | 'relocated' | 'stale';
+  last_verified_at?: string;
+  original_location?: {
+    line_number: number;
+    section_heading?: string;
+  };
+}
+
+export type FeedbackType =
+  | 'ambiguity'
+  | 'missing_requirement'
+  | 'technical_constraint'
+  | 'suggestion'
+  | 'question';
+
+export type FeedbackStatus =
+  | 'open'
+  | 'acknowledged'
+  | 'resolved'
+  | 'wont_fix';
+
+/**
  * JSONL format types
  */
 
@@ -95,6 +143,17 @@ export interface SpecJSONL extends Spec {
 export interface IssueJSONL extends Issue {
   relationships: RelationshipJSONL[];
   tags: string[];
+  feedback?: FeedbackJSONL[];
+}
+
+export interface FeedbackJSONL {
+  id: string;
+  spec_id: string;
+  type: FeedbackType;
+  content: string;
+  anchor: FeedbackAnchor;
+  status: FeedbackStatus;
+  created_at: string;
 }
 
 export interface RelationshipJSONL {

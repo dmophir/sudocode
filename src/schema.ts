@@ -103,6 +103,24 @@ CREATE TABLE IF NOT EXISTS events (
 );
 `;
 
+export const ISSUE_FEEDBACK_TABLE = `
+CREATE TABLE IF NOT EXISTS issue_feedback (
+    id TEXT PRIMARY KEY,
+    issue_id TEXT NOT NULL,
+    spec_id TEXT NOT NULL,
+    feedback_type TEXT NOT NULL CHECK(feedback_type IN ('ambiguity', 'missing_requirement', 'technical_constraint', 'suggestion', 'question')),
+    content TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    anchor TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'acknowledged', 'resolved', 'wont_fix')),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolution TEXT,
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (spec_id) REFERENCES specs(id) ON DELETE CASCADE
+);
+`;
+
 /**
  * Index definitions
  */
@@ -145,6 +163,14 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_actor ON events(actor);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
 CREATE INDEX IF NOT EXISTS idx_events_git_commit ON events(git_commit_sha);
+`;
+
+export const ISSUE_FEEDBACK_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_feedback_issue ON issue_feedback(issue_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_spec ON issue_feedback(spec_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON issue_feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_type ON issue_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON issue_feedback(created_at);
 `;
 
 /**
@@ -205,6 +231,7 @@ export const ALL_TABLES = [
   RELATIONSHIPS_TABLE,
   TAGS_TABLE,
   EVENTS_TABLE,
+  ISSUE_FEEDBACK_TABLE,
 ];
 
 export const ALL_INDEXES = [
@@ -213,6 +240,7 @@ export const ALL_INDEXES = [
   RELATIONSHIPS_INDEXES,
   TAGS_INDEXES,
   EVENTS_INDEXES,
+  ISSUE_FEEDBACK_INDEXES,
 ];
 
 export const ALL_VIEWS = [
