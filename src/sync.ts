@@ -89,8 +89,6 @@ export async function syncMarkdownToJSONL(
     if (autoExport) {
       await exportToJSONL(db, {
         outputDir,
-        includeSpecs: entityType === 'spec',
-        includeIssues: entityType === 'issue',
       });
     }
 

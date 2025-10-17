@@ -5,7 +5,7 @@
 import matter from 'gray-matter';
 import * as fs from 'fs';
 
-export interface ParsedMarkdown<T = Record<string, any>> {
+export interface ParsedMarkdown<T extends object = Record<string, any>> {
   /**
    * Parsed frontmatter data
    */
@@ -46,7 +46,7 @@ export interface CrossReference {
 /**
  * Parse markdown file with YAML frontmatter
  */
-export function parseMarkdown<T = Record<string, any>>(
+export function parseMarkdown<T extends object = Record<string, any>>(
   content: string
 ): ParsedMarkdown<T> {
   const parsed = matter(content);
@@ -65,7 +65,7 @@ export function parseMarkdown<T = Record<string, any>>(
 /**
  * Parse markdown file from disk
  */
-export function parseMarkdownFile<T = Record<string, any>>(
+export function parseMarkdownFile<T extends object = Record<string, any>>(
   filePath: string
 ): ParsedMarkdown<T> {
   const content = fs.readFileSync(filePath, 'utf8');
@@ -114,7 +114,7 @@ export function extractCrossReferences(content: string): CrossReference[] {
 /**
  * Stringify frontmatter and content back to markdown
  */
-export function stringifyMarkdown<T = Record<string, any>>(
+export function stringifyMarkdown<T extends object = Record<string, any>>(
   data: T,
   content: string
 ): string {
@@ -125,7 +125,7 @@ export function stringifyMarkdown<T = Record<string, any>>(
  * Update frontmatter in an existing markdown file
  * Preserves content unchanged
  */
-export function updateFrontmatter<T = Record<string, any>>(
+export function updateFrontmatter<T extends object = Record<string, any>>(
   originalContent: string,
   updates: Partial<T>
 ): string {
@@ -143,7 +143,7 @@ export function updateFrontmatter<T = Record<string, any>>(
 /**
  * Update frontmatter in a file
  */
-export function updateFrontmatterFile<T = Record<string, any>>(
+export function updateFrontmatterFile<T extends object = Record<string, any>>(
   filePath: string,
   updates: Partial<T>
 ): void {
@@ -162,7 +162,7 @@ export function hasFrontmatter(content: string): boolean {
 /**
  * Create markdown with frontmatter
  */
-export function createMarkdown<T = Record<string, any>>(
+export function createMarkdown<T extends object = Record<string, any>>(
   data: T,
   content: string
 ): string {
@@ -172,7 +172,7 @@ export function createMarkdown<T = Record<string, any>>(
 /**
  * Write markdown file with frontmatter
  */
-export function writeMarkdownFile<T = Record<string, any>>(
+export function writeMarkdownFile<T extends object = Record<string, any>>(
   filePath: string,
   data: T,
   content: string
@@ -192,7 +192,7 @@ export function removeFrontmatter(content: string): string {
 /**
  * Get only frontmatter data from markdown
  */
-export function getFrontmatter<T = Record<string, any>>(
+export function getFrontmatter<T extends object = Record<string, any>>(
   content: string
 ): T {
   const parsed = matter(content);

@@ -52,7 +52,7 @@ export interface Relationship {
 }
 
 export type EntityType = 'spec' | 'issue';
-export type RelationshipType = 'blocks' | 'related' | 'parent-child' | 'discovered-from' | 'implements';
+export type RelationshipType = 'blocks' | 'related' | 'parent-child' | 'discovered-from' | 'implements' | 'references' | 'depends-on';
 
 export interface Tag {
   entity_id: string;
