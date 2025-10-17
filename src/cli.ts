@@ -30,6 +30,16 @@ import { handleLink } from './cli/relationship-commands.js';
 import { handleReady, handleBlocked } from './cli/query-commands.js';
 import { handleSync, handleExport, handleImport } from './cli/sync-commands.js';
 import { handleStatus, handleStats } from './cli/status-commands.js';
+import {
+  handleFeedbackAdd,
+  handleFeedbackList,
+  handleFeedbackShow,
+  handleFeedbackAcknowledge,
+  handleFeedbackResolve,
+  handleFeedbackWontFix,
+  handleFeedbackStale,
+  handleFeedbackRelocate,
+} from './cli/feedback-commands.js';
 
 // CLI version
 const VERSION = '0.1.0';
@@ -344,6 +354,81 @@ program
   .description('Show detailed project statistics')
   .action(async (options) => {
     await handleStats(getContext(), options);
+  });
+
+// ============================================================================
+// FEEDBACK COMMANDS
+// ============================================================================
+
+const feedback = program.command('feedback').description('Manage spec feedback from issues');
+
+feedback
+  .command('add <issue-id> <spec-id>')
+  .description('Add feedback to a spec from an issue')
+  .option('-l, --line <number>', 'Line number in spec')
+  .option('-t, --text <text>', 'Text to search for anchor')
+  .option('--type <type>', 'Feedback type (ambiguity, missing_requirement, technical_constraint, etc.)', 'ambiguity')
+  .option('-c, --content <text>', 'Feedback content (required)')
+  .option('-a, --agent <name>', 'Agent name')
+  .action(async (issueId, specId, options) => {
+    await handleFeedbackAdd(getContext(), issueId, specId, options);
+  });
+
+feedback
+  .command('list')
+  .description('List all feedback')
+  .option('-i, --issue <id>', 'Filter by issue ID')
+  .option('-s, --spec <id>', 'Filter by spec ID')
+  .option('-t, --type <type>', 'Filter by feedback type')
+  .option('--status <status>', 'Filter by status (open, acknowledged, resolved, wont_fix)')
+  .option('--limit <num>', 'Limit results', '50')
+  .action(async (options) => {
+    await handleFeedbackList(getContext(), options);
+  });
+
+feedback
+  .command('show <id>')
+  .description('Show detailed feedback information')
+  .action(async (id) => {
+    await handleFeedbackShow(getContext(), id);
+  });
+
+feedback
+  .command('acknowledge <id>')
+  .description('Acknowledge feedback')
+  .action(async (id) => {
+    await handleFeedbackAcknowledge(getContext(), id);
+  });
+
+feedback
+  .command('resolve <id>')
+  .description('Mark feedback as resolved')
+  .option('-c, --comment <text>', 'Resolution comment')
+  .action(async (id, options) => {
+    await handleFeedbackResolve(getContext(), id, options);
+  });
+
+feedback
+  .command('wont-fix <id>')
+  .description('Mark feedback as won\'t fix')
+  .option('-r, --reason <text>', 'Reason for not fixing')
+  .action(async (id, options) => {
+    await handleFeedbackWontFix(getContext(), id, options);
+  });
+
+feedback
+  .command('stale')
+  .description('List all stale feedback anchors')
+  .action(async () => {
+    await handleFeedbackStale(getContext());
+  });
+
+feedback
+  .command('relocate <id>')
+  .description('Manually relocate a stale anchor')
+  .option('-l, --line <number>', 'New line number (required)')
+  .action(async (id, options) => {
+    await handleFeedbackRelocate(getContext(), id, options);
   });
 
 // ============================================================================
