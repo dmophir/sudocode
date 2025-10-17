@@ -1,0 +1,41 @@
+{
+  "name": "sudograph-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Sudograph spec and issue management",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "sudograph-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sudograph",
+    "project-management",
+    "specs",
+    "issues"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  }
+}

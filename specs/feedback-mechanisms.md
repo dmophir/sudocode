@@ -591,3 +591,10 @@ These feedback mechanisms should be tracked as implementation issues:
 - **Documentation generation:** Auto-generate docs from specs + artifacts
 - **Impact analysis:** Show which code will be affected by spec changes
 - **Stale artifact detection:** Find artifacts that no longer match their linked issues
+
+## User <-> Agent Feedback/Iterations
+
+After initial spec creation and implementation, it's possible for users to adjust existing specs.
+
+- Account for a user changing specs and capturing the spec diff
+- Allow for generating issues to account for changes to 
