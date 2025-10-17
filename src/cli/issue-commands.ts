@@ -8,6 +8,7 @@ import { generateIssueId } from '../id-generator.js';
 import { createIssue, getIssue, listIssues, updateIssue, closeIssue } from '../operations/issues.js';
 import { getOutgoingRelationships, getIncomingRelationships } from '../operations/relationships.js';
 import { getTags, setTags } from '../operations/tags.js';
+import { listFeedback } from '../operations/feedback.js';
 import { exportToJSONL } from '../export.js';
 
 export interface CommandContext {
@@ -147,9 +148,10 @@ export async function handleIssueShow(
     const outgoing = getOutgoingRelationships(ctx.db, id, 'issue');
     const incoming = getIncomingRelationships(ctx.db, id, 'issue');
     const tags = getTags(ctx.db, id, 'issue');
+    const feedback = listFeedback(ctx.db, { issue_id: id });
 
     if (ctx.jsonOutput) {
-      console.log(JSON.stringify({ ...issue, relationships: { outgoing, incoming }, tags }, null, 2));
+      console.log(JSON.stringify({ ...issue, relationships: { outgoing, incoming }, tags, feedback }, null, 2));
     } else {
       console.log();
       console.log(chalk.bold.cyan(issue.id), chalk.bold(issue.title));
@@ -207,6 +209,35 @@ export async function handleIssueShow(
           );
         }
       }
+
+      if (feedback.length > 0) {
+        console.log();
+        console.log(chalk.bold('Feedback Provided:'));
+        for (const fb of feedback) {
+          const anchor = typeof fb.anchor === 'string' ? JSON.parse(fb.anchor) : fb.anchor;
+          const statusColor =
+            fb.status === 'resolved' ? chalk.green :
+            fb.status === 'acknowledged' ? chalk.yellow :
+            fb.status === 'wont_fix' ? chalk.gray :
+            chalk.white;
+          const anchorStatusColor =
+            anchor.anchor_status === 'valid' ? chalk.green :
+            anchor.anchor_status === 'relocated' ? chalk.yellow :
+            chalk.red;
+
+          console.log(
+            `  ${chalk.cyan(fb.id)} → ${chalk.cyan(fb.spec_id)}`,
+            statusColor(`[${fb.status}]`),
+            anchorStatusColor(`[${anchor.anchor_status}]`)
+          );
+          console.log(
+            chalk.gray(`    Type: ${fb.feedback_type} | ${anchor.section_heading || 'No section'} (line ${anchor.line_number})`)
+          );
+          const contentPreview = fb.content.substring(0, 60) + (fb.content.length > 60 ? '...' : '');
+          console.log(chalk.gray(`    ${contentPreview}`));
+        }
+      }
+
       console.log();
     }
   } catch (error) {

@@ -198,3 +198,164 @@ export function getFrontmatter<T extends object = Record<string, any>>(
   const parsed = matter(content);
   return parsed.data as T;
 }
+
+// ============================================================================
+// FEEDBACK MARKDOWN FUNCTIONS
+// ============================================================================
+
+export interface FeedbackMarkdownData {
+  id: string;
+  specId: string;
+  specTitle?: string;
+  type: string;
+  location: {
+    section?: string;
+    line?: number;
+    status: 'valid' | 'relocated' | 'stale';
+  };
+  status: string;
+  content: string;
+  createdAt: string;
+  resolution?: string;
+}
+
+/**
+ * Parse feedback section from issue markdown content
+ * Looks for "## Spec Feedback Provided" section
+ */
+export function parseFeedbackSection(content: string): FeedbackMarkdownData[] {
+  const feedback: FeedbackMarkdownData[] = [];
+
+  // Look for "## Spec Feedback Provided" section
+  const feedbackSectionMatch = content.match(/^## Spec Feedback Provided\s*$/m);
+  if (!feedbackSectionMatch) {
+    return feedback;
+  }
+
+  const startIndex = feedbackSectionMatch.index! + feedbackSectionMatch[0].length;
+
+  // Find the end of this section (next ## heading or end of content)
+  const remainingContent = content.slice(startIndex);
+  const endMatch = remainingContent.match(/^## /m);
+  const sectionContent = endMatch
+    ? remainingContent.slice(0, endMatch.index)
+    : remainingContent;
+
+  // Parse individual feedback items (### heading for each)
+  const feedbackPattern = /^### (FB-\d+) → ([a-z]+-\d+)(?: \((.*?)\))?\s*\n\*\*Type:\*\* (.+?)\s*\n\*\*Location:\*\* (.*?)\s*\n\*\*Status:\*\* (.+?)\s*\n\n([\s\S]*?)(?=\n###|$)/gm;
+
+  let match;
+  while ((match = feedbackPattern.exec(sectionContent)) !== null) {
+    const [, id, specId, specTitle, type, locationStr, status, content] = match;
+
+    // Parse location string: "## Section Name, line 45 ✓" or "line 45 ⚠" or "Unknown ✗"
+    const locationMatch = locationStr.match(/(?:(.+?),\s+)?line (\d+)\s*([✓⚠✗])/);
+
+    const feedbackData: FeedbackMarkdownData = {
+      id,
+      specId,
+      specTitle: specTitle || undefined,
+      type: type.trim(),
+      location: {
+        section: locationMatch?.[1]?.trim(),
+        line: locationMatch?.[2] ? parseInt(locationMatch[2]) : undefined,
+        status: locationMatch?.[3] === '✓' ? 'valid' : locationMatch?.[3] === '⚠' ? 'relocated' : 'stale',
+      },
+      status: status.trim(),
+      content: content.trim(),
+      createdAt: '', // Would need to parse from content or get from DB
+    };
+
+    // Check for resolution
+    const resolutionMatch = content.match(/\*\*Resolution:\*\* (.+)/);
+    if (resolutionMatch) {
+      feedbackData.resolution = resolutionMatch[1].trim();
+    }
+
+    feedback.push(feedbackData);
+  }
+
+  return feedback;
+}
+
+/**
+ * Format feedback data for inclusion in issue markdown
+ */
+export function formatFeedbackForIssue(feedback: FeedbackMarkdownData[]): string {
+  if (feedback.length === 0) {
+    return '';
+  }
+
+  let output = '\n## Spec Feedback Provided\n\n';
+
+  for (const fb of feedback) {
+    // Determine status indicator
+    const statusIndicator =
+      fb.location.status === 'valid' ? '✓' :
+      fb.location.status === 'relocated' ? '⚠' :
+      '✗';
+
+    // Format location
+    let locationStr = '';
+    if (fb.location.section && fb.location.line) {
+      locationStr = `${fb.location.section}, line ${fb.location.line} ${statusIndicator}`;
+    } else if (fb.location.line) {
+      locationStr = `line ${fb.location.line} ${statusIndicator}`;
+    } else {
+      locationStr = `Unknown ${statusIndicator}`;
+    }
+
+    const titlePart = fb.specTitle ? ` (${fb.specTitle})` : '';
+
+    output += `### ${fb.id} → ${fb.specId}${titlePart}\n`;
+    output += `**Type:** ${fb.type}  \n`;
+    output += `**Location:** ${locationStr}  \n`;
+    output += `**Status:** ${fb.status}\n\n`;
+    output += `${fb.content}\n`;
+
+    if (fb.resolution) {
+      output += `\n**Resolution:** ${fb.resolution}\n`;
+    }
+
+    output += '\n';
+  }
+
+  return output;
+}
+
+/**
+ * Append or update feedback section in issue markdown
+ */
+export function updateFeedbackInIssue(
+  issueContent: string,
+  feedback: FeedbackMarkdownData[]
+): string {
+  // Remove existing feedback section if present
+  const feedbackSectionMatch = issueContent.match(/^## Spec Feedback Provided\s*$/m);
+
+  if (feedbackSectionMatch) {
+    const startIndex = feedbackSectionMatch.index!;
+
+    // Find the end of this section (next ## heading or end of content)
+    const remainingContent = issueContent.slice(startIndex);
+    const endMatch = remainingContent.match(/^## /m);
+
+    if (endMatch && endMatch.index! > 0) {
+      // There's another section after feedback
+      const endIndex = startIndex + endMatch.index!;
+      issueContent = issueContent.slice(0, startIndex) + issueContent.slice(endIndex);
+    } else {
+      // Feedback section is at the end
+      issueContent = issueContent.slice(0, startIndex);
+    }
+  }
+
+  // Append new feedback section
+  const feedbackMarkdown = formatFeedbackForIssue(feedback);
+  if (feedbackMarkdown) {
+    // Ensure there's a blank line before the new section
+    issueContent = issueContent.trimEnd() + '\n' + feedbackMarkdown;
+  }
+
+  return issueContent;
+}

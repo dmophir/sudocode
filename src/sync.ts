@@ -15,6 +15,8 @@ import { getSpec, createSpec, updateSpec } from './operations/specs.js';
 import { getIssue, createIssue, updateIssue } from './operations/issues.js';
 import { addRelationship } from './operations/relationships.js';
 import { getTags, setTags } from './operations/tags.js';
+import { listFeedback, updateFeedback } from './operations/feedback.js';
+import { relocateFeedbackAnchor } from './operations/feedback-anchors.js';
 import { exportToJSONL } from './export.js';
 import type { Spec, Issue, SpecStatus, SpecType, IssueStatus, IssueType } from './types.js';
 
@@ -212,6 +214,10 @@ async function syncSpec(
   isNew: boolean,
   user: string
 ): Promise<void> {
+  // Get old content before updating (for anchor relocation)
+  const oldSpec = isNew ? null : getSpec(db, id);
+  const oldContent = oldSpec?.content || '';
+
   const specData: Partial<Spec> = {
     id,
     title: frontmatter.title || 'Untitled',
@@ -233,6 +239,30 @@ async function syncSpec(
       ...specData,
       updated_by: user,
     });
+
+    // Relocate feedback anchors if content changed
+    if (oldContent !== content) {
+      const feedbackList = listFeedback(db, { spec_id: id });
+
+      if (feedbackList.length > 0) {
+        // Relocate each feedback anchor
+        for (const feedback of feedbackList) {
+          const oldAnchor = typeof feedback.anchor === 'string' ? JSON.parse(feedback.anchor) : feedback.anchor;
+
+          // Relocate the anchor
+          const newAnchor = relocateFeedbackAnchor(
+            oldContent,
+            content,
+            oldAnchor
+          );
+
+          // Update feedback with new anchor
+          updateFeedback(db, feedback.id, {
+            anchor: newAnchor,
+          });
+        }
+      }
+    }
   }
 
   // Sync tags

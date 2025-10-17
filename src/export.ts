@@ -3,11 +3,12 @@
  */
 
 import type Database from 'better-sqlite3';
-import type { Spec, Issue, SpecJSONL, IssueJSONL, RelationshipJSONL } from './types.js';
+import type { Spec, Issue, SpecJSONL, IssueJSONL, RelationshipJSONL, FeedbackJSONL } from './types.js';
 import { listSpecs } from './operations/specs.js';
 import { listIssues } from './operations/issues.js';
 import { getOutgoingRelationships } from './operations/relationships.js';
 import { getTags } from './operations/tags.js';
+import { listFeedback } from './operations/feedback.js';
 import { writeJSONL } from './jsonl.js';
 
 export interface ExportOptions {
@@ -73,10 +74,23 @@ export function issueToJSONL(
   // Get tags
   const tags = getTags(db, issue.id, 'issue');
 
+  // Get feedback provided by this issue
+  const feedbackList = listFeedback(db, { issue_id: issue.id });
+  const feedbackJSONL: FeedbackJSONL[] = feedbackList.map((feedback) => ({
+    id: feedback.id,
+    spec_id: feedback.spec_id,
+    type: feedback.feedback_type,
+    content: feedback.content,
+    anchor: typeof feedback.anchor === 'string' ? JSON.parse(feedback.anchor) : feedback.anchor,
+    status: feedback.status,
+    created_at: feedback.created_at,
+  }));
+
   return {
     ...issue,
     relationships: relationshipsJSONL,
     tags,
+    feedback: feedbackJSONL.length > 0 ? feedbackJSONL : undefined,
   };
 }
 

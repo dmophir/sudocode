@@ -9,6 +9,7 @@ import { listSpecs, createSpec, updateSpec, deleteSpec, getSpec } from './operat
 import { listIssues, createIssue, updateIssue, deleteIssue, getIssue } from './operations/issues.js';
 import { addRelationship, removeAllRelationships } from './operations/relationships.js';
 import { setTags } from './operations/tags.js';
+import { createFeedback, listFeedback, deleteFeedback } from './operations/feedback.js';
 import { transaction } from './operations/transactions.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -397,6 +398,37 @@ export function importSpecs(
 }
 
 /**
+ * Sync feedback for an issue from JSONL data
+ */
+function syncIssueFeedback(
+  db: Database.Database,
+  issueId: string,
+  feedbackJSONL: IssueJSONL['feedback']
+): void {
+  // Delete all existing feedback for this issue
+  const existingFeedback = listFeedback(db, { issue_id: issueId });
+  for (const fb of existingFeedback) {
+    deleteFeedback(db, fb.id);
+  }
+
+  // Create new feedback from JSONL
+  if (feedbackJSONL && feedbackJSONL.length > 0) {
+    for (const fb of feedbackJSONL) {
+      createFeedback(db, {
+        id: fb.id,
+        issue_id: issueId,
+        spec_id: fb.spec_id,
+        feedback_type: fb.type,
+        content: fb.content,
+        agent: 'import',
+        anchor: fb.anchor,
+        status: fb.status,
+      });
+    }
+  }
+}
+
+/**
  * Import issues from JSONL
  */
 export function importIssues(
@@ -451,6 +483,9 @@ export function importIssues(
       // Add tags
       setTags(db, issue.id, 'issue', issue.tags || []);
 
+      // Sync feedback
+      syncIssueFeedback(db, issue.id, issue.feedback);
+
       added++;
     }
   }
@@ -486,6 +521,9 @@ export function importIssues(
 
       // Update tags
       setTags(db, issue.id, 'issue', issue.tags || []);
+
+      // Sync feedback
+      syncIssueFeedback(db, issue.id, issue.feedback);
 
       updated++;
     }
