@@ -173,26 +173,52 @@ export async function syncMarkdownToJSONL(
       ? path.relative(process.cwd(), mdPath)
       : relPath;
 
-    // For specs, ALWAYS check if a spec already exists with this file path
-    // File path is the authoritative unique identifier for specs
-    // This prevents duplicates and handles ID conflicts gracefully
+    // For specs, determine which spec this file corresponds to
+    // Support two scenarios: rename (ID stays, path changes) and path-based lookup (no ID)
     let existingByPath: any = null;
+    let existingById: any = null;
     if (entityType === "spec") {
       // Always set the calculated file path in data (for create/update)
       data.file_path = filePath;
 
+      // Check if a spec exists with this ID (from frontmatter)
+      if (frontmatterId) {
+        existingById = getSpec(db, frontmatterId);
+      }
+
+      // Check if a spec exists at this file path
       existingByPath = getSpecByFilePath(db, filePath);
-      if (existingByPath) {
-        // Use the existing spec's ID, ignoring any ID in frontmatter
-        const correctId = existingByPath.id;
 
-        // Warn if user changed the ID in frontmatter
-        if (frontmatterId && frontmatterId !== correctId) {
-          console.warn(
-            `[sync] Warning: ID in frontmatter (${frontmatterId}) differs from existing spec ID (${correctId}) for ${filePath}. Using existing ID.`
+      // Scenario 1: Spec exists with this ID
+      if (existingById) {
+        entityId = existingById.id;
+
+        // Check if file was renamed (ID exists but different path)
+        if (existingById.file_path !== filePath) {
+          console.log(
+            `[sync] File renamed: ${existingById.file_path} → ${filePath}`
           );
-        }
 
+          // Check if another spec already exists at new path (conflict)
+          if (existingByPath && existingByPath.id !== existingById.id) {
+            console.warn(
+              `[sync] Warning: File path conflict! Spec ${existingByPath.id} already exists at ${filePath}. Keeping ${existingById.id} and updating path.`
+            );
+          }
+        }
+      }
+      // Scenario 2: No ID in frontmatter, but spec exists at this path
+      else if (existingByPath) {
+        entityId = existingByPath.id;
+        data.id = entityId;
+      }
+      // Scenario 3: ID in frontmatter differs from spec at this path (user changed ID)
+      else if (frontmatterId && existingByPath) {
+        // This shouldn't happen due to earlier checks, but handle it
+        const correctId = existingByPath.id;
+        console.warn(
+          `[sync] Warning: ID in frontmatter (${frontmatterId}) differs from existing spec ID (${correctId}) for ${filePath}. Using existing ID.`
+        );
         entityId = correctId;
         data.id = entityId;
       }

@@ -357,6 +357,122 @@ Updated auth spec.`;
       const newId = getSpec(db, 'spec-auth-v2');
       expect(newId).toBeNull();
     });
+
+    it('should handle file rename by updating file_path', async () => {
+      // User creates spec at original path
+      const originalPath = path.join(TEST_DIR, 'specs', 'original-name.md');
+      fs.mkdirSync(path.dirname(originalPath), { recursive: true });
+
+      const originalContent = `---
+id: spec-rename-001
+title: Renameable Spec
+type: feature
+---
+
+This spec will be renamed.`;
+
+      fs.writeFileSync(originalPath, originalContent, 'utf8');
+      await syncMarkdownToJSONL(db, originalPath, {
+        autoExport: false,
+        outputDir: TEST_DIR,
+      });
+
+      // Verify spec created with original path
+      let spec = getSpec(db, 'spec-rename-001');
+      expect(spec).not.toBeNull();
+      expect(spec?.file_path).toBe('specs/original-name.md');
+
+      // User renames file (keeping same ID in frontmatter)
+      const newPath = path.join(TEST_DIR, 'specs', 'new-name.md');
+      const renamedContent = `---
+id: spec-rename-001
+title: Renameable Spec
+type: feature
+---
+
+This spec was renamed.`;
+
+      fs.writeFileSync(newPath, renamedContent, 'utf8');
+      const result = await syncMarkdownToJSONL(db, newPath, {
+        autoExport: false,
+        outputDir: TEST_DIR,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.action).toBe('updated');
+      expect(result.entityId).toBe('spec-rename-001');
+
+      // Verify file_path was updated
+      spec = getSpec(db, 'spec-rename-001');
+      expect(spec).not.toBeNull();
+      expect(spec?.file_path).toBe('specs/new-name.md');
+      expect(spec?.content).toContain('This spec was renamed');
+
+      // Verify no duplicate was created
+      const { listSpecs } = await import('./operations/specs.js');
+      const allSpecs = listSpecs(db, {});
+      const renameSpecs = allSpecs.filter(s => s.title === 'Renameable Spec');
+      expect(renameSpecs.length).toBe(1);
+    });
+
+    it('should warn about path conflict when renaming to occupied path', async () => {
+      const specsDir = path.join(TEST_DIR, 'specs');
+      fs.mkdirSync(specsDir, { recursive: true });
+
+      // Create first spec at path A
+      const pathA = path.join(specsDir, 'spec-a.md');
+      fs.writeFileSync(pathA, `---
+id: spec-a
+title: Spec A
+type: feature
+---
+
+Spec A content.`, 'utf8');
+      await syncMarkdownToJSONL(db, pathA, {
+        autoExport: false,
+        outputDir: TEST_DIR,
+      });
+
+      // Create second spec at path B
+      const pathB = path.join(specsDir, 'spec-b.md');
+      fs.writeFileSync(pathB, `---
+id: spec-b
+title: Spec B
+type: feature
+---
+
+Spec B content.`, 'utf8');
+      await syncMarkdownToJSONL(db, pathB, {
+        autoExport: false,
+        outputDir: TEST_DIR,
+      });
+
+      // User tries to rename spec-a to spec-b's path (with spec-a's ID)
+      // This simulates: mv spec-a.md spec-b.md (which overwrites spec-b.md)
+      const conflictContent = `---
+id: spec-a
+title: Spec A Renamed
+type: feature
+---
+
+Spec A trying to take spec-b's path.`;
+
+      fs.writeFileSync(pathB, conflictContent, 'utf8');
+
+      // Should still work but log warning
+      const result = await syncMarkdownToJSONL(db, pathB, {
+        autoExport: false,
+        outputDir: TEST_DIR,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.entityId).toBe('spec-a'); // Uses ID from frontmatter
+
+      // Verify spec-a now has spec-b's path
+      const specA = getSpec(db, 'spec-a');
+      expect(specA?.file_path).toBe('specs/spec-b.md');
+      expect(specA?.title).toBe('Spec A Renamed');
+    });
   });
 
   describe('syncJSONLToMarkdown', () => {
