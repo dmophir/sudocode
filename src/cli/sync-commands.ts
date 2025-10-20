@@ -12,6 +12,7 @@ import { startWatcher, setupGracefulShutdown } from "../watcher.js";
 import { syncMarkdownToJSONL, syncJSONLToMarkdown } from "../sync.js";
 import { listSpecs } from "../operations/specs.js";
 import { listIssues } from "../operations/issues.js";
+import { generateUniqueFilename, findExistingSpecFile } from "../filename-generator.js";
 
 export interface CommandContext {
   db: Database.Database;
@@ -235,14 +236,20 @@ async function handleSyncToMarkdown(ctx: CommandContext): Promise<void> {
   console.log(chalk.gray(`  Found ${specs.length} specs in database`));
 
   for (const spec of specs) {
-    const fileName = `${spec.id}.md`;
-    const filePath = path.join(specsDir, fileName);
+    // Try to find existing file (supports both old and new naming)
+    let filePath = findExistingSpecFile(spec.id, specsDir, spec.title);
+
+    // If no existing file, generate title-based filename
+    if (!filePath) {
+      const fileName = generateUniqueFilename(spec.title, spec.id, specsDir);
+      filePath = path.join(specsDir, fileName);
+    }
 
     const result = await syncJSONLToMarkdown(ctx.db, spec.id, "spec", filePath);
 
     if (result.success) {
       syncedCount++;
-      console.log(chalk.gray(`  ✓ ${result.action} spec ${spec.id}`));
+      console.log(chalk.gray(`  ✓ ${result.action} spec ${spec.id} → ${path.basename(filePath)}`));
     } else {
       errorCount++;
       console.log(

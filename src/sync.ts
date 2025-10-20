@@ -23,6 +23,7 @@ import { listFeedback, updateFeedback } from "./operations/feedback.js";
 import { relocateFeedbackAnchor } from "./operations/feedback-anchors.js";
 import { exportToJSONL } from "./export.js";
 import { generateSpecId, generateIssueId } from "./id-generator.js";
+import { generateUniqueFilename, findExistingSpecFile } from "./filename-generator.js";
 import type {
   Spec,
   Issue,
