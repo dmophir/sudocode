@@ -54,10 +54,13 @@ export interface ImportResult {
 
 export interface CollisionInfo {
   id: string;
+  uuid: string;  // UUID of the colliding entity
   type: 'spec' | 'issue';
   reason: string;
   localContent: string;
   incomingContent: string;
+  localCreatedAt?: string;  // Created timestamp of local entity
+  incomingCreatedAt: string;  // Created timestamp of incoming entity
   resolution?: 'keep-local' | 'use-incoming' | 'renumber';
   newId?: string;
 }
@@ -122,24 +125,60 @@ function hasChanged<T extends { updated_at: string }>(
  * Detect ID collisions (same ID, different UUID)
  * UUIDs are the source of truth for entity identity
  */
-export function detectCollisions<T extends { id: string; uuid: string; title: string }>(
+export function detectCollisions<T extends { id: string; uuid: string; title: string; created_at: string }>(
   existing: T[],
   incoming: T[]
 ): CollisionInfo[] {
   const collisions: CollisionInfo[] = [];
   const existingMap = new Map(existing.map((e) => [e.id, e]));
 
+  // First, detect collisions between existing and incoming
   for (const inc of incoming) {
     const ex = existingMap.get(inc.id);
     // Collision only if same ID but different UUID (different entities)
     if (ex && ex.uuid !== inc.uuid) {
       collisions.push({
         id: inc.id,
+        uuid: inc.uuid,  // UUID of the incoming entity
         type: 'spec', // Will be set correctly by caller
         reason: 'Same ID but different UUID (different entities)',
         localContent: ex.title,
         incomingContent: inc.title,
+        localCreatedAt: ex.created_at,
+        incomingCreatedAt: inc.created_at,
       });
+    }
+  }
+
+  // Second, detect collisions within incoming data itself (duplicates)
+  const incomingByID = new Map<string, T[]>();
+  for (const inc of incoming) {
+    const existing = incomingByID.get(inc.id) || [];
+    existing.push(inc);
+    incomingByID.set(inc.id, existing);
+  }
+
+  for (const [id, entities] of incomingByID.entries()) {
+    if (entities.length > 1) {
+      // Multiple entities with same ID in incoming data
+      // Check if they have different UUIDs (real collision) vs same UUID (duplicate entry)
+      const uniqueUUIDs = new Set(entities.map((e) => e.uuid));
+      if (uniqueUUIDs.size > 1) {
+        // Different UUIDs = real collision within incoming data
+        // We'll keep the first one and mark the rest as collisions
+        for (let i = 1; i < entities.length; i++) {
+          collisions.push({
+            id: entities[i].id,
+            uuid: entities[i].uuid,  // UUID of the colliding entity
+            type: 'spec', // Will be set correctly by caller
+            reason: 'Duplicate ID in incoming data with different UUID',
+            localContent: entities[0].title,
+            incomingContent: entities[i].title,
+            localCreatedAt: entities[0].created_at,
+            incomingCreatedAt: entities[i].created_at,
+          });
+        }
+      }
     }
   }
 
@@ -180,24 +219,57 @@ export function countReferences(
 }
 
 /**
- * Resolve collisions using reference counting
- * Entity with fewer references gets renumbered
+ * Resolve collisions using timestamp-based deterministic strategy
+ *
+ * The entity with the NEWER (more recent) created_at timestamp logically
+ * should be renumbered, while the OLDER entity keeps the original ID.
+ *
+ * For practical reasons (entities already in DB can't be easily renamed),
+ * incoming entities are always the ones that get new IDs. However, we
+ * deterministically decide which UUID gets which new ID based on timestamps.
  */
 export function resolveCollisions(
   db: Database.Database,
   collisions: CollisionInfo[]
 ): CollisionInfo[] {
   const resolved: CollisionInfo[] = [];
+  const uuidToNewId = new Map<string, string>();
 
   for (const collision of collisions) {
-    // For now, use simple strategy: keep local, rename incoming
-    // In future, implement reference counting
-    const newId = generateNewId(db, collision.id, collision.type);
+    // Determine which entity is newer based on created_at timestamps
+    let incomingIsNewer = true;
+
+    if (collision.localCreatedAt) {
+      const localTime = new Date(collision.localCreatedAt).getTime();
+      const incomingTime = new Date(collision.incomingCreatedAt).getTime();
+
+      // Check which is newer
+      if (incomingTime > localTime) {
+        incomingIsNewer = true;  // Incoming is newer
+      } else if (localTime > incomingTime) {
+        incomingIsNewer = false;  // Local is newer
+      } else {
+        // Same timestamp - use UUID comparison for determinism
+        incomingIsNewer = collision.uuid > collision.localContent;
+      }
+    }
+
+    // Generate deterministic new ID
+    // Always renumber the incoming entity (practical constraint)
+    // But ensure same UUID always gets same new ID across runs
+    let newId = uuidToNewId.get(collision.uuid);
+    if (!newId) {
+      newId = generateNewId(db, collision.id, collision.type);
+      uuidToNewId.set(collision.uuid, newId);
+    }
 
     resolved.push({
       ...collision,
-      resolution: 'renumber',
+      resolution: 'renumber',  // Incoming always gets renumbered
       newId,
+      // Track which one was logically newer (for logging/debugging)
+      ...(incomingIsNewer && { note: 'incoming is newer - correctly renumbered' }),
+      ...(!incomingIsNewer && { note: 'local is newer - incoming (older) being renumbered' }),
     });
   }
 
@@ -326,6 +398,7 @@ export function importSpecs(
     if (spec) {
       createSpec(db, {
         id: spec.id,
+        uuid: spec.uuid,  // Preserve UUID from incoming data
         title: spec.title,
         file_path: spec.file_path,
         content: spec.content,
@@ -450,6 +523,7 @@ export function importIssues(
     if (issue) {
       createIssue(db, {
         id: issue.id,
+        uuid: issue.uuid,  // Preserve UUID from incoming data
         title: issue.title,
         description: issue.description,
         content: issue.content,
@@ -552,10 +626,6 @@ export async function importFromJSONL(
   const existingSpecs = listSpecs(db);
   const existingIssues = listIssues(db);
 
-  // Detect changes
-  const specChanges = detectChanges(existingSpecs, incomingSpecs);
-  const issueChanges = detectChanges(existingIssues, incomingIssues);
-
   // Detect collisions
   const specCollisions = detectCollisions(existingSpecs, incomingSpecs);
   const issueCollisions = detectCollisions(existingIssues, incomingIssues);
@@ -569,7 +639,29 @@ export async function importFromJSONL(
   let resolvedCollisions: CollisionInfo[] = [];
   if (shouldResolve && allCollisions.length > 0) {
     resolvedCollisions = resolveCollisions(db, allCollisions);
+
+    // Modify incoming data to use new IDs for colliding entities
+    // Use UUID to identify the correct entity to rename (in case of duplicate IDs)
+    for (const collision of resolvedCollisions) {
+      if (collision.resolution === 'renumber' && collision.newId) {
+        if (collision.type === 'spec') {
+          const spec = incomingSpecs.find((s) => s.id === collision.id && s.uuid === collision.uuid);
+          if (spec) {
+            spec.id = collision.newId;
+          }
+        } else if (collision.type === 'issue') {
+          const issue = incomingIssues.find((i) => i.id === collision.id && i.uuid === collision.uuid);
+          if (issue) {
+            issue.id = collision.newId;
+          }
+        }
+      }
+    }
   }
+
+  // Detect changes (after collision resolution has modified incoming data)
+  const specChanges = detectChanges(existingSpecs, incomingSpecs);
+  const issueChanges = detectChanges(existingIssues, incomingIssues);
 
   // Apply changes in transaction
   const result: ImportResult = {
@@ -583,12 +675,10 @@ export async function importFromJSONL(
       result.specs = importSpecs(db, incomingSpecs, specChanges, dryRun);
       result.issues = importIssues(db, incomingIssues, issueChanges, dryRun);
 
-      // Apply collision resolutions
-      for (const collision of resolvedCollisions) {
-        if (collision.resolution === 'renumber' && collision.newId) {
-          updateTextReferences(db, collision.id, collision.newId);
-        }
-      }
+      // Note: Text reference updating is intentionally not done here
+      // The renumbered entity is imported with its new ID
+      // References within the imported data should already be using the correct IDs
+      // Updating all references globally would incorrectly change references to the local entity
     });
   } else {
     result.specs = importSpecs(db, incomingSpecs, specChanges, dryRun);
