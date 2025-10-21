@@ -12,7 +12,10 @@ import { startWatcher, setupGracefulShutdown } from "../watcher.js";
 import { syncMarkdownToJSONL, syncJSONLToMarkdown } from "../sync.js";
 import { listSpecs } from "../operations/specs.js";
 import { listIssues } from "../operations/issues.js";
-import { generateUniqueFilename, findExistingSpecFile } from "../filename-generator.js";
+import {
+  generateUniqueFilename,
+  findExistingSpecFile,
+} from "../filename-generator.js";
 
 export interface CommandContext {
   db: Database.Database;
@@ -146,9 +149,9 @@ async function handleSyncFromMarkdown(ctx: CommandContext): Promise<void> {
 
   const syncOptions = {
     outputDir: ctx.outputDir,
-    autoExport: false, // We'll export once at the end
+    autoExport: false,
     autoInitialize: true,
-    writeBackFrontmatter: false,
+    writeBackFrontmatter: true,
   };
 
   // Sync specs
@@ -236,20 +239,27 @@ async function handleSyncToMarkdown(ctx: CommandContext): Promise<void> {
   console.log(chalk.gray(`  Found ${specs.length} specs in database`));
 
   for (const spec of specs) {
-    // Try to find existing file (supports both old and new naming)
-    let filePath = findExistingSpecFile(spec.id, specsDir, spec.title);
+    let filePath = path.join(ctx.outputDir, spec.file_path);
+    if (!fs.existsSync(filePath)) {
+      const foundFile = findExistingSpecFile(spec.id, specsDir, spec.title);
 
-    // If no existing file, generate title-based filename
-    if (!filePath) {
-      const fileName = generateUniqueFilename(spec.title, spec.id, specsDir);
-      filePath = path.join(specsDir, fileName);
+      if (foundFile) {
+        filePath = foundFile;
+      } else {
+        const fileName = generateUniqueFilename(spec.title, spec.id, specsDir);
+        filePath = path.join(specsDir, fileName);
+      }
     }
 
     const result = await syncJSONLToMarkdown(ctx.db, spec.id, "spec", filePath);
 
     if (result.success) {
       syncedCount++;
-      console.log(chalk.gray(`  ✓ ${result.action} spec ${spec.id} → ${path.basename(filePath)}`));
+      console.log(
+        chalk.gray(
+          `  ✓ ${result.action} spec ${spec.id} → ${path.basename(filePath)}`
+        )
+      );
     } else {
       errorCount++;
       console.log(

@@ -65,6 +65,17 @@ export interface SyncOptions {
 }
 
 /**
+ * Remove internal fields that shouldn't be in markdown frontmatter
+ * These fields are only for database tracking, not for the markdown files
+ */
+function cleanFrontmatterForMarkdown(
+  data: Record<string, any>
+): Record<string, any> {
+  const { file_path, entity_type, ...clean } = data;
+  return clean;
+}
+
+/**
  * Initialize missing frontmatter fields
  */
 function initializeFrontmatter(
@@ -103,20 +114,10 @@ function initializeFrontmatter(
   }
 
 
-  // Set entity type
-  initialized.entity_type = entityType;
-
   // Set type-specific defaults
   if (entityType === "spec") {
     if (!initialized.priority && initialized.priority !== 0)
       initialized.priority = 2;
-    if (!initialized.file_path) {
-      // Try to make path relative to outputDir
-      const relPath = path.relative(outputDir, mdPath);
-      initialized.file_path = relPath.startsWith("..")
-        ? path.relative(process.cwd(), mdPath)
-        : relPath;
-    }
   } else {
     // issue
     if (!initialized.status) initialized.status = "open";
@@ -221,7 +222,9 @@ export async function syncMarkdownToJSONL(
 
         // Write back frontmatter if requested
         if (writeBackFrontmatter) {
-          updateFrontmatterFile(mdPath, data);
+          // Filter out internal fields that shouldn't be in markdown frontmatter
+          const cleanData = cleanFrontmatterForMarkdown(data);
+          updateFrontmatterFile(mdPath, cleanData);
         }
       } else {
         return {
