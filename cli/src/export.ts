@@ -86,7 +86,7 @@ export function issueToJSONL(
     type: feedback.feedback_type,
     content: feedback.content,
     anchor: typeof feedback.anchor === 'string' ? JSON.parse(feedback.anchor) : feedback.anchor,
-    status: feedback.status,
+    dismissed: feedback.dismissed,
     created_at: feedback.created_at,
   }));
 

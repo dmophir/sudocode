@@ -91,7 +91,7 @@ export interface IssueFeedback {
   content: string;
   agent: string;
   anchor: string; // JSON-serialized FeedbackAnchor
-  status: FeedbackStatus;
+  dismissed: boolean;
   created_at: string;
   updated_at: string;
   resolution: string | null;
@@ -125,8 +125,6 @@ export interface FeedbackAnchor extends LocationAnchor {
 
 export type FeedbackType = "comment" | "suggestion" | "request";
 
-export type FeedbackStatus = "open" | "acknowledged" | "resolved" | "wont_fix";
-
 /**
  * JSONL format types
  */
@@ -148,7 +146,7 @@ export interface FeedbackJSONL {
   type: FeedbackType;
   content: string;
   anchor: FeedbackAnchor;
-  status: FeedbackStatus;
+  dismissed: boolean;
   created_at: string;
 }
 

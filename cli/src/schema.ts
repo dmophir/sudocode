@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS issue_feedback (
     content TEXT NOT NULL,
     agent TEXT NOT NULL,
     anchor TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'acknowledged', 'resolved', 'wont_fix')),
+    dismissed INTEGER NOT NULL DEFAULT 0 CHECK(dismissed IN (0, 1)),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolution TEXT,
@@ -159,7 +159,7 @@ CREATE INDEX IF NOT EXISTS idx_events_git_commit ON events(git_commit_sha);
 export const ISSUE_FEEDBACK_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_feedback_issue ON issue_feedback(issue_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_spec ON issue_feedback(spec_id);
-CREATE INDEX IF NOT EXISTS idx_feedback_status ON issue_feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_dismissed ON issue_feedback(dismissed);
 CREATE INDEX IF NOT EXISTS idx_feedback_type ON issue_feedback(feedback_type);
 CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON issue_feedback(created_at);
 `;

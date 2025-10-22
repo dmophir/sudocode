@@ -62,37 +62,24 @@ describe('Feedback Tools', () => {
     });
 
     describe('update mode (feedback_id provided)', () => {
-      it('should call acknowledge when status is acknowledged', async () => {
+      it('should call dismiss when dismissed is true', async () => {
         mockClient.exec.mockResolvedValue({});
 
         await feedbackTools.upsertFeedback(mockClient, {
           feedback_id: 'fb-1',
-          status: 'acknowledged',
+          dismissed: true,
         });
 
-        expect(mockClient.exec).toHaveBeenCalledWith(['feedback', 'acknowledge', 'fb-1']);
+        expect(mockClient.exec).toHaveBeenCalledWith(['feedback', 'dismiss', 'fb-1']);
       });
 
-      it('should call resolve when status is resolved', async () => {
-        mockClient.exec.mockResolvedValue({});
-
-        await feedbackTools.upsertFeedback(mockClient, {
-          feedback_id: 'fb-1',
-          status: 'resolved',
-        });
-
-        expect(mockClient.exec).toHaveBeenCalledWith(['feedback', 'resolve', 'fb-1']);
-      });
-
-      it('should call wont-fix when status is wont_fix', async () => {
-        mockClient.exec.mockResolvedValue({});
-
-        await feedbackTools.upsertFeedback(mockClient, {
-          feedback_id: 'fb-1',
-          status: 'wont_fix',
-        });
-
-        expect(mockClient.exec).toHaveBeenCalledWith(['feedback', 'wont-fix', 'fb-1']);
+      it('should throw error when dismissed is false (cannot un-dismiss)', async () => {
+        await expect(
+          feedbackTools.upsertFeedback(mockClient, {
+            feedback_id: 'fb-1',
+            dismissed: false,
+          })
+        ).rejects.toThrow('Cannot un-dismiss feedback; only dismissing is supported');
       });
 
       it('should call relocate when relocate is true', async () => {
@@ -106,12 +93,12 @@ describe('Feedback Tools', () => {
         expect(mockClient.exec).toHaveBeenCalledWith(['feedback', 'relocate', 'fb-1']);
       });
 
-      it('should throw error if neither status nor relocate is provided', async () => {
+      it('should throw error if neither dismissed nor relocate is provided', async () => {
         await expect(
           feedbackTools.upsertFeedback(mockClient, {
             feedback_id: 'fb-1',
           })
-        ).rejects.toThrow('When updating feedback, you must provide either status or relocate=true');
+        ).rejects.toThrow('When updating feedback, you must provide either dismissed or relocate=true');
       });
     });
   });

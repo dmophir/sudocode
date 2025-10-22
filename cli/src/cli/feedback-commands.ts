@@ -11,13 +11,13 @@ import {
   getFeedback,
   listFeedback,
   updateFeedback,
-  updateFeedbackStatus,
+  dismissFeedback,
   type ListFeedbackOptions,
 } from '../operations/feedback.js';
 import { getSpec } from '../operations/specs.js';
 import { getIssue } from '../operations/issues.js';
 import { createFeedbackAnchor, createAnchorByText } from '../operations/feedback-anchors.js';
-import type { FeedbackType, FeedbackStatus } from '../types.js';
+import type { FeedbackType } from '../types.js';
 
 export interface CommandContext {
   db: Database.Database;
@@ -87,7 +87,7 @@ export async function handleFeedbackAdd(
       content: options.content,
       agent: options.agent || process.env.USER || 'cli',
       anchor,
-      status: 'open',
+      dismissed: false,
     });
 
     if (ctx.jsonOutput) {
@@ -110,7 +110,7 @@ export interface FeedbackListOptions {
   issue?: string;
   spec?: string;
   type?: string;
-  status?: string;
+  dismissed?: string;
   limit: string;
 }
 
@@ -126,7 +126,7 @@ export async function handleFeedbackList(
       issue_id: options.issue,
       spec_id: options.spec,
       feedback_type: options.type as FeedbackType | undefined,
-      status: options.status as FeedbackStatus | undefined,
+      dismissed: options.dismissed !== undefined ? options.dismissed === 'true' : undefined,
       limit: parseInt(options.limit),
     };
 
@@ -145,14 +145,7 @@ export async function handleFeedbackList(
       for (const feedback of feedbackList) {
         const anchor = typeof feedback.anchor === 'string' ? JSON.parse(feedback.anchor) : feedback.anchor;
 
-        const statusColor =
-          feedback.status === 'resolved'
-            ? chalk.green
-            : feedback.status === 'acknowledged'
-            ? chalk.yellow
-            : feedback.status === 'wont_fix'
-            ? chalk.gray
-            : chalk.white;
+        const statusColor = feedback.dismissed ? chalk.gray : chalk.white;
 
         const anchorStatusColor =
           anchor.anchor_status === 'valid'
@@ -163,7 +156,7 @@ export async function handleFeedbackList(
 
         console.log(
           chalk.cyan(feedback.id),
-          statusColor(`[${feedback.status}]`),
+          statusColor(`[${feedback.dismissed ? 'dismissed' : 'active'}]`),
           anchorStatusColor(`[${anchor.anchor_status}]`),
           chalk.gray(`${feedback.issue_id} → ${feedback.spec_id}`)
         );
@@ -205,7 +198,7 @@ export async function handleFeedbackShow(
       console.log(chalk.gray('─'.repeat(60)));
       console.log(chalk.gray('Issue:'), feedback.issue_id);
       console.log(chalk.gray('Spec:'), feedback.spec_id);
-      console.log(chalk.gray('Status:'), feedback.status);
+      console.log(chalk.gray('Status:'), feedback.dismissed ? 'Dismissed' : 'Active');
       console.log(chalk.gray('Agent:'), feedback.agent);
       console.log(chalk.gray('Created:'), feedback.created_at);
       console.log(chalk.gray('Updated:'), feedback.updated_at);
@@ -254,83 +247,31 @@ export async function handleFeedbackShow(
   }
 }
 
-/**
- * Acknowledge feedback
- */
-export async function handleFeedbackAcknowledge(
-  ctx: CommandContext,
-  id: string
-): Promise<void> {
-  try {
-    const feedback = updateFeedbackStatus(ctx.db, id, 'acknowledged');
-
-    if (ctx.jsonOutput) {
-      console.log(JSON.stringify(feedback, null, 2));
-    } else {
-      console.log(chalk.green('✓ Acknowledged feedback'), chalk.cyan(id));
-    }
-  } catch (error) {
-    console.error(chalk.red('✗ Failed to acknowledge feedback'));
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
-
-export interface FeedbackResolveOptions {
+export interface FeedbackDismissOptions {
   comment?: string;
 }
 
 /**
- * Resolve feedback
+ * Dismiss feedback
  */
-export async function handleFeedbackResolve(
+export async function handleFeedbackDismiss(
   ctx: CommandContext,
   id: string,
-  options: FeedbackResolveOptions
+  options: FeedbackDismissOptions
 ): Promise<void> {
   try {
-    const feedback = updateFeedbackStatus(ctx.db, id, 'resolved', options.comment);
+    const feedback = dismissFeedback(ctx.db, id, options.comment);
 
     if (ctx.jsonOutput) {
       console.log(JSON.stringify(feedback, null, 2));
     } else {
-      console.log(chalk.green('✓ Resolved feedback'), chalk.cyan(id));
+      console.log(chalk.green('✓ Dismissed feedback'), chalk.cyan(id));
       if (options.comment) {
         console.log(chalk.gray(`  Comment: ${options.comment}`));
       }
     }
   } catch (error) {
-    console.error(chalk.red('✗ Failed to resolve feedback'));
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
-
-export interface FeedbackWontFixOptions {
-  reason?: string;
-}
-
-/**
- * Mark feedback as won't fix
- */
-export async function handleFeedbackWontFix(
-  ctx: CommandContext,
-  id: string,
-  options: FeedbackWontFixOptions
-): Promise<void> {
-  try {
-    const feedback = updateFeedbackStatus(ctx.db, id, 'wont_fix', options.reason);
-
-    if (ctx.jsonOutput) {
-      console.log(JSON.stringify(feedback, null, 2));
-    } else {
-      console.log(chalk.yellow('✓ Marked feedback as won\'t fix'), chalk.cyan(id));
-      if (options.reason) {
-        console.log(chalk.gray(`  Reason: ${options.reason}`));
-      }
-    }
-  } catch (error) {
-    console.error(chalk.red('✗ Failed to mark feedback as won\'t fix'));
+    console.error(chalk.red('✗ Failed to dismiss feedback'));
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }

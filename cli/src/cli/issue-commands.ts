@@ -242,14 +242,7 @@ export async function handleIssueShow(
         for (const fb of feedback) {
           const anchor =
             typeof fb.anchor === "string" ? JSON.parse(fb.anchor) : fb.anchor;
-          const statusColor =
-            fb.status === "resolved"
-              ? chalk.green
-              : fb.status === "acknowledged"
-              ? chalk.yellow
-              : fb.status === "wont_fix"
-              ? chalk.gray
-              : chalk.white;
+          const statusColor = fb.dismissed ? chalk.gray : chalk.white;
           const anchorStatusColor =
             anchor.anchor_status === "valid"
               ? chalk.green
@@ -259,7 +252,7 @@ export async function handleIssueShow(
 
           console.log(
             `  ${chalk.cyan(fb.id)} → ${chalk.cyan(fb.spec_id)}`,
-            statusColor(`[${fb.status}]`),
+            statusColor(`[${fb.dismissed ? 'dismissed' : 'active'}]`),
             anchorStatusColor(`[${anchor.anchor_status}]`)
           );
           console.log(

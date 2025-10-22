@@ -3,7 +3,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import type { IssueFeedback, FeedbackType, FeedbackStatus, FeedbackAnchor } from '../types.js';
+import type { IssueFeedback, FeedbackType, FeedbackAnchor } from '../types.js';
 
 export interface CreateFeedbackInput {
   id?: string;
@@ -13,13 +13,13 @@ export interface CreateFeedbackInput {
   content: string;
   agent: string;
   anchor: FeedbackAnchor;
-  status?: FeedbackStatus;
+  dismissed?: boolean;
   resolution?: string | null;
 }
 
 export interface UpdateFeedbackInput {
   content?: string;
-  status?: FeedbackStatus;
+  dismissed?: boolean;
   resolution?: string | null;
   anchor?: FeedbackAnchor;
 }
@@ -28,9 +28,20 @@ export interface ListFeedbackOptions {
   issue_id?: string;
   spec_id?: string;
   feedback_type?: FeedbackType;
-  status?: FeedbackStatus;
+  dismissed?: boolean;
   limit?: number;
   offset?: number;
+}
+
+/**
+ * Convert raw database row to IssueFeedback with proper types
+ * SQLite stores booleans as integers (0/1), so we need to convert
+ */
+function convertDbRowToFeedback(row: any): IssueFeedback {
+  return {
+    ...row,
+    dismissed: row.dismissed === 1,
+  };
 }
 
 /**
@@ -65,9 +76,9 @@ export function createFeedback(db: Database.Database, input: CreateFeedbackInput
 
   const stmt = db.prepare(`
     INSERT INTO issue_feedback (
-      id, issue_id, spec_id, feedback_type, content, agent, anchor, status, resolution
+      id, issue_id, spec_id, feedback_type, content, agent, anchor, dismissed, resolution
     ) VALUES (
-      @id, @issue_id, @spec_id, @feedback_type, @content, @agent, @anchor, @status, @resolution
+      @id, @issue_id, @spec_id, @feedback_type, @content, @agent, @anchor, @dismissed, @resolution
     )
   `);
 
@@ -80,7 +91,7 @@ export function createFeedback(db: Database.Database, input: CreateFeedbackInput
       content: input.content,
       agent: input.agent,
       anchor: anchorJson,
-      status: input.status || 'open',
+      dismissed: input.dismissed !== undefined ? (input.dismissed ? 1 : 0) : 0,
       resolution: input.resolution || null,
     });
 
@@ -105,7 +116,8 @@ export function getFeedback(db: Database.Database, id: string): IssueFeedback | 
     SELECT * FROM issue_feedback WHERE id = ?
   `);
 
-  return (stmt.get(id) as IssueFeedback | undefined) ?? null;
+  const row = stmt.get(id);
+  return row ? convertDbRowToFeedback(row) : null;
 }
 
 /**
@@ -128,9 +140,9 @@ export function updateFeedback(
     updates.push('content = @content');
     params.content = input.content;
   }
-  if (input.status !== undefined) {
-    updates.push('status = @status');
-    params.status = input.status;
+  if (input.dismissed !== undefined) {
+    updates.push('dismissed = @dismissed');
+    params.dismissed = input.dismissed ? 1 : 0;
   }
   if (input.resolution !== undefined) {
     updates.push('resolution = @resolution');
@@ -177,15 +189,14 @@ export function deleteFeedback(db: Database.Database, id: string): boolean {
 }
 
 /**
- * Update feedback status (convenience method)
+ * Dismiss feedback (convenience method)
  */
-export function updateFeedbackStatus(
+export function dismissFeedback(
   db: Database.Database,
   id: string,
-  status: FeedbackStatus,
   resolution?: string
 ): IssueFeedback {
-  return updateFeedback(db, id, { status, resolution: resolution || null });
+  return updateFeedback(db, id, { dismissed: true, resolution: resolution || null });
 }
 
 /**
@@ -210,9 +221,9 @@ export function listFeedback(
     conditions.push('feedback_type = @feedback_type');
     params.feedback_type = options.feedback_type;
   }
-  if (options.status !== undefined) {
-    conditions.push('status = @status');
-    params.status = options.status;
+  if (options.dismissed !== undefined) {
+    conditions.push('dismissed = @dismissed');
+    params.dismissed = options.dismissed ? 1 : 0;
   }
 
   let query = 'SELECT * FROM issue_feedback';
@@ -231,7 +242,8 @@ export function listFeedback(
   }
 
   const stmt = db.prepare(query);
-  return stmt.all(params) as IssueFeedback[];
+  const rows = stmt.all(params);
+  return rows.map(convertDbRowToFeedback);
 }
 
 /**
@@ -249,17 +261,17 @@ export function getFeedbackForSpec(db: Database.Database, spec_id: string): Issu
 }
 
 /**
- * Get open feedback for a spec
+ * Get active feedback for a spec (not dismissed)
  */
-export function getOpenFeedbackForSpec(db: Database.Database, spec_id: string): IssueFeedback[] {
-  return listFeedback(db, { spec_id, status: 'open' });
+export function getActiveFeedbackForSpec(db: Database.Database, spec_id: string): IssueFeedback[] {
+  return listFeedback(db, { spec_id, dismissed: false });
 }
 
 /**
- * Count feedback by status
+ * Count feedback by dismissed status
  */
-export function countFeedbackByStatus(db: Database.Database, spec_id?: string): Record<FeedbackStatus, number> {
-  let query = 'SELECT status, COUNT(*) as count FROM issue_feedback';
+export function countFeedbackByDismissed(db: Database.Database, spec_id?: string): { active: number; dismissed: number } {
+  let query = 'SELECT dismissed, COUNT(*) as count FROM issue_feedback';
   const params: Record<string, any> = {};
 
   if (spec_id) {
@@ -267,20 +279,22 @@ export function countFeedbackByStatus(db: Database.Database, spec_id?: string): 
     params.spec_id = spec_id;
   }
 
-  query += ' GROUP BY status';
+  query += ' GROUP BY dismissed';
 
   const stmt = db.prepare(query);
-  const rows = stmt.all(params) as Array<{ status: FeedbackStatus; count: number }>;
+  const rows = stmt.all(params) as Array<{ dismissed: number; count: number }>;
 
-  const counts: Record<FeedbackStatus, number> = {
-    open: 0,
-    acknowledged: 0,
-    resolved: 0,
-    wont_fix: 0,
+  const counts = {
+    active: 0,
+    dismissed: 0,
   };
 
   for (const row of rows) {
-    counts[row.status] = row.count;
+    if (row.dismissed === 0) {
+      counts.active = row.count;
+    } else {
+      counts.dismissed = row.count;
+    }
   }
 
   return counts;

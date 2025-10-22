@@ -3,7 +3,7 @@
  */
 
 import { SudocodeClient } from "../client.js";
-import { Feedback, FeedbackType, FeedbackStatus } from "../types.js";
+import { Feedback, FeedbackType } from "../types.js";
 
 // Tool parameter types
 export interface AddFeedbackParams {
@@ -20,7 +20,7 @@ export interface ListFeedbackParams {
   issue?: string;
   spec?: string;
   type?: FeedbackType;
-  status?: FeedbackStatus;
+  dismissed?: boolean;
   limit?: number;
 }
 
@@ -57,7 +57,7 @@ export interface UpsertFeedbackParams {
   line?: number;
   text?: string;
   agent?: string;
-  status?: FeedbackStatus; // For updating feedback status
+  dismissed?: boolean; // For dismissing feedback
   relocate?: boolean; // If true and feedback_id provided, relocate the anchor
 }
 
@@ -108,8 +108,8 @@ export async function listFeedback(
   if (params.type) {
     args.push("--type", params.type);
   }
-  if (params.status) {
-    args.push("--status", params.status);
+  if (params.dismissed !== undefined) {
+    args.push("--dismissed", params.dismissed.toString());
   }
   if (params.limit !== undefined) {
     args.push("--limit", params.limit.toString());
@@ -199,33 +199,22 @@ export async function upsertFeedback(
   const isUpdate = !!params.feedback_id;
 
   if (isUpdate) {
-    // Update mode - handle status changes or relocation
+    // Update mode - handle dismissed changes or relocation
     if (params.relocate) {
       // Relocate the feedback anchor
       const args = ["feedback", "relocate", params.feedback_id!];
       return client.exec(args);
-    } else if (params.status) {
-      // Update feedback status
-      const args: string[] = [];
-
-      switch (params.status) {
-        case "acknowledged":
-          args.push("feedback", "acknowledge", params.feedback_id!);
-          break;
-        case "resolved":
-          args.push("feedback", "resolve", params.feedback_id!);
-          break;
-        case "wont_fix":
-          args.push("feedback", "wont-fix", params.feedback_id!);
-          break;
-        default:
-          throw new Error(`Cannot update feedback to status: ${params.status}`);
+    } else if (params.dismissed !== undefined) {
+      // Dismiss feedback if dismissed is true
+      if (params.dismissed) {
+        const args = ["feedback", "dismiss", params.feedback_id!];
+        return client.exec(args);
+      } else {
+        throw new Error("Cannot un-dismiss feedback; only dismissing is supported");
       }
-
-      return client.exec(args);
     } else {
       throw new Error(
-        "When updating feedback, you must provide either status or relocate=true"
+        "When updating feedback, you must provide either dismissed or relocate=true"
       );
     }
   } else {

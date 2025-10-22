@@ -16,7 +16,6 @@ export type {
   IssueStatus,
   FeedbackAnchor,
   FeedbackType,
-  FeedbackStatus,
   IssueFeedback as Feedback,
 } from "@sudocode/types";
 

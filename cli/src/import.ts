@@ -530,7 +530,7 @@ function syncIssueFeedback(
         content: fb.content,
         agent: "import",
         anchor: fb.anchor,
-        status: fb.status,
+        dismissed: fb.dismissed,
       });
     }
   }

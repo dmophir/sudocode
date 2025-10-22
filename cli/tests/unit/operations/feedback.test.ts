@@ -9,12 +9,12 @@ import {
   getFeedback,
   updateFeedback,
   deleteFeedback,
-  updateFeedbackStatus,
+  dismissFeedback,
   listFeedback,
   getFeedbackForIssue,
   getFeedbackForSpec,
-  getOpenFeedbackForSpec,
-  countFeedbackByStatus,
+  getActiveFeedbackForSpec,
+  countFeedbackByDismissed,
   generateFeedbackId,
 } from '../../../src/operations/feedback.js';
 import { createSpec, deleteSpec } from '../../../src/operations/specs.js';
@@ -118,7 +118,7 @@ describe('Feedback Operations', () => {
       expect(feedback.feedback_type).toBe('comment');
       expect(feedback.content).toBe('Token rotation policy not specified');
       expect(feedback.agent).toBe('claude-code');
-      expect(feedback.status).toBe('open');
+      expect(feedback.dismissed).toBe(false);
 
       const parsedAnchor = JSON.parse(feedback.anchor);
       expect(parsedAnchor.section_heading).toBe('Authentication');
@@ -140,7 +140,7 @@ describe('Feedback Operations', () => {
         anchor,
       });
 
-      expect(feedback.status).toBe('open');
+      expect(feedback.dismissed).toBe(false);
       expect(feedback.resolution).toBeNull();
     });
 
@@ -178,23 +178,6 @@ describe('Feedback Operations', () => {
       }).toThrow();
     });
 
-    it('should validate status', () => {
-      const anchor: FeedbackAnchor = {
-        anchor_status: 'valid',
-      };
-
-      expect(() => {
-        createFeedback(db, {
-          issue_id: 'issue-001',
-          spec_id: 'spec-001',
-          feedback_type: 'comment',
-          content: 'Test',
-          agent: 'claude-code',
-          anchor,
-          status: 'invalid' as any,
-        });
-      }).toThrow();
-    });
   });
 
   describe('getFeedback', () => {
@@ -246,7 +229,7 @@ describe('Feedback Operations', () => {
       expect(updated.content).toBe('Updated content');
     });
 
-    it('should update status and resolution', () => {
+    it('should update dismissed and resolution', () => {
       const anchor: FeedbackAnchor = {
         anchor_status: 'valid',
       };
@@ -261,11 +244,11 @@ describe('Feedback Operations', () => {
       });
 
       const updated = updateFeedback(db, created.id, {
-        status: 'resolved',
+        dismissed: true,
         resolution: 'Updated spec section 3.2',
       });
 
-      expect(updated.status).toBe('resolved');
+      expect(updated.dismissed).toBe(true);
       expect(updated.resolution).toBe('Updated spec section 3.2');
     });
 
@@ -309,8 +292,8 @@ describe('Feedback Operations', () => {
     });
   });
 
-  describe('updateFeedbackStatus', () => {
-    it('should update status with resolution', () => {
+  describe('dismissFeedback', () => {
+    it('should dismiss feedback with resolution', () => {
       const anchor: FeedbackAnchor = {
         anchor_status: 'valid',
       };
@@ -324,14 +307,13 @@ describe('Feedback Operations', () => {
         anchor,
       });
 
-      const updated = updateFeedbackStatus(
+      const updated = dismissFeedback(
         db,
         created.id,
-        'acknowledged',
         'Will address in next iteration'
       );
 
-      expect(updated.status).toBe('acknowledged');
+      expect(updated.dismissed).toBe(true);
       expect(updated.resolution).toBe('Will address in next iteration');
     });
   });
@@ -388,7 +370,7 @@ describe('Feedback Operations', () => {
         content: 'Feedback 1',
         agent: 'claude-code',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
 
       createFeedback(db, {
@@ -398,7 +380,7 @@ describe('Feedback Operations', () => {
         content: 'Feedback 2',
         agent: 'claude-code',
         anchor,
-        status: 'resolved',
+        dismissed: true,
       });
 
       createFeedback(db, {
@@ -408,7 +390,7 @@ describe('Feedback Operations', () => {
         content: 'Feedback 3',
         agent: 'cursor',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
     });
 
@@ -429,10 +411,10 @@ describe('Feedback Operations', () => {
       expect(feedback.every(f => f.spec_id === 'spec-001')).toBe(true);
     });
 
-    it('should filter by status', () => {
-      const feedback = listFeedback(db, { status: 'open' });
+    it('should filter by dismissed status', () => {
+      const feedback = listFeedback(db, { dismissed: false });
       expect(feedback).toHaveLength(2);
-      expect(feedback.every(f => f.status === 'open')).toBe(true);
+      expect(feedback.every(f => !f.dismissed)).toBe(true);
     });
 
     it('should filter by feedback_type', () => {
@@ -444,7 +426,7 @@ describe('Feedback Operations', () => {
     it('should combine filters', () => {
       const feedback = listFeedback(db, {
         issue_id: 'issue-001',
-        status: 'open',
+        dismissed: false,
       });
       expect(feedback).toHaveLength(1);
       expect(feedback[0].content).toBe('Feedback 1');
@@ -510,75 +492,73 @@ describe('Feedback Operations', () => {
     });
   });
 
-  describe('getOpenFeedbackForSpec', () => {
-    it('should get only open feedback for a spec', () => {
+  describe('getActiveFeedbackForSpec', () => {
+    it('should get only active feedback for a spec', () => {
       const anchor: FeedbackAnchor = { anchor_status: 'valid' };
 
       createFeedback(db, {
         issue_id: 'issue-001',
         spec_id: 'spec-001',
         feedback_type: 'comment',
-        content: 'Open feedback',
+        content: 'Active feedback',
         agent: 'claude-code',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
 
       createFeedback(db, {
         issue_id: 'issue-001',
         spec_id: 'spec-001',
         feedback_type: 'suggestion',
-        content: 'Resolved feedback',
+        content: 'Dismissed feedback',
         agent: 'claude-code',
         anchor,
-        status: 'resolved',
+        dismissed: true,
       });
 
-      const feedback = getOpenFeedbackForSpec(db, 'spec-001');
+      const feedback = getActiveFeedbackForSpec(db, 'spec-001');
       expect(feedback).toHaveLength(1);
-      expect(feedback[0].status).toBe('open');
+      expect(feedback[0].dismissed).toBe(false);
     });
   });
 
-  describe('countFeedbackByStatus', () => {
-    it('should count all feedback by status', () => {
+  describe('countFeedbackByDismissed', () => {
+    it('should count all feedback by dismissed status', () => {
       const anchor: FeedbackAnchor = { anchor_status: 'valid' };
 
       createFeedback(db, {
         issue_id: 'issue-001',
         spec_id: 'spec-001',
         feedback_type: 'comment',
-        content: 'Open 1',
+        content: 'Active 1',
         agent: 'claude-code',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
 
       createFeedback(db, {
         issue_id: 'issue-001',
         spec_id: 'spec-001',
         feedback_type: 'suggestion',
-        content: 'Open 2',
+        content: 'Active 2',
         agent: 'claude-code',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
 
       createFeedback(db, {
         issue_id: 'issue-001',
         spec_id: 'spec-001',
         feedback_type: 'request',
-        content: 'Resolved',
+        content: 'Dismissed',
         agent: 'claude-code',
         anchor,
-        status: 'resolved',
+        dismissed: true,
       });
 
-      const counts = countFeedbackByStatus(db);
-      expect(counts.open).toBe(2);
-      expect(counts.resolved).toBe(1);
-      expect(counts.acknowledged).toBe(0);
-      expect(counts.wont_fix).toBe(0);
+      const counts = countFeedbackByDismissed(db);
+      expect(counts.active).toBe(2);
+      expect(counts.dismissed).toBe(1);
     });
 
     it('should count feedback for specific spec', () => {
@@ -599,7 +579,7 @@ describe('Feedback Operations', () => {
         content: 'Spec 1',
         agent: 'claude-code',
         anchor,
-        status: 'open',
+        dismissed: false,
       });
 
       createFeedback(db, {
@@ -609,12 +589,12 @@ describe('Feedback Operations', () => {
         content: 'Spec 2',
         agent: 'claude-code',
         anchor,
-        status: 'resolved',
+        dismissed: true,
       });
 
-      const counts = countFeedbackByStatus(db, 'spec-001');
-      expect(counts.open).toBe(1);
-      expect(counts.resolved).toBe(0);
+      const counts = countFeedbackByDismissed(db, 'spec-001');
+      expect(counts.active).toBe(1);
+      expect(counts.dismissed).toBe(0);
     });
   });
 

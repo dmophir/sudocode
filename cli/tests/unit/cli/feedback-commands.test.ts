@@ -8,8 +8,7 @@ import {
   handleFeedbackAdd,
   handleFeedbackList,
   handleFeedbackShow,
-  handleFeedbackAcknowledge,
-  handleFeedbackResolve,
+  handleFeedbackDismiss,
   handleFeedbackStale,
 } from '../../../src/cli/feedback-commands.js';
 import type Database from 'better-sqlite3';
@@ -350,7 +349,7 @@ This is the second section.
     });
   });
 
-  describe('handleFeedbackAcknowledge', () => {
+  describe('handleFeedbackDismiss', () => {
     beforeEach(async () => {
       const { createFeedback } = await import('../../../src/operations/feedback.js');
       const { createFeedbackAnchor } = await import('../../../src/operations/feedback-anchors.js');
@@ -374,61 +373,21 @@ This is the second section.
       consoleLogSpy.mockClear();
     });
 
-    it('should acknowledge feedback', async () => {
+    it('should dismiss feedback', async () => {
       const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const options = { comment: 'Noted, will address later' };
 
-      await handleFeedbackAcknowledge(ctx, 'FB-001');
+      await handleFeedbackDismiss(ctx, 'FB-001', options);
 
       expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining('✓ Acknowledged feedback'),
+        expect.stringContaining('✓ Dismissed feedback'),
         expect.anything()
       );
 
       const { getFeedback } = await import('../../../src/operations/feedback.js');
       const feedback = getFeedback(db, 'FB-001');
-      expect(feedback?.status).toBe('acknowledged');
-    });
-  });
-
-  describe('handleFeedbackResolve', () => {
-    beforeEach(async () => {
-      const { createFeedback } = await import('../../../src/operations/feedback.js');
-      const { createFeedbackAnchor } = await import('../../../src/operations/feedback-anchors.js');
-      const { getSpec } = await import('../../../src/operations/specs.js');
-
-      const spec = getSpec(db, 'spec-001');
-      if (!spec) throw new Error('Spec not found');
-
-      const anchor = createFeedbackAnchor(spec.content, 7);
-
-      createFeedback(db, {
-        id: 'FB-001',
-        issue_id: 'issue-001',
-        spec_id: 'spec-001',
-        feedback_type: 'comment',
-        content: 'Test feedback',
-        agent: 'test',
-        anchor,
-      });
-
-      consoleLogSpy.mockClear();
-    });
-
-    it('should resolve feedback', async () => {
-      const ctx = { db, outputDir: tempDir, jsonOutput: false };
-      const options = { comment: 'Fixed the issue' };
-
-      await handleFeedbackResolve(ctx, 'FB-001', options);
-
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining('✓ Resolved feedback'),
-        expect.anything()
-      );
-
-      const { getFeedback } = await import('../../../src/operations/feedback.js');
-      const feedback = getFeedback(db, 'FB-001');
-      expect(feedback?.status).toBe('resolved');
-      expect(feedback?.resolution).toBe('Fixed the issue');
+      expect(feedback?.dismissed).toBe(true);
+      expect(feedback?.resolution).toBe('Noted, will address later');
     });
   });
 

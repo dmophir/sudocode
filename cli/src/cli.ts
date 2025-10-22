@@ -34,9 +34,7 @@ import {
   handleFeedbackAdd,
   handleFeedbackList,
   handleFeedbackShow,
-  handleFeedbackAcknowledge,
-  handleFeedbackResolve,
-  handleFeedbackWontFix,
+  handleFeedbackDismiss,
   handleFeedbackStale,
   handleFeedbackRelocate,
 } from "./cli/feedback-commands.js";
@@ -403,26 +401,11 @@ feedback
   });
 
 feedback
-  .command("acknowledge <id>")
-  .description("Acknowledge feedback")
-  .action(async (id) => {
-    await handleFeedbackAcknowledge(getContext(), id);
-  });
-
-feedback
-  .command("resolve <id>")
-  .description("Mark feedback as resolved")
-  .option("-c, --comment <text>", "Resolution comment")
+  .command("dismiss <id>")
+  .description("Dismiss feedback")
+  .option("-c, --comment <text>", "Optional comment")
   .action(async (id, options) => {
-    await handleFeedbackResolve(getContext(), id, options);
-  });
-
-feedback
-  .command("wont-fix <id>")
-  .description("Mark feedback as won't fix")
-  .option("-r, --reason <text>", "Reason for not fixing")
-  .action(async (id, options) => {
-    await handleFeedbackWontFix(getContext(), id, options);
+    await handleFeedbackDismiss(getContext(), id, options);
   });
 
 feedback

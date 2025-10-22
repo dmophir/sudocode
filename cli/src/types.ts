@@ -19,7 +19,6 @@ export type {
   LocationAnchor,
   FeedbackAnchor,
   FeedbackType,
-  FeedbackStatus,
   SpecJSONL,
   IssueJSONL,
   FeedbackJSONL,
