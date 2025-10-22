@@ -10,7 +10,6 @@ export type RelationshipType =
   | "implements"
   | "references"
   | "depends-on"
-  | "parent-child"
   | "discovered-from"
   | "related";
 
@@ -31,6 +30,9 @@ export async function link(
 ): Promise<any> {
   const args = ["link", params.from_id, params.to_id];
 
+  if (params.from_id === params.to_id) {
+    throw new Error("from_id and to_id cannot be the same");
+  }
   if (params.type) {
     args.push("--type", params.type);
   }

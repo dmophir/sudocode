@@ -76,7 +76,8 @@ export class SudocodeMCPServer {
                 },
                 search: {
                   type: "string",
-                  description: "Search issues by title or description (optional)",
+                  description:
+                    "Search issues by title or description (optional)",
                 },
               },
             },
@@ -151,7 +152,8 @@ export class SudocodeMCPServer {
                 },
                 search: {
                   type: "string",
-                  description: "Search specs by title or description (optional)",
+                  description:
+                    "Search specs by title or description (optional)",
                 },
               },
             },
@@ -232,7 +234,6 @@ export class SudocodeMCPServer {
                     "implements",
                     "references",
                     "depends-on",
-                    "parent-child",
                     "discovered-from",
                     "related",
                   ],
@@ -454,8 +455,8 @@ sudocode is a git-native spec and issue management system designed for AI-assist
 - \`implements\`: Issue implements a spec
 - \`references\`: Soft reference
 - \`depends-on\`: General dependency
-- \`parent-child\`: Epic/subtask hierarchy
 - \`discovered-from\`: New work found during implementation
+- \`related\`: General relationship
 `,
               },
             ],

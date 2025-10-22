@@ -47,7 +47,6 @@ describe('Relationship Tools', () => {
         'implements',
         'references',
         'depends-on',
-        'parent-child',
         'discovered-from',
         'related',
       ];
