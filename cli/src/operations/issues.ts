@@ -267,17 +267,45 @@ export function getBlockedIssues(db: Database.Database): any[] {
 export function searchIssues(
   db: Database.Database,
   query: string,
-  options: { limit?: number } = {}
+  options: Omit<ListIssuesOptions, 'offset'> = {}
 ): Issue[] {
-  const stmt = db.prepare(`
-    SELECT * FROM issues
-    WHERE title LIKE @query OR description LIKE @query OR content LIKE @query
-    ORDER BY priority DESC, created_at DESC
-    LIMIT @limit
-  `);
+  const conditions: string[] = ['(title LIKE @query OR description LIKE @query OR content LIKE @query)'];
+  const params: Record<string, any> = { query: `%${query}%` };
 
-  return stmt.all({
-    query: `%${query}%`,
-    limit: options.limit || 50,
-  }) as Issue[];
+  if (options.status !== undefined) {
+    conditions.push('status = @status');
+    params.status = options.status;
+  }
+  if (options.priority !== undefined) {
+    conditions.push('priority = @priority');
+    params.priority = options.priority;
+  }
+  if (options.assignee !== undefined) {
+    if (options.assignee === null) {
+      conditions.push('assignee IS NULL');
+    } else {
+      conditions.push('assignee = @assignee');
+      params.assignee = options.assignee;
+    }
+  }
+  if (options.parent_id !== undefined) {
+    if (options.parent_id === null) {
+      conditions.push('parent_id IS NULL');
+    } else {
+      conditions.push('parent_id = @parent_id');
+      params.parent_id = options.parent_id;
+    }
+  }
+
+  let sql = `SELECT * FROM issues WHERE ${conditions.join(' AND ')} ORDER BY priority DESC, created_at DESC`;
+
+  if (options.limit !== undefined) {
+    sql += ' LIMIT @limit';
+    params.limit = options.limit;
+  } else {
+    sql += ' LIMIT 50';
+  }
+
+  const stmt = db.prepare(sql);
+  return stmt.all(params) as Issue[];
 }

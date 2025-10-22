@@ -127,6 +127,7 @@ export async function handleSpecList(
     // Use search if grep is provided, otherwise use list with filters
     const specs = options.grep
       ? searchSpecs(ctx.db, options.grep, {
+          priority: options.priority ? parseInt(options.priority) : undefined,
           limit: parseInt(options.limit),
         })
       : listSpecs(ctx.db, {

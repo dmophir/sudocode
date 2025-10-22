@@ -203,12 +203,21 @@ describe('Spec Operations', () => {
         title: 'Authentication System',
         file_path: 'auth.md',
         content: 'Implements OAuth 2.0',
+        priority: 1,
       });
       createSpec(db, {
         id: 'spec-002',
         title: 'Database Design',
         file_path: 'db.md',
         content: 'PostgreSQL schema',
+        priority: 2,
+      });
+      createSpec(db, {
+        id: 'spec-003',
+        title: 'Database Migration Strategy',
+        file_path: 'migration.md',
+        content: 'How to handle database migrations',
+        priority: 1,
       });
     });
 
@@ -227,6 +236,28 @@ describe('Spec Operations', () => {
     it('should return empty for no matches', () => {
       const results = searchSpecs(db, 'NonExistent');
       expect(results).toHaveLength(0);
+    });
+
+    it('should search and filter by priority', () => {
+      const results = searchSpecs(db, 'Database', { priority: 1 });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('spec-003');
+    });
+
+    it('should search with multiple matches', () => {
+      const results = searchSpecs(db, 'Database');
+      expect(results).toHaveLength(2);
+      expect(results.map(r => r.id).sort()).toEqual(['spec-002', 'spec-003']);
+    });
+
+    it('should search and filter with no matching filters', () => {
+      const results = searchSpecs(db, 'Database', { priority: 3 });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should respect limit parameter', () => {
+      const results = searchSpecs(db, 'Database', { limit: 1 });
+      expect(results).toHaveLength(1);
     });
   });
 });

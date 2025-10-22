@@ -95,6 +95,9 @@ export async function handleIssueList(
     // Use search if grep is provided, otherwise use list with filters
     const issues = options.grep
       ? searchIssues(ctx.db, options.grep, {
+          status: options.status as any,
+          assignee: options.assignee,
+          priority: options.priority ? parseInt(options.priority) : undefined,
           limit: parseInt(options.limit),
         })
       : listIssues(ctx.db, {

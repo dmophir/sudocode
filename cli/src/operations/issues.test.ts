@@ -188,11 +188,23 @@ describe('Issue Operations', () => {
         id: 'issue-001',
         title: 'Fix authentication bug',
         description: 'OAuth is broken',
+        status: 'open',
+        priority: 1,
+        assignee: 'agent1',
       });
       createIssue(db, {
         id: 'issue-002',
         title: 'Add database migration',
         content: 'PostgreSQL schema update',
+        status: 'in_progress',
+        priority: 2,
+      });
+      createIssue(db, {
+        id: 'issue-003',
+        title: 'Fix database connection',
+        description: 'Connection pooling issue',
+        status: 'closed',
+        priority: 1,
       });
     });
 
@@ -212,6 +224,39 @@ describe('Issue Operations', () => {
       const results = searchIssues(db, 'PostgreSQL');
       expect(results).toHaveLength(1);
       expect(results[0].id).toBe('issue-002');
+    });
+
+    it('should search and filter by status', () => {
+      const results = searchIssues(db, 'database', { status: 'in_progress' });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('issue-002');
+    });
+
+    it('should search and filter by priority', () => {
+      const results = searchIssues(db, 'Fix', { priority: 1 });
+      expect(results).toHaveLength(2);
+      expect(results.map(r => r.id).sort()).toEqual(['issue-001', 'issue-003']);
+    });
+
+    it('should search and filter by assignee', () => {
+      const results = searchIssues(db, 'authentication', { assignee: 'agent1' });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('issue-001');
+    });
+
+    it('should search and filter by multiple criteria', () => {
+      const results = searchIssues(db, 'Fix', {
+        status: 'open',
+        priority: 1,
+        assignee: 'agent1',
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('issue-001');
+    });
+
+    it('should return empty array when search matches but filters do not', () => {
+      const results = searchIssues(db, 'authentication', { status: 'closed' });
+      expect(results).toHaveLength(0);
     });
   });
 });

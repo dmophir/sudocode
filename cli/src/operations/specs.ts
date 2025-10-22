@@ -210,17 +210,33 @@ export function listSpecs(
 export function searchSpecs(
   db: Database.Database,
   query: string,
-  options: { limit?: number } = {}
+  options: Omit<ListSpecsOptions, 'offset'> = {}
 ): Spec[] {
-  const stmt = db.prepare(`
-    SELECT * FROM specs
-    WHERE title LIKE @query OR content LIKE @query
-    ORDER BY priority DESC, created_at DESC
-    LIMIT @limit
-  `);
+  const conditions: string[] = ['(title LIKE @query OR content LIKE @query)'];
+  const params: Record<string, any> = { query: `%${query}%` };
 
-  return stmt.all({
-    query: `%${query}%`,
-    limit: options.limit || 50,
-  }) as Spec[];
+  if (options.priority !== undefined) {
+    conditions.push('priority = @priority');
+    params.priority = options.priority;
+  }
+  if (options.parent_id !== undefined) {
+    if (options.parent_id === null) {
+      conditions.push('parent_id IS NULL');
+    } else {
+      conditions.push('parent_id = @parent_id');
+      params.parent_id = options.parent_id;
+    }
+  }
+
+  let sql = `SELECT * FROM specs WHERE ${conditions.join(' AND ')} ORDER BY priority DESC, created_at DESC`;
+
+  if (options.limit !== undefined) {
+    sql += ' LIMIT @limit';
+    params.limit = options.limit;
+  } else {
+    sql += ' LIMIT 50';
+  }
+
+  const stmt = db.prepare(sql);
+  return stmt.all(params) as Spec[];
 }
