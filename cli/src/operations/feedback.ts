@@ -14,13 +14,11 @@ export interface CreateFeedbackInput {
   agent: string;
   anchor: FeedbackAnchor;
   dismissed?: boolean;
-  resolution?: string | null;
 }
 
 export interface UpdateFeedbackInput {
   content?: string;
   dismissed?: boolean;
-  resolution?: string | null;
   anchor?: FeedbackAnchor;
 }
 
@@ -76,9 +74,9 @@ export function createFeedback(db: Database.Database, input: CreateFeedbackInput
 
   const stmt = db.prepare(`
     INSERT INTO issue_feedback (
-      id, issue_id, spec_id, feedback_type, content, agent, anchor, dismissed, resolution
+      id, issue_id, spec_id, feedback_type, content, agent, anchor, dismissed
     ) VALUES (
-      @id, @issue_id, @spec_id, @feedback_type, @content, @agent, @anchor, @dismissed, @resolution
+      @id, @issue_id, @spec_id, @feedback_type, @content, @agent, @anchor, @dismissed
     )
   `);
 
@@ -92,7 +90,6 @@ export function createFeedback(db: Database.Database, input: CreateFeedbackInput
       agent: input.agent,
       anchor: anchorJson,
       dismissed: input.dismissed !== undefined ? (input.dismissed ? 1 : 0) : 0,
-      resolution: input.resolution || null,
     });
 
     const feedback = getFeedback(db, id);
@@ -144,10 +141,6 @@ export function updateFeedback(
     updates.push('dismissed = @dismissed');
     params.dismissed = input.dismissed ? 1 : 0;
   }
-  if (input.resolution !== undefined) {
-    updates.push('resolution = @resolution');
-    params.resolution = input.resolution;
-  }
   if (input.anchor !== undefined) {
     updates.push('anchor = @anchor');
     params.anchor = JSON.stringify(input.anchor);
@@ -193,10 +186,9 @@ export function deleteFeedback(db: Database.Database, id: string): boolean {
  */
 export function dismissFeedback(
   db: Database.Database,
-  id: string,
-  resolution?: string
+  id: string
 ): IssueFeedback {
-  return updateFeedback(db, id, { dismissed: true, resolution: resolution || null });
+  return updateFeedback(db, id, { dismissed: true });
 }
 
 /**

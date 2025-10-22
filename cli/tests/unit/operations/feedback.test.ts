@@ -141,7 +141,6 @@ describe('Feedback Operations', () => {
       });
 
       expect(feedback.dismissed).toBe(false);
-      expect(feedback.resolution).toBeNull();
     });
 
     it('should throw error on invalid foreign key', () => {
@@ -245,11 +244,9 @@ describe('Feedback Operations', () => {
 
       const updated = updateFeedback(db, created.id, {
         dismissed: true,
-        resolution: 'Updated spec section 3.2',
       });
 
       expect(updated.dismissed).toBe(true);
-      expect(updated.resolution).toBe('Updated spec section 3.2');
     });
 
     it('should update anchor', () => {
@@ -309,12 +306,10 @@ describe('Feedback Operations', () => {
 
       const updated = dismissFeedback(
         db,
-        created.id,
-        'Will address in next iteration'
+        created.id
       );
 
       expect(updated.dismissed).toBe(true);
-      expect(updated.resolution).toBe('Will address in next iteration');
     });
   });
 

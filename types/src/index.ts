@@ -94,7 +94,6 @@ export interface IssueFeedback {
   dismissed: boolean;
   created_at: string;
   updated_at: string;
-  resolution: string | null;
 }
 
 /**

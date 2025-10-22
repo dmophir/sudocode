@@ -232,11 +232,6 @@ export async function handleFeedbackShow(
         console.log(chalk.gray('  Section:'), anchor.original_location.section_heading || 'None');
       }
 
-      if (feedback.resolution) {
-        console.log();
-        console.log(chalk.bold('Resolution:'));
-        console.log(feedback.resolution);
-      }
 
       console.log();
     }
@@ -248,7 +243,6 @@ export async function handleFeedbackShow(
 }
 
 export interface FeedbackDismissOptions {
-  comment?: string;
 }
 
 /**
@@ -260,15 +254,12 @@ export async function handleFeedbackDismiss(
   options: FeedbackDismissOptions
 ): Promise<void> {
   try {
-    const feedback = dismissFeedback(ctx.db, id, options.comment);
+    const feedback = dismissFeedback(ctx.db, id);
 
     if (ctx.jsonOutput) {
       console.log(JSON.stringify(feedback, null, 2));
     } else {
       console.log(chalk.green('✓ Dismissed feedback'), chalk.cyan(id));
-      if (options.comment) {
-        console.log(chalk.gray(`  Comment: ${options.comment}`));
-      }
     }
   } catch (error) {
     console.error(chalk.red('✗ Failed to dismiss feedback'));

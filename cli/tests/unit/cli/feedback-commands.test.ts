@@ -387,7 +387,6 @@ This is the second section.
       const { getFeedback } = await import('../../../src/operations/feedback.js');
       const feedback = getFeedback(db, 'FB-001');
       expect(feedback?.dismissed).toBe(true);
-      expect(feedback?.resolution).toBe('Noted, will address later');
     });
   });
 
