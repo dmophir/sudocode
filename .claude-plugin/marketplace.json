@@ -1,0 +1,15 @@
+{
+  "name": "sudocode-marketplace",
+  "description": "Local marketplace for sudocode plugins",
+  "owner": {
+    "name": "sudocode AI"
+  },
+  "plugins": [
+    {
+      "name": "sudocode",
+      "source": "./",
+      "description": "Git-native spec and issue management for AI-assisted development",
+      "version": "0.1.0"
+    }
+  ]
+}
