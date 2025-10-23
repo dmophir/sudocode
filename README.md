@@ -1,0 +1,189 @@
+# sudocode
+
+sudocode is a lightweight context management system for coding agents that lives in your repo. Capture user intent as durable specs and track agent activity as issues.
+
+Adding sudocode into your repo adds instant organizational capabilities to your coding agents. They'll gain the ability to track context over long-horizon tasks and work collaboratively on complex tasks.
+
+**sudocode** provides a structured yet flexible system for organizing the chaos of human-AI collaboration in software development.
+
+## Quick Start
+
+```bash 
+# Install dependencies
+npm install -g sudocode
+
+# Initialize a sudocode project in your project directory.
+sudocode init
+```
+
+You can also install the sudocode MCP server (stdio):
+```json
+{
+  "mcpServers": {
+    "sudocode": {
+      "command": "sudocode-mcp"
+    }
+  }
+}
+```
+
+For Claude Code, you can install the plugin:
+```bash
+# In Claude Code
+/plugin marketplace add sudocode-ai/sudocode
+/plugin install sudocode
+```
+
+## Context-as-Code
+
+Your context and designs are just as valuable as the code being written. Code is often over-specified, while your actual requirements are under-specified and come with design choices and intent that is not immediately captured.
+
+With sudocode, you treat your git repo as a distributed context database to capture context and make it readily available to coding agents. You can track user intent (specs), agent tasks (issues), and agent trajectories (executions) as they evolve alongside your codebase.
+
+- **Distributed Collaboration**: Human developers and AI agents share one logical database across multiple environments through git synchronization
+- **Lightweight**: All your context lives under your control in your repo
+- **Integrated Audit Trail**: Context can be recovered with git's immutable change tracking
+- **Agent Persistence**: Reduce agent hallucinations and amnesia by keeping task context in version-controlled files instead of ephemeral conversations
+
+Git handles distribution while AI handles merge conflicts.
+
+## Spec-Driven Development
+
+A spec can be thought of as user intent + relevant context. Combined, a spec contains enough information for an agent to carry out the requirements defined in the task.
+
+- **Structured Context**: Create connections between your specs with a rich graph structure, and organize context dynamically so it is easily discoverable by agents
+- **Advanced Organization**: Create structured task dependencies to keep track of blocking issues and hidden relationships between tasks
+- **Iterative Refinement**: Move through multiple refinement stages as agents provide bi-directional feedback as they implement on your specs
+
+Reduce the chaos of "vibe coding" by establishing clear, executable requirements in order to produce predictable outcomes.
+
+## Context Structure
+
+sudocode implements a **4-tiered abstraction structure** for representing context, corresponding to increasing granularity from high-level requirements to low-level implementation:
+
+### 1. Spec (Specification)
+A primitive for **user intent** and context—requirements, RFCs, research questions, design decisions. Specs capture **WHAT** you want.
+
+- Organized as nodes in a graph structure
+- Support hierarchical relationships and cross-cutting links
+- Stored as human-editable Markdown with YAML frontmatter
+- Live in `.sudocode/specs/`
+
+### 2. Issue
+A primitive for **agent intent** and context—work items derived from specs, capturing tasks within agent scope.
+
+- Link back to specific requirements in specs via `[[@ISSUE-001]]` references
+- Support hierarchical organization, dependencies, and relationships
+- Graph relationship types: `blocks`, `related`, `parent-child`, `discovered-from`
+- Stored as Markdown + JSONL (`.sudocode/issues/`)
+
+### 3. Agent
+The **execution abstraction**—represents the actual trajectory of an agentic loop run against an issue.
+
+- Tracks agent system (Claude Code, Codex, etc.) and configurations
+- One-to-many relationship with issues (supports multiple execution sessions per issue)
+- Captures sub/multi-agent structures and unique workflows
+- Configuration stored in `.sudocode/agents/`
+
+### 4. Artifact
+A primitive representing **state changes** from agent execution.
+
+- e.g. Code diffs for coding agents, reports for research agents, documentation updates for docs agents
+- Multiple artifacts per execution
+
+## Key Features
+
+### Dual Issue/Spec Representation
+Every entity has both a **human-editable format** (Markdown + YAML) and a **machine-optimized format** (JSONL + SQLite):
+
+- Write specs and issues as readable Markdown
+- Query and process through SQLite for performance
+- Auto-sync between formats (5-second debounce)
+- Git-friendly primary storage
+
+### Bidirectional Linking
+Relationships are tracked in both directions:
+
+```markdown
+## Requirements
+1. Support OAuth 2.0 [[@ISSUE-001]]
+2. Multi-factor authentication [[@ISSUE-002]]
+
+See also [[SPEC-010]] for API design patterns.
+```
+
+Backlinks are automatically tracked in the relationship graph.
+
+### Graph-Based Planning
+Navigate dependencies, hierarchies, and relationships:
+
+- Topological ordering for execution (no-dependency, high-priority tasks first)
+- Hierarchical execution with subtask handoffs
+- Automatic issue claiming for multi-agent concurrency
+
+### Agent Feedback Loops
+Agents can update specs with findings during execution, bridging lower to higher abstraction levels to keep humans in the loop.
+
+## Architecture
+
+### Distributed Git Database
+
+- **Source of Truth**: JSONL files (`.sudocode/specs/specs.jsonl`, `.sudocode/issues/issues.jsonl`) committed to git
+- **Local Cache**: Each machine maintains a SQLite cache (`.sudocode/cache.db`, gitignored)
+- **Auto-Export**: SQLite → JSONL after CRUD operations (5-second debounce)
+- **Auto-Import**: JSONL → SQLite when JSONL is newer (e.g., after `git pull`)
+- **Conflict Resolution**: Git handles distribution, AI handles merge conflicts
+
+This design provides centralized database semantics through distributed git infrastructure.
+
+## Development Flow
+
+### 1. Create a Spec
+Define requirements, behaviors, abstractions, and design decisions:
+
+```bash
+sudocode spec create auth-system
+# Then update created spec markdown file.
+```
+
+### 2. Create Sub-Specs (Optional)
+For complex specs, create hierarchical or cross-cutting relationships by creating references between specs and issues.
+
+```markdown
+See [[SPEC-002]] for detailed API contracts.
+```
+
+### 3. Plan and Create Issues
+Invoke a planning agent to collaboratively define implementation issues.
+
+The agent:
+- Creates issues with `blocks`, `related`, `parent-child` relationships
+- Embeds issue references back into the spec: `[[@ISSUE-001]]`
+- Populates bidirectional links (issue → spec, spec → issue)
+
+TODO: Add a plan CLI command that hooks into the configured agent.
+
+### 4. Execute Issues
+Invoke your coding agent to implement issues. Agents can pull ready issues or issue details to align on work items. Agents can also refer to specs for added context.
+
+- Issues with no blockers and higher priority execute first (topological order)
+- Agents can update specs with findings and feedback during execution
+- Multiple agent executions can run simultaneously
+
+### 5. Manage Artifacts
+Artifacts and tracked as agents execute.
+
+- Code changes are marked for review or directly committed (user settings)
+- Issues are updated with artifact references for traceability
+
+## Philosophy
+
+sudocode embraces:
+
+1. **Context-as-Code**: Version-controlled, human-readable requirements and plans are persisted in source control
+2. **Git-Native**: Everything lives in git—no external databases or services
+3. **Flexible Structure**: Markdown content is free-form; structure emerges from user-defined conventions and usage patterns
+
+## Acknowledgments
+
+sudocode is inspired by the git-native issues system pioneered by [Beads](https://github.com/steveyegge/beads).

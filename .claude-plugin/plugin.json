@@ -1,0 +1,31 @@
+{
+  "name": "sudocode",
+  "description": "Git-native spec and issue management for AI-assisted development. Track issues, specs, and feedback with smart anchoring.",
+  "version": "0.1.0",
+  "author": {
+    "name": "sudocode AI",
+    "url": "https://github.com/sudocode-ai"
+  },
+  "repository": "https://github.com/sudocode-ai/sudocode",
+  "license": "MIT",
+  "homepage": "https://sudocode.ai",
+  "keywords": [
+    "issue-tracker",
+    "spec-management",
+    "spec-driven-development",
+    "ai-assisted-development",
+    "multi-agent-orchestration",
+    "git-native",
+    "mcp-server",
+    "context-as-code"
+  ],
+  "mcpServers": {
+    "sudocode": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/run-mcp.sh",
+      "args": [],
+      "env": {
+        "SUDOCODE_WORKING_DIR": "${workspaceFolder}"
+      }
+    }
+  }
+}

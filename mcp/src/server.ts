@@ -17,6 +17,7 @@ import * as issueTools from "./tools/issues.js";
 import * as specTools from "./tools/specs.js";
 import * as relationshipTools from "./tools/relationships.js";
 import * as feedbackTools from "./tools/feedback.js";
+import * as referenceTools from "./tools/references.js";
 
 export class SudocodeMCPServer {
   private server: Server;
@@ -116,7 +117,8 @@ export class SudocodeMCPServer {
                 },
                 description: {
                   type: "string",
-                  description: "Issue description",
+                  description:
+                    "Issue descriptions. Supports inline references to other specs/issues by ID in Obsidian internal link format (e.g. `[[SPEC-002]]`).",
                 },
                 priority: {
                   type: "number",
@@ -198,7 +200,8 @@ export class SudocodeMCPServer {
                 },
                 design: {
                   type: "string",
-                  description: "Design notes (optional)",
+                  description:
+                    "Design notes (optional). Supports inline references to other specs/issues by ID in Obsidian internal link format (e.g. `[[ISSUE-001]]`).",
                 },
                 parent: {
                   type: "string",
@@ -241,6 +244,59 @@ export class SudocodeMCPServer {
                 },
               },
               required: ["from_id", "to_id"],
+            },
+          },
+          {
+            name: "add_reference",
+            description:
+              "Add an inline cross-reference to a spec or issue using Obsidian-style [[ID]] syntax. References are inserted at a specific location in the markdown content.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                entity_id: {
+                  type: "string",
+                  description: "Target entity ID (where to add the reference)",
+                },
+                reference_id: {
+                  type: "string",
+                  description: "ID to reference (e.g., ISSUE-001, SPEC-002)",
+                },
+                display_text: {
+                  type: "string",
+                  description: "Display text (optional)",
+                },
+                relationship_type: {
+                  type: "string",
+                  enum: [
+                    "blocks",
+                    "implements",
+                    "references",
+                    "depends-on",
+                    "discovered-from",
+                    "related",
+                  ],
+                  description: "Relationship type (optional)",
+                },
+                line: {
+                  type: "number",
+                  description:
+                    "Line number to insert reference (use line OR text, not both)",
+                },
+                text: {
+                  type: "string",
+                  description:
+                    "Text to search for insertion point (use line OR text, not both)",
+                },
+                format: {
+                  type: "string",
+                  enum: ["inline", "newline"],
+                  description:
+                    "Format: inline (same line) or newline (new line)",
+                  default: "inline",
+                },
+                // TODO: Add position handling later if needed.
+              },
+              required: ["entity_id", "reference_id"],
             },
           },
           {
@@ -330,6 +386,13 @@ export class SudocodeMCPServer {
             result = await relationshipTools.link(this.client, args as any);
             break;
 
+          case "add_reference":
+            result = await referenceTools.addReference(
+              this.client,
+              args as any
+            );
+            break;
+
           case "add_feedback":
             result = await feedbackTools.addFeedback(this.client, args as any);
             break;
@@ -404,7 +467,7 @@ sudocode is a git-native spec and issue management system designed for AI-assist
 **Specs**: Technical specifications stored as markdown files
 - Types: architecture, api, database, feature, research
 - Status: draft → review → approved → deprecated
-- Each spec has a unique ID (e.g., sg-spec-1) and file path
+- Each spec has a unique ID (e.g., SPEC-001) and file path
 
 **Issues**: Work items tracked in the database
 - Types: bug, feature, task, epic, chore

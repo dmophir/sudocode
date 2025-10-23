@@ -16,6 +16,7 @@ import {
   handleSpecCreate,
   handleSpecList,
   handleSpecShow,
+  handleSpecUpdate,
   handleSpecDelete,
 } from "./cli/spec-commands.js";
 import {
@@ -27,6 +28,7 @@ import {
   handleIssueDelete,
 } from "./cli/issue-commands.js";
 import { handleLink } from "./cli/relationship-commands.js";
+import { handleAddReference } from "./cli/reference-commands.js";
 import { handleReady, handleBlocked } from "./cli/query-commands.js";
 import { handleSync, handleExport, handleImport } from "./cli/sync-commands.js";
 import { handleStatus, handleStats } from "./cli/status-commands.js";
@@ -161,7 +163,7 @@ program
 
       // Create meta.json with correct structure matching Metadata interface
       const meta = {
-        version: "1.0.0",
+        version: VERSION,
         next_spec_id: 1,
         next_issue_id: 1,
         id_prefix: {
@@ -181,6 +183,13 @@ program
       fs.writeFileSync(path.join(dir, "specs.jsonl"), "", "utf8");
       fs.writeFileSync(path.join(dir, "issues.jsonl"), "", "utf8");
 
+      // Create .gitignore file
+      const gitignoreContent = `cache.db
+issues/
+specs/
+`;
+      fs.writeFileSync(path.join(dir, ".gitignore"), gitignoreContent, "utf8");
+
       database.close();
 
       console.log(chalk.green("✓ Initialized sudocode in"), chalk.cyan(dir));
@@ -198,7 +207,10 @@ program
 // SPEC COMMANDS
 // ============================================================================
 
-const spec = program.command("spec").alias("specs").description("Manage specifications");
+const spec = program
+  .command("spec")
+  .alias("specs")
+  .description("Manage specifications");
 
 spec
   .command("create <title>")
@@ -231,17 +243,45 @@ spec
   });
 
 spec
+  .command("update <id>")
+  .description("Update a spec")
+  .option("-p, --priority <priority>", "New priority")
+  .option("--title <title>", "New title")
+  .option("-d, --description <desc>", "New description")
+  .option("--design <design>", "New design notes")
+  .option("--parent <id>", "New parent spec ID")
+  .option("--tags <tags>", "New comma-separated tags")
+  .action(async (id, options) => {
+    await handleSpecUpdate(getContext(), id, options);
+  });
+
+spec
   .command("delete <id...>")
   .description("Delete one or more specs")
   .action(async (ids, options) => {
     await handleSpecDelete(getContext(), ids, options);
   });
 
+spec
+  .command("add-ref <entity-id> <reference-id>")
+  .description("Add a reference to a spec")
+  .option("-l, --line <number>", "Line number to insert reference")
+  .option("-t, --text <text>", "Text to search for insertion point")
+  .option("--display <text>", "Display text for reference")
+  .option("--type <type>", "Relationship type (blocks, implements, etc.)")
+  .option("--format <format>", "Format: inline or newline", "inline")
+  .action(async (entityId, referenceId, options) => {
+    await handleAddReference(getContext(), entityId, referenceId, options);
+  });
+
 // ============================================================================
 // ISSUE COMMANDS
 // ============================================================================
 
-const issue = program.command("issue").alias("issues").description("Manage issues");
+const issue = program
+  .command("issue")
+  .alias("issues")
+  .description("Manage issues");
 
 issue
   .command("create <title>")
@@ -303,6 +343,19 @@ issue
   )
   .action(async (ids, options) => {
     await handleIssueDelete(getContext(), ids, options);
+  });
+
+issue
+  .command("add-ref <entity-id> <reference-id>")
+  .description("Add a reference to an issue")
+  .option("-l, --line <number>", "Line number to insert reference")
+  .option("-t, --text <text>", "Text to search for insertion point")
+  .option("--display <text>", "Display text for reference")
+  .option("--type <type>", "Relationship type (blocks, implements, etc.)")
+  .option("--format <format>", "Format: inline or newline", "inline")
+  .option("--position <position>", "Position: before or after", "after")
+  .action(async (entityId, referenceId, options) => {
+    await handleAddReference(getContext(), entityId, referenceId, options);
   });
 
 // ============================================================================
