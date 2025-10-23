@@ -161,7 +161,7 @@ program
 
       // Create meta.json with correct structure matching Metadata interface
       const meta = {
-        version: "1.0.0",
+        version: VERSION,
         next_spec_id: 1,
         next_issue_id: 1,
         id_prefix: {
@@ -205,7 +205,10 @@ specs/
 // SPEC COMMANDS
 // ============================================================================
 
-const spec = program.command("spec").alias("specs").description("Manage specifications");
+const spec = program
+  .command("spec")
+  .alias("specs")
+  .description("Manage specifications");
 
 spec
   .command("create <title>")
@@ -248,7 +251,10 @@ spec
 // ISSUE COMMANDS
 // ============================================================================
 
-const issue = program.command("issue").alias("issues").description("Manage issues");
+const issue = program
+  .command("issue")
+  .alias("issues")
+  .description("Manage issues");
 
 issue
   .command("create <title>")
