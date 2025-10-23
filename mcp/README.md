@@ -18,9 +18,9 @@ npm install -g sudocode-mcp
 
 ## Configuration
 
-### Claude Desktop
+### Claude Code
 
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to your Claude Code configuration:
 
 ```json
 {
@@ -42,7 +42,6 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
       "env": {
         "SUDOCODE_WORKING_DIR": "/path/to/your/project",
         "SUDOCODE_PATH": "sudocode",
-        "SUDOCODE_DB": "/path/to/custom/db.sqlite"
       }
     }
   }
@@ -118,7 +117,7 @@ Install sudocode:
 
 ## Usage Example
 
-Once configured in Claude Desktop, you can ask Claude to:
+Once configured in Claude Code, you can ask Claude to:
 
 1. Find ready tasks: "Show me issues that are ready to work on"
 2. Claim work: "Set issue sg-123 to in_progress status"
@@ -173,7 +172,7 @@ If you get "CLI not found" errors:
 
 1. Ensure `sudocode` is installed and in your PATH
 2. Try setting `SUDOCODE_PATH` to the full path of the `sudocode` executable
-3. Restart Claude Desktop after configuration changes
+3. Restart Claude Code after configuration changes
 
 ### Database Not Found
 
