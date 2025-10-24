@@ -16,10 +16,10 @@ export interface Spec {
 export interface Issue {
   id: string;
   title: string;
+  status: IssueStatus;
   uuid: string;
   description: string;
   content: string;
-  status: IssueStatus;
   priority: number;
   assignee: string | null;
   created_at: string;

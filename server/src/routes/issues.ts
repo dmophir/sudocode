@@ -4,7 +4,15 @@
 
 import { Router, Request, Response } from "express";
 import type Database from "better-sqlite3";
-import { getAllIssues, getIssueById } from "../services/issues.js";
+import {
+  getAllIssues,
+  getIssueById,
+  createNewIssue,
+  updateExistingIssue,
+  deleteExistingIssue,
+} from "../services/issues.js";
+import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
+import * as path from "path";
 
 export function createIssuesRouter(db: Database.Database): Router {
   const router = Router();
@@ -78,6 +86,205 @@ export function createIssuesRouter(db: Database.Database): Router {
         data: null,
         error_data: error instanceof Error ? error.message : String(error),
         message: "Failed to get issue",
+      });
+    }
+  });
+
+  /**
+   * POST /api/issues - Create a new issue
+   */
+  router.post("/", (req: Request, res: Response) => {
+    try {
+      const {
+        title,
+        description,
+        content,
+        status,
+        priority,
+        assignee,
+        parent_id,
+      } = req.body;
+
+      // Validate required fields
+      if (!title || typeof title !== "string") {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "Title is required and must be a string",
+        });
+        return;
+      }
+
+      if (title.length > 500) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "Title must be 500 characters or less",
+        });
+        return;
+      }
+
+      // Generate new issue ID
+      const outputDir = path.join(process.cwd(), ".sudocode");
+      const id = generateIssueId(db, outputDir);
+
+      // Create issue using CLI operation
+      const issue = createNewIssue(db, {
+        id,
+        title,
+        description: description || "",
+        content: content || "",
+        status: status || "open",
+        priority: priority !== undefined ? priority : 2,
+        assignee: assignee || null,
+        parent_id: parent_id || null,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: issue,
+      });
+    } catch (error) {
+      console.error("Error creating issue:", error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error instanceof Error ? error.message : String(error),
+        message: "Failed to create issue",
+      });
+    }
+  });
+
+  /**
+   * PUT /api/issues/:id - Update an existing issue
+   */
+  router.put("/:id", (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const {
+        title,
+        description,
+        content,
+        status,
+        priority,
+        assignee,
+        parent_id,
+      } = req.body;
+
+      // Validate that at least one field is provided
+      if (
+        title === undefined &&
+        description === undefined &&
+        content === undefined &&
+        status === undefined &&
+        priority === undefined &&
+        assignee === undefined &&
+        parent_id === undefined
+      ) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "At least one field must be provided for update",
+        });
+        return;
+      }
+
+      // Validate title length if provided
+      if (
+        title !== undefined &&
+        typeof title === "string" &&
+        title.length > 500
+      ) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "Title must be 500 characters or less",
+        });
+        return;
+      }
+
+      // Build update input
+      const updateInput: any = {};
+      if (title !== undefined) updateInput.title = title;
+      if (description !== undefined) updateInput.description = description;
+      if (content !== undefined) updateInput.content = content;
+      if (status !== undefined) updateInput.status = status;
+      if (priority !== undefined) updateInput.priority = priority;
+      if (assignee !== undefined) updateInput.assignee = assignee;
+      if (parent_id !== undefined) updateInput.parent_id = parent_id;
+
+      // Update issue using CLI operation
+      const issue = updateExistingIssue(db, id, updateInput);
+
+      res.json({
+        success: true,
+        data: issue,
+      });
+    } catch (error) {
+      console.error("Error updating issue:", error);
+
+      // Handle "not found" errors
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          message: error.message,
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error instanceof Error ? error.message : String(error),
+        message: "Failed to update issue",
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/issues/:id - Delete an issue
+   */
+  router.delete("/:id", (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      // Check if issue exists first
+      const existingIssue = getIssueById(db, id);
+      if (!existingIssue) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          message: `Issue not found: ${id}`,
+        });
+        return;
+      }
+
+      // Delete issue using CLI operation
+      const deleted = deleteExistingIssue(db, id);
+
+      if (deleted) {
+        res.json({
+          success: true,
+          data: {
+            id,
+            deleted: true,
+          },
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          data: null,
+          message: "Failed to delete issue",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting issue:", error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error instanceof Error ? error.message : String(error),
+        message: "Failed to delete issue",
       });
     }
   });
