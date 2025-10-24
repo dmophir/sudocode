@@ -30,7 +30,7 @@ export async function handleServerStart(
 
   // Find the server package - it should be a sibling workspace
   // TODO: Improve this to handle various installation scenarios
-  const serverPath = path.resolve(__dirname, "../../../server/dist/index.js");
+  const serverPath = path.resolve(__dirname, "../../../server/dist/src/index.js");
 
   // Set up environment variables
   const env = {

@@ -8,6 +8,10 @@ import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
+import {
+  startServerWatcher,
+  type ServerWatcherControl,
+} from "./services/watcher.js";
 
 // Load environment variables
 dotenv.config();
@@ -21,6 +25,8 @@ const DB_PATH =
 
 // Initialize database
 let db: Database.Database;
+let watcher: ServerWatcherControl | null = null;
+
 try {
   console.log(`Initializing database at: ${DB_PATH}`);
   db = initDatabase({ path: DB_PATH });
@@ -35,6 +41,34 @@ try {
 } catch (error) {
   console.error("Failed to initialize database:", error);
   process.exit(1);
+}
+
+// Start file watcher (enabled by default, disable with WATCH=false)
+const WATCH_ENABLED = process.env.WATCH !== "false";
+if (WATCH_ENABLED) {
+  try {
+    const SUDOCODE_DIR = path.dirname(DB_PATH); // .sudocode directory
+    watcher = startServerWatcher({
+      db,
+      baseDir: SUDOCODE_DIR,
+      debounceDelay: parseInt(process.env.WATCH_DEBOUNCE || "2000", 10),
+      onFileChange: (info) => {
+        // TODO: Broadcast WebSocket updates when implemented (ISSUE-013, ISSUE-014)
+        // TODO: Add some syncing operation to keep the database, jsonl, markdown files consistent.
+        console.log(
+          `[server] File change detected: ${info.entityType || "unknown"} ${
+            info.entityId || ""
+          }`
+        );
+      },
+    });
+    console.log(`[server] File watcher started on: ${SUDOCODE_DIR}`);
+  } catch (error) {
+    console.error("Failed to start file watcher:", error);
+    console.warn(
+      "Continuing without file watcher. Set WATCH=false to suppress this warning."
+    );
+  }
 }
 
 // Middleware
@@ -75,14 +109,20 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
+  if (watcher) {
+    await watcher.stop();
+  }
   db.close();
   process.exit(0);
 });
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("\nShutting down server...");
+  if (watcher) {
+    await watcher.stop();
+  }
   db.close();
   process.exit(0);
 });
