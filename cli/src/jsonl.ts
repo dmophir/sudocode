@@ -155,12 +155,23 @@ export async function writeJSONL<T extends JSONLEntity = JSONLEntity>(
     const bDate = (b as any).created_at;
 
     // Handle missing created_at fields - put them at the end
-    if (!aDate && !bDate) return 0;
+    if (!aDate && !bDate) {
+      // Both missing dates, sort by ID
+      const aId = (a as any).id || "";
+      const bId = (b as any).id || "";
+      return aId < bId ? -1 : aId > bId ? 1 : 0;
+    }
     if (!aDate) return 1;
     if (!bDate) return -1;
 
     // Compare dates as strings (ISO 8601 format sorts lexicographically)
-    return aDate < bDate ? -1 : aDate > bDate ? 1 : 0;
+    if (aDate < bDate) return -1;
+    if (aDate > bDate) return 1;
+
+    // If dates are equal, fall back to ID comparison
+    const aId = (a as any).id || "";
+    const bId = (b as any).id || "";
+    return aId < bId ? -1 : aId > bId ? 1 : 0;
   });
 
   // Write each entity as a line
@@ -200,12 +211,23 @@ export function writeJSONLSync<T extends JSONLEntity = JSONLEntity>(
     const bDate = (b as any).created_at;
 
     // Handle missing created_at fields - put them at the end
-    if (!aDate && !bDate) return 0;
+    if (!aDate && !bDate) {
+      // Both missing dates, sort by ID
+      const aId = (a as any).id || "";
+      const bId = (b as any).id || "";
+      return aId < bId ? -1 : aId > bId ? 1 : 0;
+    }
     if (!aDate) return 1;
     if (!bDate) return -1;
 
     // Compare dates as strings (ISO 8601 format sorts lexicographically)
-    return aDate < bDate ? -1 : aDate > bDate ? 1 : 0;
+    if (aDate < bDate) return -1;
+    if (aDate > bDate) return 1;
+
+    // If dates are equal, fall back to ID comparison
+    const aId = (a as any).id || "";
+    const bId = (b as any).id || "";
+    return aId < bId ? -1 : aId > bId ? 1 : 0;
   });
 
   // Write each entity as a line
