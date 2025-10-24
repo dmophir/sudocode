@@ -4,8 +4,8 @@
 
 export interface Spec {
   id: string;
-  uuid: string;
   title: string;
+  uuid: string;
   file_path: string;
   content: string;
   priority: number;
@@ -16,9 +16,9 @@ export interface Spec {
 
 export interface Issue {
   id: string;
-  uuid: string;
   title: string;
   description: string;
+  uuid: string;
   content: string;
   status: IssueStatus;
   priority: number;

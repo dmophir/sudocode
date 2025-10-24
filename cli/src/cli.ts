@@ -178,7 +178,7 @@ program
       fs.writeFileSync(path.join(dir, "issues.jsonl"), "", "utf8");
 
       // Create .gitignore file
-      const gitignoreContent = `cache.db
+      const gitignoreContent = `cache.db*
 issues/
 specs/
 `;
