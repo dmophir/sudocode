@@ -1,0 +1,127 @@
+import { useEffect, useRef, useState, useCallback } from 'react'
+import type { WebSocketMessage, WebSocketSubscribeMessage } from '@/types/api'
+
+interface UseWebSocketOptions {
+  onMessage?: (message: WebSocketMessage) => void
+  onOpen?: () => void
+  onClose?: () => void
+  onError?: (error: Event) => void
+  reconnect?: boolean
+  reconnectInterval?: number
+}
+
+export function useWebSocket(
+  url: string,
+  options: UseWebSocketOptions = {}
+) {
+  const {
+    onMessage,
+    onOpen,
+    onClose,
+    onError,
+    reconnect = true,
+    reconnectInterval = 5000,
+  } = options
+
+  const ws = useRef<WebSocket | null>(null)
+  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+
+  const connect = useCallback(() => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      return
+    }
+
+    const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:3002'}${url}`
+    console.log('[WebSocket] Connecting to:', wsUrl)
+
+    try {
+      ws.current = new WebSocket(wsUrl)
+
+      ws.current.onopen = () => {
+        console.log('[WebSocket] Connected:', url)
+        setConnected(true)
+        onOpen?.()
+      }
+
+      ws.current.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as WebSocketMessage
+          console.log('[WebSocket] Message received:', message.type)
+          setLastMessage(message)
+          onMessage?.(message)
+        } catch (error) {
+          console.error('[WebSocket] Failed to parse message:', error)
+        }
+      }
+
+      ws.current.onerror = (error) => {
+        console.error('[WebSocket] Error:', error)
+        onError?.(error)
+      }
+
+      ws.current.onclose = () => {
+        console.log('[WebSocket] Disconnected:', url)
+        setConnected(false)
+        onClose?.()
+
+        // Reconnect if enabled
+        if (reconnect) {
+          reconnectTimeout.current = setTimeout(() => {
+            console.log('[WebSocket] Attempting to reconnect...')
+            connect()
+          }, reconnectInterval)
+        }
+      }
+    } catch (error) {
+      console.error('[WebSocket] Connection failed:', error)
+    }
+  }, [url, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval])
+
+  const disconnect = useCallback(() => {
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current)
+      reconnectTimeout.current = null
+    }
+    if (ws.current) {
+      ws.current.close()
+      ws.current = null
+    }
+    setConnected(false)
+  }, [])
+
+  const send = useCallback((message: WebSocketSubscribeMessage | any) => {
+    if (ws.current && connected) {
+      ws.current.send(JSON.stringify(message))
+      console.log('[WebSocket] Message sent:', message.type)
+    } else {
+      console.warn('[WebSocket] Cannot send message: not connected')
+    }
+  }, [connected])
+
+  const subscribe = useCallback((channel: WebSocketSubscribeMessage['channel'], entityId?: string) => {
+    send({
+      type: 'subscribe',
+      channel,
+      entity_id: entityId,
+    } as WebSocketSubscribeMessage)
+  }, [send])
+
+  useEffect(() => {
+    connect()
+
+    return () => {
+      disconnect()
+    }
+  }, [connect, disconnect])
+
+  return {
+    connected,
+    lastMessage,
+    send,
+    subscribe,
+    reconnect: connect,
+    disconnect,
+  }
+}
