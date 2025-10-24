@@ -12,6 +12,7 @@ import {
   deleteExistingSpec,
 } from "../services/specs.js";
 import { generateSpecId } from "@sudocode/cli/dist/id-generator.js";
+import { broadcastSpecUpdate } from "../services/websocket.js";
 import * as path from "path";
 
 export function createSpecsRouter(db: Database.Database): Router {
@@ -127,6 +128,9 @@ export function createSpecsRouter(db: Database.Database): Router {
         parent_id: parent_id || null,
       });
 
+      // Broadcast spec creation to WebSocket clients
+      broadcastSpecUpdate(spec.id, "created", spec);
+
       res.status(201).json({
         success: true,
         data: spec,
@@ -189,6 +193,9 @@ export function createSpecsRouter(db: Database.Database): Router {
       // Update spec using CLI operation
       const spec = updateExistingSpec(db, id, updateInput);
 
+      // Broadcast spec update to WebSocket clients
+      broadcastSpecUpdate(spec.id, "updated", spec);
+
       res.json({
         success: true,
         data: spec,
@@ -237,6 +244,9 @@ export function createSpecsRouter(db: Database.Database): Router {
       const deleted = deleteExistingSpec(db, id);
 
       if (deleted) {
+        // Broadcast spec deletion to WebSocket clients
+        broadcastSpecUpdate(id, "deleted", { id });
+
         res.json({
           success: true,
           data: {
