@@ -12,6 +12,7 @@ import {
   deleteExistingIssue,
 } from "../services/issues.js";
 import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
+import { broadcastIssueUpdate } from "../services/websocket.js";
 import * as path from "path";
 
 export function createIssuesRouter(db: Database.Database): Router {
@@ -140,6 +141,9 @@ export function createIssuesRouter(db: Database.Database): Router {
         parent_id: parent_id || null,
       });
 
+      // Broadcast issue creation to WebSocket clients
+      broadcastIssueUpdate(issue.id, "created", issue);
+
       res.status(201).json({
         success: true,
         data: issue,
@@ -216,6 +220,9 @@ export function createIssuesRouter(db: Database.Database): Router {
       // Update issue using CLI operation
       const issue = updateExistingIssue(db, id, updateInput);
 
+      // Broadcast issue update to WebSocket clients
+      broadcastIssueUpdate(issue.id, "updated", issue);
+
       res.json({
         success: true,
         data: issue,
@@ -264,6 +271,9 @@ export function createIssuesRouter(db: Database.Database): Router {
       const deleted = deleteExistingIssue(db, id);
 
       if (deleted) {
+        // Broadcast issue deletion to WebSocket clients
+        broadcastIssueUpdate(id, "deleted", { id });
+
         res.json({
           success: true,
           data: {

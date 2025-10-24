@@ -9,6 +9,8 @@ import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
+import { getIssueById } from "./services/issues.js";
+import { getSpecById } from "./services/specs.js";
 import {
   startServerWatcher,
   type ServerWatcherControl,
@@ -17,6 +19,8 @@ import {
   initWebSocketServer,
   getWebSocketStats,
   shutdownWebSocketServer,
+  broadcastIssueUpdate,
+  broadcastSpecUpdate,
 } from "./services/websocket.js";
 
 // Load environment variables
@@ -61,12 +65,24 @@ if (WATCH_ENABLED) {
       debounceDelay: parseInt(process.env.WATCH_DEBOUNCE || "2000", 10),
       syncJSONLToMarkdown: SYNC_JSONL_TO_MARKDOWN,
       onFileChange: (info) => {
-        // TODO: Broadcast WebSocket updates when implemented (ISSUE-013, ISSUE-014)
         console.log(
           `[server] File change detected: ${info.entityType || "unknown"} ${
             info.entityId || ""
           }`
         );
+
+        // Broadcast WebSocket updates for issue and spec changes
+        if (info.entityType === "issue" && info.entityId) {
+          const issue = getIssueById(db, info.entityId);
+          if (issue) {
+            broadcastIssueUpdate(info.entityId, "updated", issue);
+          }
+        } else if (info.entityType === "spec" && info.entityId) {
+          const spec = getSpecById(db, info.entityId);
+          if (spec) {
+            broadcastSpecUpdate(info.entityId, "updated", spec);
+          }
+        }
       },
     });
     console.log(`[server] File watcher started on: ${SUDOCODE_DIR}`);
