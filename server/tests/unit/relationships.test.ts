@@ -13,36 +13,26 @@ import { createIssuesRouter } from "../../src/routes/issues.js";
 import { createSpecsRouter } from "../../src/routes/specs.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 describe("Relationships API", () => {
   let app: express.Application;
   let db: Database.Database;
   let testDbPath: string;
+  let testDir: string;
   let testIssueId: string;
   let testSpecId: string;
 
   before(async () => {
-    // Create a temporary database for testing
-    testDbPath = path.join(
-      process.cwd(),
-      ".sudocode-test-relationships",
-      "cache.db"
-    );
-    const testDir = path.dirname(testDbPath);
+    // Create a unique temporary directory in system temp
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-relationships-"));
+    testDbPath = path.join(testDir, "cache.db");
 
-    // Create test directory if it doesn't exist
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
-
-    // Create .sudocode directory at project root for config (needed by POST endpoint)
-    const sudocodeDir = path.join(process.cwd(), ".sudocode");
-    if (!fs.existsSync(sudocodeDir)) {
-      fs.mkdirSync(sudocodeDir, { recursive: true });
-    }
+    // Set SUDOCODE_DIR environment variable
+    process.env.SUDOCODE_DIR = testDir;
 
     // Create config.json for ID generation
-    const configPath = path.join(sudocodeDir, "config.json");
+    const configPath = path.join(testDir, "config.json");
     const config = {
       version: "1.0.0",
       id_prefix: {
@@ -51,6 +41,10 @@ describe("Relationships API", () => {
       },
     };
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    // Create specs directory for spec files
+    const specsDir = path.join(testDir, "specs");
+    fs.mkdirSync(specsDir, { recursive: true });
 
     // Initialize test database
     db = initDatabase({ path: testDbPath });
@@ -77,10 +71,11 @@ describe("Relationships API", () => {
   after(() => {
     // Clean up
     db.close();
-    const testDir = path.join(process.cwd(), ".sudocode-test-relationships");
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
+    // Unset environment variable
+    delete process.env.SUDOCODE_DIR;
   });
 
   describe("POST /api/relationships", () => {
@@ -393,23 +388,8 @@ describe("Relationships API", () => {
 
   describe("Integration tests", () => {
     before(() => {
-      // Ensure .sudocode directory and config exist for these tests
-      const sudocodeDir = path.join(process.cwd(), ".sudocode");
-      if (!fs.existsSync(sudocodeDir)) {
-        fs.mkdirSync(sudocodeDir, { recursive: true });
-      }
-
-      const configPath = path.join(sudocodeDir, "config.json");
-      if (!fs.existsSync(configPath)) {
-        const config = {
-          version: "1.0.0",
-          id_prefix: {
-            spec: "SPEC",
-            issue: "ISSUE",
-          },
-        };
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      }
+      // Config already exists in testDir from main before() hook
+      // No additional setup needed
     });
 
     it("should support multiple relationship types", async () => {

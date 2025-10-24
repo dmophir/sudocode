@@ -9,6 +9,7 @@ import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { startServerWatcher } from "../../src/services/watcher.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 describe("File Watcher Service", () => {
   let db: Database.Database;
@@ -16,23 +17,15 @@ describe("File Watcher Service", () => {
   let testDir: string;
 
   before(async () => {
-    // Create a temporary database for testing
-    testDbPath = path.join(process.cwd(), ".sudocode-test-watcher", "cache.db");
-    testDir = path.dirname(testDbPath);
+    // Create a unique temporary directory in system temp
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-watcher-"));
+    testDbPath = path.join(testDir, "cache.db");
 
-    // Create test directory if it doesn't exist
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
-
-    // Create .sudocode directory at project root for config (needed by watcher)
-    const sudocodeDir = path.join(process.cwd(), ".sudocode");
-    if (!fs.existsSync(sudocodeDir)) {
-      fs.mkdirSync(sudocodeDir, { recursive: true });
-    }
+    // Set SUDOCODE_DIR environment variable
+    process.env.SUDOCODE_DIR = testDir;
 
     // Create config.json for ID generation
-    const configPath = path.join(sudocodeDir, "config.json");
+    const configPath = path.join(testDir, "config.json");
     const config = {
       version: "1.0.0",
       id_prefix: {
@@ -55,10 +48,11 @@ describe("File Watcher Service", () => {
   after(() => {
     // Clean up
     db.close();
-    const testWatcherDir = path.join(process.cwd(), ".sudocode-test-watcher");
-    if (fs.existsSync(testWatcherDir)) {
-      fs.rmSync(testWatcherDir, { recursive: true, force: true });
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
+    // Unset environment variable
+    delete process.env.SUDOCODE_DIR;
   });
 
   describe("Watcher Initialization", () => {

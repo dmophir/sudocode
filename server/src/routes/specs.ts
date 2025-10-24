@@ -13,6 +13,7 @@ import {
 } from "../services/specs.js";
 import { generateSpecId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastSpecUpdate } from "../services/websocket.js";
+import { getSudocodeDir } from "../utils/sudocode-dir.js";
 import * as path from "path";
 
 export function createSpecsRouter(db: Database.Database): Router {
@@ -112,7 +113,7 @@ export function createSpecsRouter(db: Database.Database): Router {
       }
 
       // Generate new spec ID
-      const outputDir = path.join(process.cwd(), ".sudocode");
+      const outputDir = getSudocodeDir();
       const id = generateSpecId(db, outputDir);
 
       // Generate file path for the spec

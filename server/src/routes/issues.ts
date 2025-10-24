@@ -13,7 +13,7 @@ import {
 } from "../services/issues.js";
 import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastIssueUpdate } from "../services/websocket.js";
-import * as path from "path";
+import { getSudocodeDir } from "../utils/sudocode-dir.js";
 
 export function createIssuesRouter(db: Database.Database): Router {
   const router = Router();
@@ -126,7 +126,7 @@ export function createIssuesRouter(db: Database.Database): Router {
       }
 
       // Generate new issue ID
-      const outputDir = path.join(process.cwd(), ".sudocode");
+      const outputDir = getSudocodeDir();
       const id = generateIssueId(db, outputDir);
 
       // Create issue using CLI operation

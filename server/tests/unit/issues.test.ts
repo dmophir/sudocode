@@ -11,31 +11,25 @@ import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { createIssuesRouter } from "../../src/routes/issues.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 describe("Issues API", () => {
   let app: express.Application;
   let db: Database.Database;
   let testDbPath: string;
+  let testDir: string;
   let createdIssueId: string;
 
   before(() => {
-    // Create a temporary database for testing
-    testDbPath = path.join(process.cwd(), ".sudocode-test", "cache.db");
-    const testDir = path.dirname(testDbPath);
+    // Create a unique temporary directory in system temp
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-issues-"));
+    testDbPath = path.join(testDir, "cache.db");
 
-    // Create test directory if it doesn't exist
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
-
-    // Create .sudocode directory at project root for config (needed by POST endpoint)
-    const sudocodeDir = path.join(process.cwd(), ".sudocode");
-    if (!fs.existsSync(sudocodeDir)) {
-      fs.mkdirSync(sudocodeDir, { recursive: true });
-    }
+    // Set SUDOCODE_DIR environment variable
+    process.env.SUDOCODE_DIR = testDir;
 
     // Create config.json for ID generation
-    const configPath = path.join(sudocodeDir, "config.json");
+    const configPath = path.join(testDir, "config.json");
     const config = {
       version: "1.0.0",
       id_prefix: {
@@ -57,18 +51,11 @@ describe("Issues API", () => {
   after(() => {
     // Clean up
     db.close();
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
-    const testDir = path.dirname(testDbPath);
     if (fs.existsSync(testDir)) {
-      fs.rmdirSync(testDir, { recursive: true });
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
-    // Clean up .sudocode directory
-    const sudocodeDir = path.join(process.cwd(), ".sudocode");
-    if (fs.existsSync(sudocodeDir)) {
-      fs.rmSync(sudocodeDir, { recursive: true, force: true });
-    }
+    // Unset environment variable
+    delete process.env.SUDOCODE_DIR;
   });
 
   describe("GET /api/issues", () => {
