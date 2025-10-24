@@ -522,7 +522,8 @@ sudocode is a git-native spec and issue management system designed for AI-assist
 
     try {
       console.error("Initializing sudocode database...");
-      await this.client.exec(["sync", "--from-markdown"]);
+      // TODO: Determine if sync or import is more appropriate here.
+      await this.client.exec(["import"]);
       console.error("Database initialized successfully");
     } catch (error) {
       // Log error but don't fail startup - database may not exist yet
