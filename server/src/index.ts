@@ -3,7 +3,12 @@ import cors from "cors";
 import dotenv from "dotenv";
 import * as path from "path";
 import * as http from "http";
+import { fileURLToPath } from "url";
 import type Database from "better-sqlite3";
+
+// ES Module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { initDatabase, getDatabaseInfo } from "./services/db.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
@@ -28,10 +33,11 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-const DB_PATH =
-  process.env.SUDOCODE_DB_PATH ||
-  // TODO: Extract the cache path from config.json
-  path.join(process.cwd(), ".sudocode", "cache.db");
+
+// Falls back to current directory for development/testing
+const SUDOCODE_DIR =
+  process.env.SUDOCODE_DIR || path.join(process.cwd(), ".sudocode");
+const DB_PATH = path.join(SUDOCODE_DIR, "cache.db");
 
 // Initialize database
 let db: Database.Database;
@@ -58,7 +64,6 @@ const WATCH_ENABLED = process.env.WATCH !== "false";
 const SYNC_JSONL_TO_MARKDOWN = process.env.SYNC_JSONL_TO_MARKDOWN === "true";
 if (WATCH_ENABLED) {
   try {
-    const SUDOCODE_DIR = path.dirname(DB_PATH); // .sudocode directory
     watcher = startServerWatcher({
       db,
       baseDir: SUDOCODE_DIR,
@@ -125,25 +130,25 @@ app.get("/ws/stats", (_req: Request, res: Response) => {
   res.status(200).json(stats);
 });
 
-// Root endpoint
-app.get("/", (_req: Request, res: Response) => {
-  res.json({
-    message: "sudocode local server",
-    version: "0.1.0",
-    endpoints: {
-      rest: {
-        health: "/health",
-        issues: "/api/issues",
-        specs: "/api/specs",
-        relationships: "/api/relationships",
-        feedback: "/api/feedback",
-      },
-      websocket: {
-        path: "/ws",
-        stats: "/ws/stats",
-      },
-    },
-  });
+// Serve static frontend
+const frontendPath = path.join(__dirname, "../../../frontend/dist");
+console.log(`[server] Serving static frontend from: ${frontendPath}`);
+
+// Serve static files
+app.use(express.static(frontendPath));
+
+// SPA fallback - serve index.html for all non-API/non-WS routes
+app.get("*", (req: Request, res: Response) => {
+  // Skip API and WebSocket routes
+  if (
+    req.path.startsWith("/api") ||
+    req.path.startsWith("/ws") ||
+    req.path.startsWith("/health")
+  ) {
+    res.status(404).json({ error: "Not found" });
+  } else {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  }
 });
 
 // Create HTTP server and initialize WebSocket

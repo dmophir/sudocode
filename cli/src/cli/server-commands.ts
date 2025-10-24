@@ -30,11 +30,15 @@ export async function handleServerStart(
 
   // Find the server package - it should be a sibling workspace
   // TODO: Improve this to handle various installation scenarios
-  const serverPath = path.resolve(__dirname, "../../../server/dist/src/index.js");
+  const serverPath = path.resolve(
+    __dirname,
+    "../../../server/dist/src/index.js"
+  );
 
   // Set up environment variables
   const env = {
     ...process.env,
+    SUDOCODE_DIR: ctx.outputDir,
     PORT: options.port || process.env.PORT || "3000",
   };
 
