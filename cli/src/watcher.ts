@@ -223,9 +223,6 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
 
             // Skip if content already matches (prevents oscillation)
             if (entityId && contentMatches(filePath, entityId, entityType)) {
-              onLog(
-                `[watch] Skipping sync for ${entityType} ${entityId} (content matches)`
-              );
               return;
             }
           } catch (error) {

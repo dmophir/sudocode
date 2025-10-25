@@ -14,6 +14,7 @@ import {
 import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastIssueUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
+import { triggerExport } from "../services/export.js";
 
 export function createIssuesRouter(db: Database.Database): Router {
   const router = Router();
@@ -141,6 +142,9 @@ export function createIssuesRouter(db: Database.Database): Router {
         parent_id: parent_id || null,
       });
 
+      // Trigger export to JSONL files
+      triggerExport(db);
+
       // Broadcast issue creation to WebSocket clients
       broadcastIssueUpdate(issue.id, "created", issue);
 
@@ -220,6 +224,9 @@ export function createIssuesRouter(db: Database.Database): Router {
       // Update issue using CLI operation
       const issue = updateExistingIssue(db, id, updateInput);
 
+      // Trigger export to JSONL files
+      triggerExport(db);
+
       // Broadcast issue update to WebSocket clients
       broadcastIssueUpdate(issue.id, "updated", issue);
 
@@ -271,6 +278,9 @@ export function createIssuesRouter(db: Database.Database): Router {
       const deleted = deleteExistingIssue(db, id);
 
       if (deleted) {
+        // Trigger export to JSONL files
+        triggerExport(db);
+
         // Broadcast issue deletion to WebSocket clients
         broadcastIssueUpdate(id, "deleted", { id });
 

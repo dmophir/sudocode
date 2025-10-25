@@ -9,6 +9,7 @@ import express from "express";
 import type Database from "better-sqlite3";
 import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { createIssuesRouter } from "../../src/routes/issues.js";
+import { cleanupExport } from "../../src/services/export.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -49,7 +50,9 @@ describe("Issues API", () => {
   });
 
   after(() => {
-    // Clean up
+    // Clean up export debouncer first
+    cleanupExport();
+    // Clean up database
     db.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });

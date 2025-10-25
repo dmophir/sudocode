@@ -14,6 +14,7 @@ import {
 import { generateSpecId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastSpecUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
+import { triggerExport } from "../services/export.js";
 import * as path from "path";
 
 export function createSpecsRouter(db: Database.Database): Router {
@@ -129,6 +130,9 @@ export function createSpecsRouter(db: Database.Database): Router {
         parent_id: parent_id || null,
       });
 
+      // Trigger export to JSONL files
+      triggerExport(db);
+
       // Broadcast spec creation to WebSocket clients
       broadcastSpecUpdate(spec.id, "created", spec);
 
@@ -194,6 +198,9 @@ export function createSpecsRouter(db: Database.Database): Router {
       // Update spec using CLI operation
       const spec = updateExistingSpec(db, id, updateInput);
 
+      // Trigger export to JSONL files
+      triggerExport(db);
+
       // Broadcast spec update to WebSocket clients
       broadcastSpecUpdate(spec.id, "updated", spec);
 
@@ -245,6 +252,9 @@ export function createSpecsRouter(db: Database.Database): Router {
       const deleted = deleteExistingSpec(db, id);
 
       if (deleted) {
+        // Trigger export to JSONL files
+        triggerExport(db);
+
         // Broadcast spec deletion to WebSocket clients
         broadcastSpecUpdate(id, "deleted", { id });
 

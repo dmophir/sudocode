@@ -24,12 +24,7 @@ import { listFeedback, updateFeedback } from "./operations/feedback.js";
 import { relocateFeedbackAnchor } from "./operations/feedback-anchors.js";
 import { exportToJSONL } from "./export.js";
 import { generateSpecId, generateIssueId } from "./id-generator.js";
-import { generateUniqueFilename, findExistingSpecFile } from "./filename-generator.js";
-import type {
-  Spec,
-  Issue,
-  IssueStatus,
-} from "@sudocode/types";
+import type { Spec, Issue, IssueStatus } from "@sudocode/types";
 
 export interface SyncResult {
   success: boolean;
@@ -114,7 +109,6 @@ function initializeFrontmatter(
   if (!initialized.updated_at) {
     initialized.updated_at = now;
   }
-
 
   // Set type-specific defaults
   if (entityType === "spec") {
@@ -219,7 +213,14 @@ export async function syncMarkdownToJSONL(
     if (!entityId) {
       if (autoInitialize) {
         // Auto-initialize missing fields
-        data = initializeFrontmatter(db, data, entityType, mdPath, outputDir, user);
+        data = initializeFrontmatter(
+          db,
+          data,
+          entityType,
+          mdPath,
+          outputDir,
+          user
+        );
         entityId = data.id as string;
 
         // Write back frontmatter if requested

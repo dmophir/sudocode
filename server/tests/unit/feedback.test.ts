@@ -11,6 +11,7 @@ import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { createFeedbackRouter } from "../../src/routes/feedback.js";
 import { createIssuesRouter } from "../../src/routes/issues.js";
 import { createSpecsRouter } from "../../src/routes/specs.js";
+import { cleanupExport } from "../../src/services/export.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -70,7 +71,9 @@ describe("Feedback API", () => {
   });
 
   after(() => {
-    // Clean up
+    // Clean up export debouncer first
+    cleanupExport();
+    // Clean up database
     db.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
