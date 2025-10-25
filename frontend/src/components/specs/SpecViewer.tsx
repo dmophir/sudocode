@@ -1,10 +1,17 @@
 import { useMemo } from 'react'
 import { Card } from '@/components/ui/card'
+import { FeedbackAnchor } from './FeedbackAnchor'
+import type { IssueFeedback, FeedbackAnchor as FeedbackAnchorType } from '@/types/api'
 
 interface SpecViewerProps {
   content: string
   showLineNumbers?: boolean
   highlightLines?: number[]
+  feedback?: IssueFeedback[]
+  selectedLine?: number | null
+  onLineClick?: (lineNumber: number) => void
+  onTextSelect?: (text: string, lineNumber: number) => void
+  onFeedbackClick?: (feedback: IssueFeedback) => void
   className?: string
 }
 
@@ -12,11 +19,50 @@ export function SpecViewer({
   content,
   showLineNumbers = true,
   highlightLines = [],
+  feedback = [],
+  selectedLine,
+  onLineClick,
+  onTextSelect,
+  onFeedbackClick,
   className = '',
 }: SpecViewerProps) {
   const lines = useMemo(() => {
     return content.split('\n')
   }, [content])
+
+  // Map feedback to line numbers
+  const feedbackByLine = useMemo(() => {
+    const map = new Map<number, IssueFeedback[]>()
+    feedback.forEach((fb) => {
+      try {
+        const anchor: FeedbackAnchorType | null = fb.anchor
+          ? JSON.parse(fb.anchor)
+          : null
+        if (anchor?.line_number) {
+          const existing = map.get(anchor.line_number) || []
+          map.set(anchor.line_number, [...existing, fb])
+        }
+      } catch (error) {
+        console.error('Failed to parse feedback anchor:', error)
+      }
+    })
+    return map
+  }, [feedback])
+
+  const handleLineClick = (lineNumber: number) => {
+    onLineClick?.(lineNumber)
+  }
+
+  const handleMouseUp = (lineNumber: number) => {
+    if (!onTextSelect) return
+
+    const selection = window.getSelection()
+    const selectedText = selection?.toString().trim()
+
+    if (selectedText && selectedText.length > 0) {
+      onTextSelect(selectedText, lineNumber)
+    }
+  }
 
   return (
     <Card className={`overflow-hidden ${className}`}>
@@ -29,10 +75,13 @@ export function SpecViewer({
               {lines.map((_, index) => (
                 <div
                   key={index}
-                  className={`text-right font-mono text-xs leading-6 text-muted-foreground ${
-                    highlightLines.includes(index + 1) ? 'font-bold text-primary' : ''
-                  }`}
+                  className={`cursor-pointer text-right font-mono text-xs leading-6 text-muted-foreground transition-colors hover:bg-primary/10 ${
+                    highlightLines.includes(index + 1)
+                      ? 'font-bold text-primary'
+                      : ''
+                  } ${selectedLine === index + 1 ? 'bg-primary/20' : ''}`}
                   data-line-number={index + 1}
+                  onClick={() => handleLineClick(index + 1)}
                 >
                   {index + 1}
                 </div>
@@ -42,22 +91,55 @@ export function SpecViewer({
 
           {/* Content column */}
           <div className="flex-1 overflow-x-auto px-4 py-4">
-            {lines.map((line, index) => (
-              <div
-                key={index}
-                className={`font-mono text-sm leading-6 ${
-                  highlightLines.includes(index + 1)
-                    ? 'bg-primary/10'
-                    : ''
-                }`}
-                data-line={index + 1}
-              >
-                {/* Preserve whitespace and render line content */}
-                <pre className="m-0 inline whitespace-pre-wrap break-words font-mono">
-                  {line || ' '}
-                </pre>
-              </div>
-            ))}
+            {lines.map((line, index) => {
+              const lineNumber = index + 1
+              const lineFeedback = feedbackByLine.get(lineNumber) || []
+
+              return (
+                <div
+                  key={index}
+                  className={`group relative font-mono text-sm leading-6 ${
+                    highlightLines.includes(lineNumber) ? 'bg-primary/10' : ''
+                  } ${selectedLine === lineNumber ? 'bg-primary/20' : ''}`}
+                  data-line={lineNumber}
+                >
+                  <div className="flex items-start gap-2">
+                    {/* Line content */}
+                    <pre
+                      className="m-0 inline flex-1 cursor-pointer whitespace-pre-wrap break-words font-mono transition-colors hover:bg-muted/30"
+                      onClick={() => handleLineClick(lineNumber)}
+                      onMouseUp={() => handleMouseUp(lineNumber)}
+                    >
+                      {line || ' '}
+                    </pre>
+
+                    {/* Feedback anchors */}
+                    {lineFeedback.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {/* Group feedback by type and show one anchor per type */}
+                        {Array.from(
+                          new Set(lineFeedback.map((f) => f.feedback_type))
+                        ).map((type) => {
+                          const feedbackOfType = lineFeedback.filter(
+                            (f) => f.feedback_type === type
+                          )
+                          return (
+                            <FeedbackAnchor
+                              key={type}
+                              type={type}
+                              count={feedbackOfType.length}
+                              onClick={() =>
+                                onFeedbackClick?.(feedbackOfType[0])
+                              }
+                            />
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
