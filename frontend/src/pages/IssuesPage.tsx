@@ -1,25 +1,65 @@
-import { useEffect, useState } from 'react'
-import { issuesApi } from '@/lib/api'
-import type { Issue } from '@/types/api'
+import { useMemo, useState, useCallback } from 'react'
+import { useIssues, useUpdateIssueStatus } from '@/hooks/useIssues'
+import type { Issue, IssueStatus } from '@/types/api'
+import type { DragEndEvent } from '@/components/ui/kanban'
+import IssueKanbanBoard from '@/components/issues/IssueKanbanBoard'
+import IssuePanel from '@/components/issues/IssuePanel'
 
 export default function IssuesPage() {
-  const [issues, setIssues] = useState<Issue[]>([])
-  const [loading, setLoading] = useState(true)
+  const { issues, isLoading, isError, error } = useIssues()
+  const updateStatus = useUpdateIssueStatus()
+  const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
 
-  useEffect(() => {
-    issuesApi
-      .getAll()
-      .then((data) => {
-        setIssues(data)
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.error('Failed to load issues:', err)
-        setLoading(false)
-      })
+  // Group issues by status
+  const groupedIssues = useMemo(() => {
+    const groups: Record<IssueStatus, Issue[]> = {
+      open: [],
+      in_progress: [],
+      blocked: [],
+      needs_review: [],
+      closed: [],
+    }
+
+    issues.forEach((issue) => {
+      const status = issue.status.toLowerCase() as IssueStatus
+      if (groups[status]) {
+        groups[status].push(issue)
+      } else {
+        // Default to open if status is unknown
+        groups.open.push(issue)
+      }
+    })
+
+    return groups
+  }, [issues])
+
+  // Handle drag-and-drop to change status
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || !active.data.current) return
+
+      const draggedIssueId = active.id as string
+      const newStatus = over.id as IssueStatus
+      const issue = issues.find((i) => i.id === draggedIssueId)
+
+      if (!issue || issue.status === newStatus) return
+
+      // Update issue status via API with optimistic update
+      updateStatus.mutate({ id: draggedIssueId, status: newStatus })
+    },
+    [issues, updateStatus]
+  )
+
+  const handleViewIssueDetails = useCallback((issue: Issue) => {
+    setSelectedIssue(issue)
   }, [])
 
-  if (loading) {
+  const handleClosePanel = useCallback(() => {
+    setSelectedIssue(undefined)
+  }, [])
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-muted-foreground">Loading issues...</p>
@@ -27,42 +67,44 @@ export default function IssuesPage() {
     )
   }
 
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-destructive">
+          Error loading issues: {error?.message || 'Unknown error'}
+        </p>
+      </div>
+    )
+  }
+
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Issues</h1>
-        <p className="text-muted-foreground">
-          Found {issues.length} issues | Kanban board coming in ISSUE-021
+    <div className="flex h-screen flex-col">
+      {/* Header */}
+      <div className="border-b bg-background p-4">
+        <h1 className="text-2xl font-bold">Issues</h1>
+        <p className="text-sm text-muted-foreground">
+          {issues.length} total issues
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {issues.slice(0, 12).map((issue) => (
-          <div key={issue.id} className="rounded-lg border border-border bg-card p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-mono text-xs text-muted-foreground">{issue.id}</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  issue.status === 'open'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                    : issue.status === 'in_progress'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-                    : issue.status === 'closed'
-                    ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
-                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                }`}
-              >
-                {issue.status}
-              </span>
-            </div>
-            <h3 className="mb-1 font-semibold line-clamp-2">{issue.title}</h3>
-            {issue.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {issue.description}
-              </p>
-            )}
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Kanban Board */}
+        <div className="flex-1 overflow-auto">
+          <IssueKanbanBoard
+            groupedIssues={groupedIssues}
+            onDragEnd={handleDragEnd}
+            onViewIssueDetails={handleViewIssueDetails}
+            selectedIssue={selectedIssue}
+          />
+        </div>
+
+        {/* Issue Detail Panel (slide-out) */}
+        {selectedIssue && (
+          <div className="w-96 border-l bg-background shadow-lg">
+            <IssuePanel issue={selectedIssue} onClose={handleClosePanel} />
           </div>
-        ))}
+        )}
       </div>
     </div>
   )

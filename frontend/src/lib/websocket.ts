@@ -33,7 +33,15 @@ export function useWebSocket(
       return
     }
 
-    const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:3002'}${url}`
+    // Build WebSocket URL
+    // In development with Vite proxy: ws://localhost:3000/ws
+    // In production: use current host
+    const wsBaseUrl = import.meta.env.VITE_WS_URL || '/ws'
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = wsBaseUrl.startsWith('/')
+      ? `${protocol}//${window.location.host}${wsBaseUrl}${url}`
+      : `${wsBaseUrl}${url}`
+
     console.log('[WebSocket] Connecting to:', wsUrl)
 
     try {

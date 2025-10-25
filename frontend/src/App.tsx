@@ -24,7 +24,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<MainLayout />}>
-              <Route index element={<Navigate to="/projects" replace />} />
+              <Route index element={<Navigate to="/issues" replace />} />
               <Route path="issues" element={<IssuesPage />} />
               <Route path="specs" element={<SpecsPage />} />
             </Route>

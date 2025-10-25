@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { issuesApi } from '@/lib/api'
-import type { Issue, IssueStatus } from '@/types/api'
+import { useWebSocket } from '@/lib/websocket'
+import type { Issue, IssueStatus, WebSocketMessage } from '@/types/api'
 
 export function useIssues() {
   const queryClient = useQueryClient()
@@ -9,6 +11,27 @@ export function useIssues() {
     queryKey: ['issues'],
     queryFn: issuesApi.getAll,
   })
+
+  // WebSocket for live updates
+  const { connected, subscribe } = useWebSocket('/ws', {
+    onMessage: (message: WebSocketMessage) => {
+      if (
+        message.type === 'issue_created' ||
+        message.type === 'issue_updated' ||
+        message.type === 'issue_deleted'
+      ) {
+        // Invalidate issues query to refetch
+        queryClient.invalidateQueries({ queryKey: ['issues'] })
+      }
+    },
+  })
+
+  // Subscribe to issues channel when connected
+  useEffect(() => {
+    if (connected) {
+      subscribe('issues')
+    }
+  }, [connected, subscribe])
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Issue> }) => issuesApi.update(id, data),
