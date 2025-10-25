@@ -10,10 +10,7 @@ interface UseWebSocketOptions {
   reconnectInterval?: number
 }
 
-export function useWebSocket(
-  url: string,
-  options: UseWebSocketOptions = {}
-) {
+export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   const {
     onMessage,
     onOpen,
@@ -34,7 +31,7 @@ export function useWebSocket(
     }
 
     // Build WebSocket URL
-    // In development with Vite proxy: ws://localhost:3000/ws
+    // In development with Vite proxy: ws://localhost:3001/ws (proxy forwards to backend)
     // In production: use current host
     const wsBaseUrl = import.meta.env.VITE_WS_URL || '/ws'
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -43,6 +40,8 @@ export function useWebSocket(
       : `${wsBaseUrl}${url}`
 
     console.log('[WebSocket] Connecting to:', wsUrl)
+    console.log('[WebSocket] Current host:', window.location.host)
+    console.log('[WebSocket] Base URL:', wsBaseUrl)
 
     try {
       ws.current = new WebSocket(wsUrl)
@@ -99,22 +98,28 @@ export function useWebSocket(
     setConnected(false)
   }, [])
 
-  const send = useCallback((message: WebSocketSubscribeMessage | any) => {
-    if (ws.current && connected) {
-      ws.current.send(JSON.stringify(message))
-      console.log('[WebSocket] Message sent:', message.type)
-    } else {
-      console.warn('[WebSocket] Cannot send message: not connected')
-    }
-  }, [connected])
+  const send = useCallback(
+    (message: WebSocketSubscribeMessage | any) => {
+      if (ws.current && connected) {
+        ws.current.send(JSON.stringify(message))
+        console.log('[WebSocket] Message sent:', message.type)
+      } else {
+        console.warn('[WebSocket] Cannot send message: not connected')
+      }
+    },
+    [connected]
+  )
 
-  const subscribe = useCallback((channel: WebSocketSubscribeMessage['channel'], entityId?: string) => {
-    send({
-      type: 'subscribe',
-      channel,
-      entity_id: entityId,
-    } as WebSocketSubscribeMessage)
-  }, [send])
+  const subscribe = useCallback(
+    (channel: WebSocketSubscribeMessage['channel'], entityId?: string) => {
+      send({
+        type: 'subscribe',
+        channel,
+        entity_id: entityId,
+      } as WebSocketSubscribeMessage)
+    },
+    [send]
+  )
 
   useEffect(() => {
     connect()
