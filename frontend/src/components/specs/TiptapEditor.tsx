@@ -1,4 +1,4 @@
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
@@ -33,6 +33,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import Image from '@tiptap/extension-image'
 import { ListKit } from '@tiptap/extension-list'
+import { TableWithControls } from './TableWithControls'
 import './tiptap.css'
 
 // Create lowlight instance with common languages
@@ -125,10 +126,14 @@ export function TiptapEditor({
           class: 'bg-muted/50 rounded-md p-4 font-mono text-sm my-4 overflow-x-auto',
         },
       }),
-      Table.configure({
+      Table.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(TableWithControls)
+        },
+      }).configure({
         resizable: true,
         HTMLAttributes: {
-          class: 'border-collapse table-auto w-full my-4',
+          class: 'border-collapse table-auto w-full',
         },
       }),
       TableRow,
