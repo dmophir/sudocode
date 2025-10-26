@@ -84,9 +84,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Footer info */}
         <div className="border-t border-border p-4">
-          <p className="text-xs text-muted-foreground">
-            Phase 1 MVP
-          </p>
+          <p className="text-xs text-muted-foreground">Phase 1 MVP</p>
         </div>
       </aside>
     </>

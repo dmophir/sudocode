@@ -18,13 +18,7 @@ const widthClasses = {
   full: 'max-w-full',
 }
 
-export default function Panel({
-  open,
-  onClose,
-  title,
-  children,
-  width = 'lg',
-}: PanelProps) {
+export default function Panel({ open, onClose, title, children, width = 'lg' }: PanelProps) {
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

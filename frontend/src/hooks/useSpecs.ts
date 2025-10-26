@@ -37,8 +37,7 @@ export function useSpecs() {
   }, [connected, subscribe])
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Spec> }) =>
-      specsApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<Spec> }) => specsApi.update(id, data),
     onMutate: async ({ id, data }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['specs'] })

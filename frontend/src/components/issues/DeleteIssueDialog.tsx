@@ -7,15 +7,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import type { Issue } from '@sudocode/types';
+} from '@/components/ui/alert-dialog'
+import type { Issue } from '@sudocode/types'
 
 interface DeleteIssueDialogProps {
-  issue: Issue | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  isDeleting?: boolean;
+  issue: Issue | null
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  isDeleting?: boolean
 }
 
 export function DeleteIssueDialog({
@@ -25,7 +25,7 @@ export function DeleteIssueDialog({
   onConfirm,
   isDeleting = false,
 }: DeleteIssueDialogProps) {
-  if (!issue) return null;
+  if (!issue) return null
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
@@ -33,8 +33,7 @@ export function DeleteIssueDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Issue</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete <strong>{issue.title}</strong> (
-            {issue.id})?
+            Are you sure you want to delete <strong>{issue.title}</strong> ({issue.id})?
             <br />
             This action cannot be undone.
           </AlertDialogDescription>
@@ -51,5 +50,5 @@ export function DeleteIssueDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  );
+  )
 }

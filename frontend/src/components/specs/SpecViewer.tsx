@@ -35,9 +35,7 @@ export function SpecViewer({
     const map = new Map<number, IssueFeedback[]>()
     feedback.forEach((fb) => {
       try {
-        const anchor: FeedbackAnchorType | null = fb.anchor
-          ? JSON.parse(fb.anchor)
-          : null
+        const anchor: FeedbackAnchorType | null = fb.anchor ? JSON.parse(fb.anchor) : null
         if (anchor?.line_number) {
           const existing = map.get(anchor.line_number) || []
           map.set(anchor.line_number, [...existing, fb])
@@ -76,9 +74,7 @@ export function SpecViewer({
                 <div
                   key={index}
                   className={`cursor-pointer text-right font-mono text-xs leading-6 text-muted-foreground transition-colors hover:bg-primary/10 ${
-                    highlightLines.includes(index + 1)
-                      ? 'font-bold text-primary'
-                      : ''
+                    highlightLines.includes(index + 1) ? 'font-bold text-primary' : ''
                   } ${selectedLine === index + 1 ? 'bg-primary/20' : ''}`}
                   data-line-number={index + 1}
                   onClick={() => handleLineClick(index + 1)}
@@ -117,23 +113,21 @@ export function SpecViewer({
                     {lineFeedback.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {/* Group feedback by type and show one anchor per type */}
-                        {Array.from(
-                          new Set(lineFeedback.map((f) => f.feedback_type))
-                        ).map((type) => {
-                          const feedbackOfType = lineFeedback.filter(
-                            (f) => f.feedback_type === type
-                          )
-                          return (
-                            <FeedbackAnchor
-                              key={type}
-                              type={type}
-                              count={feedbackOfType.length}
-                              onClick={() =>
-                                onFeedbackClick?.(feedbackOfType[0])
-                              }
-                            />
-                          )
-                        })}
+                        {Array.from(new Set(lineFeedback.map((f) => f.feedback_type))).map(
+                          (type) => {
+                            const feedbackOfType = lineFeedback.filter(
+                              (f) => f.feedback_type === type
+                            )
+                            return (
+                              <FeedbackAnchor
+                                key={type}
+                                type={type}
+                                count={feedbackOfType.length}
+                                onClick={() => onFeedbackClick?.(feedbackOfType[0])}
+                              />
+                            )
+                          }
+                        )}
                       </div>
                     )}
                   </div>

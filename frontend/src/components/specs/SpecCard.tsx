@@ -35,19 +35,14 @@ export function SpecCard({ spec, onClick }: SpecCardProps) {
     : ''
 
   return (
-    <Card
-      className="p-4 cursor-pointer hover:shadow-md transition-shadow"
-      onClick={handleClick}
-    >
+    <Card className="cursor-pointer p-4 transition-shadow hover:shadow-md" onClick={handleClick}>
       <div className="flex flex-col gap-3">
         {/* Header with ID and priority */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-xs text-muted-foreground">
-            {spec.id}
-          </span>
+          <span className="font-mono text-xs text-muted-foreground">{spec.id}</span>
           {spec.priority !== undefined && spec.priority <= 3 && (
             <span
-              className={`text-xs px-2 py-0.5 rounded-full text-white shrink-0 ${priorityColors[spec.priority]}`}
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs text-white ${priorityColors[spec.priority]}`}
             >
               {priorityLabels[spec.priority]}
             </span>
@@ -55,21 +50,15 @@ export function SpecCard({ spec, onClick }: SpecCardProps) {
         </div>
 
         {/* Title */}
-        <h3 className="font-semibold text-lg line-clamp-2">{spec.title}</h3>
+        <h3 className="line-clamp-2 text-lg font-semibold">{spec.title}</h3>
 
         {/* Preview */}
-        {preview && (
-          <p className="text-sm text-muted-foreground line-clamp-3">
-            {preview}
-          </p>
-        )}
+        {preview && <p className="line-clamp-3 text-sm text-muted-foreground">{preview}</p>}
 
         {/* Footer with file path */}
         <div className="flex flex-col gap-2">
           {spec.file_path && (
-            <p className="font-mono text-xs text-muted-foreground truncate">
-              {spec.file_path}
-            </p>
+            <p className="truncate font-mono text-xs text-muted-foreground">{spec.file_path}</p>
           )}
         </div>
       </div>

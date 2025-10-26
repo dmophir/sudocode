@@ -1,17 +1,17 @@
-import { useState } from 'react';
-import type { Issue } from '@sudocode/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { IssueEditor } from './IssueEditor';
-import { DeleteIssueDialog } from './DeleteIssueDialog';
+import { useState } from 'react'
+import type { Issue } from '@sudocode/types'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { IssueEditor } from './IssueEditor'
+import { DeleteIssueDialog } from './DeleteIssueDialog'
 
 interface IssuePanelProps {
-  issue: Issue;
-  onClose?: () => void;
-  onUpdate?: (data: Partial<Issue>) => void;
-  onDelete?: () => void;
-  isUpdating?: boolean;
-  isDeleting?: boolean;
+  issue: Issue
+  onClose?: () => void
+  onUpdate?: (data: Partial<Issue>) => void
+  onDelete?: () => void
+  isUpdating?: boolean
+  isDeleting?: boolean
 }
 
 const priorityLabels: Record<number, string> = {
@@ -20,7 +20,7 @@ const priorityLabels: Record<number, string> = {
   2: 'Medium',
   3: 'Low',
   4: 'None',
-};
+}
 
 const statusLabels: Record<string, string> = {
   open: 'Open',
@@ -28,7 +28,7 @@ const statusLabels: Record<string, string> = {
   blocked: 'Blocked',
   needs_review: 'Needs Review',
   closed: 'Closed',
-};
+}
 
 export function IssuePanel({
   issue,
@@ -38,18 +38,18 @@ export function IssuePanel({
   isUpdating = false,
   isDeleting = false,
 }: IssuePanelProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isEditing, setIsEditing] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleUpdate = (data: Partial<Issue>) => {
-    onUpdate?.(data);
-    setIsEditing(false);
-  };
+    onUpdate?.(data)
+    setIsEditing(false)
+  }
 
   const handleDelete = () => {
-    onDelete?.();
-    setShowDeleteDialog(false);
-  };
+    onDelete?.()
+    setShowDeleteDialog(false)
+  }
 
   if (isEditing) {
     return (
@@ -68,7 +68,7 @@ export function IssuePanel({
           </CardContent>
         </Card>
       </div>
-    );
+    )
   }
 
   return (
@@ -78,9 +78,7 @@ export function IssuePanel({
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <CardTitle>{issue.title}</CardTitle>
-              <div className="mt-2 text-sm text-muted-foreground">
-                {issue.id}
-              </div>
+              <div className="mt-2 text-sm text-muted-foreground">{issue.id}</div>
             </div>
             {onClose && (
               <button
@@ -97,49 +95,35 @@ export function IssuePanel({
           {/* Status and Priority */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Status
-              </div>
-              <div className="text-sm">
-                {statusLabels[issue.status] || issue.status}
-              </div>
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Status</div>
+              <div className="text-sm">{statusLabels[issue.status] || issue.status}</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Priority
-              </div>
-              <div className="text-sm">
-                {priorityLabels[issue.priority] || issue.priority}
-              </div>
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Priority</div>
+              <div className="text-sm">{priorityLabels[issue.priority] || issue.priority}</div>
             </div>
           </div>
 
           {/* Description */}
           {issue.description && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Description
-              </div>
-              <div className="text-sm whitespace-pre-wrap">
-                {issue.description}
-              </div>
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Description</div>
+              <div className="whitespace-pre-wrap text-sm">{issue.description}</div>
             </div>
           )}
 
           {/* Content */}
           {issue.content && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Details
-              </div>
-              <div className="text-sm whitespace-pre-wrap prose prose-sm max-w-none">
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Details</div>
+              <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
                 {issue.content}
               </div>
             </div>
           )}
 
           {/* Timestamps */}
-          <div className="border-t pt-4 space-y-2">
+          <div className="space-y-2 border-t pt-4">
             <div className="text-xs text-muted-foreground">
               <span className="font-medium">Created:</span>{' '}
               {new Date(issue.created_at).toLocaleString()}
@@ -159,9 +143,7 @@ export function IssuePanel({
           {/* Assignee */}
           {issue.assignee && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Assignee
-              </div>
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Assignee</div>
               <div className="text-sm">{issue.assignee}</div>
             </div>
           )}
@@ -169,16 +151,14 @@ export function IssuePanel({
           {/* Parent */}
           {issue.parent_id && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                Parent Issue
-              </div>
+              <div className="mb-1 text-sm font-medium text-muted-foreground">Parent Issue</div>
               <div className="text-sm">{issue.parent_id}</div>
             </div>
           )}
 
           {/* Actions */}
           {(onUpdate || onDelete) && (
-            <div className="border-t pt-4 flex gap-2">
+            <div className="flex gap-2 border-t pt-4">
               {onUpdate && (
                 <Button
                   onClick={() => setIsEditing(true)}
@@ -210,7 +190,7 @@ export function IssuePanel({
         isDeleting={isDeleting}
       />
     </div>
-  );
+  )
 }
 
-export default IssuePanel;
+export default IssuePanel

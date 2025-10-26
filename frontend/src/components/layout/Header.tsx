@@ -19,7 +19,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
         {/* Mobile menu button */}
         <button
           onClick={onMenuClick}
-          className="inline-flex md:hidden rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="inline-flex rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
           aria-label="Toggle menu"
         >
           <Menu className="h-5 w-5" />
@@ -43,11 +43,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
-            {theme === 'dark' ? (
-              <Sun className="h-5 w-5" />
-            ) : (
-              <Moon className="h-5 w-5" />
-            )}
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
         </div>
       </div>

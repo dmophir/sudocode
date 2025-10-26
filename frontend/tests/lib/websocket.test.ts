@@ -73,9 +73,7 @@ describe('useWebSocket', () => {
 
   it('should connect to WebSocket on mount', async () => {
     const onOpen = vi.fn()
-    const { result } = renderHook(() =>
-      useWebSocket('/test', { onOpen })
-    )
+    const { result } = renderHook(() => useWebSocket('/test', { onOpen }))
 
     expect(result.current.connected).toBe(false)
 
@@ -88,9 +86,7 @@ describe('useWebSocket', () => {
 
   it('should disconnect on unmount', async () => {
     const onClose = vi.fn()
-    const { result, unmount } = renderHook(() =>
-      useWebSocket('/test', { onClose })
-    )
+    const { result, unmount } = renderHook(() => useWebSocket('/test', { onClose }))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -110,9 +106,7 @@ describe('useWebSocket', () => {
       data: { id: 'SPEC-001' },
     }
 
-    const { result } = renderHook(() =>
-      useWebSocket('/test', { onMessage })
-    )
+    const { result } = renderHook(() => useWebSocket('/test', { onMessage }))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -161,32 +155,37 @@ describe('useWebSocket', () => {
     })
 
     expect(consoleWarn).toHaveBeenCalledWith(
-      '[WebSocket] Cannot send message: not connected'
+      '[WebSocket] Cannot send message: not connected or still connecting'
     )
 
     consoleWarn.mockRestore()
   })
 
-  it('should subscribe to channels', async () => {
+  it('should subscribe to entity types', async () => {
     const { result } = renderHook(() => useWebSocket('/test'))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
     })
 
-    // Should not throw
+    // Should not throw when subscribing to spec with ID
     expect(() => {
       act(() => {
-        result.current.subscribe('specs', 'SPEC-001')
+        result.current.subscribe('spec', 'SPEC-001')
+      })
+    }).not.toThrow()
+
+    // Should not throw when subscribing to all
+    expect(() => {
+      act(() => {
+        result.current.subscribe('all')
       })
     }).not.toThrow()
   })
 
   it('should handle errors', async () => {
     const onError = vi.fn()
-    const { result } = renderHook(() =>
-      useWebSocket('/test', { onError })
-    )
+    const { result } = renderHook(() => useWebSocket('/test', { onError }))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -204,9 +203,7 @@ describe('useWebSocket', () => {
   })
 
   it('should manually disconnect', async () => {
-    const { result } = renderHook(() =>
-      useWebSocket('/test', { reconnect: false })
-    )
+    const { result } = renderHook(() => useWebSocket('/test', { reconnect: false }))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -226,9 +223,7 @@ describe('useWebSocket', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const onMessage = vi.fn()
 
-    const { result } = renderHook(() =>
-      useWebSocket('/test', { onMessage })
-    )
+    const { result } = renderHook(() => useWebSocket('/test', { onMessage }))
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -251,5 +246,119 @@ describe('useWebSocket', () => {
     expect(onMessage).not.toHaveBeenCalled()
 
     consoleError.mockRestore()
+  })
+
+  it('should prevent sending messages while still connecting', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    // Create a mock that stays in CONNECTING state
+    class StuckConnectingWebSocket extends MockWebSocket {
+      constructor(url: string) {
+        super(url)
+        this.readyState = MockWebSocket.CONNECTING
+      }
+    }
+
+    global.WebSocket = StuckConnectingWebSocket as any
+
+    const { result } = renderHook(() => useWebSocket('/test'))
+
+    // Try to send while connecting
+    act(() => {
+      result.current.send({ type: 'test' })
+    })
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[WebSocket] Cannot send message: not connected or still connecting'
+    )
+
+    consoleWarn.mockRestore()
+    global.WebSocket = MockWebSocket as any
+  })
+
+  it('should not cause infinite reconnection loops when handlers change', async () => {
+    let connectCount = 0
+
+    class CountingWebSocket extends MockWebSocket {
+      constructor(url: string) {
+        super(url)
+        connectCount++
+      }
+    }
+
+    global.WebSocket = CountingWebSocket as any
+
+    const { result, rerender } = renderHook(
+      ({ onMessage }) => useWebSocket('/test', { onMessage }),
+      { initialProps: { onMessage: vi.fn() } }
+    )
+
+    await waitFor(() => {
+      expect(result.current.connected).toBe(true)
+    })
+
+    const initialConnectCount = connectCount
+
+    // Change the onMessage handler (simulate component re-render with new handler)
+    rerender({ onMessage: vi.fn() })
+    rerender({ onMessage: vi.fn() })
+    rerender({ onMessage: vi.fn() })
+
+    // Wait a bit to ensure no reconnections occur
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Should still have only connected once
+    expect(connectCount).toBe(initialConnectCount)
+
+    global.WebSocket = MockWebSocket as any
+  })
+
+  it('should use updated callbacks without reconnecting', async () => {
+    const firstCallback = vi.fn()
+    const secondCallback = vi.fn()
+
+    const { result, rerender } = renderHook(
+      ({ onMessage }) => useWebSocket('/test', { onMessage }),
+      { initialProps: { onMessage: firstCallback } }
+    )
+
+    await waitFor(() => {
+      expect(result.current.connected).toBe(true)
+    })
+
+    const ws = lastWebSocketInstance!
+    const mockMessage: WebSocketMessage = {
+      type: 'spec_updated',
+      data: { id: 'SPEC-001' },
+    }
+
+    // Send a message with first callback
+    act(() => {
+      ws.simulateMessage(mockMessage)
+    })
+
+    expect(firstCallback).toHaveBeenCalledWith(mockMessage)
+    expect(secondCallback).not.toHaveBeenCalled()
+
+    // Update to second callback
+    rerender({ onMessage: secondCallback })
+
+    // Send another message with second callback
+    act(() => {
+      ws.simulateMessage(mockMessage)
+    })
+
+    expect(secondCallback).toHaveBeenCalledWith(mockMessage)
+  })
+
+  it('should construct correct WebSocket URL', async () => {
+    renderHook(() => useWebSocket(''))
+
+    await waitFor(() => {
+      expect(lastWebSocketInstance).not.toBeNull()
+    })
+
+    // Should use the base URL /ws
+    expect(lastWebSocketInstance!.url).toMatch(/\/ws$/)
   })
 })

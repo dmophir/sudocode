@@ -33,7 +33,7 @@ export default function SpecDetailPage() {
     return (
       <div className="flex items-center justify-center p-12">
         <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
           <p className="text-muted-foreground">Loading spec...</p>
         </div>
       </div>
@@ -44,8 +44,8 @@ export default function SpecDetailPage() {
     return (
       <div className="flex items-center justify-center p-12">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Spec not found</h2>
-          <p className="text-muted-foreground mb-4">
+          <h2 className="mb-2 text-2xl font-bold">Spec not found</h2>
+          <p className="mb-4 text-muted-foreground">
             The spec you're looking for doesn't exist or has been deleted.
           </p>
           <Button onClick={() => navigate('/specs')}>Back to Specs</Button>
@@ -91,29 +91,23 @@ export default function SpecDetailPage() {
       <div className="flex-1 overflow-auto p-8">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/specs')}
-            >
+          <div className="mb-2 flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/specs')}>
               ← Back
             </Button>
           </div>
 
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="font-mono text-sm text-muted-foreground">
-                  {spec.id}
-                </span>
+              <div className="mb-2 flex items-center gap-3">
+                <span className="font-mono text-sm text-muted-foreground">{spec.id}</span>
                 {spec.priority !== undefined && (
                   <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                     Priority {spec.priority}
                   </span>
                 )}
               </div>
-              <h1 className="text-3xl font-bold mb-2">{spec.title}</h1>
+              <h1 className="mb-2 text-3xl font-bold">{spec.title}</h1>
             </div>
 
             <div className="flex items-center gap-2">
@@ -141,7 +135,7 @@ export default function SpecDetailPage() {
                 size="sm"
                 onClick={() => setShowFeedbackPanel(!showFeedbackPanel)}
               >
-                <MessageSquare className="h-4 w-4 mr-2" />
+                <MessageSquare className="mr-2 h-4 w-4" />
                 Feedback {feedback.length > 0 && `(${feedback.length})`}
               </Button>
               <Button variant="outline" size="sm">

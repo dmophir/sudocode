@@ -1,12 +1,5 @@
 import { useState } from 'react'
-import {
-  MessageSquare,
-  AlertCircle,
-  Lightbulb,
-  Trash2,
-  Check,
-  X,
-} from 'lucide-react'
+import { MessageSquare, AlertCircle, Lightbulb, Trash2, Check, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { IssueFeedback, FeedbackType, FeedbackAnchor } from '@/types/api'
@@ -100,9 +93,7 @@ export function FeedbackCard({
                 {feedback.feedback_type}
               </div>
               {anchor && getAnchorText() && (
-                <div className="text-xs text-muted-foreground">
-                  {getAnchorText()}
-                </div>
+                <div className="text-xs text-muted-foreground">{getAnchorText()}</div>
               )}
             </div>
           </div>
@@ -154,9 +145,7 @@ export function FeedbackCard({
         </div>
 
         {/* Content */}
-        <div className="text-sm text-foreground">
-          {feedback.content}
-        </div>
+        <div className="text-sm text-foreground">{feedback.content}</div>
 
         {/* Footer */}
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">

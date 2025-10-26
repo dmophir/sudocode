@@ -15,11 +15,7 @@ interface FeedbackFormProps {
   issueId?: string
   lineNumber?: number
   textSnippet?: string
-  onSubmit: (data: {
-    type: FeedbackType
-    content: string
-    anchor?: FeedbackAnchor
-  }) => void
+  onSubmit: (data: { type: FeedbackType; content: string; anchor?: FeedbackAnchor }) => void
   onCancel: () => void
   className?: string
 }
@@ -92,10 +88,7 @@ export function FeedbackForm({
       {/* Feedback type */}
       <div>
         <Label htmlFor="feedback-type">Type</Label>
-        <Select
-          value={type}
-          onValueChange={(value) => setType(value as FeedbackType)}
-        >
+        <Select value={type} onValueChange={(value) => setType(value as FeedbackType)}>
           <SelectTrigger id="feedback-type">
             <SelectValue />
           </SelectTrigger>
@@ -130,10 +123,7 @@ export function FeedbackForm({
 
       {/* Actions */}
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={!content.trim() || !issueId || isSubmitting}
-        >
+        <Button type="submit" disabled={!content.trim() || !issueId || isSubmitting}>
           {isSubmitting ? 'Adding...' : 'Add Feedback'}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>

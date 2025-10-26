@@ -11,12 +11,7 @@ interface FeedbackAnchorProps {
 /**
  * Visual indicator shown on spec lines that have feedback
  */
-export function FeedbackAnchor({
-  type,
-  count = 1,
-  onClick,
-  className = '',
-}: FeedbackAnchorProps) {
+export function FeedbackAnchor({ type, count = 1, onClick, className = '' }: FeedbackAnchorProps) {
   const getIcon = () => {
     switch (type) {
       case 'comment':

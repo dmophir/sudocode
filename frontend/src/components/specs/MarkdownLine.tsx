@@ -14,31 +14,18 @@ interface MarkdownLineProps {
  * where each line needs to maintain its identity for features like
  * feedback anchors and line selection.
  */
-export function MarkdownLine({
-  content,
-  className = '',
-  onClick,
-  onMouseUp,
-}: MarkdownLineProps) {
+export function MarkdownLine({ content, className = '', onClick, onMouseUp }: MarkdownLineProps) {
   // If the line is empty, render a space to maintain line height
   if (!content || content.trim() === '') {
     return (
-      <div
-        className={`min-h-[1.5rem] ${className}`}
-        onClick={onClick}
-        onMouseUp={onMouseUp}
-      >
+      <div className={`min-h-[1.5rem] ${className}`} onClick={onClick} onMouseUp={onMouseUp}>
         &nbsp;
       </div>
     )
   }
 
   return (
-    <div
-      className={`markdown-line ${className}`}
-      onClick={onClick}
-      onMouseUp={onMouseUp}
-    >
+    <div className={`markdown-line ${className}`} onClick={onClick} onMouseUp={onMouseUp}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -52,7 +39,7 @@ export function MarkdownLine({
           h5: ({ children }) => <span className="text-sm font-bold">{children}</span>,
           h6: ({ children }) => <span className="text-xs font-bold">{children}</span>,
           code: ({ children, className }) => (
-            <code className={`bg-muted rounded px-1 py-0.5 font-mono text-sm ${className || ''}`}>
+            <code className={`rounded bg-muted px-1 py-0.5 font-mono text-sm ${className || ''}`}>
               {children}
             </code>
           ),

@@ -58,7 +58,7 @@ export function SpecViewerTiptap({
     <Card className={`overflow-hidden ${className}`}>
       {/* View mode toggle */}
       {!isEditing && (
-        <div className="border-b border-border bg-muted/30 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">View:</span>
             <div className="flex gap-1">
@@ -68,7 +68,7 @@ export function SpecViewerTiptap({
                 onClick={() => setViewMode('formatted')}
                 className="h-8"
               >
-                <FileText className="h-4 w-4 mr-2" />
+                <FileText className="mr-2 h-4 w-4" />
                 Formatted
               </Button>
               <Button
@@ -77,7 +77,7 @@ export function SpecViewerTiptap({
                 onClick={() => setViewMode('source')}
                 className="h-8"
               >
-                <Code2 className="h-4 w-4 mr-2" />
+                <Code2 className="mr-2 h-4 w-4" />
                 Source
               </Button>
             </div>
@@ -89,20 +89,15 @@ export function SpecViewerTiptap({
               </span>
             )}
             {viewMode === 'formatted' && onSave && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleEditClick}
-                className="h-8"
-              >
+              <Button variant="outline" size="sm" onClick={handleEditClick} className="h-8">
                 {isEditing ? (
                   <>
-                    <Eye className="h-4 w-4 mr-2" />
+                    <Eye className="mr-2 h-4 w-4" />
                     View
                   </>
                 ) : (
                   <>
-                    <Edit className="h-4 w-4 mr-2" />
+                    <Edit className="mr-2 h-4 w-4" />
                     Edit
                   </>
                 )}

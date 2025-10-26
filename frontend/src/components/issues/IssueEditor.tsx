@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
-import type { Issue, IssueStatus } from '@sudocode/types';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react'
+import type { Issue, IssueStatus } from '@sudocode/types'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '@/components/ui/select'
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -18,7 +18,7 @@ const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
   { value: 'blocked', label: 'Blocked' },
   { value: 'needs_review', label: 'Needs Review' },
   { value: 'closed', label: 'Closed' },
-];
+]
 
 const PRIORITY_OPTIONS = [
   { value: '0', label: 'Critical (P0)' },
@@ -26,57 +26,52 @@ const PRIORITY_OPTIONS = [
   { value: '2', label: 'Medium (P2)' },
   { value: '3', label: 'Low (P3)' },
   { value: '4', label: 'None (P4)' },
-];
+]
 
 interface IssueEditorProps {
-  issue?: Issue | null;
-  onSave: (data: Partial<Issue>) => void;
-  onCancel: () => void;
-  isLoading?: boolean;
+  issue?: Issue | null
+  onSave: (data: Partial<Issue>) => void
+  onCancel: () => void
+  isLoading?: boolean
 }
 
-export function IssueEditor({
-  issue,
-  onSave,
-  onCancel,
-  isLoading = false,
-}: IssueEditorProps) {
-  const [title, setTitle] = useState(issue?.title || '');
-  const [description, setDescription] = useState(issue?.description || '');
-  const [content, setContent] = useState(issue?.content || '');
-  const [status, setStatus] = useState<IssueStatus>(issue?.status || 'open');
-  const [priority, setPriority] = useState<number>(issue?.priority ?? 2);
-  const [errors, setErrors] = useState<{ title?: string }>({});
+export function IssueEditor({ issue, onSave, onCancel, isLoading = false }: IssueEditorProps) {
+  const [title, setTitle] = useState(issue?.title || '')
+  const [description, setDescription] = useState(issue?.description || '')
+  const [content, setContent] = useState(issue?.content || '')
+  const [status, setStatus] = useState<IssueStatus>(issue?.status || 'open')
+  const [priority, setPriority] = useState<number>(issue?.priority ?? 2)
+  const [errors, setErrors] = useState<{ title?: string }>({})
 
   // Update form when issue changes
   useEffect(() => {
     if (issue) {
-      setTitle(issue.title);
-      setDescription(issue.description || '');
-      setContent(issue.content || '');
-      setStatus(issue.status);
-      setPriority(issue.priority);
+      setTitle(issue.title)
+      setDescription(issue.description || '')
+      setContent(issue.content || '')
+      setStatus(issue.status)
+      setPriority(issue.priority)
     }
-  }, [issue]);
+  }, [issue])
 
   const validate = () => {
-    const newErrors: { title?: string } = {};
+    const newErrors: { title?: string } = {}
 
     if (!title.trim()) {
-      newErrors.title = 'Title is required';
+      newErrors.title = 'Title is required'
     } else if (title.length > 200) {
-      newErrors.title = 'Title must be less than 200 characters';
+      newErrors.title = 'Title must be less than 200 characters'
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
     if (!validate()) {
-      return;
+      return
     }
 
     onSave({
@@ -85,8 +80,8 @@ export function IssueEditor({
       content,
       status,
       priority,
-    });
-  };
+    })
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -103,9 +98,7 @@ export function IssueEditor({
           className={errors.title ? 'border-destructive' : ''}
           disabled={isLoading}
         />
-        {errors.title && (
-          <p className="text-sm text-destructive">{errors.title}</p>
-        )}
+        {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
       </div>
 
       {/* Description */}
@@ -119,9 +112,7 @@ export function IssueEditor({
           rows={3}
           disabled={isLoading}
         />
-        <p className="text-xs text-muted-foreground">
-          Brief summary shown in card previews
-        </p>
+        <p className="text-xs text-muted-foreground">Brief summary shown in card previews</p>
       </div>
 
       {/* Content (Markdown) */}
@@ -136,9 +127,7 @@ export function IssueEditor({
           className="font-mono text-sm"
           disabled={isLoading}
         />
-        <p className="text-xs text-muted-foreground">
-          Full details with markdown support
-        </p>
+        <p className="text-xs text-muted-foreground">Full details with markdown support</p>
       </div>
 
       {/* Status and Priority Row */}
@@ -188,12 +177,7 @@ export function IssueEditor({
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={isLoading}
-        >
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
           Cancel
         </Button>
         <Button type="submit" disabled={isLoading}>
@@ -201,5 +185,5 @@ export function IssueEditor({
         </Button>
       </div>
     </form>
-  );
+  )
 }

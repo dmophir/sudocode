@@ -23,7 +23,7 @@ export function SpecList({
     return (
       <div className="flex items-center justify-center p-12">
         <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
           <p className="text-muted-foreground">Loading specs...</p>
         </div>
       </div>
@@ -35,9 +35,7 @@ export function SpecList({
       <div className="flex items-center justify-center p-12">
         <div className="text-center">
           <p className="text-lg text-muted-foreground">{emptyMessage}</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Create a new spec to get started
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">Create a new spec to get started</p>
         </div>
       </div>
     )

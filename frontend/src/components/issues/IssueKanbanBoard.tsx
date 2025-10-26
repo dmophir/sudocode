@@ -1,13 +1,13 @@
-import { memo } from 'react';
+import { memo } from 'react'
 import {
   type DragEndEvent,
   KanbanBoard,
   KanbanCards,
   KanbanHeader,
   KanbanProvider,
-} from '@/components/ui/kanban';
-import { IssueCard } from './IssueCard';
-import type { Issue, IssueStatus } from '@sudocode/types';
+} from '@/components/ui/kanban'
+import { IssueCard } from './IssueCard'
+import type { Issue, IssueStatus } from '@sudocode/types'
 
 // Status labels and colors
 const statusLabels: Record<IssueStatus, string> = {
@@ -16,7 +16,7 @@ const statusLabels: Record<IssueStatus, string> = {
   blocked: 'Blocked',
   needs_review: 'Needs Review',
   closed: 'Closed',
-};
+}
 
 const statusColors: Record<IssueStatus, string> = {
   open: '--chart-1',
@@ -24,14 +24,14 @@ const statusColors: Record<IssueStatus, string> = {
   blocked: '--chart-3',
   needs_review: '--chart-4',
   closed: '--chart-5',
-};
+}
 
 interface IssueKanbanBoardProps {
-  groupedIssues: Record<IssueStatus, Issue[]>;
-  onDragEnd: (event: DragEndEvent) => void;
-  onViewIssueDetails: (issue: Issue) => void;
-  selectedIssue?: Issue;
-  onCreateIssue?: (status?: IssueStatus) => void;
+  groupedIssues: Record<IssueStatus, Issue[]>
+  onDragEnd: (event: DragEndEvent) => void
+  onViewIssueDetails: (issue: Issue) => void
+  selectedIssue?: Issue
+  onCreateIssue?: (status?: IssueStatus) => void
 }
 
 function IssueKanbanBoard({
@@ -48,9 +48,7 @@ function IssueKanbanBoard({
           <KanbanHeader
             name={statusLabels[status as IssueStatus]}
             color={statusColors[status as IssueStatus]}
-            onAddIssue={
-              onCreateIssue ? () => onCreateIssue(status as IssueStatus) : undefined
-            }
+            onAddIssue={onCreateIssue ? () => onCreateIssue(status as IssueStatus) : undefined}
           />
           <KanbanCards>
             {statusIssues.map((issue, index) => (
@@ -67,7 +65,7 @@ function IssueKanbanBoard({
         </KanbanBoard>
       ))}
     </KanbanProvider>
-  );
+  )
 }
 
-export default memo(IssueKanbanBoard);
+export default memo(IssueKanbanBoard)

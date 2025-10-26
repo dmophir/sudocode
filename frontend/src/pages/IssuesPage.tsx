@@ -22,9 +22,7 @@ export default function IssuesPage() {
   const updateStatus = useUpdateIssueStatus()
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [createDialogStatus, setCreateDialogStatus] = useState<
-    IssueStatus | undefined
-  >()
+  const [createDialogStatus, setCreateDialogStatus] = useState<IssueStatus | undefined>()
 
   // Group issues by status
   const groupedIssues = useMemo(() => {
@@ -75,13 +73,10 @@ export default function IssuesPage() {
     setSelectedIssue(undefined)
   }, [])
 
-  const handleCreateIssue = useCallback(
-    (status?: IssueStatus) => {
-      setCreateDialogStatus(status)
-      setShowCreateDialog(true)
-    },
-    []
-  )
+  const handleCreateIssue = useCallback((status?: IssueStatus) => {
+    setCreateDialogStatus(status)
+    setShowCreateDialog(true)
+  }, [])
 
   const handleCreateSubmit = useCallback(
     async (data: Partial<Issue>) => {
@@ -133,9 +128,7 @@ export default function IssuesPage() {
       {/* Header */}
       <div className="border-b bg-background p-4">
         <h1 className="text-2xl font-bold">Issues</h1>
-        <p className="text-sm text-muted-foreground">
-          {issues.length} total issues
-        </p>
+        <p className="text-sm text-muted-foreground">{issues.length} total issues</p>
       </div>
 
       {/* Main content */}

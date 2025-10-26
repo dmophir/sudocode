@@ -56,23 +56,16 @@ export function SpecEditor({ spec, onSave, onCancel }: SpecEditorProps) {
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold mb-4">
-              {spec ? 'Edit Spec' : 'New Spec'}
-            </h2>
+            <h2 className="mb-4 text-2xl font-bold">{spec ? 'Edit Spec' : 'New Spec'}</h2>
           </div>
 
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
           {/* Title */}
           <div>
-            <label
-              htmlFor="title"
-              className="block text-sm font-medium mb-2"
-            >
+            <label htmlFor="title" className="mb-2 block text-sm font-medium">
               Title *
             </label>
             <input
@@ -87,17 +80,14 @@ export function SpecEditor({ spec, onSave, onCancel }: SpecEditorProps) {
 
           {/* Content */}
           <div>
-            <label
-              htmlFor="content"
-              className="block text-sm font-medium mb-2"
-            >
+            <label htmlFor="content" className="mb-2 block text-sm font-medium">
               Content
             </label>
             <textarea
               id="content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
               placeholder="Spec content (markdown supported)"
               rows={12}
             />
@@ -105,10 +95,7 @@ export function SpecEditor({ spec, onSave, onCancel }: SpecEditorProps) {
 
           {/* Priority */}
           <div>
-            <label
-              htmlFor="priority"
-              className="block text-sm font-medium mb-2"
-            >
+            <label htmlFor="priority" className="mb-2 block text-sm font-medium">
               Priority
             </label>
             <select
@@ -128,12 +115,7 @@ export function SpecEditor({ spec, onSave, onCancel }: SpecEditorProps) {
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">
             {onCancel && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isCreating}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isCreating}>
                 Cancel
               </Button>
             )}

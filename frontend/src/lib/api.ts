@@ -62,8 +62,7 @@ api.interceptors.response.use(
 const get = <T>(url: string) => api.get<T, T>(url)
 const post = <T>(url: string, data?: any) => api.post<T, T>(url, data)
 const put = <T>(url: string, data?: any) => api.put<T, T>(url, data)
-const del = (url: string, data?: any) =>
-  api.delete(url, data ? { data } : undefined)
+const del = (url: string, data?: any) => api.delete(url, data ? { data } : undefined)
 
 /**
  * Issues API
@@ -72,8 +71,7 @@ export const issuesApi = {
   getAll: () => get<Issue[]>('/issues'),
   getById: (id: string) => get<Issue>(`/issues/${id}`),
   create: (data: CreateIssueRequest) => post<Issue>('/issues', data),
-  update: (id: string, data: UpdateIssueRequest) =>
-    put<Issue>(`/issues/${id}`, data),
+  update: (id: string, data: UpdateIssueRequest) => put<Issue>(`/issues/${id}`, data),
   delete: (id: string) => del(`/issues/${id}`),
 }
 
@@ -84,8 +82,7 @@ export const specsApi = {
   getAll: () => get<Spec[]>('/specs'),
   getById: (id: string) => get<Spec>(`/specs/${id}`),
   create: (data: CreateSpecRequest) => post<Spec>('/specs', data),
-  update: (id: string, data: UpdateSpecRequest) =>
-    put<Spec>(`/specs/${id}`, data),
+  update: (id: string, data: UpdateSpecRequest) => put<Spec>(`/specs/${id}`, data),
   delete: (id: string) => del(`/specs/${id}`),
   getFeedback: (id: string) => get<IssueFeedback[]>(`/feedback?spec_id=${id}`),
 }
@@ -95,11 +92,8 @@ export const specsApi = {
  */
 export const relationshipsApi = {
   getForEntity: (entityId: string, entityType: 'issue' | 'spec') =>
-    get<Relationship[]>(
-      `/relationships?entity_id=${entityId}&entity_type=${entityType}`
-    ),
-  create: (data: CreateRelationshipRequest) =>
-    post<Relationship>('/relationships', data),
+    get<Relationship[]>(`/relationships?entity_id=${entityId}&entity_type=${entityType}`),
+  create: (data: CreateRelationshipRequest) => post<Relationship>('/relationships', data),
   delete: (data: DeleteRelationshipRequest) => del('/relationships', data),
 }
 
@@ -107,12 +101,10 @@ export const relationshipsApi = {
  * Feedback API
  */
 export const feedbackApi = {
-  getForSpec: (specId: string) =>
-    get<IssueFeedback[]>(`/feedback?spec_id=${specId}`),
+  getForSpec: (specId: string) => get<IssueFeedback[]>(`/feedback?spec_id=${specId}`),
   getById: (id: string) => get<IssueFeedback>(`/feedback/${id}`),
   create: (data: CreateFeedbackRequest) => post<IssueFeedback>('/feedback', data),
-  update: (id: string, data: UpdateFeedbackRequest) =>
-    put<IssueFeedback>(`/feedback/${id}`, data),
+  update: (id: string, data: UpdateFeedbackRequest) => put<IssueFeedback>(`/feedback/${id}`, data),
   delete: (id: string) => del(`/feedback/${id}`),
 }
 

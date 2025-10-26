@@ -35,11 +35,7 @@ export function SpecFeedbackPanel({
   const [showDismissed, setShowDismissed] = useState(false)
 
   const { feedback, isLoading } = useSpecFeedback(specId)
-  const {
-    createFeedback,
-    updateFeedback,
-    deleteFeedback,
-  } = useFeedback(specId)
+  const { createFeedback, updateFeedback, deleteFeedback } = useFeedback(specId)
 
   // Filter feedback based on current filters
   const filteredFeedback = useMemo(() => {
@@ -57,8 +53,7 @@ export function SpecFeedbackPanel({
 
     // Sort by created_at desc
     return filtered.sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
   }, [feedback, filterType, showDismissed])
 
@@ -108,9 +103,7 @@ export function SpecFeedbackPanel({
       <div className="flex items-center justify-between border-b p-4">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">Feedback</h3>
-          <span className="text-sm text-muted-foreground">
-            ({filteredFeedback.length})
-          </span>
+          <span className="text-sm text-muted-foreground">({filteredFeedback.length})</span>
         </div>
         <div className="flex gap-1">
           <Button
@@ -194,9 +187,7 @@ export function SpecFeedbackPanel({
         )}
 
         {isLoading && (
-          <div className="text-center text-sm text-muted-foreground">
-            Loading feedback...
-          </div>
+          <div className="text-center text-sm text-muted-foreground">Loading feedback...</div>
         )}
 
         {!isLoading && filteredFeedback.length === 0 && (

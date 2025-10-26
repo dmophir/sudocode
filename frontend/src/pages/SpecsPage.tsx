@@ -19,10 +19,7 @@ export default function SpecsPage() {
   if (showEditor) {
     return (
       <div className="flex-1 p-8">
-        <SpecEditor
-          onSave={handleSave}
-          onCancel={() => setShowEditor(false)}
-        />
+        <SpecEditor onSave={handleSave} onCancel={() => setShowEditor(false)} />
       </div>
     )
   }

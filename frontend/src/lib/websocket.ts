@@ -25,6 +25,20 @@ export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {})
   const [connected, setConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
 
+  // Use refs to avoid recreating connect callback when handlers change
+  const onMessageRef = useRef(onMessage)
+  const onOpenRef = useRef(onOpen)
+  const onCloseRef = useRef(onClose)
+  const onErrorRef = useRef(onError)
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onMessageRef.current = onMessage
+    onOpenRef.current = onOpen
+    onCloseRef.current = onClose
+    onErrorRef.current = onError
+  }, [onMessage, onOpen, onClose, onError])
+
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
       return
@@ -49,7 +63,7 @@ export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {})
       ws.current.onopen = () => {
         console.log('[WebSocket] Connected:', baseUrl)
         setConnected(true)
-        onOpen?.()
+        onOpenRef.current?.()
       }
 
       ws.current.onmessage = (event) => {
@@ -57,7 +71,7 @@ export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {})
           const message = JSON.parse(event.data) as WebSocketMessage
           console.log('[WebSocket] Message received:', message.type)
           setLastMessage(message)
-          onMessage?.(message)
+          onMessageRef.current?.(message)
         } catch (error) {
           console.error('[WebSocket] Failed to parse message:', error)
         }
@@ -65,13 +79,13 @@ export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {})
 
       ws.current.onerror = (error) => {
         console.error('[WebSocket] Error:', error)
-        onError?.(error)
+        onErrorRef.current?.(error)
       }
 
       ws.current.onclose = () => {
         console.log('[WebSocket] Disconnected:', baseUrl)
         setConnected(false)
-        onClose?.()
+        onCloseRef.current?.()
 
         // Reconnect if enabled
         if (reconnect) {
@@ -84,7 +98,7 @@ export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {})
     } catch (error) {
       console.error('[WebSocket] Connection failed:', error)
     }
-  }, [baseUrl, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval])
+  }, [baseUrl, reconnect, reconnectInterval])
 
   const disconnect = useCallback(() => {
     if (reconnectTimeout.current) {

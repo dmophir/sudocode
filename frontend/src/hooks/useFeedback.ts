@@ -1,10 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { feedbackApi } from '@/lib/api'
-import type {
-  IssueFeedback,
-  CreateFeedbackRequest,
-  UpdateFeedbackRequest,
-} from '@/types/api'
+import type { IssueFeedback, CreateFeedbackRequest, UpdateFeedbackRequest } from '@/types/api'
 
 /**
  * Hook for managing feedback operations (create, update, delete)
@@ -21,45 +17,34 @@ export function useFeedback(specId: string) {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string
-      data: UpdateFeedbackRequest
-    }) => feedbackApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: UpdateFeedbackRequest }) =>
+      feedbackApi.update(id, data),
     onMutate: async ({ id, data }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['feedback', specId] })
 
       // Snapshot previous value
-      const previousFeedback = queryClient.getQueryData<IssueFeedback[]>([
-        'feedback',
-        specId,
-      ])
+      const previousFeedback = queryClient.getQueryData<IssueFeedback[]>(['feedback', specId])
 
       // Optimistically update - convert anchor to string if needed
-      queryClient.setQueryData<IssueFeedback[]>(
-        ['feedback', specId],
-        (old) =>
-          old?.map((feedback) => {
-            if (feedback.id !== id) return feedback
+      queryClient.setQueryData<IssueFeedback[]>(['feedback', specId], (old) =>
+        old?.map((feedback) => {
+          if (feedback.id !== id) return feedback
 
-            // Prepare updated data with proper typing
-            const updates: Partial<IssueFeedback> = {}
-            if (data.content !== undefined) updates.content = data.content
-            if (data.type !== undefined) updates.feedback_type = data.type
-            if (data.dismissed !== undefined) updates.dismissed = data.dismissed
+          // Prepare updated data with proper typing
+          const updates: Partial<IssueFeedback> = {}
+          if (data.content !== undefined) updates.content = data.content
+          if (data.type !== undefined) updates.feedback_type = data.type
+          if (data.dismissed !== undefined) updates.dismissed = data.dismissed
 
-            // Convert anchor to string if it's provided
-            if (data.anchor !== undefined) {
-              updates.anchor = typeof data.anchor === 'string'
-                ? data.anchor
-                : JSON.stringify(data.anchor)
-            }
+          // Convert anchor to string if it's provided
+          if (data.anchor !== undefined) {
+            updates.anchor =
+              typeof data.anchor === 'string' ? data.anchor : JSON.stringify(data.anchor)
+          }
 
-            return { ...feedback, ...updates }
-          })
+          return { ...feedback, ...updates }
+        })
       )
 
       return { previousFeedback }
@@ -67,10 +52,7 @@ export function useFeedback(specId: string) {
     onError: (_err, _variables, context) => {
       // Rollback on error
       if (context?.previousFeedback) {
-        queryClient.setQueryData(
-          ['feedback', specId],
-          context.previousFeedback
-        )
+        queryClient.setQueryData(['feedback', specId], context.previousFeedback)
       }
     },
     onSettled: () => {
@@ -86,15 +68,11 @@ export function useFeedback(specId: string) {
       await queryClient.cancelQueries({ queryKey: ['feedback', specId] })
 
       // Snapshot previous value
-      const previousFeedback = queryClient.getQueryData<IssueFeedback[]>([
-        'feedback',
-        specId,
-      ])
+      const previousFeedback = queryClient.getQueryData<IssueFeedback[]>(['feedback', specId])
 
       // Optimistically remove
-      queryClient.setQueryData<IssueFeedback[]>(
-        ['feedback', specId],
-        (old) => old?.filter((feedback) => feedback.id !== id)
+      queryClient.setQueryData<IssueFeedback[]>(['feedback', specId], (old) =>
+        old?.filter((feedback) => feedback.id !== id)
       )
 
       return { previousFeedback }
@@ -102,10 +80,7 @@ export function useFeedback(specId: string) {
     onError: (_err, _variables, context) => {
       // Rollback on error
       if (context?.previousFeedback) {
-        queryClient.setQueryData(
-          ['feedback', specId],
-          context.previousFeedback
-        )
+        queryClient.setQueryData(['feedback', specId], context.previousFeedback)
       }
     },
     onSettled: () => {
