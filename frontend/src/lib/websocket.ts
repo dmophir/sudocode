@@ -10,7 +10,7 @@ interface UseWebSocketOptions {
   reconnectInterval?: number
 }
 
-export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
+export function useWebSocket(baseUrl: string, options: UseWebSocketOptions = {}) {
   const {
     onMessage,
     onOpen,
@@ -36,8 +36,8 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     const wsBaseUrl = import.meta.env.VITE_WS_URL || '/ws'
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = wsBaseUrl.startsWith('/')
-      ? `${protocol}//${window.location.host}${wsBaseUrl}${url}`
-      : `${wsBaseUrl}${url}`
+      ? `${protocol}//${window.location.host}${wsBaseUrl}${baseUrl}`
+      : `${wsBaseUrl}${baseUrl}`
 
     console.log('[WebSocket] Connecting to:', wsUrl)
     console.log('[WebSocket] Current host:', window.location.host)
@@ -47,7 +47,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
       ws.current = new WebSocket(wsUrl)
 
       ws.current.onopen = () => {
-        console.log('[WebSocket] Connected:', url)
+        console.log('[WebSocket] Connected:', baseUrl)
         setConnected(true)
         onOpen?.()
       }
@@ -69,7 +69,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
       }
 
       ws.current.onclose = () => {
-        console.log('[WebSocket] Disconnected:', url)
+        console.log('[WebSocket] Disconnected:', baseUrl)
         setConnected(false)
         onClose?.()
 
@@ -84,7 +84,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     } catch (error) {
       console.error('[WebSocket] Connection failed:', error)
     }
-  }, [url, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval])
+  }, [baseUrl, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval])
 
   const disconnect = useCallback(() => {
     if (reconnectTimeout.current) {
@@ -98,23 +98,20 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     setConnected(false)
   }, [])
 
-  const send = useCallback(
-    (message: WebSocketSubscribeMessage | any) => {
-      if (ws.current && connected) {
-        ws.current.send(JSON.stringify(message))
-        console.log('[WebSocket] Message sent:', message.type)
-      } else {
-        console.warn('[WebSocket] Cannot send message: not connected')
-      }
-    },
-    [connected]
-  )
+  const send = useCallback((message: WebSocketSubscribeMessage | any) => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(message))
+      console.log('[WebSocket] Message sent:', message.type)
+    } else {
+      console.warn('[WebSocket] Cannot send message: not connected or still connecting')
+    }
+  }, [])
 
   const subscribe = useCallback(
-    (channel: WebSocketSubscribeMessage['channel'], entityId?: string) => {
+    (entityType: WebSocketSubscribeMessage['entity_type'], entityId?: string) => {
       send({
         type: 'subscribe',
-        channel,
+        entity_type: entityType,
         entity_id: entityId,
       } as WebSocketSubscribeMessage)
     },

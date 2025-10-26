@@ -13,7 +13,7 @@ export function useIssues() {
   })
 
   // WebSocket for live updates
-  const { connected, subscribe } = useWebSocket('/ws', {
+  const { connected, subscribe } = useWebSocket('', {
     onMessage: (message: WebSocketMessage) => {
       if (
         message.type === 'issue_created' ||
@@ -26,10 +26,10 @@ export function useIssues() {
     },
   })
 
-  // Subscribe to issues channel when connected
+  // Subscribe to all issue updates when connected
   useEffect(() => {
     if (connected) {
-      subscribe('issues')
+      subscribe('issue')
     }
   }, [connected, subscribe])
 

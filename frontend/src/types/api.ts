@@ -120,7 +120,7 @@ export interface WebSocketMessage {
 
 export interface WebSocketSubscribeMessage {
   type: 'subscribe'
-  channel: 'issues' | 'specs' | 'relationships' | 'feedback'
+  entity_type: 'issue' | 'spec' | 'all'
   entity_id?: string
 }
 

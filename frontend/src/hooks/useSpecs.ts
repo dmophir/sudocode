@@ -16,7 +16,7 @@ export function useSpecs() {
   })
 
   // WebSocket for live updates
-  const { connected, subscribe } = useWebSocket('/ws', {
+  const { connected, subscribe } = useWebSocket('', {
     onMessage: (message: WebSocketMessage) => {
       if (
         message.type === 'spec_created' ||
@@ -29,10 +29,10 @@ export function useSpecs() {
     },
   })
 
-  // Subscribe to specs channel when connected
+  // Subscribe to all spec updates when connected
   useEffect(() => {
     if (connected) {
-      subscribe('specs')
+      subscribe('spec')
     }
   }, [connected, subscribe])
 
@@ -107,7 +107,7 @@ export function useSpec(id: string) {
   })
 
   // WebSocket for live updates to this specific spec
-  const { connected, subscribe } = useWebSocket('/ws', {
+  const { connected, subscribe } = useWebSocket('', {
     onMessage: (message: WebSocketMessage) => {
       if (message.type === 'spec_updated' && (message.data as Spec).id === id) {
         queryClient.invalidateQueries({ queryKey: ['specs', id] })
@@ -117,7 +117,7 @@ export function useSpec(id: string) {
 
   useEffect(() => {
     if (connected && id) {
-      subscribe('specs', id)
+      subscribe('spec', id)
     }
   }, [connected, id, subscribe])
 
@@ -142,7 +142,7 @@ export function useSpecFeedback(specId: string) {
   })
 
   // WebSocket for live feedback updates
-  const { connected, subscribe } = useWebSocket('/ws', {
+  const { connected, subscribe } = useWebSocket('', {
     onMessage: (message: WebSocketMessage) => {
       if (
         message.type === 'feedback_created' ||
@@ -154,9 +154,10 @@ export function useSpecFeedback(specId: string) {
     },
   })
 
+  // Subscribe to all updates (including feedback) when connected
   useEffect(() => {
     if (connected && specId) {
-      subscribe('feedback', specId)
+      subscribe('all')
     }
   }, [connected, specId, subscribe])
 
