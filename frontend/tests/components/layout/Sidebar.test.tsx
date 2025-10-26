@@ -2,13 +2,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 import Sidebar from '@/components/layout/Sidebar'
 
 const renderSidebar = (props = {}) => {
   return render(
-    <BrowserRouter>
-      <Sidebar open={false} {...props} />
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Sidebar open={false} collapsed={false} {...props} />
+      </BrowserRouter>
+    </ThemeProvider>
   )
 }
 
