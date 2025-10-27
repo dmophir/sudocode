@@ -82,8 +82,10 @@ interface TiptapEditorProps {
   content: string
   editable?: boolean
   onSave?: (markdown: string) => void
+  onChange?: (markdown: string) => void
   onCancel?: () => void
   className?: string
+  showToolbar?: boolean
 }
 
 /**
@@ -94,8 +96,10 @@ export function TiptapEditor({
   content,
   editable = false,
   onSave,
+  onChange,
   onCancel,
   className = '',
+  showToolbar = false,
 }: TiptapEditorProps) {
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -160,8 +164,58 @@ export function TiptapEditor({
     ],
     editable,
     content: htmlContent,
-    onUpdate: () => {
+    onUpdate: ({ editor }) => {
       setHasChanges(true)
+
+      // Call onChange callback if provided (for autosave)
+      if (onChange) {
+        const html = editor.getHTML()
+        const turndownService = new TurndownService({
+          headingStyle: 'atx',
+          codeBlockStyle: 'fenced',
+          bulletListMarker: '-',
+          hr: '---',
+          emDelimiter: '_',
+          strongDelimiter: '**',
+        })
+
+        // Add all the custom rules (copy from handleSave)
+        turndownService.addRule('strikethrough', {
+          filter: ['del', 's'] as any,
+          replacement: (content) => `~~${content}~~`,
+        })
+
+        turndownService.addRule('entityMention', {
+          filter: (node) => {
+            return node.nodeName === 'SPAN' && node.hasAttribute('data-entity-id')
+          },
+          replacement: (content, node) => {
+            const element = node as HTMLElement
+            const entityId = element.getAttribute('data-entity-id')
+            const displayText = element.getAttribute('data-display-text')
+            const relationshipType = element.getAttribute('data-relationship-type')
+
+            if (!entityId) return content
+
+            let ref = `[[${entityId}`
+
+            if (displayText) {
+              ref += `|${displayText}`
+            }
+
+            ref += ']]'
+
+            if (relationshipType) {
+              ref += `{ ${relationshipType} }`
+            }
+
+            return ref
+          },
+        })
+
+        const markdown = turndownService.turndown(html)
+        onChange(markdown)
+      }
     },
   })
 
@@ -284,10 +338,7 @@ export function TiptapEditor({
     // This prevents turndown from escaping the brackets
     turndownService.addRule('entityMention', {
       filter: (node) => {
-        return (
-          node.nodeName === 'SPAN' &&
-          node.hasAttribute('data-entity-id')
-        )
+        return node.nodeName === 'SPAN' && node.hasAttribute('data-entity-id')
       },
       replacement: (content, node) => {
         const element = node as HTMLElement
@@ -355,7 +406,7 @@ export function TiptapEditor({
   return (
     <div className={className}>
       {/* Toolbar - only show in editable mode */}
-      {editable && (
+      {editable && showToolbar && (
         <div className="flex flex-wrap items-center gap-1 border-b border-border bg-muted/30 px-4 py-2">
           <Button
             variant="ghost"

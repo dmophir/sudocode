@@ -20,17 +20,23 @@ const mockIssue: Issue = {
 }
 
 describe('IssuePanel', () => {
-  it('should render issue details in view mode', async () => {
+  it('should render issue details with editable fields', async () => {
     renderWithProviders(<IssuePanel issue={mockIssue} />)
 
-    expect(screen.getByText('Test Issue')).toBeInTheDocument()
     expect(screen.getByText('ISSUE-001')).toBeInTheDocument()
-    // Content is rendered by TiptapMarkdownViewer, wait for it to appear
+
+    // Title should be in an editable input
+    expect(screen.getByDisplayValue('Test Issue')).toBeInTheDocument()
+
+    // Content is rendered by TiptapEditor
     await waitFor(() => {
       expect(screen.getByText(/Test content in detail/)).toBeInTheDocument()
     })
+
+    // Status and Priority should be in selects
     expect(screen.getByText('In Progress')).toBeInTheDocument()
-    expect(screen.getByText('High')).toBeInTheDocument()
+    expect(screen.getByText('High (P1)')).toBeInTheDocument()
+
     expect(screen.getByText('john.doe')).toBeInTheDocument()
     expect(screen.getByText('ISSUE-000')).toBeInTheDocument()
   })
@@ -55,12 +61,12 @@ describe('IssuePanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('should render Edit button when onUpdate is provided', () => {
+  it('should render save status when onUpdate is provided', () => {
     const onUpdate = vi.fn()
 
     renderWithProviders(<IssuePanel issue={mockIssue} onUpdate={onUpdate} />)
 
-    expect(screen.getByRole('button', { name: /Edit/ })).toBeInTheDocument()
+    expect(screen.getByText('All changes saved')).toBeInTheDocument()
   })
 
   it('should render Delete button when onDelete is provided', () => {
@@ -71,70 +77,46 @@ describe('IssuePanel', () => {
     expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument()
   })
 
-  it('should switch to edit mode when Edit button is clicked', async () => {
+  it('should show unsaved changes status when fields are modified', async () => {
     const user = userEvent.setup()
     const onUpdate = vi.fn()
 
     renderWithProviders(<IssuePanel issue={mockIssue} onUpdate={onUpdate} />)
 
-    const editButton = screen.getByRole('button', { name: /Edit/ })
-    await user.click(editButton)
-
-    // Should show the edit form
-    await waitFor(() => {
-      expect(screen.getByText('Edit Issue')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Update Issue/ })).toBeInTheDocument()
-    })
-  })
-
-  it('should call onUpdate when edit form is saved', async () => {
-    const user = userEvent.setup()
-    const onUpdate = vi.fn()
-
-    renderWithProviders(<IssuePanel issue={mockIssue} onUpdate={onUpdate} />)
-
-    // Enter edit mode
-    const editButton = screen.getByRole('button', { name: /Edit/ })
-    await user.click(editButton)
+    // Initially should show all saved
+    expect(screen.getByText('All changes saved')).toBeInTheDocument()
 
     // Modify the title
     const titleInput = screen.getByLabelText(/Title/)
     await user.clear(titleInput)
     await user.type(titleInput, 'Updated Title')
 
-    // Save changes
-    const saveButton = screen.getByRole('button', { name: /Update Issue/ })
-    await user.click(saveButton)
-
-    await waitFor(() => {
-      expect(onUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Updated Title',
-        })
-      )
-    })
+    // Should show unsaved changes
+    expect(screen.getByText('Unsaved changes...')).toBeInTheDocument()
   })
 
-  it('should exit edit mode and not save when Cancel is clicked in edit form', async () => {
+  it('should auto-save changes after debounce', async () => {
     const user = userEvent.setup()
     const onUpdate = vi.fn()
 
     renderWithProviders(<IssuePanel issue={mockIssue} onUpdate={onUpdate} />)
 
-    // Enter edit mode
-    const editButton = screen.getByRole('button', { name: /Edit/ })
-    await user.click(editButton)
+    // Modify the title
+    const titleInput = screen.getByLabelText(/Title/)
+    await user.clear(titleInput)
+    await user.type(titleInput, 'Updated Title')
 
-    // Cancel editing - get all Cancel buttons and click the last one (form's Cancel button)
-    const cancelButtons = screen.getAllByRole('button', { name: /Cancel/ })
-    await user.click(cancelButtons[cancelButtons.length - 1])
-
-    // Should return to view mode
-    await waitFor(() => {
-      expect(screen.queryByText('Edit Issue')).not.toBeInTheDocument()
-      expect(screen.getByText('Test Issue')).toBeInTheDocument()
-    })
-    expect(onUpdate).not.toHaveBeenCalled()
+    // Wait for auto-save debounce (1 second)
+    await waitFor(
+      () => {
+        expect(onUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Updated Title',
+          })
+        )
+      },
+      { timeout: 2000 }
+    )
   })
 
   it('should show delete confirmation dialog when Delete button is clicked', async () => {
@@ -188,7 +170,7 @@ describe('IssuePanel', () => {
     expect(onDelete).not.toHaveBeenCalled()
   })
 
-  it('should disable Edit and Delete buttons when isUpdating is true', () => {
+  it('should show Saving status and disable Delete button when isUpdating is true', () => {
     const onUpdate = vi.fn()
     const onDelete = vi.fn()
 
@@ -196,11 +178,12 @@ describe('IssuePanel', () => {
       <IssuePanel issue={mockIssue} onUpdate={onUpdate} onDelete={onDelete} isUpdating={true} />
     )
 
-    expect(screen.getByRole('button', { name: /Edit/ })).toBeDisabled()
+    // When isUpdating is true, should show "Saving..." status
+    expect(screen.getByText('Saving...')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Delete/ })).toBeDisabled()
   })
 
-  it('should disable Edit and Delete buttons when isDeleting is true', () => {
+  it('should disable Delete button when isDeleting is true', () => {
     const onUpdate = vi.fn()
     const onDelete = vi.fn()
 
@@ -208,7 +191,6 @@ describe('IssuePanel', () => {
       <IssuePanel issue={mockIssue} onUpdate={onUpdate} onDelete={onDelete} isDeleting={true} />
     )
 
-    expect(screen.getByRole('button', { name: /Edit/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Delete/ })).toBeDisabled()
   })
 

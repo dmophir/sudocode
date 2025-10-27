@@ -1,14 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus } from 'lucide-react'
-import type { Issue, Relationship, EntityType, RelationshipType } from '@/types/api'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { IssueEditor } from './IssueEditor'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DeleteIssueDialog } from './DeleteIssueDialog'
 import { RelationshipList } from '@/components/relationships/RelationshipList'
 import { RelationshipForm } from '@/components/relationships/RelationshipForm'
 import { relationshipsApi } from '@/lib/api'
-import { TiptapMarkdownViewer } from '@/components/specs/TiptapMarkdownViewer'
+import { TiptapEditor } from '@/components/specs/TiptapEditor'
 
 interface IssuePanelProps {
   issue: Issue
@@ -19,21 +27,21 @@ interface IssuePanelProps {
   isDeleting?: boolean
 }
 
-const priorityLabels: Record<number, string> = {
-  0: 'Critical',
-  1: 'High',
-  2: 'Medium',
-  3: 'Low',
-  4: 'None',
-}
+const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'needs_review', label: 'Needs Review' },
+  { value: 'closed', label: 'Closed' },
+]
 
-const statusLabels: Record<string, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  blocked: 'Blocked',
-  needs_review: 'Needs Review',
-  closed: 'Closed',
-}
+const PRIORITY_OPTIONS = [
+  { value: '0', label: 'Critical (P0)' },
+  { value: '1', label: 'High (P1)' },
+  { value: '2', label: 'Medium (P2)' },
+  { value: '3', label: 'Low (P3)' },
+  { value: '4', label: 'None (P4)' },
+]
 
 export function IssuePanel({
   issue,
@@ -43,12 +51,37 @@ export function IssuePanel({
   isUpdating = false,
   isDeleting = false,
 }: IssuePanelProps) {
-  const [isEditing, setIsEditing] = useState(false)
+  const [title, setTitle] = useState(issue.title)
+  const [content, setContent] = useState(issue.content || '')
+  const [status, setStatus] = useState<IssueStatus>(issue.status)
+  const [priority, setPriority] = useState<number>(issue.priority)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [showAddRelationship, setShowAddRelationship] = useState(false)
   const [isLoadingRelationships, setIsLoadingRelationships] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const onUpdateRef = useRef(onUpdate)
+  const latestValuesRef = useRef({ title, content, status, priority, hasChanges })
+
+  // Keep refs in sync with latest values
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+  }, [onUpdate])
+
+  useEffect(() => {
+    latestValuesRef.current = { title, content, status, priority, hasChanges }
+  }, [title, content, status, priority, hasChanges])
+
+  // Update form values when issue changes
+  useEffect(() => {
+    setTitle(issue.title)
+    setContent(issue.content || '')
+    setStatus(issue.status)
+    setPriority(issue.priority)
+    setHasChanges(false)
+  }, [issue])
 
   // Fetch relationships when issue changes
   useEffect(() => {
@@ -94,6 +127,13 @@ export function IssuePanel({
       const issueCard = clickedElement.closest('[data-issue-id]')
       if (issueCard) return
 
+      // Don't close if clicking on the resize handle
+      const resizeHandle = clickedElement.closest('[data-panel-resize-handle-id]')
+      if (resizeHandle) return
+
+      // Also check for resize handle by class (backup check)
+      if (clickedElement.classList?.contains('cursor-col-resize')) return
+
       // Close the panel if clicking outside
       onClose()
     }
@@ -104,9 +144,68 @@ export function IssuePanel({
     }
   }, [onClose])
 
-  const handleUpdate = (data: Partial<Issue>) => {
-    onUpdate?.(data)
-    setIsEditing(false)
+  // Auto-save effect with debounce
+  useEffect(() => {
+    if (!hasChanges || !onUpdateRef.current) return
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    // Set new timer for auto-save after 1 second of inactivity
+    autoSaveTimerRef.current = setTimeout(() => {
+      onUpdateRef.current?.({
+        title,
+        content,
+        status,
+        priority,
+      })
+      setHasChanges(false)
+    }, 1000)
+
+    // Cleanup timer on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [title, content, status, priority, hasChanges])
+
+  // Save pending changes on unmount
+  useEffect(() => {
+    return () => {
+      // On unmount, if there are unsaved changes, save them immediately
+      const { hasChanges, title, content, status, priority } = latestValuesRef.current
+      if (hasChanges && onUpdateRef.current) {
+        onUpdateRef.current({
+          title,
+          content,
+          status,
+          priority,
+        })
+      }
+    }
+  }, [])
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value)
+    setHasChanges(true)
+  }
+
+  const handleContentChange = (value: string) => {
+    setContent(value)
+    setHasChanges(true)
+  }
+
+  const handleStatusChange = (value: IssueStatus) => {
+    setStatus(value)
+    setHasChanges(true)
+  }
+
+  const handlePriorityChange = (value: number) => {
+    setPriority(value)
+    setHasChanges(true)
   }
 
   const handleDelete = () => {
@@ -158,35 +257,12 @@ export function IssuePanel({
     }
   }
 
-  if (isEditing) {
-    return (
-      <div className="h-full overflow-y-auto p-4" ref={panelRef}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Edit Issue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <IssueEditor
-              issue={issue}
-              onSave={handleUpdate}
-              onCancel={() => setIsEditing(false)}
-              isLoading={isUpdating}
-            />
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="h-full overflow-y-auto p-4" ref={panelRef}>
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle>{issue.title}</CardTitle>
-              <div className="mt-2 text-sm text-muted-foreground">{issue.id}</div>
-            </div>
+            <div className="flex-1 text-sm text-muted-foreground">{issue.id}</div>
             {onClose && (
               <button
                 onClick={onClose}
@@ -199,27 +275,77 @@ export function IssuePanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Title */}
+          <div className="space-y-2">
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="Enter issue title..."
+              disabled={isUpdating}
+            />
+          </div>
+
           {/* Status and Priority */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="mb-1 text-sm font-medium text-muted-foreground">Status</div>
-              <div className="text-sm">{statusLabels[issue.status] || issue.status}</div>
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={status}
+                onValueChange={(value) => handleStatusChange(value as IssueStatus)}
+                disabled={isUpdating}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-muted-foreground">Priority</div>
-              <div className="text-sm">{priorityLabels[issue.priority] || issue.priority}</div>
+
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={String(priority)}
+                onValueChange={(value) => handlePriorityChange(parseInt(value))}
+                disabled={isUpdating}
+              >
+                <SelectTrigger id="priority">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {/* Content */}
-          {issue.content && (
-            <div>
-              <div className="mb-2 text-sm font-medium text-muted-foreground">Details</div>
-              <Card>
-                <TiptapMarkdownViewer content={issue.content} className="p-4" />
-              </Card>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="content">Details</Label>
+            <Card className="overflow-hidden">
+              <TiptapEditor
+                content={content}
+                editable={true}
+                onChange={handleContentChange}
+                onCancel={() => {
+                  setContent(issue.content || '')
+                  setHasChanges(false)
+                }}
+                className="min-h-[200px]"
+              />
+            </Card>
+          </div>
 
           {/* Timestamps */}
           <div className="space-y-2 border-t pt-4">
@@ -298,28 +424,27 @@ export function IssuePanel({
           </div>
 
           {/* Actions */}
-          {(onUpdate || onDelete) && (
-            <div className="flex gap-2 border-t pt-4">
-              {onUpdate && (
-                <Button
-                  onClick={() => setIsEditing(true)}
-                  variant="default"
-                  disabled={isUpdating || isDeleting}
-                >
-                  Edit
-                </Button>
-              )}
-              {onDelete && (
-                <Button
-                  onClick={() => setShowDeleteDialog(true)}
-                  variant="destructive"
-                  disabled={isUpdating || isDeleting}
-                >
-                  Delete
-                </Button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center justify-between border-t pt-4">
+            {onUpdate && (
+              <div className="text-sm text-muted-foreground">
+                {isUpdating
+                  ? 'Saving...'
+                  : hasChanges
+                    ? 'Unsaved changes...'
+                    : 'All changes saved'}
+              </div>
+            )}
+            {onDelete && (
+              <Button
+                onClick={() => setShowDeleteDialog(true)}
+                variant="destructive"
+                disabled={isUpdating || isDeleting}
+                className="ml-auto"
+              >
+                Delete
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
