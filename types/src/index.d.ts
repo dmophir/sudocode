@@ -173,18 +173,44 @@ export interface Config {
 }
 
 /**
- * Represents an attempt to resolve an issue.
+ * Agent types supported for execution
+ */
+export type AgentType = "claude-code" | "codex";
+
+/**
+ * Execution status
+ */
+export type ExecutionStatus = "running" | "completed" | "failed" | "stopped";
+
+/**
+ * Represents a single agent run on an issue
+ * Tracks the full lifecycle of a coding agent execution
  */
 export interface Execution {
   id: string;
   issue_id: string;
-  status: "pending" | "in_progress" | "completed" | "failed" | "cancelled";
-  target_branch: string;
-  worktree_path?: string;
+  agent_type: AgentType;
+  status: ExecutionStatus;
+
+  // Timestamps
+  started_at: string;
+  completed_at: string | null;
+
+  // Process info
+  exit_code: number | null;
+  error_message: string | null;
+
+  // Git context (captured before/after)
+  before_commit: string | null;
+  after_commit: string | null;
+  target_branch: string | null;
+  worktree_path: string | null;
+
+  // Session tracking (for resume/fork)
+  session_id: string | null;
+  summary: string | null;
+
+  // Metadata
   created_at: string;
-  started_at?: string;
-  completed_at?: string;
-  error_message?: string;
-  // TODO: Add fields to track branch commit status.
-  // TODO: Add fields to track execution trajectories.
+  updated_at: string;
 }

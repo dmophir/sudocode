@@ -15,13 +15,25 @@ export const EXECUTIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS executions (
     id TEXT PRIMARY KEY,
     issue_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed', 'failed', 'cancelled')),
-    target_branch TEXT NOT NULL,
-    worktree_path TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    started_at DATETIME,
-    completed_at DATETIME,
+    agent_type TEXT NOT NULL CHECK(agent_type IN ('claude-code', 'codex')),
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'stopped')),
+
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    exit_code INTEGER,
     error_message TEXT,
+
+    before_commit TEXT,
+    after_commit TEXT,
+    target_branch TEXT,
+    worktree_path TEXT,
+
+    session_id TEXT,
+    summary TEXT,
+
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+
     FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
 );
 `;
@@ -30,9 +42,9 @@ CREATE TABLE IF NOT EXISTS executions (
  * Indexes for server tables
  */
 export const SERVER_INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_executions_issue ON executions(issue_id);
+CREATE INDEX IF NOT EXISTS idx_executions_issue_id ON executions(issue_id);
 CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
-CREATE INDEX IF NOT EXISTS idx_executions_created ON executions(created_at);
+CREATE INDEX IF NOT EXISTS idx_executions_session_id ON executions(session_id);
 `;
 
 /**
