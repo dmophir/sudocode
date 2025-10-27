@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSpec, useSpecFeedback, useSpecs } from '@/hooks/useSpecs'
 import { useIssues } from '@/hooks/useIssues'
@@ -6,6 +6,7 @@ import { SpecViewerTiptap } from '@/components/specs/SpecViewerTiptap'
 import { SpecFeedbackPanel } from '@/components/specs/SpecFeedbackPanel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -16,18 +17,104 @@ import {
 import { MessageSquare } from 'lucide-react'
 import type { IssueFeedback } from '@/types/api'
 
+const PRIORITY_OPTIONS = [
+  { value: '0', label: 'Critical (P0)' },
+  { value: '1', label: 'High (P1)' },
+  { value: '2', label: 'Medium (P2)' },
+  { value: '3', label: 'Low (P3)' },
+  { value: '4', label: 'None (P4)' },
+]
+
 export default function SpecDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { spec, isLoading, isError } = useSpec(id || '')
   const { feedback } = useSpecFeedback(id || '')
   const { issues } = useIssues()
-  const { updateSpec } = useSpecs()
+  const { updateSpec, isUpdating } = useSpecs()
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [selectedText, setSelectedText] = useState<string | null>(null)
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(true)
   const [selectedIssueId, setSelectedIssueId] = useState<string | undefined>(undefined)
+
+  // Local state for editable fields
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [priority, setPriority] = useState<number>(2)
+  const [hasChanges, setHasChanges] = useState(false)
+
+  // Refs for auto-save
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const updateSpecRef = useRef(updateSpec)
+  const latestValuesRef = useRef({ title, content, priority, hasChanges })
+
+  // Keep refs in sync with latest values
+  useEffect(() => {
+    updateSpecRef.current = updateSpec
+  }, [updateSpec])
+
+  useEffect(() => {
+    latestValuesRef.current = { title, content, priority, hasChanges }
+  }, [title, content, priority, hasChanges])
+
+  // Update form values when spec changes
+  useEffect(() => {
+    if (spec) {
+      setTitle(spec.title)
+      setContent(spec.content || '')
+      setPriority(spec.priority ?? 2)
+      setHasChanges(false)
+    }
+  }, [spec])
+
+  // Auto-save effect with debounce
+  useEffect(() => {
+    if (!hasChanges || !id) return
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    // Set new timer for auto-save after 1 second of inactivity
+    autoSaveTimerRef.current = setTimeout(() => {
+      updateSpecRef.current({
+        id,
+        data: {
+          title,
+          content,
+          priority,
+        },
+      })
+      setHasChanges(false)
+    }, 1000)
+
+    // Cleanup timer on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [title, content, priority, hasChanges, id])
+
+  // Save pending changes on unmount
+  useEffect(() => {
+    return () => {
+      // On unmount, if there are unsaved changes, save them immediately
+      const { hasChanges, title, content, priority } = latestValuesRef.current
+      if (hasChanges && id && updateSpecRef.current) {
+        updateSpecRef.current({
+          id,
+          data: {
+            title,
+            content,
+            priority,
+          },
+        })
+      }
+    }
+  }, [id])
 
   if (isLoading) {
     return (
@@ -78,12 +165,19 @@ export default function SpecDetailPage() {
     }
   }
 
-  const handleSave = (markdown: string) => {
-    if (!spec) return
-    updateSpec({
-      id: spec.id,
-      data: { content: markdown },
-    })
+  const handleTitleChange = (value: string) => {
+    setTitle(value)
+    setHasChanges(true)
+  }
+
+  const handleContentChange = (markdown: string) => {
+    setContent(markdown)
+    setHasChanges(true)
+  }
+
+  const handlePriorityChange = (value: number) => {
+    setPriority(value)
+    setHasChanges(true)
   }
 
   return (
@@ -101,13 +195,32 @@ export default function SpecDetailPage() {
             <div className="flex-1">
               <div className="mb-2 flex items-center gap-3">
                 <span className="font-mono text-sm text-muted-foreground">{spec.id}</span>
-                {spec.priority !== undefined && (
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    Priority {spec.priority}
-                  </span>
-                )}
+                <Select
+                  value={String(priority)}
+                  onValueChange={(value) => handlePriorityChange(parseInt(value))}
+                  disabled={isUpdating}
+                >
+                  <SelectTrigger className="w-40 h-7">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasChanges && <span className="text-xs text-muted-foreground">Unsaved changes...</span>}
+                {isUpdating && <span className="text-xs text-muted-foreground">Saving...</span>}
+                {!hasChanges && !isUpdating && <span className="text-xs text-muted-foreground">All changes saved</span>}
               </div>
-              <h1 className="mb-2 text-3xl font-bold">{spec.title}</h1>
+              <Input
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                disabled={isUpdating}
+                className="mb-2 text-3xl font-bold border-none shadow-none px-0 h-auto"
+              />
             </div>
 
             <div className="flex items-center gap-2">
@@ -138,12 +251,6 @@ export default function SpecDetailPage() {
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Feedback {feedback.length > 0 && `(${feedback.length})`}
               </Button>
-              <Button variant="outline" size="sm">
-                Edit
-              </Button>
-              <Button variant="outline" size="sm">
-                Delete
-              </Button>
             </div>
           </div>
 
@@ -171,15 +278,15 @@ export default function SpecDetailPage() {
         </div>
 
         {/* Content */}
-        {spec.content ? (
+        {content !== undefined ? (
           <SpecViewerTiptap
-            content={spec.content}
+            content={content}
             feedback={feedback}
             selectedLine={selectedLine}
             onLineClick={handleLineClick}
             onTextSelect={handleTextSelect}
             onFeedbackClick={handleFeedbackClick}
-            onSave={handleSave}
+            onChange={handleContentChange}
           />
         ) : (
           <Card className="p-8 text-center">
