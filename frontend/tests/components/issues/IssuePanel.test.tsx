@@ -15,7 +15,7 @@ const mockIssue: Issue = {
   assignee: 'john.doe',
   created_at: '2024-01-01T10:00:00Z',
   updated_at: '2024-01-02T15:30:00Z',
-  closed_at: null,
+  closed_at: undefined,
   parent_id: 'ISSUE-000',
 }
 
@@ -242,8 +242,8 @@ describe('IssuePanel', () => {
     expect(screen.getByText(/Closed:/)).toBeInTheDocument()
   })
 
-  it('should not show assignee section when assignee is null', () => {
-    const issueWithoutAssignee = { ...mockIssue, assignee: null }
+  it('should not show assignee section when assignee is undefined', () => {
+    const issueWithoutAssignee = { ...mockIssue, assignee: undefined }
 
     renderWithProviders(<IssuePanel issue={issueWithoutAssignee} />)
 
@@ -251,8 +251,8 @@ describe('IssuePanel', () => {
     expect(screen.queryByText('john.doe')).not.toBeInTheDocument()
   })
 
-  it('should not show parent section when parent_id is null', () => {
-    const issueWithoutParent = { ...mockIssue, parent_id: null }
+  it('should not show parent section when parent_id is undefined', () => {
+    const issueWithoutParent = { ...mockIssue, parent_id: undefined }
 
     renderWithProviders(<IssuePanel issue={issueWithoutParent} />)
 

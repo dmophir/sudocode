@@ -52,7 +52,7 @@ describe('SpecEditor', () => {
       priority: 1,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      parent_id: null,
+      parent_id: undefined,
     }
 
     render(<SpecEditor spec={spec} />, { wrapper })
@@ -87,7 +87,7 @@ describe('SpecEditor', () => {
       priority: 2,
       created_at: '2024-01-02T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',
-      parent_id: null,
+      parent_id: undefined,
     }
 
     mockCreateSpecAsync.mockResolvedValue(newSpec)
@@ -128,7 +128,7 @@ describe('SpecEditor', () => {
       priority: 1,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      parent_id: null,
+      parent_id: undefined,
     }
 
     const updatedSpec: Spec = {

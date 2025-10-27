@@ -12,11 +12,11 @@ const mockIssue: Issue = {
   content: 'Test content',
   status: 'open',
   priority: 2,
-  assignee: null,
+  assignee: undefined,
   created_at: '2024-01-01',
   updated_at: '2024-01-01',
-  closed_at: null,
-  parent_id: null,
+  closed_at: undefined,
+  parent_id: undefined,
 }
 
 describe('DeleteIssueDialog', () => {
@@ -25,12 +25,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     renderWithProviders(
-      <DeleteIssueDialog
-        issue={mockIssue}
-        isOpen={false}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={mockIssue} isOpen={false} onClose={onClose} onConfirm={onConfirm} />
     )
 
     expect(screen.queryByText('Delete Issue')).not.toBeInTheDocument()
@@ -41,12 +36,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     renderWithProviders(
-      <DeleteIssueDialog
-        issue={mockIssue}
-        isOpen={true}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={mockIssue} isOpen={true} onClose={onClose} onConfirm={onConfirm} />
     )
 
     expect(screen.getByText('Delete Issue')).toBeInTheDocument()
@@ -61,12 +51,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     renderWithProviders(
-      <DeleteIssueDialog
-        issue={mockIssue}
-        isOpen={true}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={mockIssue} isOpen={true} onClose={onClose} onConfirm={onConfirm} />
     )
 
     const deleteButton = screen.getByRole('button', { name: /Delete/ })
@@ -81,12 +66,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     renderWithProviders(
-      <DeleteIssueDialog
-        issue={mockIssue}
-        isOpen={true}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={mockIssue} isOpen={true} onClose={onClose} onConfirm={onConfirm} />
     )
 
     const cancelButton = screen.getByRole('button', { name: /Cancel/ })
@@ -136,12 +116,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     const { container } = renderWithProviders(
-      <DeleteIssueDialog
-        issue={null}
-        isOpen={true}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={null} isOpen={true} onClose={onClose} onConfirm={onConfirm} />
     )
 
     expect(container.firstChild).toBeNull()
@@ -153,12 +128,7 @@ describe('DeleteIssueDialog', () => {
     const onConfirm = vi.fn()
 
     renderWithProviders(
-      <DeleteIssueDialog
-        issue={mockIssue}
-        isOpen={true}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <DeleteIssueDialog issue={mockIssue} isOpen={true} onClose={onClose} onConfirm={onConfirm} />
     )
 
     // Pressing Escape should trigger onClose

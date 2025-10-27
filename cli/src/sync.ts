@@ -393,7 +393,7 @@ async function syncSpec(
     file_path: frontmatter.file_path || "",
     content,
     priority: frontmatter.priority ?? 2,
-    parent_id: frontmatter.parent_id || null,
+    parent_id: frontmatter.parent_id || undefined,
   };
 
   if (isNew) {
@@ -467,8 +467,8 @@ async function syncIssue(
     content,
     status: (frontmatter.status as IssueStatus) || "open",
     priority: frontmatter.priority ?? 2,
-    assignee: frontmatter.assignee || null,
-    parent_id: frontmatter.parent_id || null,
+    assignee: frontmatter.assignee || undefined,
+    parent_id: frontmatter.parent_id || undefined,
   };
 
   if (isNew) {
@@ -534,7 +534,7 @@ async function syncRelationships(
           to_id: ref.id,
           to_type: ref.type,
           relationship_type: relType as any,
-          metadata: ref.anchor ? JSON.stringify({ anchor: ref.anchor }) : null,
+          metadata: ref.anchor ? JSON.stringify({ anchor: ref.anchor }) : undefined,
         });
       } catch (error) {
         // Ignore errors (e.g., target not found, duplicate)

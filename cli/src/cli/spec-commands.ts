@@ -64,7 +64,7 @@ export async function handleSpecCreate(
       file_path: filePath,
       content,
       priority: parseInt(options.priority),
-      parent_id: options.parent || null,
+      parent_id: options.parent || undefined,
     });
 
     // Add tags if provided
@@ -271,6 +271,7 @@ export interface SpecUpdateOptions {
   description?: string;
   parent?: string;
   tags?: string;
+  archived?: string;
 }
 
 export async function handleSpecUpdate(
@@ -299,7 +300,10 @@ export async function handleSpecUpdate(
       updateData.content = options.description;
     }
     if (options.parent !== undefined) {
-      updateData.parent_id = options.parent || null;
+      updateData.parent_id = options.parent || undefined;
+    }
+    if (options.archived !== undefined) {
+      updateData.archived = options.archived === 'true';
     }
 
     // Update spec in database

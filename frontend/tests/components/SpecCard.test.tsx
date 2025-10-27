@@ -13,7 +13,7 @@ describe('SpecCard', () => {
     priority: 1,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    parent_id: null,
+    parent_id: undefined,
   }
 
   it('should render spec title', () => {
@@ -39,9 +39,7 @@ describe('SpecCard', () => {
 
   it('should render content preview', () => {
     render(<SpecCard spec={mockSpec} />)
-    expect(
-      screen.getByText(/This is a test spec with some content/)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/This is a test spec with some content/)).toBeInTheDocument()
   })
 
   it('should truncate long content', () => {

@@ -4,7 +4,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { initDatabase } from "../../../src/db.js";
-import type Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -144,9 +143,6 @@ describe("Init Command", () => {
 
       db.close();
 
-      // Get file stats before init
-      const statsBefore = fs.statSync(dbPath);
-
       // Run init
       const output = execSync(`node "${cliPath}" init`, {
         cwd: tempDir,
@@ -228,6 +224,197 @@ describe("Init Command", () => {
       // Verify output mentions only the preserved file
       expect(output).toContain("specs.jsonl");
       expect(output).not.toContain("issues.jsonl");
+    });
+  });
+
+  describe("importing from existing JSONL files", () => {
+    it("should import specs from existing specs.jsonl on init", async () => {
+      const sudocodeDir = path.join(tempDir, ".sudocode");
+      fs.mkdirSync(sudocodeDir, { recursive: true });
+
+      // Create specs.jsonl with valid JSONL data
+      const specsPath = path.join(sudocodeDir, "specs.jsonl");
+      const specData = {
+        id: "SPEC-001",
+        uuid: "test-uuid-001",
+        title: "Test Spec",
+        file_path: "specs/test-spec.md",
+        content: "# Test Spec Content",
+        priority: 2,
+        parent_id: null,
+        archived: false,
+        archived_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ["test"],
+        relationships: [],
+      };
+      fs.writeFileSync(specsPath, JSON.stringify(specData) + "\n", "utf8");
+
+      // Run init
+      const output = execSync(`node "${cliPath}" init`, {
+        cwd: tempDir,
+        encoding: "utf8",
+      });
+
+      // Verify import happened
+      expect(output).toContain("Importing from existing JSONL files");
+      expect(output).toContain("Specs: 1 added");
+
+      // Verify data is in database
+      const dbPath = path.join(sudocodeDir, "cache.db");
+      const db = initDatabase({ path: dbPath });
+      const { getSpec } = await import("../../../src/operations/specs.js");
+      const spec = getSpec(db, "SPEC-001");
+
+      expect(spec).not.toBeNull();
+      expect(spec?.title).toBe("Test Spec");
+      expect(spec?.content).toBe("# Test Spec Content");
+
+      db.close();
+    });
+
+    it("should import issues from existing issues.jsonl on init", async () => {
+      const sudocodeDir = path.join(tempDir, ".sudocode");
+      fs.mkdirSync(sudocodeDir, { recursive: true });
+
+      // Create issues.jsonl with valid JSONL data
+      const issuesPath = path.join(sudocodeDir, "issues.jsonl");
+      const issueData = {
+        id: "ISSUE-001",
+        uuid: "test-issue-uuid-001",
+        title: "Test Issue",
+        content: "Test issue content",
+        status: "open",
+        priority: 2,
+        assignee: null,
+        parent_id: null,
+        archived: false,
+        archived_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        closed_at: null,
+        tags: ["bug"],
+        relationships: [],
+        feedback: [],
+      };
+      fs.writeFileSync(issuesPath, JSON.stringify(issueData) + "\n", "utf8");
+
+      // Run init
+      const output = execSync(`node "${cliPath}" init`, {
+        cwd: tempDir,
+        encoding: "utf8",
+      });
+
+      // Verify import happened
+      expect(output).toContain("Importing from existing JSONL files");
+      expect(output).toContain("Issues: 1 added");
+
+      // Verify data is in database
+      const dbPath = path.join(sudocodeDir, "cache.db");
+      const db = initDatabase({ path: dbPath });
+      const { getIssue } = await import("../../../src/operations/issues.js");
+      const issue = getIssue(db, "ISSUE-001");
+
+      expect(issue).not.toBeNull();
+      expect(issue?.title).toBe("Test Issue");
+      expect(issue?.status).toBe("open");
+
+      db.close();
+    });
+
+    it("should import both specs and issues from JSONL files", async () => {
+      const sudocodeDir = path.join(tempDir, ".sudocode");
+      fs.mkdirSync(sudocodeDir, { recursive: true });
+
+      // Create specs.jsonl
+      const specsPath = path.join(sudocodeDir, "specs.jsonl");
+      const specData = {
+        id: "SPEC-002",
+        uuid: "test-uuid-002",
+        title: "Another Spec",
+        file_path: "specs/another-spec.md",
+        content: "# Another Spec",
+        priority: 1,
+        parent_id: null,
+        archived: false,
+        archived_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: [],
+        relationships: [],
+      };
+      fs.writeFileSync(specsPath, JSON.stringify(specData) + "\n", "utf8");
+
+      // Create issues.jsonl
+      const issuesPath = path.join(sudocodeDir, "issues.jsonl");
+      const issueData = {
+        id: "ISSUE-002",
+        uuid: "test-issue-uuid-002",
+        title: "Another Issue",
+        content: "Another issue content",
+        status: "in_progress",
+        priority: 1,
+        assignee: "test-user",
+        parent_id: null,
+        archived: false,
+        archived_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        closed_at: null,
+        tags: [],
+        relationships: [],
+        feedback: [],
+      };
+      fs.writeFileSync(issuesPath, JSON.stringify(issueData) + "\n", "utf8");
+
+      // Run init
+      const output = execSync(`node "${cliPath}" init`, {
+        cwd: tempDir,
+        encoding: "utf8",
+      });
+
+      // Verify import happened for both
+      expect(output).toContain("Importing from existing JSONL files");
+      expect(output).toContain("Specs: 1 added");
+      expect(output).toContain("Issues: 1 added");
+
+      // Verify data is in database
+      const dbPath = path.join(sudocodeDir, "cache.db");
+      const db = initDatabase({ path: dbPath });
+      const { getSpec } = await import("../../../src/operations/specs.js");
+      const { getIssue } = await import("../../../src/operations/issues.js");
+
+      const spec = getSpec(db, "SPEC-002");
+      expect(spec).not.toBeNull();
+      expect(spec?.title).toBe("Another Spec");
+
+      const issue = getIssue(db, "ISSUE-002");
+      expect(issue).not.toBeNull();
+      expect(issue?.title).toBe("Another Issue");
+      expect(issue?.status).toBe("in_progress");
+
+      db.close();
+    });
+
+    it("should not import when JSONL files are empty", () => {
+      const sudocodeDir = path.join(tempDir, ".sudocode");
+      fs.mkdirSync(sudocodeDir, { recursive: true });
+
+      // Create empty JSONL files
+      const specsPath = path.join(sudocodeDir, "specs.jsonl");
+      const issuesPath = path.join(sudocodeDir, "issues.jsonl");
+      fs.writeFileSync(specsPath, "", "utf8");
+      fs.writeFileSync(issuesPath, "", "utf8");
+
+      // Run init
+      const output = execSync(`node "${cliPath}" init`, {
+        cwd: tempDir,
+        encoding: "utf8",
+      });
+
+      // Verify no import message
+      expect(output).not.toContain("Importing from existing JSONL files");
     });
   });
 });

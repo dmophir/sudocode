@@ -8,9 +8,11 @@ export interface Spec {
   file_path: string;
   content: string;
   priority: number;
+  archived?: boolean;
+  archived_at?: string;
   created_at: string;
   updated_at: string;
-  parent_id: string | null;
+  parent_id?: string;
 }
 
 export interface Issue {
@@ -20,11 +22,13 @@ export interface Issue {
   uuid: string;
   content: string;
   priority: number;
-  assignee: string | null;
+  assignee?: string;
+  archived?: boolean;
+  archived_at?: string;
   created_at: string;
   updated_at: string;
-  closed_at: string | null;
-  parent_id: string | null;
+  closed_at?: string;
+  parent_id?: string;
 }
 
 export type IssueStatus =
@@ -41,7 +45,7 @@ export interface Relationship {
   to_type: EntityType;
   relationship_type: RelationshipType;
   created_at: string;
-  metadata: string | null;
+  metadata?: string;
 }
 
 export type EntityType = "spec" | "issue";

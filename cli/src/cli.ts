@@ -320,6 +320,7 @@ spec
   .option("-d, --description <desc>", "New description")
   .option("--parent <id>", "New parent spec ID")
   .option("--tags <tags>", "New comma-separated tags")
+  .option("--archived <bool>", "Archive status (true/false)")
   .action(async (id, options) => {
     await handleSpecUpdate(getContext(), id, options);
   });

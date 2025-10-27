@@ -136,8 +136,8 @@ export function createIssuesRouter(db: Database.Database): Router {
         content: content || "",
         status: status || "open",
         priority: priority !== undefined ? priority : 2,
-        assignee: assignee || null,
-        parent_id: parent_id || null,
+        assignee: assignee || undefined,
+        parent_id: parent_id || undefined,
       });
 
       // Trigger export to JSONL files

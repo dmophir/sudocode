@@ -127,7 +127,7 @@ export function createSpecsRouter(db: Database.Database): Router {
         file_path,
         content: content || "",
         priority: priority !== undefined ? priority : 2,
-        parent_id: parent_id || null,
+        parent_id: parent_id || undefined,
       });
 
       // Trigger export to JSONL files

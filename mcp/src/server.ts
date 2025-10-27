@@ -73,6 +73,11 @@ export class SudocodeMCPServer {
                   type: "number",
                   description: "Filter by priority (0-4) (optional)",
                 },
+                archived: {
+                  type: "boolean",
+                  description:
+                    "Filter by archived status (optional, defaults to false to exclude archived)",
+                },
                 limit: {
                   type: "number",
                   description: "Max results (optional)",
@@ -104,7 +109,7 @@ export class SudocodeMCPServer {
           {
             name: "upsert_issue",
             description:
-              "Create or update an issue. If issue_id is provided, updates the issue; otherwise creates a new one. To close an issue, set status='closed'.",
+              "Create or update an issue. If issue_id is provided, updates the issue; otherwise creates a new one. To close an issue, set status='closed'. To archive an issue, set archived=true.",
             inputSchema: {
               type: "object",
               properties: {
@@ -140,6 +145,10 @@ export class SudocodeMCPServer {
                   type: "string",
                   enum: ["open", "in_progress", "blocked", "closed"],
                   description: "Issue status (optional)",
+                },
+                archived: {
+                  type: "boolean",
+                  description: "Archive status (optional)",
                 },
               },
             },

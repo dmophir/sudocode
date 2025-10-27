@@ -25,11 +25,11 @@ const mockIssues: Issue[] = [
     content: 'Test content',
     status: 'open',
     priority: 1,
-    assignee: null,
+    assignee: undefined,
     created_at: '2024-01-01',
     updated_at: '2024-01-01',
-    closed_at: null,
-    parent_id: null,
+    closed_at: undefined,
+    parent_id: undefined,
   },
   {
     id: 'ISSUE-002',
@@ -38,11 +38,11 @@ const mockIssues: Issue[] = [
     content: 'Another test',
     status: 'in_progress',
     priority: 2,
-    assignee: null,
+    assignee: undefined,
     created_at: '2024-01-02',
     updated_at: '2024-01-02',
-    closed_at: null,
-    parent_id: null,
+    closed_at: undefined,
+    parent_id: undefined,
   },
 ]
 
@@ -166,11 +166,11 @@ describe('useIssues', () => {
       content: 'New content',
       status: 'open',
       priority: 1,
-      assignee: null,
+      assignee: undefined,
       created_at: '2024-01-03',
       updated_at: '2024-01-03',
-      closed_at: null,
-      parent_id: null,
+      closed_at: undefined,
+      parent_id: undefined,
     }
     vi.mocked(issuesApi.create).mockResolvedValue(newIssue)
 

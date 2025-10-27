@@ -73,7 +73,7 @@ describe('relationships utilities', () => {
         to_type: 'spec',
         relationship_type: 'implements' as RelationshipType,
         created_at: '2024-01-01T00:00:00Z',
-        metadata: null,
+        metadata: undefined,
       },
       {
         from_id: 'ISSUE-002',
@@ -82,7 +82,7 @@ describe('relationships utilities', () => {
         to_type: 'issue',
         relationship_type: 'blocks' as RelationshipType,
         created_at: '2024-01-01T00:00:00Z',
-        metadata: null,
+        metadata: undefined,
       },
       {
         from_id: 'ISSUE-001',
@@ -91,7 +91,7 @@ describe('relationships utilities', () => {
         to_type: 'issue',
         relationship_type: 'related' as RelationshipType,
         created_at: '2024-01-01T00:00:00Z',
-        metadata: null,
+        metadata: undefined,
       },
     ]
 

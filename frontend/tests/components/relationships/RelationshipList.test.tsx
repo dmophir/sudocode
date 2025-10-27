@@ -13,7 +13,7 @@ describe('RelationshipList', () => {
       to_type: 'spec',
       relationship_type: 'implements' as RelationshipType,
       created_at: '2024-01-01T00:00:00Z',
-      metadata: null,
+      metadata: undefined,
     },
     {
       from_id: 'ISSUE-002',
@@ -22,7 +22,7 @@ describe('RelationshipList', () => {
       to_type: 'issue',
       relationship_type: 'blocks' as RelationshipType,
       created_at: '2024-01-01T00:00:00Z',
-      metadata: null,
+      metadata: undefined,
     },
     {
       from_id: 'ISSUE-001',
@@ -31,30 +31,20 @@ describe('RelationshipList', () => {
       to_type: 'issue',
       relationship_type: 'related' as RelationshipType,
       created_at: '2024-01-01T00:00:00Z',
-      metadata: null,
+      metadata: undefined,
     },
   ]
 
   describe('empty state', () => {
     it('should show empty message when no relationships and showEmpty is true', () => {
-      render(
-        <RelationshipList
-          relationships={[]}
-          currentEntityId="ISSUE-001"
-          showEmpty={true}
-        />
-      )
+      render(<RelationshipList relationships={[]} currentEntityId="ISSUE-001" showEmpty={true} />)
 
       expect(screen.getByText('No relationships yet')).toBeInTheDocument()
     })
 
     it('should render nothing when no relationships and showEmpty is false', () => {
       const { container } = render(
-        <RelationshipList
-          relationships={[]}
-          currentEntityId="ISSUE-001"
-          showEmpty={false}
-        />
+        <RelationshipList relationships={[]} currentEntityId="ISSUE-001" showEmpty={false} />
       )
 
       expect(container.firstChild).toBeNull()
@@ -63,12 +53,7 @@ describe('RelationshipList', () => {
 
   describe('grouping', () => {
     it('should group relationships into outgoing and incoming', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText(/Outgoing \(2\)/)).toBeInTheDocument()
       expect(screen.getByText(/Incoming \(1\)/)).toBeInTheDocument()
@@ -83,16 +68,11 @@ describe('RelationshipList', () => {
           to_type: 'spec',
           relationship_type: 'implements' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
       ]
 
-      render(
-        <RelationshipList
-          relationships={outgoingOnly}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={outgoingOnly} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText(/Outgoing \(1\)/)).toBeInTheDocument()
       expect(screen.queryByText(/Incoming/)).not.toBeInTheDocument()
@@ -107,16 +87,11 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'blocks' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
       ]
 
-      render(
-        <RelationshipList
-          relationships={incomingOnly}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={incomingOnly} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText(/Incoming \(1\)/)).toBeInTheDocument()
       expect(screen.queryByText(/Outgoing/)).not.toBeInTheDocument()
@@ -125,35 +100,20 @@ describe('RelationshipList', () => {
 
   describe('relationship rendering', () => {
     it('should render outgoing relationships with correct labels', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText('Implements')).toBeInTheDocument()
       expect(screen.getByText('Related to')).toBeInTheDocument()
     })
 
     it('should render incoming relationships with inverse labels', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText('Blocked by')).toBeInTheDocument()
     })
 
     it('should display target entity IDs', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText('SPEC-001')).toBeInTheDocument()
       expect(screen.getByText('ISSUE-003')).toBeInTheDocument()
@@ -161,12 +121,7 @@ describe('RelationshipList', () => {
     })
 
     it('should display entity type icons', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       // Check for issue and spec icons
       const container = screen.getByText('SPEC-001').parentElement
@@ -199,12 +154,7 @@ describe('RelationshipList', () => {
     it('should not call onNavigate when not provided', async () => {
       const user = userEvent.setup()
 
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       const specButton = screen.getByText('SPEC-001')
       await user.click(specButton)
@@ -231,12 +181,7 @@ describe('RelationshipList', () => {
     })
 
     it('should not show delete buttons when onDelete is not provided', () => {
-      render(
-        <RelationshipList
-          relationships={mockRelationships}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={mockRelationships} currentEntityId="ISSUE-001" />)
 
       const deleteButtons = screen.queryAllByTitle('Remove relationship')
       expect(deleteButtons).toHaveLength(0)
@@ -271,7 +216,7 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'blocks' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-001',
@@ -280,7 +225,7 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'related' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-001',
@@ -289,7 +234,7 @@ describe('RelationshipList', () => {
           to_type: 'spec',
           relationship_type: 'implements' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-001',
@@ -298,7 +243,7 @@ describe('RelationshipList', () => {
           to_type: 'spec',
           relationship_type: 'references' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-001',
@@ -307,7 +252,7 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'depends-on' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-001',
@@ -316,13 +261,11 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'discovered-from' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
       ]
 
-      render(
-        <RelationshipList relationships={allTypes} currentEntityId="ISSUE-001" />
-      )
+      render(<RelationshipList relationships={allTypes} currentEntityId="ISSUE-001" />)
 
       expect(screen.getByText('Blocks')).toBeInTheDocument()
       expect(screen.getByText('Related to')).toBeInTheDocument()
@@ -341,7 +284,7 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'related' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
         {
           from_id: 'ISSUE-002',
@@ -350,16 +293,11 @@ describe('RelationshipList', () => {
           to_type: 'issue',
           relationship_type: 'related' as RelationshipType,
           created_at: '2024-01-01T00:00:00Z',
-          metadata: null,
+          metadata: undefined,
         },
       ]
 
-      render(
-        <RelationshipList
-          relationships={bidirectional}
-          currentEntityId="ISSUE-001"
-        />
-      )
+      render(<RelationshipList relationships={bidirectional} currentEntityId="ISSUE-001" />)
 
       // Both should show "Related to" since it's bidirectional
       const relatedLabels = screen.getAllByText('Related to')

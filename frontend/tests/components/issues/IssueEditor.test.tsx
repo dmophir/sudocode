@@ -12,11 +12,11 @@ const mockIssue: Issue = {
   content: 'Test content',
   status: 'open',
   priority: 2,
-  assignee: null,
+  assignee: undefined,
   created_at: '2024-01-01',
   updated_at: '2024-01-01',
-  closed_at: null,
-  parent_id: null,
+  closed_at: undefined,
+  parent_id: undefined,
 }
 
 describe('IssueEditor', () => {

@@ -29,7 +29,7 @@ export interface CreateIssueRequest {
   content?: string
   status?: IssueStatus
   priority?: number
-  parent_id?: string | null
+  parent_id?: string
   tags?: string[]
 }
 
@@ -39,8 +39,8 @@ export interface UpdateIssueRequest {
   content?: string
   status?: IssueStatus
   priority?: number
-  assignee?: string | null
-  parent_id?: string | null
+  assignee?: string
+  parent_id?: string
 }
 
 /**
@@ -50,7 +50,7 @@ export interface CreateSpecRequest {
   title: string
   content?: string
   priority?: number
-  parent_id?: string | null
+  parent_id?: string
   tags?: string[]
 }
 
@@ -58,7 +58,7 @@ export interface UpdateSpecRequest {
   title?: string
   content?: string
   priority?: number
-  parent_id?: string | null
+  parent_id?: string
 }
 
 /**

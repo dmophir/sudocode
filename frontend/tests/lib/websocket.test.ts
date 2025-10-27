@@ -112,7 +112,7 @@ describe('useWebSocket', () => {
         priority: 1,
         created_at: '2024-01-01',
         updated_at: '2024-01-01',
-        parent_id: null,
+        parent_id: undefined,
       },
       timestamp: '2024-01-01T00:00:00Z',
     }
@@ -302,10 +302,9 @@ describe('useWebSocket', () => {
     const { result, rerender } = renderHook<
       ReturnType<typeof useWebSocket>,
       { onMessage: (msg: WebSocketMessage) => void }
-    >(
-      ({ onMessage }) => useWebSocket('/test', { onMessage }),
-      { initialProps: { onMessage: vi.fn() } }
-    )
+    >(({ onMessage }) => useWebSocket('/test', { onMessage }), {
+      initialProps: { onMessage: vi.fn() },
+    })
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -334,10 +333,9 @@ describe('useWebSocket', () => {
     const { result, rerender } = renderHook<
       ReturnType<typeof useWebSocket>,
       { onMessage: (msg: WebSocketMessage) => void }
-    >(
-      ({ onMessage }) => useWebSocket('/test', { onMessage }),
-      { initialProps: { onMessage: firstCallback } }
-    )
+    >(({ onMessage }) => useWebSocket('/test', { onMessage }), {
+      initialProps: { onMessage: firstCallback },
+    })
 
     await waitFor(() => {
       expect(result.current.connected).toBe(true)
@@ -355,7 +353,7 @@ describe('useWebSocket', () => {
         priority: 1,
         created_at: '2024-01-01',
         updated_at: '2024-01-01',
-        parent_id: null,
+        parent_id: undefined,
       },
       timestamp: '2024-01-01T00:00:00Z',
     }

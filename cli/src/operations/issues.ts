@@ -13,11 +13,13 @@ export interface CreateIssueInput {
   content?: string;
   status?: IssueStatus;
   priority?: number;
-  assignee?: string | null;
-  parent_id?: string | null;
+  assignee?: string;
+  parent_id?: string;
+  archived?: boolean;
+  archived_at?: string;
   created_at?: string;
   updated_at?: string;
-  closed_at?: string | null;
+  closed_at?: string;
 }
 
 export interface UpdateIssueInput {
@@ -25,17 +27,20 @@ export interface UpdateIssueInput {
   content?: string;
   status?: IssueStatus;
   priority?: number;
-  assignee?: string | null;
-  parent_id?: string | null;
+  assignee?: string;
+  parent_id?: string;
+  archived?: boolean;
+  archived_at?: string;
   updated_at?: string;
-  closed_at?: string | null;
+  closed_at?: string;
 }
 
 export interface ListIssuesOptions {
   status?: IssueStatus;
   priority?: number;
-  assignee?: string | null;
-  parent_id?: string | null;
+  assignee?: string;
+  parent_id?: string;
+  archived?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -67,6 +72,7 @@ export function createIssue(
     "priority",
     "assignee",
     "parent_id",
+    "archived",
   ];
   const values = [
     "@id",
@@ -77,6 +83,7 @@ export function createIssue(
     "@priority",
     "@assignee",
     "@parent_id",
+    "@archived",
   ];
 
   if (input.created_at) {
@@ -90,6 +97,10 @@ export function createIssue(
   if (input.closed_at !== undefined) {
     columns.push("closed_at");
     values.push("@closed_at");
+  }
+  if (input.archived_at !== undefined) {
+    columns.push("archived_at");
+    values.push("@archived_at");
   }
 
   const stmt = db.prepare(`
@@ -108,8 +119,9 @@ export function createIssue(
       content: input.content || "",
       status: input.status || "open",
       priority: input.priority ?? 2,
-      assignee: input.assignee || null,
-      parent_id: input.parent_id || null,
+      assignee: input.assignee ?? null,
+      parent_id: input.parent_id ?? null,
+      archived: input.archived ? 1 : 0,
     };
 
     // Add optional timestamp parameters
@@ -121,6 +133,9 @@ export function createIssue(
     }
     if (input.closed_at !== undefined) {
       params.closed_at = input.closed_at;
+    }
+    if (input.archived_at !== undefined) {
+      params.archived_at = input.archived_at;
     }
 
     stmt.run(params);
@@ -162,8 +177,8 @@ export function updateIssue(
     throw new Error(`Issue not found: ${id}`);
   }
 
-  // Validate parent_id exists if provided (and not null)
-  if (input.parent_id !== undefined && input.parent_id !== null) {
+  // Validate parent_id exists if provided
+  if (input.parent_id) {
     const parent = getIssue(db, input.parent_id);
     if (!parent) {
       throw new Error(`Parent issue not found: ${input.parent_id}`);
@@ -214,6 +229,28 @@ export function updateIssue(
   if (input.parent_id !== undefined) {
     updates.push("parent_id = @parent_id");
     params.parent_id = input.parent_id;
+  }
+  if (input.archived !== undefined) {
+    updates.push("archived = @archived");
+    params.archived = input.archived ? 1 : 0;
+
+    // Handle archived_at based on archived changes
+    // Use input.archived_at if provided, otherwise auto-set based on archived
+    if (input.archived_at !== undefined) {
+      // Explicit archived_at provided - use it
+      updates.push("archived_at = @archived_at");
+      params.archived_at = input.archived_at;
+    } else if (input.archived && !existing.archived) {
+      // Archiving - set timestamp
+      updates.push("archived_at = CURRENT_TIMESTAMP");
+    } else if (!input.archived && existing.archived) {
+      // Unarchiving - clear timestamp
+      updates.push("archived_at = NULL");
+    }
+  } else if (input.archived_at !== undefined) {
+    // archived_at provided without archived change
+    updates.push("archived_at = @archived_at");
+    params.archived_at = input.archived_at;
   }
 
   // Handle updated_at - use provided value or set to current timestamp
@@ -290,20 +327,19 @@ export function listIssues(
     params.priority = options.priority;
   }
   if (options.assignee !== undefined) {
-    if (options.assignee === null) {
-      conditions.push("assignee IS NULL");
-    } else {
-      conditions.push("assignee = @assignee");
-      params.assignee = options.assignee;
-    }
+    conditions.push("assignee = @assignee");
+    params.assignee = options.assignee;
   }
   if (options.parent_id !== undefined) {
-    if (options.parent_id === null) {
-      conditions.push("parent_id IS NULL");
-    } else {
-      conditions.push("parent_id = @parent_id");
-      params.parent_id = options.parent_id;
-    }
+    conditions.push("parent_id = @parent_id");
+    params.parent_id = options.parent_id;
+  }
+  if (options.archived !== undefined) {
+    conditions.push("archived = @archived");
+    params.archived = options.archived ? 1 : 0;
+  } else {
+    // By default, exclude archived issues
+    conditions.push("archived = 0");
   }
 
   let query = "SELECT * FROM issues";
@@ -367,20 +403,19 @@ export function searchIssues(
     params.priority = options.priority;
   }
   if (options.assignee !== undefined) {
-    if (options.assignee === null) {
-      conditions.push("assignee IS NULL");
-    } else {
-      conditions.push("assignee = @assignee");
-      params.assignee = options.assignee;
-    }
+    conditions.push("assignee = @assignee");
+    params.assignee = options.assignee;
   }
   if (options.parent_id !== undefined) {
-    if (options.parent_id === null) {
-      conditions.push("parent_id IS NULL");
-    } else {
-      conditions.push("parent_id = @parent_id");
-      params.parent_id = options.parent_id;
-    }
+    conditions.push("parent_id = @parent_id");
+    params.parent_id = options.parent_id;
+  }
+  if (options.archived !== undefined) {
+    conditions.push("archived = @archived");
+    params.archived = options.archived ? 1 : 0;
+  } else {
+    // By default, exclude archived issues
+    conditions.push("archived = 0");
   }
 
   let sql = `SELECT * FROM issues WHERE ${conditions.join(

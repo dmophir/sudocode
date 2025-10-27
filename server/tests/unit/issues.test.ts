@@ -97,7 +97,7 @@ describe("Issues API", () => {
     it("should create a new issue", async () => {
       const newIssue = {
         title: "Test Issue",
-        description: "This is a test issue",
+        content: "This is a test issue",
         status: "open",
         priority: 1,
       };
@@ -112,7 +112,7 @@ describe("Issues API", () => {
       assert.ok(response.body.data);
       assert.ok(response.body.data.id);
       assert.strictEqual(response.body.data.title, newIssue.title);
-      assert.strictEqual(response.body.data.description, newIssue.description);
+      assert.strictEqual(response.body.data.content, newIssue.content);
       assert.strictEqual(response.body.data.status, newIssue.status);
       assert.strictEqual(response.body.data.priority, newIssue.priority);
 
@@ -122,7 +122,7 @@ describe("Issues API", () => {
 
     it("should reject issue without title", async () => {
       const invalidIssue = {
-        description: "No title provided",
+        content: "No title provided",
       };
 
       const response = await request(app)
@@ -137,7 +137,7 @@ describe("Issues API", () => {
     it("should reject issue with title too long", async () => {
       const invalidIssue = {
         title: "x".repeat(501), // 501 characters
-        description: "Title is too long",
+        content: "Title is too long",
       };
 
       const response = await request(app)
@@ -161,7 +161,7 @@ describe("Issues API", () => {
 
       assert.strictEqual(response.body.success, true);
       assert.strictEqual(response.body.data.title, minimalIssue.title);
-      assert.strictEqual(response.body.data.description, "");
+      assert.strictEqual(response.body.data.content, "");
       assert.strictEqual(response.body.data.status, "open");
       assert.strictEqual(response.body.data.priority, 2);
     });

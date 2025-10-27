@@ -415,6 +415,8 @@ export function importSpecs(
         content: spec.content,
         priority: spec.priority,
         parent_id: spec.parent_id,
+        archived: spec.archived,
+        archived_at: spec.archived_at,
         created_at: spec.created_at,
         updated_at: spec.updated_at,
       });
@@ -455,6 +457,8 @@ export function importSpecs(
         content: spec.content,
         priority: spec.priority,
         parent_id: spec.parent_id,
+        archived: spec.archived,
+        archived_at: spec.archived_at,
         updated_at: spec.updated_at,
       });
       setTags(db, spec.id, "spec", spec.tags || []);
@@ -556,6 +560,8 @@ export function importIssues(
         priority: issue.priority,
         assignee: issue.assignee,
         parent_id: issue.parent_id,
+        archived: issue.archived,
+        archived_at: issue.archived_at,
         created_at: issue.created_at,
         updated_at: issue.updated_at,
         closed_at: issue.closed_at,
@@ -595,6 +601,8 @@ export function importIssues(
         priority: issue.priority,
         assignee: issue.assignee,
         parent_id: issue.parent_id,
+        archived: issue.archived,
+        archived_at: issue.archived_at,
         updated_at: issue.updated_at,
         closed_at: issue.closed_at,
       });

@@ -49,8 +49,8 @@ export async function handleIssueCreate(
       content: options.description || "",
       status: "open",
       priority: parseInt(options.priority),
-      assignee: options.assignee || null,
-      parent_id: options.parent || null,
+      assignee: options.assignee || undefined,
+      parent_id: options.parent || undefined,
     });
 
     if (options.tags) {
@@ -275,6 +275,7 @@ export interface IssueUpdateOptions {
   assignee?: string;
   title?: string;
   description?: string;
+  archived?: string;
 }
 
 export async function handleIssueUpdate(
@@ -289,6 +290,9 @@ export async function handleIssueUpdate(
     if (options.assignee) updates.assignee = options.assignee;
     if (options.title) updates.title = options.title;
     if (options.description) updates.description = options.description;
+    if (options.archived !== undefined) {
+      updates.archived = options.archived === 'true';
+    }
 
     const issue = updateIssue(ctx.db, id, updates);
 

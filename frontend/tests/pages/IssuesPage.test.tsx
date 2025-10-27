@@ -23,11 +23,11 @@ const mockIssues: Issue[] = [
     content: 'Test content',
     status: 'open',
     priority: 1,
-    assignee: null,
+    assignee: undefined,
     created_at: '2024-01-01',
     updated_at: '2024-01-01',
-    closed_at: null,
-    parent_id: null,
+    closed_at: undefined,
+    parent_id: undefined,
   },
   {
     id: 'ISSUE-002',
@@ -36,11 +36,11 @@ const mockIssues: Issue[] = [
     content: 'Another test',
     status: 'in_progress',
     priority: 2,
-    assignee: null,
+    assignee: undefined,
     created_at: '2024-01-02',
     updated_at: '2024-01-02',
-    closed_at: null,
-    parent_id: null,
+    closed_at: undefined,
+    parent_id: undefined,
   },
 ]
 
@@ -136,11 +136,11 @@ describe('IssuesPage', () => {
           content: 'Closed first',
           status: 'closed',
           priority: 1,
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-01',
           updated_at: '2024-01-01',
           closed_at: '2024-01-05', // Earlier
-          parent_id: null,
+          parent_id: undefined,
         },
         {
           id: 'ISSUE-004',
@@ -149,11 +149,11 @@ describe('IssuesPage', () => {
           content: 'Closed second',
           status: 'closed',
           priority: 0,
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-02',
           updated_at: '2024-01-02',
           closed_at: '2024-01-10', // More recent, should be first
-          parent_id: null,
+          parent_id: undefined,
         },
       ]
 
@@ -187,11 +187,11 @@ describe('IssuesPage', () => {
           content: 'Low priority, oldest',
           status: 'open',
           priority: 3, // Low priority
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-01', // Oldest
           updated_at: '2024-01-01',
-          closed_at: null,
-          parent_id: null,
+          closed_at: undefined,
+          parent_id: undefined,
         },
         {
           id: 'ISSUE-006',
@@ -200,11 +200,11 @@ describe('IssuesPage', () => {
           content: 'High priority, old',
           status: 'open',
           priority: 1, // Higher priority
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-02',
           updated_at: '2024-01-02',
-          closed_at: null,
-          parent_id: null,
+          closed_at: undefined,
+          parent_id: undefined,
         },
         {
           id: 'ISSUE-007',
@@ -213,11 +213,11 @@ describe('IssuesPage', () => {
           content: 'Critical, newest',
           status: 'open',
           priority: 0, // Highest priority
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-10', // Most recent
           updated_at: '2024-01-10',
-          closed_at: null,
-          parent_id: null,
+          closed_at: undefined,
+          parent_id: undefined,
         },
         {
           id: 'ISSUE-008',
@@ -226,11 +226,11 @@ describe('IssuesPage', () => {
           content: 'Critical, oldest',
           status: 'open',
           priority: 0, // Highest priority
-          assignee: null,
+          assignee: undefined,
           created_at: '2024-01-03', // Older than ISSUE-007
           updated_at: '2024-01-03',
-          closed_at: null,
-          parent_id: null,
+          closed_at: undefined,
+          parent_id: undefined,
         },
       ]
 

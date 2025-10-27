@@ -26,8 +26,10 @@ const mockSpecs: Spec[] = [
     priority: 1,
     created_at: '2024-01-01',
     updated_at: '2024-01-01',
-    parent_id: null,
+    parent_id: undefined,
     file_path: 'specs/test-spec-1.md',
+    archived: undefined,
+    archived_at: undefined,
   },
   {
     id: 'SPEC-002',
@@ -37,7 +39,7 @@ const mockSpecs: Spec[] = [
     priority: 2,
     created_at: '2024-01-02',
     updated_at: '2024-01-02',
-    parent_id: null,
+    parent_id: undefined,
     file_path: 'specs/test-spec-2.md',
   },
 ]

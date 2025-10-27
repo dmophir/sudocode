@@ -29,7 +29,7 @@ describe('SpecList', () => {
       priority: 1,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      parent_id: null,
+      parent_id: undefined,
     },
     {
       id: 'SPEC-002',
@@ -40,7 +40,7 @@ describe('SpecList', () => {
       priority: 2,
       created_at: '2024-01-02T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',
-      parent_id: null,
+      parent_id: undefined,
     },
   ]
 
