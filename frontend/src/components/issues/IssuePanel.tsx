@@ -153,6 +153,15 @@ export function IssuePanel({
       // Also check for resize handle by class (backup check)
       if (clickedElement.classList?.contains('cursor-col-resize')) return
 
+      // Don't close if clicking on a portal element (dialogs, dropdowns, etc.)
+      // Radix UI (which shadcn/ui is built on) renders portals with specific attributes
+      const isInDialog = clickedElement.closest('[role="dialog"]')
+      const isInAlertDialog = clickedElement.closest('[role="alertdialog"]')
+      const isInDropdown = clickedElement.closest('[role="listbox"]')
+      const isInPopover = clickedElement.closest('[data-radix-popper-content-wrapper]')
+
+      if (isInDialog || isInAlertDialog || isInDropdown || isInPopover) return
+
       // Close the panel if clicking outside
       onClose()
     }
