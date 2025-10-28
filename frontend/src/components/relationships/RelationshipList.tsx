@@ -26,7 +26,7 @@ export function RelationshipList({
   relationships,
   currentEntityId,
   currentEntityType: _currentEntityType,
-  onNavigate: _onNavigate,
+  onNavigate,
   onDelete,
   showEmpty = true,
   showGroupHeaders = true,
@@ -73,7 +73,7 @@ export function RelationshipList({
     return (
       <Card
         key={`${rel.from_id}-${rel.to_id}-${rel.relationship_type}`}
-        className="group flex items-center gap-2 p-3 transition-colors hover:bg-accent/50"
+        className="group flex items-center gap-2 p-2 transition-colors hover:bg-accent/50"
       >
         {/* Relationship type badge */}
         <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium text-white ${color}`}>

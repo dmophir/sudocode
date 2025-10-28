@@ -176,6 +176,15 @@ export function IssuePanel({
 
       if (isInDialog || isInAlertDialog || isInDropdown || isInPopover) return
 
+      // Don't close if clicking on TipTap/ProseMirror elements
+      // TipTap can render menus, tooltips, and other UI in portals
+      const isInProseMirror = clickedElement.closest('.ProseMirror')
+      const isInTiptap = clickedElement.closest('.tiptap-editor')
+      const isInTiptapMenu = clickedElement.closest('[data-tippy-root]') // Tippy.js tooltips
+      const isInBubbleMenu = clickedElement.closest('.tippy-box') // Bubble menu
+
+      if (isInProseMirror || isInTiptap || isInTiptapMenu || isInBubbleMenu) return
+
       // Close the panel if clicking outside
       onClose()
     }
@@ -372,13 +381,13 @@ export function IssuePanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-3">
-          <div className="space-y-6">
+          <div className="space-y-3">
             {/* Issue ID and Title */}
-            <div className="space-y-3">
+            <div className="space-y-2 pb-3">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">{issue.id}</div>
                 {onUpdate && (
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs italic text-muted-foreground">
                     {isUpdating
                       ? 'Saving...'
                       : hasChanges
@@ -457,7 +466,7 @@ export function IssuePanel({
             </div>
 
             {/* Relationships */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center gap-4">
                 <h3 className="text-sm font-medium text-muted-foreground">
                   Relationships {relationships.length > 0 && `(${relationships.length})`}

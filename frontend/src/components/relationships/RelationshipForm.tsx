@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
 import type { EntityType, RelationshipType } from '@/types/api'
 import { RELATIONSHIP_LABELS } from '@/lib/relationships'
 import { Button } from '@/components/ui/button'
