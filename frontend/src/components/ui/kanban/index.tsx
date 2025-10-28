@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { DragEndEvent, Modifier } from '@dnd-kit/core'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   rectIntersection,
   useDraggable,
@@ -13,7 +14,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { type ReactNode, type Ref, type KeyboardEvent } from 'react'
+import { type ReactNode, type Ref, type KeyboardEvent, useState } from 'react'
 
 import { Plus } from 'lucide-react'
 import type { ClientRect } from '@dnd-kit/core'
@@ -34,7 +35,12 @@ export type KanbanBoardProps = {
   'data-column-id'?: string
 }
 
-export const KanbanBoard = ({ id, children, className, 'data-column-id': dataColumnId }: KanbanBoardProps) => {
+export const KanbanBoard = ({
+  id,
+  children,
+  className,
+  'data-column-id': dataColumnId,
+}: KanbanBoardProps) => {
   const { isOver, setNodeRef } = useDroppable({ id })
 
   return (
@@ -79,7 +85,7 @@ export const KanbanCard = ({
   onKeyDown,
   isOpen,
 }: KanbanCardProps) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
     data: { index, parent },
   })
@@ -98,7 +104,7 @@ export const KanbanCard = ({
     <Card
       className={cn(
         'flex-col space-y-2 border-b p-3 outline-none',
-        isDragging && 'cursor-grabbing',
+        isDragging && 'cursor-grabbing opacity-50',
         isOpen && 'ring-2 ring-inset ring-secondary-foreground',
         className
       )}
@@ -109,10 +115,6 @@ export const KanbanCard = ({
       onClick={onClick}
       onKeyDown={onKeyDown}
       data-issue-id={id}
-      style={{
-        zIndex: isDragging ? 1000 : 1,
-        transform: transform ? `translateX(${transform.x}px) translateY(${transform.y}px)` : 'none',
-      }}
     >
       {children ?? <p className="m-0 text-sm font-medium">{name}</p>}
     </Card>
@@ -243,9 +245,17 @@ export type KanbanProviderProps = {
   children: ReactNode
   onDragEnd: (event: DragEndEvent) => void
   className?: string
+  renderDragOverlay?: (activeId: string | null) => ReactNode
 }
 
-export const KanbanProvider = ({ children, onDragEnd, className }: KanbanProviderProps) => {
+export const KanbanProvider = ({
+  children,
+  onDragEnd,
+  className,
+  renderDragOverlay,
+}: KanbanProviderProps) => {
+  const [activeId, setActiveId] = useState<string | null>(null)
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -255,7 +265,12 @@ export const KanbanProvider = ({ children, onDragEnd, className }: KanbanProvide
   return (
     <DndContext
       collisionDetection={rectIntersection}
-      onDragEnd={onDragEnd}
+      onDragStart={(event) => setActiveId(event.active.id as string)}
+      onDragEnd={(event) => {
+        setActiveId(null)
+        onDragEnd(event)
+      }}
+      onDragCancel={() => setActiveId(null)}
       sensors={sensors}
       modifiers={[restrictToFirstScrollableAncestorCustom]}
     >
@@ -267,6 +282,9 @@ export const KanbanProvider = ({ children, onDragEnd, className }: KanbanProvide
       >
         {children}
       </div>
+      <DragOverlay dropAnimation={null}>
+        {activeId && renderDragOverlay ? renderDragOverlay(activeId) : null}
+      </DragOverlay>
     </DndContext>
   )
 }

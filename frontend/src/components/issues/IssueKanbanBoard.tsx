@@ -39,8 +39,30 @@ function IssueKanbanBoard({
   onViewIssueDetails,
   selectedIssue,
 }: IssueKanbanBoardProps) {
+  const renderDragOverlay = (activeId: string | null) => {
+    if (!activeId) return null
+
+    // Find the issue being dragged
+    for (const [status, statusIssues] of Object.entries(groupedIssues)) {
+      const issue = statusIssues.find((i) => i.id === activeId)
+      if (issue) {
+        const index = statusIssues.indexOf(issue)
+        return (
+          <IssueCard
+            issue={issue}
+            index={index}
+            status={status}
+            onViewDetails={onViewIssueDetails}
+            isOpen={false}
+          />
+        )
+      }
+    }
+    return null
+  }
+
   return (
-    <KanbanProvider onDragEnd={onDragEnd}>
+    <KanbanProvider onDragEnd={onDragEnd} renderDragOverlay={renderDragOverlay}>
       {Object.entries(groupedIssues).map(([status, statusIssues]) => (
         <KanbanBoard key={status} id={status as IssueStatus} data-column-id={status}>
           <KanbanHeader
