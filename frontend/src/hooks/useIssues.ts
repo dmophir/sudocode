@@ -4,12 +4,12 @@ import { issuesApi } from '@/lib/api'
 import { useWebSocket } from '@/lib/websocket'
 import type { Issue, IssueStatus, WebSocketMessage } from '@/types/api'
 
-export function useIssues() {
+export function useIssues(archived?: boolean) {
   const queryClient = useQueryClient()
 
   const query = useQuery({
-    queryKey: ['issues'],
-    queryFn: issuesApi.getAll,
+    queryKey: archived !== undefined ? ['issues', { archived }] : ['issues'],
+    queryFn: () => issuesApi.getAll(archived),
   })
 
   // WebSocket for live updates

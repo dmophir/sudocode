@@ -7,12 +7,12 @@ import type { Spec, WebSocketMessage } from '@/types/api'
 /**
  * Hook for managing specs with React Query and WebSocket updates
  */
-export function useSpecs() {
+export function useSpecs(archived?: boolean) {
   const queryClient = useQueryClient()
 
   const query = useQuery({
-    queryKey: ['specs'],
-    queryFn: specsApi.getAll,
+    queryKey: archived !== undefined ? ['specs', { archived }] : ['specs'],
+    queryFn: () => specsApi.getAll(archived),
   })
 
   // WebSocket for live updates

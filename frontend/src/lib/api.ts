@@ -68,7 +68,10 @@ const del = (url: string, data?: any) => api.delete(url, data ? { data } : undef
  * Issues API
  */
 export const issuesApi = {
-  getAll: () => get<Issue[]>('/issues'),
+  getAll: (archived?: boolean) => {
+    const params = archived !== undefined ? `?archived=${archived}` : ''
+    return get<Issue[]>(`/issues${params}`)
+  },
   getById: (id: string) => get<Issue>(`/issues/${id}`),
   create: (data: CreateIssueRequest) => post<Issue>('/issues', data),
   update: (id: string, data: UpdateIssueRequest) => put<Issue>(`/issues/${id}`, data),
@@ -79,7 +82,10 @@ export const issuesApi = {
  * Specs API
  */
 export const specsApi = {
-  getAll: () => get<Spec[]>('/specs'),
+  getAll: (archived?: boolean) => {
+    const params = archived !== undefined ? `?archived=${archived}` : ''
+    return get<Spec[]>(`/specs${params}`)
+  },
   getById: (id: string) => get<Spec>(`/specs/${id}`),
   create: (data: CreateSpecRequest) => post<Spec>('/specs', data),
   update: (id: string, data: UpdateSpecRequest) => put<Spec>(`/specs/${id}`, data),

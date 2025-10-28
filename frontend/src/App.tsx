@@ -5,6 +5,8 @@ import MainLayout from '@/components/layout/MainLayout'
 import IssuesPage from '@/pages/IssuesPage'
 import SpecsPage from '@/pages/SpecsPage'
 import SpecDetailPage from '@/pages/SpecDetailPage'
+import ArchivedIssuesPage from '@/pages/ArchivedIssuesPage'
+import ArchivedSpecsPage from '@/pages/ArchivedSpecsPage'
 
 // Configure TanStack Query
 const queryClient = new QueryClient({
@@ -27,7 +29,9 @@ function App() {
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/issues" replace />} />
               <Route path="issues" element={<IssuesPage />} />
+              <Route path="issues/archived" element={<ArchivedIssuesPage />} />
               <Route path="specs" element={<SpecsPage />} />
+              <Route path="specs/archived" element={<ArchivedSpecsPage />} />
               <Route path="specs/:id" element={<SpecDetailPage />} />
             </Route>
           </Routes>

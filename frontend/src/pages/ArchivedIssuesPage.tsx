@@ -1,35 +1,27 @@
 import { useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useIssues, useUpdateIssueStatus } from '@/hooks/useIssues'
+import { useIssues } from '@/hooks/useIssues'
 import type { Issue, IssueStatus } from '@/types/api'
-import type { DragEndEvent } from '@/components/ui/kanban'
 import IssueKanbanBoard from '@/components/issues/IssueKanbanBoard'
 import IssuePanel from '@/components/issues/IssuePanel'
-import { CreateIssueDialog } from '@/components/issues/CreateIssueDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, Archive } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
-export default function IssuesPage() {
+export default function ArchivedIssuesPage() {
   const navigate = useNavigate()
   const {
     issues,
     isLoading,
     isError,
     error,
-    createIssueAsync,
     updateIssue,
     deleteIssue,
-    archiveIssue,
     unarchiveIssue,
-    isCreating,
     isUpdating,
     isDeleting,
-  } = useIssues()
-  const updateStatus = useUpdateIssueStatus()
+  } = useIssues(true)
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [createDialogStatus, setCreateDialogStatus] = useState<IssueStatus | undefined>()
 
   // Group issues by status
   const groupedIssues = useMemo(() => {
@@ -77,24 +69,6 @@ export default function IssuesPage() {
     return groups
   }, [issues])
 
-  // Handle drag-and-drop to change status
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event
-      if (!over || !active.data.current) return
-
-      const draggedIssueId = active.id as string
-      const newStatus = over.id as IssueStatus
-      const issue = issues.find((i) => i.id === draggedIssueId)
-
-      if (!issue || issue.status === newStatus) return
-
-      // Update issue status via API with optimistic update
-      updateStatus.mutate({ id: draggedIssueId, status: newStatus })
-    },
-    [issues, updateStatus]
-  )
-
   const handleViewIssueDetails = useCallback((issue: Issue) => {
     setSelectedIssue(issue)
   }, [])
@@ -102,24 +76,6 @@ export default function IssuesPage() {
   const handleClosePanel = useCallback(() => {
     setSelectedIssue(undefined)
   }, [])
-
-  const handleCreateIssue = useCallback((status?: IssueStatus) => {
-    setCreateDialogStatus(status)
-    setShowCreateDialog(true)
-  }, [])
-
-  const handleCreateSubmit = useCallback(
-    async (data: Partial<Issue>) => {
-      try {
-        await createIssueAsync(data as Omit<Issue, 'id' | 'created_at' | 'updated_at'>)
-        setShowCreateDialog(false)
-        setCreateDialogStatus(undefined)
-      } catch (error) {
-        console.error('Failed to create issue:', error)
-      }
-    },
-    [createIssueAsync]
-  )
 
   const handleUpdateIssue = useCallback(
     (data: Partial<Issue>) => {
@@ -135,13 +91,6 @@ export default function IssuesPage() {
     setSelectedIssue(undefined)
   }, [selectedIssue, deleteIssue])
 
-  const handleArchiveIssue = useCallback(
-    (id: string) => {
-      archiveIssue(id)
-    },
-    [archiveIssue]
-  )
-
   const handleUnarchiveIssue = useCallback(
     (id: string) => {
       unarchiveIssue(id)
@@ -152,7 +101,7 @@ export default function IssuesPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Loading issues...</p>
+        <p className="text-muted-foreground">Loading archived issues...</p>
       </div>
     )
   }
@@ -161,7 +110,7 @@ export default function IssuesPage() {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-destructive">
-          Error loading issues: {error?.message || 'Unknown error'}
+          Error loading archived issues: {error?.message || 'Unknown error'}
         </p>
       </div>
     )
@@ -171,19 +120,19 @@ export default function IssuesPage() {
     <div className="flex h-screen flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b bg-background p-4">
-        <div>
-          <h1 className="text-2xl font-bold">Issues</h1>
-          <p className="text-sm text-muted-foreground">{issues.length} total issues</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate('/issues/archived')} variant="outline" size="sm">
-            <Archive className="mr-2 h-4 w-4" />
-            Archived
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/issues')}
+            className="h-8 w-8 p-0"
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Button onClick={() => handleCreateIssue()} variant="default" size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Issue
-          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Archived Issues</h1>
+            <p className="text-sm text-muted-foreground">{issues.length} archived issues</p>
+          </div>
         </div>
       </div>
 
@@ -196,7 +145,7 @@ export default function IssuesPage() {
             onLayout={(layout) => {
               if (layout.length === 2) {
                 try {
-                  localStorage.setItem('issuesPage.panelSizes', JSON.stringify(layout))
+                  localStorage.setItem('archivedIssuesPage.panelSizes', JSON.stringify(layout))
                 } catch {
                   // Ignore errors
                 }
@@ -209,7 +158,7 @@ export default function IssuesPage() {
               order={1}
               defaultSize={(() => {
                 try {
-                  const saved = localStorage.getItem('issuesPage.panelSizes')
+                  const saved = localStorage.getItem('archivedIssuesPage.panelSizes')
                   if (saved) {
                     const parsed = JSON.parse(saved)
                     if (Array.isArray(parsed) && parsed.length === 2) {
@@ -226,7 +175,7 @@ export default function IssuesPage() {
             >
               <IssueKanbanBoard
                 groupedIssues={groupedIssues}
-                onDragEnd={handleDragEnd}
+                onDragEnd={() => {}} // Disable drag-and-drop for archived issues
                 onViewIssueDetails={handleViewIssueDetails}
                 selectedIssue={selectedIssue}
               />
@@ -248,7 +197,7 @@ export default function IssuesPage() {
               order={2}
               defaultSize={(() => {
                 try {
-                  const saved = localStorage.getItem('issuesPage.panelSizes')
+                  const saved = localStorage.getItem('archivedIssuesPage.panelSizes')
                   if (saved) {
                     const parsed = JSON.parse(saved)
                     if (Array.isArray(parsed) && parsed.length === 2) {
@@ -268,7 +217,6 @@ export default function IssuesPage() {
                 onClose={handleClosePanel}
                 onUpdate={handleUpdateIssue}
                 onDelete={handleDeleteIssue}
-                onArchive={handleArchiveIssue}
                 onUnarchive={handleUnarchiveIssue}
                 isUpdating={isUpdating}
                 isDeleting={isDeleting}
@@ -279,24 +227,13 @@ export default function IssuesPage() {
           <div className="flex-1 overflow-auto">
             <IssueKanbanBoard
               groupedIssues={groupedIssues}
-              onDragEnd={handleDragEnd}
+              onDragEnd={() => {}} // Disable drag-and-drop for archived issues
               onViewIssueDetails={handleViewIssueDetails}
               selectedIssue={selectedIssue}
             />
           </div>
         )}
       </div>
-
-      <CreateIssueDialog
-        isOpen={showCreateDialog}
-        onClose={() => {
-          setShowCreateDialog(false)
-          setCreateDialogStatus(undefined)
-        }}
-        onCreate={handleCreateSubmit}
-        isCreating={isCreating}
-        defaultStatus={createDialogStatus}
-      />
     </div>
   )
 }
