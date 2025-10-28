@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { SpecViewer } from '@/components/specs/SpecViewer'
 
 describe('SpecViewer', () => {
@@ -97,5 +98,32 @@ describe('SpecViewer', () => {
 
     const preElement = container.querySelector('pre')
     expect(preElement).toHaveClass('break-words')
+  })
+
+  it('should render as textarea when editable is true', () => {
+    render(<SpecViewer content={sampleContent} editable={true} />)
+
+    const textarea = screen.getByRole('textbox')
+    expect(textarea).toBeInTheDocument()
+    expect(textarea).toHaveValue(sampleContent)
+  })
+
+  it('should call onChange when content is edited in editable mode', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+
+    render(<SpecViewer content={sampleContent} editable={true} onChange={onChange} />)
+
+    const textarea = screen.getByRole('textbox')
+    await user.clear(textarea)
+    await user.type(textarea, 'New content')
+
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('should not render textarea when editable is false', () => {
+    render(<SpecViewer content={sampleContent} editable={false} />)
+
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 })

@@ -19,8 +19,8 @@ interface SpecViewerTiptapProps {
 /**
  * Spec viewer with Tiptap integration for rich markdown rendering and editing.
  * Provides multiple view modes:
- * - Formatted view: Always-editable rich text editor with auto-save
- * - Source view: Line-by-line view with feedback anchors and line numbers
+ * - Formatted view: Rich text editor with auto-save
+ * - Source view: Editable markdown with line numbers, feedback anchors, and auto-save
  */
 export function SpecViewerTiptap({
   content,
@@ -53,6 +53,8 @@ export function SpecViewerTiptap({
           onTextSelect={onTextSelect}
           onFeedbackClick={onFeedbackClick}
           showLineNumbers={true}
+          editable={true}
+          onChange={onChange}
         />
       )}
     </Card>
