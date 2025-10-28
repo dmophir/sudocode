@@ -214,7 +214,11 @@ describe('Issue Operations', () => {
       });
     });
 
-    it('should list all issues', () => {
+    it('should list all issues including archived when no filter provided', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      // Without archived parameter, should return ALL issues (both archived and non-archived)
       const issues = listIssues(db);
       expect(issues).toHaveLength(2);
     });
@@ -235,6 +239,24 @@ describe('Issue Operations', () => {
       const issues = listIssues(db, { assignee: 'agent1' });
       expect(issues).toHaveLength(1);
       expect(issues[0].id).toBe('issue-002');
+    });
+
+    it('should filter by archived status - exclude archived', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      const issues = listIssues(db, { archived: false });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].id).toBe('issue-002');
+    });
+
+    it('should filter by archived status - only archived', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      const issues = listIssues(db, { archived: true });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].id).toBe('issue-001');
     });
   });
 
@@ -313,6 +335,32 @@ describe('Issue Operations', () => {
     it('should return empty array when search matches but filters do not', () => {
       const results = searchIssues(db, 'authentication', { status: 'closed' });
       expect(results).toHaveLength(0);
+    });
+
+    it('should include all issues including archived when no filter provided', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      // Without archived parameter, should return ALL matching issues (both archived and non-archived)
+      const results = searchIssues(db, 'Fix');
+      expect(results).toHaveLength(2);
+    });
+
+    it('should exclude archived issues when filter is set to false', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      const results = searchIssues(db, 'authentication', { archived: false });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should include archived issues when filter is set to true', () => {
+      // Archive one issue
+      updateIssue(db, 'issue-001', { archived: true });
+
+      const results = searchIssues(db, 'authentication', { archived: true });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('issue-001');
     });
   });
 

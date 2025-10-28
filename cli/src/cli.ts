@@ -300,6 +300,7 @@ spec
   .description("List all specs")
   .option("-p, --priority <priority>", "Filter by priority")
   .option("-g, --grep <query>", "Search by title or content")
+  .option("--archived <bool>", "Filter by archive status (true/false)")
   .option("--limit <num>", "Limit results", "50")
   .action(async (options) => {
     await handleSpecList(getContext(), options);
@@ -372,6 +373,7 @@ issue
   .option("-a, --assignee <assignee>", "Filter by assignee")
   .option("-p, --priority <priority>", "Filter by priority")
   .option("-g, --grep <query>", "Search by title or content")
+  .option("--archived <bool>", "Filter by archive status (true/false)")
   .option("--limit <num>", "Limit results", "50")
   .action(async (options) => {
     await handleIssueList(getContext(), options);
@@ -392,6 +394,7 @@ issue
   .option("-a, --assignee <assignee>", "New assignee")
   .option("--title <title>", "New title")
   .option("--description <desc>", "New description")
+  .option("--archived <bool>", "Archive status (true/false)")
   .action(async (id, options) => {
     await handleIssueUpdate(getContext(), id, options);
   });

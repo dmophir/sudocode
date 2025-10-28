@@ -35,11 +35,16 @@ export function SpecCard({ spec, onClick }: SpecCardProps) {
     : ''
 
   return (
-    <Card className="cursor-pointer p-4 transition-shadow hover:shadow-md" onClick={handleClick}>
+    <Card
+      className={`cursor-pointer p-4 transition-shadow hover:shadow-md ${spec.archived ? 'opacity-60' : ''}`}
+      onClick={handleClick}
+    >
       <div className="flex flex-col gap-3">
         {/* Header with ID and priority */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-xs text-muted-foreground">{spec.id}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">{spec.id}</span>
+          </div>
           {spec.priority !== undefined && spec.priority <= 3 && (
             <span
               className={`shrink-0 rounded-full px-2 py-0.5 text-xs text-white ${priorityColors[spec.priority]}`}

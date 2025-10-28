@@ -78,6 +78,9 @@ export function useSpecs() {
     },
   })
 
+  const archiveSpec = (id: string) => updateMutation.mutate({ id, data: { archived: true } })
+  const unarchiveSpec = (id: string) => updateMutation.mutate({ id, data: { archived: false } })
+
   return {
     specs: query.data ?? [],
     isLoading: query.isLoading,
@@ -88,6 +91,8 @@ export function useSpecs() {
     createSpec: createMutation.mutate,
     createSpecAsync: createMutation.mutateAsync,
     deleteSpec: deleteMutation.mutate,
+    archiveSpec,
+    unarchiveSpec,
     isUpdating: updateMutation.isPending,
     isCreating: createMutation.isPending,
   }

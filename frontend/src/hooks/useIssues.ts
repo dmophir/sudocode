@@ -75,6 +75,9 @@ export function useIssues() {
     },
   })
 
+  const archiveIssue = (id: string) => updateMutation.mutate({ id, data: { archived: true } })
+  const unarchiveIssue = (id: string) => updateMutation.mutate({ id, data: { archived: false } })
+
   return {
     issues: query.data ?? [],
     isLoading: query.isLoading,
@@ -86,6 +89,8 @@ export function useIssues() {
     createIssueAsync: createMutation.mutateAsync,
     deleteIssue: deleteMutation.mutate,
     deleteIssueAsync: deleteMutation.mutateAsync,
+    archiveIssue,
+    unarchiveIssue,
     isUpdating: updateMutation.isPending,
     isCreating: createMutation.isPending,
     isDeleting: deleteMutation.isPending,

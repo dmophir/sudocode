@@ -18,6 +18,8 @@ export default function IssuesPage() {
     createIssueAsync,
     updateIssue,
     deleteIssue,
+    archiveIssue,
+    unarchiveIssue,
     isCreating,
     isUpdating,
     isDeleting,
@@ -130,6 +132,20 @@ export default function IssuesPage() {
     deleteIssue(selectedIssue.id)
     setSelectedIssue(undefined)
   }, [selectedIssue, deleteIssue])
+
+  const handleArchiveIssue = useCallback(
+    (id: string) => {
+      archiveIssue(id)
+    },
+    [archiveIssue]
+  )
+
+  const handleUnarchiveIssue = useCallback(
+    (id: string) => {
+      unarchiveIssue(id)
+    },
+    [unarchiveIssue]
+  )
 
   if (isLoading) {
     return (
@@ -244,6 +260,8 @@ export default function IssuesPage() {
                 onClose={handleClosePanel}
                 onUpdate={handleUpdateIssue}
                 onDelete={handleDeleteIssue}
+                onArchive={handleArchiveIssue}
+                onUnarchive={handleUnarchiveIssue}
                 isUpdating={isUpdating}
                 isDeleting={isDeleting}
               />

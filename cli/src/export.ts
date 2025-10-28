@@ -107,7 +107,7 @@ export function exportSpecsToJSONL(
 ): SpecJSONL[] {
   const { since } = options;
 
-  // Get all specs (or only updated ones)
+  // Get all specs (including archived)
   const specs = listSpecs(db);
 
   // Filter by timestamp if requested
@@ -128,7 +128,7 @@ export function exportIssuesToJSONL(
 ): IssueJSONL[] {
   const { since } = options;
 
-  // Get all issues (or only updated ones)
+  // Get all issues (including archived)
   const issues = listIssues(db);
 
   // Filter by timestamp if requested

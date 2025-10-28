@@ -337,9 +337,6 @@ export function listIssues(
   if (options.archived !== undefined) {
     conditions.push("archived = @archived");
     params.archived = options.archived ? 1 : 0;
-  } else {
-    // By default, exclude archived issues
-    conditions.push("archived = 0");
   }
 
   let query = "SELECT * FROM issues";
@@ -413,9 +410,6 @@ export function searchIssues(
   if (options.archived !== undefined) {
     conditions.push("archived = @archived");
     params.archived = options.archived ? 1 : 0;
-  } else {
-    // By default, exclude archived issues
-    conditions.push("archived = 0");
   }
 
   let sql = `SELECT * FROM issues WHERE ${conditions.join(

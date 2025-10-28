@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MessageSquare } from 'lucide-react'
+import { MessageSquare, Archive, ArchiveRestore } from 'lucide-react'
 import type { IssueFeedback } from '@/types/api'
 
 const PRIORITY_OPTIONS = [
@@ -31,7 +31,7 @@ export default function SpecDetailPage() {
   const { spec, isLoading, isError } = useSpec(id || '')
   const { feedback } = useSpecFeedback(id || '')
   const { issues } = useIssues()
-  const { updateSpec, isUpdating } = useSpecs()
+  const { updateSpec, isUpdating, archiveSpec, unarchiveSpec } = useSpecs()
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [selectedText, setSelectedText] = useState<string | null>(null)
@@ -251,6 +251,28 @@ export default function SpecDetailPage() {
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Feedback {feedback.length > 0 && `(${feedback.length})`}
               </Button>
+
+              {spec.archived ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => unarchiveSpec(spec.id)}
+                  disabled={isUpdating}
+                >
+                  <ArchiveRestore className="mr-2 h-4 w-4" />
+                  Unarchive
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => archiveSpec(spec.id)}
+                  disabled={isUpdating}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
+                </Button>
+              )}
             </div>
           </div>
 

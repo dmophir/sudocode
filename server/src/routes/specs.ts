@@ -31,6 +31,10 @@ export function createSpecsRouter(db: Database.Database): Router {
       if (req.query.priority) {
         options.priority = parseInt(req.query.priority as string, 10);
       }
+      // Default to excluding archived unless explicitly specified
+      options.archived = req.query.archived !== undefined
+        ? req.query.archived === "true"
+        : false;
       if (req.query.limit) {
         options.limit = parseInt(req.query.limit as string, 10);
       }
@@ -162,14 +166,15 @@ export function createSpecsRouter(db: Database.Database): Router {
   router.put("/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { title, content, priority, parent_id } = req.body;
+      const { title, content, priority, parent_id, archived } = req.body;
 
       // Validate that at least one field is provided
       if (
         title === undefined &&
         content === undefined &&
         priority === undefined &&
-        parent_id === undefined
+        parent_id === undefined &&
+        archived === undefined
       ) {
         res.status(400).json({
           success: false,
@@ -199,6 +204,10 @@ export function createSpecsRouter(db: Database.Database): Router {
       if (content !== undefined) updateInput.content = content;
       if (priority !== undefined) updateInput.priority = priority;
       if (parent_id !== undefined) updateInput.parent_id = parent_id;
+      if (archived !== undefined) {
+        updateInput.archived = archived;
+        updateInput.archived_at = archived ? new Date().toISOString() : null;
+      }
 
       // Update spec using CLI operation
       const spec = updateExistingSpec(db, id, updateInput);

@@ -41,6 +41,7 @@ export interface UpdateIssueRequest {
   priority?: number
   assignee?: string
   parent_id?: string
+  archived?: boolean
 }
 
 /**
@@ -59,6 +60,7 @@ export interface UpdateSpecRequest {
   content?: string
   priority?: number
   parent_id?: string
+  archived?: boolean
 }
 
 /**

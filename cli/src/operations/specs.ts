@@ -267,9 +267,6 @@ export function listSpecs(
   if (options.archived !== undefined) {
     conditions.push('archived = @archived');
     params.archived = options.archived ? 1 : 0;
-  } else {
-    // By default, exclude archived specs
-    conditions.push('archived = 0');
   }
 
   let query = 'SELECT * FROM specs';
@@ -309,6 +306,10 @@ export function searchSpecs(
   if (options.parent_id !== undefined) {
     conditions.push('parent_id = @parent_id');
     params.parent_id = options.parent_id;
+  }
+  if (options.archived !== undefined) {
+    conditions.push('archived = @archived');
+    params.archived = options.archived ? 1 : 0;
   }
 
   let sql = `SELECT * FROM specs WHERE ${conditions.join(' AND ')} ORDER BY priority DESC, created_at DESC`;

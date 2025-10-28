@@ -198,6 +198,72 @@ describe('useSpecs', () => {
       expect(specsApi.delete).toHaveBeenCalledWith('SPEC-001', expect.any(Object))
     })
   })
+
+  it('should archive a spec', async () => {
+    const archivedSpec: Spec = {
+      id: 'SPEC-001',
+      uuid: 'uuid-1',
+      title: 'Archived Spec',
+      content: 'Content',
+      file_path: '/path/to/spec1.md',
+      priority: 1,
+      archived: true,
+      archived_at: '2024-01-01T12:00:00Z',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T12:00:00Z',
+      parent_id: undefined,
+    }
+
+    vi.mocked(specsApi.getAll).mockResolvedValue([])
+    vi.mocked(specsApi.update).mockResolvedValue(archivedSpec)
+
+    const { result } = renderHook(() => useSpecs(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    result.current.archiveSpec('SPEC-001')
+
+    await waitFor(() => {
+      expect(specsApi.update).toHaveBeenCalledWith('SPEC-001', {
+        archived: true,
+      })
+    })
+  })
+
+  it('should unarchive a spec', async () => {
+    const unarchivedSpec: Spec = {
+      id: 'SPEC-001',
+      uuid: 'uuid-1',
+      title: 'Unarchived Spec',
+      content: 'Content',
+      file_path: '/path/to/spec1.md',
+      priority: 1,
+      archived: false,
+      archived_at: undefined,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T12:00:00Z',
+      parent_id: undefined,
+    }
+
+    vi.mocked(specsApi.getAll).mockResolvedValue([])
+    vi.mocked(specsApi.update).mockResolvedValue(unarchivedSpec)
+
+    const { result } = renderHook(() => useSpecs(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    result.current.unarchiveSpec('SPEC-001')
+
+    await waitFor(() => {
+      expect(specsApi.update).toHaveBeenCalledWith('SPEC-001', {
+        archived: false,
+      })
+    })
+  })
 })
 
 describe('useSpec', () => {

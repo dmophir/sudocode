@@ -241,4 +241,58 @@ describe('IssuePanel', () => {
     expect(screen.queryByText('Parent Issue')).not.toBeInTheDocument()
     expect(screen.queryByText('ISSUE-000')).not.toBeInTheDocument()
   })
+
+  it('should render Archive button when issue is not archived', () => {
+    const onArchive = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onArchive={onArchive} />)
+
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Unarchive/ })).not.toBeInTheDocument()
+  })
+
+  it('should render Unarchive button when issue is archived', () => {
+    const archivedIssue = { ...mockIssue, archived: true, archived_at: '2024-01-04T10:00:00Z' }
+    const onUnarchive = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={archivedIssue} onUnarchive={onUnarchive} />)
+
+    expect(screen.getByRole('button', { name: /Unarchive/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Archive$/ })).not.toBeInTheDocument()
+  })
+
+  it('should call onArchive when Archive button is clicked', async () => {
+    const user = userEvent.setup()
+    const onArchive = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onArchive={onArchive} />)
+
+    const archiveButton = screen.getByRole('button', { name: /Archive/ })
+    await user.click(archiveButton)
+
+    expect(onArchive).toHaveBeenCalledWith('ISSUE-001')
+  })
+
+  it('should call onUnarchive when Unarchive button is clicked', async () => {
+    const user = userEvent.setup()
+    const archivedIssue = { ...mockIssue, archived: true, archived_at: '2024-01-04T10:00:00Z' }
+    const onUnarchive = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={archivedIssue} onUnarchive={onUnarchive} />)
+
+    const unarchiveButton = screen.getByRole('button', { name: /Unarchive/ })
+    await user.click(unarchiveButton)
+
+    expect(onUnarchive).toHaveBeenCalledWith('ISSUE-001')
+  })
+
+  it('should disable Archive button when isUpdating is true', () => {
+    const onArchive = vi.fn()
+
+    renderWithProviders(
+      <IssuePanel issue={mockIssue} onArchive={onArchive} isUpdating={true} />
+    )
+
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
+  })
 })

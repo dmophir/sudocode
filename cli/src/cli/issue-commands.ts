@@ -83,6 +83,7 @@ export interface IssueListOptions {
   assignee?: string;
   priority?: string;
   grep?: string;
+  archived?: string;
   limit: string;
 }
 
@@ -97,12 +98,14 @@ export async function handleIssueList(
           status: options.status as any,
           assignee: options.assignee,
           priority: options.priority ? parseInt(options.priority) : undefined,
+          archived: options.archived !== undefined ? options.archived === 'true' : false, // Default to excluding archived
           limit: parseInt(options.limit),
         })
       : listIssues(ctx.db, {
           status: options.status as any,
           assignee: options.assignee,
           priority: options.priority ? parseInt(options.priority) : undefined,
+          archived: options.archived !== undefined ? options.archived === 'true' : false, // Default to excluding archived
           limit: parseInt(options.limit),
         });
 

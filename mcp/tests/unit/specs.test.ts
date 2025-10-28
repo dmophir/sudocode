@@ -15,12 +15,17 @@ describe("Spec Tools", () => {
   });
 
   describe("listSpecs", () => {
-    it("should call exec with list command", async () => {
+    it("should call exec with list command and default archived filter", async () => {
       mockClient.exec.mockResolvedValue([]);
 
       await specTools.listSpecs(mockClient);
 
-      expect(mockClient.exec).toHaveBeenCalledWith(["spec", "list"]);
+      expect(mockClient.exec).toHaveBeenCalledWith([
+        "spec",
+        "list",
+        "--archived",
+        "false",
+      ]);
     });
 
     it("should include filter parameters", async () => {
@@ -35,6 +40,23 @@ describe("Spec Tools", () => {
         "list",
         "--limit",
         "10",
+        "--archived",
+        "false",
+      ]);
+    });
+
+    it("should include archived filter parameter", async () => {
+      mockClient.exec.mockResolvedValue([]);
+
+      await specTools.listSpecs(mockClient, {
+        archived: true,
+      });
+
+      expect(mockClient.exec).toHaveBeenCalledWith([
+        "spec",
+        "list",
+        "--archived",
+        "true",
       ]);
     });
 
@@ -50,6 +72,8 @@ describe("Spec Tools", () => {
         "list",
         "--grep",
         "database",
+        "--archived",
+        "false",
       ]);
     });
 

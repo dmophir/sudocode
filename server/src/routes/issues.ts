@@ -36,6 +36,10 @@ export function createIssuesRouter(db: Database.Database): Router {
       if (req.query.assignee) {
         options.assignee = req.query.assignee as string;
       }
+      // Default to excluding archived unless explicitly specified
+      options.archived = req.query.archived !== undefined
+        ? req.query.archived === "true"
+        : false;
       if (req.query.limit) {
         options.limit = parseInt(req.query.limit as string, 10);
       }
@@ -179,6 +183,7 @@ export function createIssuesRouter(db: Database.Database): Router {
         priority,
         assignee,
         parent_id,
+        archived,
       } = req.body;
 
       // Validate that at least one field is provided
@@ -188,7 +193,8 @@ export function createIssuesRouter(db: Database.Database): Router {
         status === undefined &&
         priority === undefined &&
         assignee === undefined &&
-        parent_id === undefined
+        parent_id === undefined &&
+        archived === undefined
       ) {
         res.status(400).json({
           success: false,
@@ -220,6 +226,10 @@ export function createIssuesRouter(db: Database.Database): Router {
       if (priority !== undefined) updateInput.priority = priority;
       if (assignee !== undefined) updateInput.assignee = assignee;
       if (parent_id !== undefined) updateInput.parent_id = parent_id;
+      if (archived !== undefined) {
+        updateInput.archived = archived;
+        updateInput.archived_at = archived ? new Date().toISOString() : null;
+      }
 
       // Update issue using CLI operation
       const issue = updateExistingIssue(db, id, updateInput);

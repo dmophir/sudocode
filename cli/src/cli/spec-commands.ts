@@ -110,6 +110,7 @@ export async function handleSpecCreate(
 export interface SpecListOptions {
   priority?: string;
   grep?: string;
+  archived?: string;
   limit: string;
 }
 
@@ -122,10 +123,12 @@ export async function handleSpecList(
     const specs = options.grep
       ? searchSpecs(ctx.db, options.grep, {
           priority: options.priority ? parseInt(options.priority) : undefined,
+          archived: options.archived !== undefined ? options.archived === 'true' : false, // Default to excluding archived
           limit: parseInt(options.limit),
         })
       : listSpecs(ctx.db, {
           priority: options.priority ? parseInt(options.priority) : undefined,
+          archived: options.archived !== undefined ? options.archived === 'true' : false, // Default to excluding archived
           limit: parseInt(options.limit),
         });
 

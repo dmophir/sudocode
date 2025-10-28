@@ -9,6 +9,7 @@ import { Spec } from "../types.js";
 export interface ListSpecsParams {
   limit?: number;
   search?: string;
+  archived?: boolean;
 }
 
 export interface ShowSpecParams {
@@ -22,6 +23,7 @@ export interface UpsertSpecParams {
   description?: string;
   parent?: string;
   tags?: string[];
+  archived?: boolean;
 }
 
 // Tool implementations
@@ -41,6 +43,9 @@ export async function listSpecs(
   if (params.search) {
     args.push("--grep", params.search);
   }
+  // Default to excluding archived unless explicitly specified
+  const archived = params.archived !== undefined ? params.archived : false;
+  args.push("--archived", archived.toString());
 
   const specs = await client.exec(args);
 
@@ -93,6 +98,9 @@ export async function upsertSpec(
     }
     if (params.tags !== undefined) {
       args.push("--tags", params.tags.join(","));
+    }
+    if (params.archived !== undefined) {
+      args.push("--archived", params.archived.toString());
     }
 
     return client.exec(args);

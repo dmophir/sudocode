@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore } from 'lucide-react'
 import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,8 @@ interface IssuePanelProps {
   onClose?: () => void
   onUpdate?: (data: Partial<Issue>) => void
   onDelete?: () => void
+  onArchive?: (id: string) => void
+  onUnarchive?: (id: string) => void
   isUpdating?: boolean
   isDeleting?: boolean
 }
@@ -48,6 +50,8 @@ export function IssuePanel({
   onClose,
   onUpdate,
   onDelete,
+  onArchive,
+  onUnarchive,
   isUpdating = false,
   isDeleting = false,
 }: IssuePanelProps) {
@@ -430,16 +434,38 @@ export function IssuePanel({
                 {isUpdating ? 'Saving...' : hasChanges ? 'Unsaved changes...' : 'All changes saved'}
               </div>
             )}
-            {onDelete && (
-              <Button
-                onClick={() => setShowDeleteDialog(true)}
-                variant="destructive"
-                disabled={isUpdating || isDeleting}
-                className="ml-auto"
-              >
-                Delete
-              </Button>
-            )}
+            <div className="ml-auto flex gap-2">
+              {(onArchive || onUnarchive) && (
+                issue.archived ? (
+                  <Button
+                    onClick={() => onUnarchive?.(issue.id)}
+                    variant="outline"
+                    disabled={isUpdating}
+                  >
+                    <ArchiveRestore className="mr-2 h-4 w-4" />
+                    Unarchive
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => onArchive?.(issue.id)}
+                    variant="outline"
+                    disabled={isUpdating}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive
+                  </Button>
+                )
+              )}
+              {onDelete && (
+                <Button
+                  onClick={() => setShowDeleteDialog(true)}
+                  variant="destructive"
+                  disabled={isUpdating || isDeleting}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
