@@ -14,7 +14,7 @@ import {
 import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastIssueUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
-import { triggerExport } from "../services/export.js";
+import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
 
 export function createIssuesRouter(db: Database.Database): Router {
   const router = Router();
@@ -143,6 +143,11 @@ export function createIssuesRouter(db: Database.Database): Router {
       // Trigger export to JSONL files
       triggerExport(db);
 
+      // Sync this specific issue to its markdown file (don't wait for it)
+      syncEntityToMarkdown(db, issue.id, "issue").catch((error) => {
+        console.error(`Failed to sync issue ${issue.id} to markdown:`, error);
+      });
+
       // Broadcast issue creation to WebSocket clients
       broadcastIssueUpdate(issue.id, "created", issue);
 
@@ -221,6 +226,11 @@ export function createIssuesRouter(db: Database.Database): Router {
 
       // Trigger export to JSONL files
       triggerExport(db);
+
+      // Sync this specific issue to its markdown file (don't wait for it)
+      syncEntityToMarkdown(db, issue.id, "issue").catch((error) => {
+        console.error(`Failed to sync issue ${issue.id} to markdown:`, error);
+      });
 
       // Broadcast issue update to WebSocket clients
       broadcastIssueUpdate(issue.id, "updated", issue);

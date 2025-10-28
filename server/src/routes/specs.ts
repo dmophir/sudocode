@@ -14,7 +14,7 @@ import {
 import { generateSpecId } from "@sudocode/cli/dist/id-generator.js";
 import { broadcastSpecUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
-import { triggerExport } from "../services/export.js";
+import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
 import * as path from "path";
 
 export function createSpecsRouter(db: Database.Database): Router {
@@ -133,6 +133,11 @@ export function createSpecsRouter(db: Database.Database): Router {
       // Trigger export to JSONL files
       triggerExport(db);
 
+      // Sync this specific spec to its markdown file (don't wait for it)
+      syncEntityToMarkdown(db, spec.id, "spec").catch((error) => {
+        console.error(`Failed to sync spec ${spec.id} to markdown:`, error);
+      });
+
       // Broadcast spec creation to WebSocket clients
       broadcastSpecUpdate(spec.id, "created", spec);
 
@@ -200,6 +205,11 @@ export function createSpecsRouter(db: Database.Database): Router {
 
       // Trigger export to JSONL files
       triggerExport(db);
+
+      // Sync this specific spec to its markdown file (don't wait for it)
+      syncEntityToMarkdown(db, spec.id, "spec").catch((error) => {
+        console.error(`Failed to sync spec ${spec.id} to markdown:`, error);
+      });
 
       // Broadcast spec update to WebSocket clients
       broadcastSpecUpdate(spec.id, "updated", spec);

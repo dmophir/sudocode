@@ -178,6 +178,16 @@ export async function writeJSONL<T extends JSONLEntity = JSONLEntity>(
   const lines = sortedEntities.map((entity) => JSON.stringify(entity));
   const content = lines.join("\n") + "\n";
 
+  // Check if content has actually changed before writing
+  // This prevents unnecessary file writes that trigger watcher events
+  if (fs.existsSync(filePath)) {
+    const existingContent = fs.readFileSync(filePath, "utf8");
+    if (existingContent === content) {
+      // Content unchanged, skip write
+      return;
+    }
+  }
+
   fs.writeFileSync(targetPath, content, "utf8");
 
   // Atomic rename if requested
@@ -233,6 +243,16 @@ export function writeJSONLSync<T extends JSONLEntity = JSONLEntity>(
   // Write each entity as a line
   const lines = sortedEntities.map((entity) => JSON.stringify(entity));
   const content = lines.join("\n") + "\n";
+
+  // Check if content has actually changed before writing
+  // This prevents unnecessary file writes that trigger watcher events
+  if (fs.existsSync(filePath)) {
+    const existingContent = fs.readFileSync(filePath, "utf8");
+    if (existingContent === content) {
+      // Content unchanged, skip write
+      return;
+    }
+  }
 
   fs.writeFileSync(targetPath, content, "utf8");
 

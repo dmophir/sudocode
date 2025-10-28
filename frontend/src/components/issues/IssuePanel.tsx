@@ -383,7 +383,7 @@ export function IssuePanel({
 
           {/* Relationships */}
           <div className="border-t pt-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-medium">
                 Relationships {relationships.length > 0 && `(${relationships.length})`}
               </h3>
@@ -392,7 +392,7 @@ export function IssuePanel({
                 size="sm"
                 onClick={() => setShowAddRelationship(!showAddRelationship)}
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="mr-1 h-4 w-4" />
                 Add
               </Button>
             </div>
@@ -409,7 +409,7 @@ export function IssuePanel({
             )}
 
             {isLoadingRelationships ? (
-              <div className="text-center text-sm text-muted-foreground py-4">
+              <div className="py-4 text-center text-sm text-muted-foreground">
                 Loading relationships...
               </div>
             ) : (
@@ -427,11 +427,7 @@ export function IssuePanel({
           <div className="flex items-center justify-between border-t pt-4">
             {onUpdate && (
               <div className="text-sm text-muted-foreground">
-                {isUpdating
-                  ? 'Saving...'
-                  : hasChanges
-                    ? 'Unsaved changes...'
-                    : 'All changes saved'}
+                {isUpdating ? 'Saving...' : hasChanges ? 'Unsaved changes...' : 'All changes saved'}
               </div>
             )}
             {onDelete && (

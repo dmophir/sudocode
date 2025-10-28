@@ -2,7 +2,7 @@ import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
@@ -103,6 +103,7 @@ export function TiptapEditor({
 }: TiptapEditorProps) {
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
+  const isLoadingContentRef = useRef(false)
 
   const editor = useEditor({
     extensions: [
@@ -165,6 +166,8 @@ export function TiptapEditor({
     editable,
     content: htmlContent,
     onUpdate: ({ editor }) => {
+      if (isLoadingContentRef.current) return
+
       setHasChanges(true)
 
       // Call onChange callback if provided (for autosave)
@@ -247,8 +250,19 @@ export function TiptapEditor({
   // Update editor content when HTML changes
   useEffect(() => {
     if (editor && htmlContent) {
-      editor.commands.setContent(htmlContent)
-      setHasChanges(false)
+      // Only update content if editor is not focused (i.e., change is from external source)
+      // This prevents losing cursor position during auto-save
+      if (!editor.isFocused) {
+        isLoadingContentRef.current = true
+        editor.commands.setContent(htmlContent)
+        // Reset hasChanges since we're loading external content
+        setHasChanges(false)
+        // Use setTimeout to ensure the content is set before resetting the flag
+        setTimeout(() => {
+          isLoadingContentRef.current = false
+        }, 0)
+      }
+      // Don't reset hasChanges if editor is focused - user is actively editing
     }
   }, [htmlContent, editor])
 

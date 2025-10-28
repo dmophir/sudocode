@@ -24,7 +24,9 @@
     "test:server": "npm test --workspace=server",
     "test:frontend": "npm test --workspace=frontend",
     "clean": "npm run clean --workspaces --if-present",
-    "dev": "npm run dev --workspaces --if-present"
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:server": "SUDOCODE_DIR=$(pwd)/.sudocode npm run dev --workspace=server",
+    "start:server": "SUDOCODE_DIR=$(pwd)/.sudocode npm start --workspace=server"
   },
   "keywords": ["sudocode", "monorepo"],
   "author": "sudocode AI",

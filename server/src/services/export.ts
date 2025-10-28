@@ -5,8 +5,6 @@
 import type Database from "better-sqlite3";
 import { exportToJSONL } from "@sudocode/cli/dist/export.js";
 import { syncJSONLToMarkdown } from "@sudocode/cli/dist/sync.js";
-import { getAllIssues } from "./issues.js";
-import { getAllSpecs } from "./specs.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
 import * as path from "path";
 
@@ -32,40 +30,51 @@ function getExportDebouncer(db: Database.Database) {
 }
 
 /**
- * Sync all entities from database to markdown files
- */
-async function syncAllToMarkdown(db: Database.Database): Promise<void> {
-  const outputDir = getSudocodeDir();
-
-  // Sync all issues to markdown
-  const issues = getAllIssues(db);
-  for (const issue of issues) {
-    const mdPath = path.join(outputDir, "issues", `${issue.id}.md`);
-    await syncJSONLToMarkdown(db, issue.id, "issue", mdPath);
-  }
-
-  // Sync all specs to markdown
-  const specs = getAllSpecs(db);
-  for (const spec of specs) {
-    // Use file_path from database if available
-    const mdPath = spec.file_path
-      ? path.join(outputDir, spec.file_path)
-      : path.join(outputDir, "specs", `${spec.id}.md`);
-    await syncJSONLToMarkdown(db, spec.id, "spec", mdPath);
-  }
-}
-
-/**
- * Execute the full export (JSONL + Markdown)
+ * Execute the full export (JSONL only)
+ * Note: Markdown files are not updated here to avoid triggering mass file changes.
+ * Markdown updates should happen through the watcher's reverse sync if enabled,
+ * or through explicit sync commands.
  */
 async function executeFullExport(db: Database.Database): Promise<void> {
   const outputDir = getSudocodeDir();
 
-  // Export to JSONL first
+  // Export to JSONL only
   await exportToJSONL(db, { outputDir });
 
-  // Then sync all entities to markdown
-  await syncAllToMarkdown(db);
+  // Note: We don't sync to markdown here because:
+  // 1. It would update ALL markdown files on every change (inefficient)
+  // 2. The watcher can handle reverse sync if enabled (JSONL → Markdown)
+  // 3. For API updates, the markdown file will be updated when the watcher
+  //    detects the JSONL change and does reverse sync
+}
+
+/**
+ * Sync a single entity to its markdown file
+ */
+export async function syncEntityToMarkdown(
+  db: Database.Database,
+  entityId: string,
+  entityType: "spec" | "issue"
+): Promise<void> {
+  const outputDir = getSudocodeDir();
+
+  if (entityType === "issue") {
+    const { getIssueById } = await import("./issues.js");
+    const issue = getIssueById(db, entityId);
+    if (issue) {
+      const mdPath = path.join(outputDir, "issues", `${issue.id}.md`);
+      await syncJSONLToMarkdown(db, issue.id, "issue", mdPath);
+    }
+  } else {
+    const { getSpecById } = await import("./specs.js");
+    const spec = getSpecById(db, entityId);
+    if (spec) {
+      const mdPath = spec.file_path
+        ? path.join(outputDir, spec.file_path)
+        : path.join(outputDir, "specs", `${spec.id}.md`);
+      await syncJSONLToMarkdown(db, spec.id, "spec", mdPath);
+    }
+  }
 }
 
 /**

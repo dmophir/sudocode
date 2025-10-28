@@ -148,6 +148,70 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
     }
   }
 
+  /**
+   * Check if JSONL file needs to be imported to database
+   * Returns true if import is needed (JSONL has changes not in DB)
+   */
+  function jsonlNeedsImport(jsonlPath: string): boolean {
+    try {
+      if (!fs.existsSync(jsonlPath)) {
+        return false; // File doesn't exist
+      }
+
+      // Read JSONL file
+      const content = fs.readFileSync(jsonlPath, "utf8");
+      const lines = content
+        .trim()
+        .split("\n")
+        .filter((line) => line.trim());
+
+      // Parse each line and check if it differs from database
+      for (const line of lines) {
+        const jsonlEntity = JSON.parse(line);
+        const entityId = jsonlEntity.id;
+        const entityType = jsonlPath.includes("specs.jsonl") ? "spec" : "issue";
+
+        // Get entity from database
+        const dbEntity =
+          entityType === "spec"
+            ? getSpec(db, entityId)
+            : getIssue(db, entityId);
+
+        // If entity doesn't exist in DB, import is needed
+        if (!dbEntity) {
+          return true;
+        }
+
+        // Compare key fields
+        if (jsonlEntity.title !== dbEntity.title) return true;
+        if (
+          (jsonlEntity.content || "").trim() !== (dbEntity.content || "").trim()
+        )
+          return true;
+        if (jsonlEntity.priority !== dbEntity.priority) return true;
+
+        if (entityType === "issue") {
+          const dbIssue = dbEntity as any;
+          if (jsonlEntity.status !== dbIssue.status) return true;
+        }
+
+        // Compare updated_at timestamp - if JSONL is newer, import is needed
+        if (
+          jsonlEntity.updated_at &&
+          new Date(jsonlEntity.updated_at).getTime() >
+            new Date(dbEntity.updated_at).getTime()
+        ) {
+          return true;
+        }
+      }
+
+      return false; // All entities match
+    } catch (error) {
+      // If there's an error, assume import is needed
+      return true;
+    }
+  }
+
   // Paths to watch
   const specsDir = path.join(baseDir, "specs");
   const issuesDir = path.join(baseDir, "issues");
@@ -222,10 +286,32 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
 
             // Skip if content already matches (prevents oscillation)
             if (entityId && contentMatches(filePath, entityId, entityType)) {
-              onLog(
-                `[watch] Skipping sync for ${entityType} ${entityId} (content matches)`
-              );
               return;
+            }
+
+            // Check timestamps to determine sync direction
+            if (entityId) {
+              const dbEntity =
+                entityType === "spec"
+                  ? getSpec(db, entityId)
+                  : getIssue(db, entityId);
+
+              if (dbEntity) {
+                // Get file modification time
+                const fileStat = fs.statSync(filePath);
+                const fileTime = fileStat.mtimeMs;
+
+                // Get database updated_at time
+                const dbTime = new Date(dbEntity.updated_at).getTime();
+
+                // If database is newer than file, skip markdown → database sync
+                if (dbTime > fileTime) {
+                  onLog(
+                    `[watch] Skipping sync for ${entityType} ${entityId} (database is newer)`
+                  );
+                  return;
+                }
+              }
             }
           } catch (error) {
             // If parsing fails, continue with sync (might be a new file)
@@ -249,14 +335,17 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
           }
         }
       } else if (basename === "specs.jsonl" || basename === "issues.jsonl") {
-        // JSONL file changed (e.g., from git pull) - import to database
+        // JSONL file changed (e.g., from git pull) - check if import is needed
         onLog(`[watch] ${event} ${path.relative(baseDir, filePath)}`);
 
         if (event !== "unlink") {
-          await importFromJSONL(db, {
-            inputDir: baseDir,
-          });
-          onLog(`[watch] Imported JSONL changes to database`);
+          // Check if JSONL actually differs from database before importing
+          if (jsonlNeedsImport(filePath)) {
+            await importFromJSONL(db, {
+              inputDir: baseDir,
+            });
+            onLog(`[watch] Imported JSONL changes to database`);
+          }
 
           // Optionally sync database changes back to markdown files
           // Only sync entities where content actually differs (contentMatches check)
@@ -275,9 +364,6 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
 
                 // Skip if content already matches (prevents oscillation)
                 if (contentMatches(mdPath, spec.id, "spec")) {
-                  onLog(
-                    `[watch] Skipping sync for spec ${spec.id} (content matches)`
-                  );
                   continue;
                 }
 
@@ -310,9 +396,6 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
 
               // Skip if content already matches (prevents unnecessary writes and oscillation)
               if (contentMatches(mdPath, issue.id, "issue")) {
-                onLog(
-                  `[watch] Skipping sync for issue ${issue.id} (content matches)`
-                );
                 continue;
               }
 

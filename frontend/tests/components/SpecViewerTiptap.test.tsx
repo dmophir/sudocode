@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SpecViewerTiptap } from '@/components/specs/SpecViewerTiptap'
 import { renderWithProviders } from '@/test/test-utils'
+import { IssueFeedback } from '@/types/api'
 
 describe('SpecViewerTiptap', () => {
   const sampleContent = `# Test Spec\n\nThis is the content.`
@@ -55,13 +56,14 @@ describe('SpecViewerTiptap', () => {
 
   it('should display feedback count in source view', async () => {
     const user = userEvent.setup()
-    const feedback = [
+    const feedback: IssueFeedback[] = [
       {
         id: 'fb1',
         issue_id: 'ISSUE-001',
         spec_id: 'SPEC-001',
-        type: 'comment' as const,
+        feedback_type: 'comment' as const,
         content: 'Test feedback',
+        agent: 'Test Agent',
         anchor: JSON.stringify({ line_number: 1 }),
         dismissed: false,
         created_at: '2024-01-01',
