@@ -13,11 +13,11 @@ const priorityColors: Record<number, string> = {
 }
 
 const priorityLabels: Record<number, string> = {
-  0: 'Critical',
-  1: 'High',
-  2: 'Medium',
-  3: 'Low',
-  4: 'None',
+  0: 'P0',
+  1: 'P1',
+  2: 'P2',
+  3: 'P3',
+  4: 'P4',
 }
 
 interface IssueCardProps {
@@ -68,8 +68,8 @@ export function IssueCard({ issue, index, status, onViewDetails, isOpen }: Issue
       className={issue.archived ? 'opacity-60' : ''}
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
-        <div className="flex w-full items-center gap-2">
-          <h4 className="line-clamp-2 min-w-0 flex-1 text-sm font-medium">{issue.title}</h4>
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="text-xs text-muted-foreground">{issue.id}</div>
           {/* Priority Badge */}
           {issue.priority !== undefined && issue.priority <= 3 && (
             <span
@@ -79,11 +79,10 @@ export function IssueCard({ issue, index, status, onViewDetails, isOpen }: Issue
             </span>
           )}
         </div>
-        {/* Issue ID */}
-        <div className="text-xs text-muted-foreground">{issue.id}</div>
+        <h4 className="text-md line-clamp-2 min-w-0 flex-1 font-medium">{issue.title}</h4>
         {/* Content Preview */}
         {issue.content && (
-          <p className="line-clamp-2 break-words text-sm text-secondary-foreground">
+          <p className="line-clamp-2 break-words text-xs text-muted-foreground">
             {(() => {
               // Simple markdown stripping - remove headers, formatting, etc.
               const plainText = issue.content

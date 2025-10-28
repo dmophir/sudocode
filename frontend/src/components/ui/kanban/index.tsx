@@ -1,6 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { DragEndEvent, Modifier } from '@dnd-kit/core'
@@ -138,6 +139,7 @@ export type KanbanHeaderProps =
       name: Status['name']
       color: Status['color']
       className?: string
+      count?: number
       onAddIssue?: () => void
       onArchiveAll?: () => void
     }
@@ -165,6 +167,7 @@ export const KanbanHeader = (props: KanbanHeaderProps) => {
         />
 
         <p className="m-0 text-sm">{props.name}</p>
+        {props.count !== undefined && <Badge variant="secondary">{props.count}</Badge>}
       </span>
       <span className="flex items-center gap-1">
         {props.onArchiveAll && (

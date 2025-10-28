@@ -74,6 +74,7 @@ function IssueKanbanBoard({
             <KanbanHeader
               name={statusLabels[status]}
               color={statusColors[status]}
+              count={statusIssues.length}
               onArchiveAll={status === 'closed' ? onArchiveAllClosed : undefined}
             />
             <KanbanCards>

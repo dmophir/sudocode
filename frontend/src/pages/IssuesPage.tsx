@@ -8,6 +8,17 @@ import IssueKanbanBoard from '@/components/issues/IssueKanbanBoard'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { CreateIssueDialog } from '@/components/issues/CreateIssueDialog'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Plus, Archive } from 'lucide-react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
@@ -31,6 +42,7 @@ export default function IssuesPage() {
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [createDialogStatus, setCreateDialogStatus] = useState<IssueStatus | undefined>()
+  const [showArchiveAllDialog, setShowArchiveAllDialog] = useState(false)
 
   // Fetch relationships for all issues
   const { data: relationshipsMap } = useIssueRelationships(issues)
@@ -160,10 +172,15 @@ export default function IssuesPage() {
   )
 
   const handleArchiveAllClosed = useCallback(() => {
+    setShowArchiveAllDialog(true)
+  }, [])
+
+  const confirmArchiveAllClosed = useCallback(() => {
     const closedIssues = groupedIssues.closed || []
     closedIssues.forEach((issue) => {
       archiveIssue(issue.id)
     })
+    setShowArchiveAllDialog(false)
   }, [groupedIssues.closed, archiveIssue])
 
   if (isLoading) {
@@ -188,16 +205,26 @@ export default function IssuesPage() {
     <div className="flex h-screen flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b bg-background p-4">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold">Issues</h1>
-          <p className="text-sm text-muted-foreground">{issues.length} total issues</p>
+          <Badge variant="secondary">{issues.length}</Badge>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate('/issues/archived')} variant="outline" size="sm">
-            <Archive className="mr-2 h-4 w-4" />
+          <Button
+            onClick={() => navigate('/issues/archived')}
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Archive className="h-4 w-4" />
             Archived
           </Button>
-          <Button onClick={() => handleCreateIssue()} variant="default" size="sm">
+          <Button
+            onClick={() => handleCreateIssue()}
+            variant="default"
+            size="sm"
+            className="text-primary-foreground hover:bg-primary/90"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Issue
           </Button>
@@ -317,6 +344,22 @@ export default function IssuesPage() {
         isCreating={isCreating}
         defaultStatus={createDialogStatus}
       />
+
+      <AlertDialog open={showArchiveAllDialog} onOpenChange={setShowArchiveAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive All Closed Issues?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will archive all {groupedIssues.closed?.length || 0} closed issues. You can view
+              archived issues later from the Archived Issues page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmArchiveAllClosed}>Archive All</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
