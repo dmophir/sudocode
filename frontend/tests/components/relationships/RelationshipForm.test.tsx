@@ -12,7 +12,7 @@ describe('RelationshipForm', () => {
 
       expect(screen.getByLabelText('Target Entity')).toBeInTheDocument()
       expect(screen.getByLabelText('Relationship Type')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Add Relationship/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Create/i })).toBeInTheDocument()
     })
 
     it('should render as a card by default', () => {
@@ -128,7 +128,7 @@ describe('RelationshipForm', () => {
       await user.type(input, 'ISSUE-002')
 
       // Submit the form
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       await waitFor(() => {
@@ -145,7 +145,7 @@ describe('RelationshipForm', () => {
       const input = screen.getByPlaceholderText('ISSUE-001')
       await user.type(input, '  ISSUE-002  ')
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       await waitFor(() => {
@@ -164,7 +164,7 @@ describe('RelationshipForm', () => {
       await user.type(input, 'ISSUE-002')
 
       // Submit
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       await waitFor(() => {
@@ -180,7 +180,7 @@ describe('RelationshipForm', () => {
 
       render(<RelationshipForm onSubmit={onSubmit} />)
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       expect(submitButton).toBeDisabled()
     })
 
@@ -193,7 +193,7 @@ describe('RelationshipForm', () => {
       const input = screen.getByPlaceholderText('ISSUE-001')
       await user.type(input, 'ISSUE-002')
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       expect(submitButton).not.toBeDisabled()
     })
 
@@ -208,7 +208,7 @@ describe('RelationshipForm', () => {
 
       // Button should still be enabled (input has value)
       // but clicking shouldn't call onSubmit
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
 
       // The submit button should actually be disabled because we check toId.trim()
       expect(submitButton).toBeDisabled()
@@ -223,7 +223,7 @@ describe('RelationshipForm', () => {
       const input = screen.getByPlaceholderText('ISSUE-001')
       await user.type(input, 'ISSUE-002')
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       // During submission, input should be disabled
@@ -264,7 +264,7 @@ describe('RelationshipForm', () => {
       const input = screen.getByPlaceholderText('ISSUE-001')
       await user.type(input, 'ISSUE-002')
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       // Cancel button should be disabled during submission
@@ -301,7 +301,7 @@ describe('RelationshipForm', () => {
       await user.click(implementsOption)
 
       // Submit
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       await waitFor(() => {
@@ -319,7 +319,7 @@ describe('RelationshipForm', () => {
       const input = screen.getByPlaceholderText('ISSUE-001')
       await user.type(input, 'ISSUE-002')
 
-      const submitButton = screen.getByRole('button', { name: /Add Relationship/i })
+      const submitButton = screen.getByRole('button', { name: /Create/i })
       await user.click(submitButton)
 
       await waitFor(() => {

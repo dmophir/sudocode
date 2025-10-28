@@ -14,6 +14,7 @@ import {
 import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -40,6 +41,7 @@ interface IssuePanelProps {
   isUpdating?: boolean
   isDeleting?: boolean
   showOpenDetail?: boolean
+  hideTopControls?: boolean
 }
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
@@ -68,6 +70,7 @@ export function IssuePanel({
   isUpdating = false,
   isDeleting = false,
   showOpenDetail = false,
+  hideTopControls = false,
 }: IssuePanelProps) {
   const navigate = useNavigate()
   const [title, setTitle] = useState(issue.title)
@@ -312,80 +315,84 @@ export function IssuePanel({
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full flex-col" ref={panelRef}>
         {/* Top Navigation Bar */}
-        <div className="flex items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-4">
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
-            {showOpenDetail && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => navigate(`/issues/${issue.id}`)}
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label="Open in full page"
-                  >
-                    <ExpandIcon className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Open in full page</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+        {!hideTopControls && (
+          <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-4">
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {showOpenDetail && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => navigate(`/issues/${issue.id}`)}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Open in full page"
+                    >
+                      <ExpandIcon className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in full page</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
 
-          <div className="flex items-center gap-4">
-            {(onArchive || onUnarchive) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() =>
-                      issue.archived ? onUnarchive?.(issue.id) : onArchive?.(issue.id)
-                    }
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label={issue.archived ? 'Unarchive' : 'Archive'}
-                    disabled={isUpdating}
-                  >
-                    {issue.archived ? (
-                      <ArchiveRestore className="h-4 w-4" />
-                    ) : (
-                      <Archive className="h-4 w-4" />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{issue.archived ? 'Unarchive' : 'Archive'}</TooltipContent>
-              </Tooltip>
-            )}
-            {onDelete && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setShowDeleteDialog(true)}
-                    className="text-muted-foreground hover:text-destructive"
-                    aria-label="Delete"
-                    disabled={isUpdating || isDeleting}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Delete issue</TooltipContent>
-              </Tooltip>
-            )}
+            <div className="flex items-center gap-4">
+              {(onArchive || onUnarchive) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() =>
+                        issue.archived ? onUnarchive?.(issue.id) : onArchive?.(issue.id)
+                      }
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={issue.archived ? 'Unarchive' : 'Archive'}
+                      disabled={isUpdating}
+                    >
+                      {issue.archived ? (
+                        <ArchiveRestore className="h-4 w-4" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{issue.archived ? 'Unarchive' : 'Archive'}</TooltipContent>
+                </Tooltip>
+              )}
+              {onDelete && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label="Delete"
+                      disabled={isUpdating || isDeleting}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete issue</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-3">
+        <div className={`flex-1 overflow-y-auto px-6 ${hideTopControls ? 'py-4' : 'py-3'}`}>
           <div className="space-y-3">
             {/* Issue ID and Title */}
             <div className="space-y-2 pb-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">{issue.id}</div>
+                <Badge variant="issue" className="font-mono">
+                  {issue.id}
+                </Badge>
                 {onUpdate && (
                   <div className="text-xs italic text-muted-foreground">
                     {isUpdating

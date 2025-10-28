@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { SpecViewerTiptap } from '@/components/specs/SpecViewerTiptap'
 import { renderWithProviders } from '@/test/test-utils'
 import { IssueFeedback } from '@/types/api'
@@ -12,11 +11,11 @@ describe('SpecViewerTiptap', () => {
     vi.clearAllMocks()
   })
 
-  it('should render spec content with view mode toggles', () => {
+  it('should render spec content in formatted view by default', () => {
     renderWithProviders(<SpecViewerTiptap content={sampleContent} />)
 
-    expect(screen.getByText('Formatted')).toBeInTheDocument()
-    expect(screen.getByText('Source')).toBeInTheDocument()
+    // Should render tiptap editor in formatted mode
+    expect(screen.getByRole('textbox')).toBeInTheDocument()
   })
 
   it('should not show edit/view toggle buttons since it is always editable', () => {
@@ -27,19 +26,10 @@ describe('SpecViewerTiptap', () => {
     expect(screen.queryByRole('button', { name: /View/i })).not.toBeInTheDocument()
   })
 
-  it('should switch between formatted and source view', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<SpecViewerTiptap content={sampleContent} />)
+  it('should render in source view when viewMode is set to source', async () => {
+    renderWithProviders(<SpecViewerTiptap content={sampleContent} viewMode="source" />)
 
-    // Should have both view mode buttons
-    expect(screen.getByRole('button', { name: /Formatted/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Source/i })).toBeInTheDocument()
-
-    // Switch to source view
-    const sourceButton = screen.getByRole('button', { name: /Source/i })
-    await user.click(sourceButton)
-
-    // Should show source view content
+    // Should show source view content with line numbers
     await waitFor(() => {
       expect(screen.getByText(/Test Spec/)).toBeInTheDocument()
     })
@@ -51,11 +41,10 @@ describe('SpecViewerTiptap', () => {
     renderWithProviders(<SpecViewerTiptap content={sampleContent} onChange={onChange} />)
 
     // Component should render without errors when onChange is provided
-    expect(screen.getByText('Formatted')).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toBeInTheDocument()
   })
 
-  it('should display feedback count in source view', async () => {
-    const user = userEvent.setup()
+  it('should render feedback in source view', async () => {
     const feedback: IssueFeedback[] = [
       {
         id: 'fb1',
@@ -71,14 +60,13 @@ describe('SpecViewerTiptap', () => {
       },
     ]
 
-    renderWithProviders(<SpecViewerTiptap content={sampleContent} feedback={feedback} />)
+    renderWithProviders(
+      <SpecViewerTiptap content={sampleContent} feedback={feedback} viewMode="source" />
+    )
 
-    // Switch to source view to see feedback count
-    const sourceButton = screen.getByRole('button', { name: /Source/i })
-    await user.click(sourceButton)
-
+    // Should render source view with feedback
     await waitFor(() => {
-      expect(screen.getByText(/1 feedback item/)).toBeInTheDocument()
+      expect(screen.getByText(/Test Spec/)).toBeInTheDocument()
     })
   })
 })

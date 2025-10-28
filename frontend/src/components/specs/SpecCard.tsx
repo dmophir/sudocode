@@ -12,11 +12,11 @@ const priorityColors: Record<number, string> = {
 }
 
 const priorityLabels: Record<number, string> = {
-  0: 'Critical',
-  1: 'High',
-  2: 'Medium',
-  3: 'Low',
-  4: 'None',
+  0: 'P0',
+  1: 'P1',
+  2: 'P2',
+  3: 'P3',
+  4: 'P4',
 }
 
 interface SpecCardProps {
@@ -36,7 +36,7 @@ export function SpecCard({ spec, onClick }: SpecCardProps) {
 
   return (
     <Card
-      className={`cursor-pointer p-4 transition-shadow hover:shadow-md ${spec.archived ? 'opacity-60' : ''}`}
+      className={`cursor-pointer border border-border p-4 transition-shadow hover:shadow-md ${spec.archived ? 'opacity-60' : ''}`}
       onClick={handleClick}
     >
       <div className="flex flex-col gap-3">

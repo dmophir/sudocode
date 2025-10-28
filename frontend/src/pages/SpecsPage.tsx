@@ -4,7 +4,8 @@ import { useSpecs } from '@/hooks/useSpecs'
 import { SpecList } from '@/components/specs/SpecList'
 import { SpecEditor } from '@/components/specs/SpecEditor'
 import { Button } from '@/components/ui/button'
-import { Archive } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Archive, Plus } from 'lucide-react'
 import type { Spec } from '@/types/api'
 
 export default function SpecsPage() {
@@ -28,18 +29,28 @@ export default function SpecsPage() {
   return (
     <div className="flex-1 p-8">
       <div className="mb-6 flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold">Specs</h1>
-          <p className="text-muted-foreground">
-            {isLoading ? 'Loading...' : `${specs.length} spec${specs.length !== 1 ? 's' : ''}`}
-          </p>
+          {!isLoading && <Badge variant="secondary">{specs.length}</Badge>}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/specs/archived')}>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/specs/archived')}
+            className="gap-1 text-muted-foreground hover:text-foreground"
+          >
             <Archive className="mr-2 h-4 w-4" />
             Archived
           </Button>
-          <Button onClick={() => setShowEditor(true)}>New Spec</Button>
+          <Button
+            onClick={() => setShowEditor(true)}
+            variant="default"
+            size="sm"
+            className="text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Spec
+          </Button>
         </div>
       </div>
 

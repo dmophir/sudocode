@@ -214,7 +214,7 @@ export default function IssuesPage() {
             onClick={() => navigate('/issues/archived')}
             variant="ghost"
             size="sm"
-            className="gap-2 text-muted-foreground hover:text-foreground"
+            className="gap-1 text-muted-foreground hover:text-foreground"
           >
             <Archive className="h-4 w-4" />
             Archived

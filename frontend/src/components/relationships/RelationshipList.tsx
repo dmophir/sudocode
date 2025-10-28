@@ -26,7 +26,7 @@ export function RelationshipList({
   relationships,
   currentEntityId,
   currentEntityType: _currentEntityType,
-  onNavigate,
+  onNavigate: _onNavigate,
   onDelete,
   showEmpty = true,
   showGroupHeaders = true,

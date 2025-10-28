@@ -125,9 +125,7 @@ describe('SpecDetailPage', () => {
 
     // Click priority dropdown - get all comboboxes and find the priority one
     const comboboxes = screen.getAllByRole('combobox')
-    const priorityTrigger = comboboxes.find((box) =>
-      box.textContent?.includes('High (P1)')
-    )
+    const priorityTrigger = comboboxes.find((box) => box.textContent?.includes('High (P1)'))
     expect(priorityTrigger).toBeDefined()
     await user.click(priorityTrigger!)
 
@@ -189,7 +187,6 @@ describe('SpecDetailPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('SPEC-001')).toBeInTheDocument()
-      expect(screen.getByText('test.md')).toBeInTheDocument()
     })
   })
 

@@ -75,7 +75,7 @@ describe('SpecsPage', () => {
     renderWithProviders(<SpecsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText(/2 specs/)).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument()
     })
   })
 
@@ -96,8 +96,8 @@ describe('SpecsPage', () => {
     renderWithProviders(<SpecsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('High')).toBeInTheDocument()
-      expect(screen.getByText('Medium')).toBeInTheDocument()
+      expect(screen.getByText('P1')).toBeInTheDocument()
+      expect(screen.getByText('P2')).toBeInTheDocument()
     })
   })
 
@@ -133,7 +133,7 @@ describe('SpecsPage', () => {
     renderWithProviders(<SpecsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText(/0 specs/)).toBeInTheDocument()
+      expect(screen.getByText('0')).toBeInTheDocument()
     })
   })
 

@@ -80,7 +80,7 @@ describe('IssuesPage', () => {
     renderWithProviders(<IssuesPage />)
 
     await waitFor(() => {
-      expect(screen.getByText(/2 total issues/)).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument()
     })
   })
 

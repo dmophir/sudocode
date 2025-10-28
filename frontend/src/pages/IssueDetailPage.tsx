@@ -1,13 +1,18 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useIssue, useIssues } from '@/hooks/useIssues'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { Button } from '@/components/ui/button'
+import { DeleteIssueDialog } from '@/components/issues/DeleteIssueDialog'
+import { Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 
 export default function IssueDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: issue, isLoading, isError } = useIssue(id || '')
-  const { updateIssue, deleteIssue, archiveIssue, unarchiveIssue, isUpdating, isDeleting } = useIssues()
+  const { updateIssue, deleteIssue, archiveIssue, unarchiveIssue, isUpdating, isDeleting } =
+    useIssues()
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleUpdate = (data: Parameters<typeof updateIssue>[0]['data']) => {
     if (!id) return
@@ -58,10 +63,44 @@ export default function IssueDetailPage() {
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b bg-background p-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/issues')}>
-          ← Back to Issues
-        </Button>
+      <div className="flex items-center justify-between border-b bg-background p-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/issues')}>
+            ← Back to Issues
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          {issue.archived ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleUnarchive(issue.id)}
+              disabled={isUpdating}
+            >
+              <ArchiveRestore className="mr-2 h-4 w-4" />
+              Unarchive
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleArchive(issue.id)}
+              disabled={isUpdating}
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isUpdating || isDeleting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       {/* Main content */}
@@ -69,13 +108,20 @@ export default function IssueDetailPage() {
         <IssuePanel
           issue={issue}
           onUpdate={handleUpdate}
-          onDelete={handleDelete}
-          onArchive={handleArchive}
-          onUnarchive={handleUnarchive}
           isUpdating={isUpdating}
           isDeleting={isDeleting}
+          hideTopControls={true}
         />
       </div>
+
+      {/* Delete Dialog */}
+      <DeleteIssueDialog
+        issue={issue}
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        isDeleting={isDeleting}
+      />
     </div>
   )
 }

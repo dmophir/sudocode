@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MessageSquare, Archive, ArchiveRestore } from 'lucide-react'
+import { MessageSquare, Archive, ArchiveRestore, Signal, FileText, Code2 } from 'lucide-react'
 import type { IssueFeedback } from '@/types/api'
 
 const PRIORITY_OPTIONS = [
@@ -37,6 +37,7 @@ export default function SpecDetailPage() {
   const [selectedText, setSelectedText] = useState<string | null>(null)
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(true)
   const [selectedIssueId, setSelectedIssueId] = useState<string | undefined>(undefined)
+  const [viewMode, setViewMode] = useState<'formatted' | 'source'>('formatted')
 
   // Local state for editable fields
   const [title, setTitle] = useState('')
@@ -198,27 +199,126 @@ export default function SpecDetailPage() {
   }
 
   return (
-    <div className="flex h-screen">
-      <div className="flex-1 overflow-auto p-8">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/specs')}>
-              ← Back
-            </Button>
+    <div className="flex h-screen flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b bg-background p-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/specs')}>
+            ← Back to Specs
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
+              <Button
+                variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('formatted')}
+                className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Formatted
+              </Button>
+              <Button
+                variant={viewMode === 'source' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('source')}
+                className={`h-7 rounded-sm ${viewMode === 'source' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                <Code2 className="mr-2 h-4 w-4" />
+                Markdown
+              </Button>
+            </div>
           </div>
 
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="mb-2 flex items-center gap-3">
+          {/* Issue selector */}
+          <Select value={selectedIssueId} onValueChange={setSelectedIssueId}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select issue..." />
+            </SelectTrigger>
+            <SelectContent>
+              {issues.map((issue) => (
+                <SelectItem key={issue.id} value={issue.id}>
+                  {issue.id}: {issue.title}
+                </SelectItem>
+              ))}
+              {issues.length === 0 && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">No issues available</div>
+              )}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFeedbackPanel(!showFeedbackPanel)}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Feedback {feedback.length > 0 && `(${feedback.length})`}
+          </Button>
+
+          {spec.archived ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => unarchiveSpec(spec.id)}
+              disabled={isUpdating}
+            >
+              <ArchiveRestore className="mr-2 h-4 w-4" />
+              Unarchive
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => archiveSpec(spec.id)}
+              disabled={isUpdating}
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <div className="space-y-3">
+            {/* Spec ID and Title */}
+            <div className="space-y-2 pb-3">
+              <div className="flex items-center justify-between">
                 <span className="font-mono text-sm text-muted-foreground">{spec.id}</span>
+                <div className="text-xs italic text-muted-foreground">
+                  {isUpdating
+                    ? 'Saving...'
+                    : hasChanges
+                      ? 'Unsaved changes...'
+                      : 'All changes saved'}
+                </div>
+              </div>
+              <Input
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                disabled={isUpdating}
+                placeholder="Spec title..."
+                className="border-none bg-transparent px-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
+              />
+            </div>
+
+            {/* Metadata Row */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Priority */}
+              <div className="flex items-center gap-2">
+                <Signal className="h-4 w-4 text-muted-foreground" />
                 <Select
                   value={String(priority)}
                   onValueChange={(value) => handlePriorityChange(parseInt(value))}
                   disabled={isUpdating}
                 >
-                  <SelectTrigger className="w-40 h-7">
-                    <SelectValue />
+                  <SelectTrigger className="h-8 w-auto gap-3 rounded-md border-none bg-accent px-3 shadow-none hover:bg-accent/80">
+                    <SelectValue placeholder="Priority" />
                   </SelectTrigger>
                   <SelectContent>
                     {PRIORITY_OPTIONS.map((option) => (
@@ -228,125 +328,53 @@ export default function SpecDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {hasChanges && <span className="text-xs text-muted-foreground">Unsaved changes...</span>}
-                {isUpdating && <span className="text-xs text-muted-foreground">Saving...</span>}
-                {!hasChanges && !isUpdating && <span className="text-xs text-muted-foreground">All changes saved</span>}
               </div>
-              <Input
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                disabled={isUpdating}
-                className="mb-2 text-3xl font-bold border-none shadow-none px-0 h-auto"
+
+              {/* Timestamp */}
+              <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+                {spec.updated_at && (
+                  <div className="ml-auto flex items-center text-xs text-muted-foreground">
+                    Updated at {new Date(spec.updated_at).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Content */}
+            {content !== undefined ? (
+              <SpecViewerTiptap
+                content={content}
+                feedback={feedback}
+                selectedLine={selectedLine}
+                onLineClick={handleLineClick}
+                onTextSelect={handleTextSelect}
+                onFeedbackClick={handleFeedbackClick}
+                onChange={handleContentChange}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* Issue selector */}
-              <Select value={selectedIssueId} onValueChange={setSelectedIssueId}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select issue..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {issues.map((issue) => (
-                    <SelectItem key={issue.id} value={issue.id}>
-                      {issue.id}: {issue.title}
-                    </SelectItem>
-                  ))}
-                  {issues.length === 0 && (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No issues available
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFeedbackPanel(!showFeedbackPanel)}
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Feedback {feedback.length > 0 && `(${feedback.length})`}
-              </Button>
-
-              {spec.archived ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => unarchiveSpec(spec.id)}
-                  disabled={isUpdating}
-                >
-                  <ArchiveRestore className="mr-2 h-4 w-4" />
-                  Unarchive
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => archiveSpec(spec.id)}
-                  disabled={isUpdating}
-                >
-                  <Archive className="mr-2 h-4 w-4" />
-                  Archive
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Metadata */}
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
-            {spec.file_path && (
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">File:</span>
-                <span className="font-mono">{spec.file_path}</span>
-              </div>
-            )}
-            {spec.created_at && (
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Created:</span>
-                <span>{new Date(spec.created_at).toLocaleDateString()}</span>
-              </div>
-            )}
-            {spec.updated_at && (
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Updated:</span>
-                <span>{new Date(spec.updated_at).toLocaleDateString()}</span>
-              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No content available for this spec.</p>
+              </Card>
             )}
           </div>
         </div>
 
-        {/* Content */}
-        {content !== undefined ? (
-          <SpecViewerTiptap
-            content={content}
-            feedback={feedback}
-            selectedLine={selectedLine}
-            onLineClick={handleLineClick}
-            onTextSelect={handleTextSelect}
-            onFeedbackClick={handleFeedbackClick}
-            onChange={handleContentChange}
-          />
-        ) : (
-          <Card className="p-8 text-center">
-            <p className="text-muted-foreground">No content available for this spec.</p>
-          </Card>
+        {/* Feedback Panel */}
+        {showFeedbackPanel && (
+          <div className="w-96 border-l">
+            <SpecFeedbackPanel
+              specId={spec.id}
+              issueId={selectedIssueId}
+              selectedLineNumber={selectedLine}
+              selectedText={selectedText}
+              onClose={() => setShowFeedbackPanel(false)}
+              onFeedbackClick={handleFeedbackClick}
+            />
+          </div>
         )}
       </div>
-
-      {/* Feedback Panel */}
-      {showFeedbackPanel && (
-        <div className="w-96">
-          <SpecFeedbackPanel
-            specId={spec.id}
-            issueId={selectedIssueId}
-            selectedLineNumber={selectedLine}
-            selectedText={selectedText}
-            onClose={() => setShowFeedbackPanel(false)}
-            onFeedbackClick={handleFeedbackClick}
-          />
-        </div>
-      )}
     </div>
   )
 }

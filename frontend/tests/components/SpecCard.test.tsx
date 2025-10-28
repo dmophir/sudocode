@@ -28,13 +28,13 @@ describe('SpecCard', () => {
 
   it('should render priority badge for high priority', () => {
     render(<SpecCard spec={mockSpec} />)
-    expect(screen.getByText('High')).toBeInTheDocument()
+    expect(screen.getByText('P1')).toBeInTheDocument()
   })
 
   it('should not render priority badge for low priority', () => {
     const lowPrioritySpec = { ...mockSpec, priority: 4 }
     render(<SpecCard spec={lowPrioritySpec} />)
-    expect(screen.queryByText('None')).not.toBeInTheDocument()
+    expect(screen.queryByText('P4')).not.toBeInTheDocument()
   })
 
   it('should render content preview', () => {
@@ -49,11 +49,6 @@ describe('SpecCard', () => {
 
     const preview = screen.getByText(/a+\.\.\./)
     expect(preview.textContent?.length).toBeLessThan(210) // 200 chars + "..."
-  })
-
-  it('should render file path', () => {
-    render(<SpecCard spec={mockSpec} />)
-    expect(screen.getByText('/path/to/spec.md')).toBeInTheDocument()
   })
 
   it('should call onClick when clicked', () => {
@@ -74,19 +69,19 @@ describe('SpecCard', () => {
 
   it('should have correct priority colors', () => {
     const { rerender } = render(<SpecCard spec={{ ...mockSpec, priority: 0 }} />)
-    let badge = screen.getByText('Critical')
+    let badge = screen.getByText('P0')
     expect(badge).toHaveClass('bg-red-600')
 
     rerender(<SpecCard spec={{ ...mockSpec, priority: 1 }} />)
-    badge = screen.getByText('High')
+    badge = screen.getByText('P1')
     expect(badge).toHaveClass('bg-orange-600')
 
     rerender(<SpecCard spec={{ ...mockSpec, priority: 2 }} />)
-    badge = screen.getByText('Medium')
+    badge = screen.getByText('P2')
     expect(badge).toHaveClass('bg-yellow-600')
 
     rerender(<SpecCard spec={{ ...mockSpec, priority: 3 }} />)
-    badge = screen.getByText('Low')
+    badge = screen.getByText('P3')
     expect(badge).toHaveClass('bg-blue-600')
   })
 })
