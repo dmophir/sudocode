@@ -125,6 +125,9 @@ export class SimpleProcessManager implements IProcessManager {
     this._metrics.totalSpawned++;
     this._metrics.currentlyActive++;
 
+    // Set up event handlers for lifecycle management
+    this.setupProcessHandlers(managedProcess, mergedConfig);
+
     return managedProcess;
   }
 
@@ -145,6 +148,101 @@ export class SimpleProcessManager implements IProcessManager {
     });
 
     return childProcess;
+  }
+
+  /**
+   * Set up event handlers for a managed process
+   *
+   * Handles lifecycle events:
+   * - exit: Process terminated normally or abnormally
+   * - error: Process encountered an error
+   * - stdout/stderr data: Track activity for idle detection
+   *
+   * @param managedProcess - The managed process to set up handlers for
+   * @param config - Process configuration (for timeout)
+   */
+  private setupProcessHandlers(
+    managedProcess: ManagedProcess,
+    config: ProcessConfig
+  ): void {
+    const { process: childProcess, id } = managedProcess;
+    let timeoutHandle: NodeJS.Timeout | null = null;
+
+    // Set up timeout if configured
+    if (config.timeout) {
+      timeoutHandle = setTimeout(() => {
+        // Terminate process on timeout
+        if (managedProcess.status === 'busy') {
+          managedProcess.status = 'terminating';
+          childProcess.kill('SIGTERM');
+        }
+      }, config.timeout);
+    }
+
+    // Exit event handler
+    childProcess.once('exit', (code, signal) => {
+      // Clear timeout
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+
+      // Update process state
+      managedProcess.exitCode = code;
+      managedProcess.signal = signal;
+      managedProcess.status = code === 0 ? 'completed' : 'crashed';
+
+      // Calculate duration
+      const duration = Date.now() - managedProcess.spawnedAt.getTime();
+      managedProcess.metrics.totalDuration = duration;
+
+      // Update global metrics
+      this._metrics.currentlyActive--;
+      if (code === 0) {
+        this._metrics.totalCompleted++;
+      } else {
+        this._metrics.totalFailed++;
+      }
+
+      // Calculate average duration
+      const totalProcesses =
+        this._metrics.totalCompleted + this._metrics.totalFailed;
+      if (totalProcesses > 0) {
+        const currentTotal = this._metrics.averageDuration * (totalProcesses - 1);
+        this._metrics.averageDuration = (currentTotal + duration) / totalProcesses;
+      }
+
+      // Schedule cleanup (delete from activeProcesses after 5s delay)
+      setTimeout(() => {
+        this._activeProcesses.delete(id);
+      }, 5000);
+    });
+
+    // Error event handler
+    childProcess.once('error', (error) => {
+      void error; // Error is logged but not used here
+
+      // Clear timeout
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+
+      // Update process state
+      managedProcess.status = 'crashed';
+
+      // Update global metrics
+      this._metrics.currentlyActive--;
+      this._metrics.totalFailed++;
+    });
+
+    // stdout data handler - track activity
+    childProcess.stdout?.on('data', () => {
+      managedProcess.lastActivity = new Date();
+    });
+
+    // stderr data handler - track activity
+    childProcess.stderr?.on('data', () => {
+      managedProcess.lastActivity = new Date();
+    });
   }
 
   async releaseProcess(_processId: string): Promise<void> {
