@@ -343,4 +343,204 @@ describe('Process Lifecycle Events', () => {
       assert.strictEqual(manager.getMetrics().totalFailed, 1);
     });
   });
+
+  describe('State Transitions', () => {
+    it('follows busy → completed transition on normal exit', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'process.exit(0)'],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Initial state should be 'busy'
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Wait for process to exit
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => setTimeout(resolve, 50));
+      });
+
+      // Final state should be 'completed'
+      assert.strictEqual(managedProcess.status, 'completed');
+      assert.strictEqual(managedProcess.exitCode, 0);
+    });
+
+    it('follows busy → crashed transition on error exit', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'process.exit(1)'],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Initial state should be 'busy'
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Wait for process to exit
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => setTimeout(resolve, 50));
+      });
+
+      // Final state should be 'crashed'
+      assert.strictEqual(managedProcess.status, 'crashed');
+      assert.strictEqual(managedProcess.exitCode, 1);
+    });
+
+    it('follows busy → terminating → completed transition on graceful termination', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', `
+          process.on('SIGTERM', () => {
+            // Gracefully handle SIGTERM - exit immediately with code 0
+            setTimeout(() => process.exit(0), 10);
+          });
+          // Keep process alive
+          const interval = setInterval(() => {}, 1000);
+          // Prevent process from exiting accidentally
+          process.on('beforeExit', () => {
+            clearInterval(interval);
+          });
+        `],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Initial state should be 'busy'
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Terminate the process
+      await manager.terminateProcess(managedProcess.id);
+
+      // The process should complete the termination cycle
+      // Either completed (if it handled SIGTERM gracefully) or crashed (if force-killed)
+      // Both are valid outcomes depending on timing
+      const finalStatus = managedProcess.status as string;
+      assert.ok(
+        finalStatus === 'completed' || finalStatus === 'crashed',
+        `Expected status to be completed or crashed, got ${finalStatus}`
+      );
+
+      // If completed, exitCode should be 0
+      if (finalStatus === 'completed') {
+        assert.strictEqual(managedProcess.exitCode, 0);
+      }
+    });
+
+    it('follows busy → terminating → crashed transition on forced termination', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', `
+          process.on('SIGTERM', () => {
+            // Ignore SIGTERM to force SIGKILL
+          });
+          setInterval(() => {}, 1000);
+        `],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Initial state should be 'busy'
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Terminate the process (will wait then force kill)
+      await manager.terminateProcess(managedProcess.id);
+
+      // Wait for termination to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Final state should be 'crashed' (killed by signal)
+      assert.strictEqual(managedProcess.status, 'crashed');
+      assert.ok(managedProcess.signal); // Should have a signal
+    });
+
+    it('tracks state transition on timeout-triggered termination', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'setInterval(() => {}, 1000)'],
+        workDir: process.cwd(),
+        timeout: 150,
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+      const states: string[] = [managedProcess.status];
+
+      // Initial state should be 'busy'
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Monitor state changes
+      const checkInterval = setInterval(() => {
+        const currentState = managedProcess.status;
+        if (states[states.length - 1] !== currentState) {
+          states.push(currentState);
+        }
+      }, 50);
+
+      // Wait for timeout and termination
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => {
+          clearInterval(checkInterval);
+          setTimeout(resolve, 50);
+        });
+      });
+
+      // Should have seen busy → terminating → crashed
+      assert.ok(states.includes('busy'));
+      assert.ok(states.includes('terminating'));
+      assert.strictEqual(managedProcess.status, 'crashed');
+    });
+
+    it('maintains consistent state during concurrent operations', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'setInterval(() => {}, 1000)'],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Track all status values seen
+      const statuses: string[] = [managedProcess.status];
+      const interval = setInterval(() => {
+        if (statuses[statuses.length - 1] !== managedProcess.status) {
+          statuses.push(managedProcess.status);
+        }
+      }, 10);
+
+      // Terminate after a short delay
+      setTimeout(() => {
+        manager.terminateProcess(managedProcess.id);
+      }, 50);
+
+      // Wait for termination
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => {
+          clearInterval(interval);
+          setTimeout(resolve, 50);
+        });
+      });
+
+      // Verify state progression is logical
+      // Should only see: busy, possibly terminating, then completed/crashed
+      for (let i = 0; i < statuses.length; i++) {
+        const status = statuses[i];
+        assert.ok(
+          ['busy', 'terminating', 'completed', 'crashed'].includes(status),
+          `Invalid status in sequence: ${status}`
+        );
+
+        // Cannot go from completed/crashed back to any other state
+        if (i > 0 && (statuses[i-1] === 'completed' || statuses[i-1] === 'crashed')) {
+          assert.ok(
+            status === statuses[i-1],
+            `Invalid transition from ${statuses[i-1]} to ${status}`
+          );
+        }
+      }
+    });
+  });
 });

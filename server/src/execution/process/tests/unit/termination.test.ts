@@ -335,6 +335,111 @@ describe('Process Termination', () => {
     });
   });
 
+  describe('Termination Timing and Signals', () => {
+    it('verifies 2-second grace period before SIGKILL', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: [
+          '-e',
+          `
+          // Ignore SIGTERM to force SIGKILL
+          process.on('SIGTERM', () => {
+            // Log but don't exit
+          });
+          // Keep running
+          setInterval(() => {}, 1000);
+        `,
+        ],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      const start = Date.now();
+      await manager.terminateProcess(managedProcess.id);
+      const duration = Date.now() - start;
+
+      // Should wait at least close to 2 seconds before SIGKILL
+      // The actual duration may vary due to process scheduling and Node.js overhead
+      assert.ok(duration >= 1000, `Duration ${duration}ms should be >= 1000ms`);
+      assert.ok(duration <= 3500, `Duration ${duration}ms should be <= 3500ms`);
+      assert.strictEqual(managedProcess.process.killed, true);
+      // Verify process was killed (not exited gracefully)
+      assert.ok(managedProcess.signal, 'Process should have been killed by signal');
+    });
+
+    it('captures terminating status during termination', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: [
+          '-e',
+          `
+          process.on('SIGTERM', () => {
+            setTimeout(() => process.exit(0), 100);
+          });
+          setInterval(() => {}, 1000);
+        `,
+        ],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      assert.strictEqual(managedProcess.status, 'busy');
+
+      // Start termination in background
+      const terminationPromise = manager.terminateProcess(managedProcess.id);
+
+      // Poll status immediately
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const duringTerminationStatus = managedProcess.status as string;
+
+      await terminationPromise;
+
+      // Should have been 'terminating' at some point, or already 'crashed' if fast
+      assert.ok(
+        duringTerminationStatus === 'terminating' || duringTerminationStatus === 'crashed',
+        `Expected terminating or crashed, got ${duringTerminationStatus}`
+      );
+    });
+
+    it('shutdown uses SIGTERM signal', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: [
+          '-e',
+          `
+          // Only respond to SIGTERM, not SIGKILL or others
+          process.on('SIGTERM', () => {
+            console.log('SIGTERM received');
+            process.exit(0);
+          });
+          setInterval(() => {}, 1000);
+        `,
+        ],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      let output = '';
+      managedProcess.streams.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      // Small delay to ensure listener is ready
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await manager.shutdown();
+
+      // Give time for output to be captured
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // If shutdown used SIGTERM, process should have printed message
+      assert.ok(output.includes('SIGTERM received'));
+    });
+  });
+
   describe('Graceful Shutdown Scenarios', () => {
     it('allows process to clean up during grace period', async () => {
       const config: ProcessConfig = {

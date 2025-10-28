@@ -356,6 +356,185 @@ describe('Process I/O Communication', () => {
     });
   });
 
+  describe('I/O Edge Cases', () => {
+    it('handles empty sendInput', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'process.stdin.on("data", () => process.exit(0));'],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Send empty string
+      await manager.sendInput(managedProcess.id, '');
+
+      // Should not crash
+      assert.ok(managedProcess);
+
+      // Cleanup
+      managedProcess.process.kill();
+    });
+
+    it('handles large data chunks in onOutput', async () => {
+      const largeString = 'A'.repeat(10000);
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', `console.log('${largeString}'); setTimeout(() => {}, 100);`],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      let receivedData = '';
+      manager.onOutput(managedProcess.id, (data, type) => {
+        if (type === 'stdout') {
+          receivedData += data.toString();
+        }
+      });
+
+      // Wait for output
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      assert.ok(receivedData.includes(largeString));
+
+      // Cleanup
+      managedProcess.process.kill();
+    });
+
+    it('handles rapid successive sendInput calls', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: [
+          '-e',
+          `
+          const chunks = [];
+          process.stdin.on('data', (data) => {
+            chunks.push(data.toString());
+          });
+          setTimeout(() => {
+            const allData = chunks.join('');
+            const lines = allData.split('\\n').filter(l => l.length > 0);
+            console.log('Lines received: ' + lines.length);
+            process.exit(0);
+          }, 300);
+        `,
+        ],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      let output = '';
+      managedProcess.streams.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      // Send 10 inputs rapidly
+      const promises = [];
+      for (let i = 0; i < 10; i++) {
+        promises.push(manager.sendInput(managedProcess.id, `input${i}\n`));
+      }
+      await Promise.all(promises);
+
+      // Wait for process to complete
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => {
+          setTimeout(resolve, 50);
+        });
+      });
+
+      // Should have received all 10 inputs
+      assert.ok(output.includes('Lines received: 10'), `Expected 10 lines, got: ${output}`);
+    });
+
+    it('onOutput handles data immediately after spawn', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'console.log("immediate"); setTimeout(() => {}, 100);'],
+        workDir: process.cwd(),
+      };
+
+      let capturedOutput = false;
+      const managedProcess = await manager.acquireProcess(config);
+
+      // Register handler immediately after spawn
+      manager.onOutput(managedProcess.id, (data, type) => {
+        if (type === 'stdout' && data.toString().includes('immediate')) {
+          capturedOutput = true;
+        }
+      });
+
+      // Wait a bit
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      assert.strictEqual(capturedOutput, true);
+
+      // Cleanup
+      managedProcess.process.kill();
+    });
+
+    it('sendInput promise resolves after write completes', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: ['-e', 'process.stdin.on("data", () => {}); setTimeout(() => {}, 200);'],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      const startTime = Date.now();
+      await manager.sendInput(managedProcess.id, 'test data\n');
+      const duration = Date.now() - startTime;
+
+      // Should resolve quickly (not wait for process to read)
+      assert.ok(duration < 100, `sendInput took ${duration}ms, expected < 100ms`);
+
+      // Cleanup
+      managedProcess.process.kill();
+    });
+
+    it('handles binary data in I/O operations', async () => {
+      const config: ProcessConfig = {
+        executablePath: 'node',
+        args: [
+          '-e',
+          `
+          process.stdin.on('data', (data) => {
+            process.stdout.write(data);
+            process.exit(0);
+          });
+        `,
+        ],
+        workDir: process.cwd(),
+      };
+
+      const managedProcess = await manager.acquireProcess(config);
+
+      const binaryData = Buffer.from([0x01, 0x02, 0x03, 0x04, 0xff]);
+      let receivedData: Buffer[] = [];
+
+      manager.onOutput(managedProcess.id, (data, type) => {
+        if (type === 'stdout') {
+          receivedData.push(data);
+        }
+      });
+
+      await manager.sendInput(managedProcess.id, binaryData.toString('binary'));
+
+      // Wait for echo
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => {
+          setTimeout(resolve, 50);
+        });
+      });
+
+      assert.ok(receivedData.length > 0);
+      const totalLength = receivedData.reduce((sum, buf) => sum + buf.length, 0);
+      assert.ok(totalLength > 0);
+    });
+  });
+
   describe('Combined I/O Operations', () => {
     it('supports bidirectional communication', async () => {
       const config: ProcessConfig = {
