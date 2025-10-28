@@ -71,6 +71,7 @@ export function startServerWatcher(
   }
 
   // Start the CLI watcher with server-specific callbacks
+  // TODO: Migrate away from parsing messages and start a watcher directly instead of using the CLI watcher.
   const control = startCliWatcher({
     db,
     baseDir,
@@ -83,6 +84,8 @@ export function startServerWatcher(
       // Log format: "[watch] <event> <path>" or "[watch] Synced <type> <id> (<action>)"
       if (onFileChange) {
         // TODO: Use something more robust than regex parsing here.
+
+        // Match markdown sync log: "[watch] Synced issue ISSUE-001 (updated)"
         const syncMatch = message.match(
           /\[watch\] Synced (spec|issue) ([A-Z]+-\d+) \((created|updated)\)/
         );
@@ -93,6 +96,25 @@ export function startServerWatcher(
             event: "change",
             entityType: entityType as "spec" | "issue",
             entityId,
+          });
+          return; // Early return to avoid double-processing
+        }
+
+        // Match JSONL file change: "[watch] change issues.jsonl" or "[watch] change specs.jsonl"
+        const jsonlChangeMatch = message.match(
+          /\[watch\] change (issues|specs)\.jsonl/
+        );
+        if (jsonlChangeMatch) {
+          const [, entityType] = jsonlChangeMatch;
+          // For JSONL changes, we don't know which specific entity changed
+          // so we broadcast a generic update that will trigger a refetch
+          onFileChange({
+            filePath: `${entityType}.jsonl`,
+            event: "change",
+            entityType: (entityType === "issues" ? "issue" : "spec") as
+              | "spec"
+              | "issue",
+            entityId: "*", // Wildcard to indicate "any entity of this type"
           });
         }
       }

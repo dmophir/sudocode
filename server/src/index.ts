@@ -78,14 +78,26 @@ if (WATCH_ENABLED) {
 
         // Broadcast WebSocket updates for issue and spec changes
         if (info.entityType === "issue" && info.entityId) {
-          const issue = getIssueById(db, info.entityId);
-          if (issue) {
-            broadcastIssueUpdate(info.entityId, "updated", issue);
+          if (info.entityId === "*") {
+            // Wildcard update (JSONL file changed) - broadcast to all issue subscribers
+            broadcastIssueUpdate("*", "updated", null);
+          } else {
+            // Specific issue update - fetch and broadcast the specific issue
+            const issue = getIssueById(db, info.entityId);
+            if (issue) {
+              broadcastIssueUpdate(info.entityId, "updated", issue);
+            }
           }
         } else if (info.entityType === "spec" && info.entityId) {
-          const spec = getSpecById(db, info.entityId);
-          if (spec) {
-            broadcastSpecUpdate(info.entityId, "updated", spec);
+          if (info.entityId === "*") {
+            // Wildcard update (JSONL file changed) - broadcast to all spec subscribers
+            broadcastSpecUpdate("*", "updated", null);
+          } else {
+            // Specific spec update - fetch and broadcast the specific spec
+            const spec = getSpecById(db, info.entityId);
+            if (spec) {
+              broadcastSpecUpdate(info.entityId, "updated", spec);
+            }
           }
         }
       },
