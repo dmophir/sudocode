@@ -91,42 +91,20 @@ describe('SimpleProcessManager', () => {
 
     // acquireProcess is now implemented - tested in spawning.test.ts
 
-    it('releaseProcess throws not implemented', async () => {
-      await assert.rejects(
-        manager.releaseProcess('test-id'),
-        /Not implemented/
-      );
-    });
-
-    it('terminateProcess throws not implemented', async () => {
-      await assert.rejects(
-        manager.terminateProcess('test-id'),
-        /Not implemented/
-      );
-    });
+    // releaseProcess, terminateProcess, and shutdown are now implemented
+    // and tested in termination.test.ts
 
     // sendInput, onOutput, and onError are now implemented
     // and tested in io.test.ts
 
     // getProcess, getActiveProcesses, and getMetrics are now implemented
     // and tested in spawning.test.ts
-
-    it('shutdown throws not implemented', async () => {
-      await assert.rejects(
-        manager.shutdown(),
-        /Not implemented/
-      );
-    });
   });
 
   describe('method signatures', () => {
     // acquireProcess signature testing is in spawning.test.ts
 
-    it('terminateProcess accepts optional signal parameter', async () => {
-      await assert.rejects(manager.terminateProcess('test-id'));
-      await assert.rejects(manager.terminateProcess('test-id', 'SIGTERM'));
-      await assert.rejects(manager.terminateProcess('test-id', 'SIGKILL'));
-    });
+    // terminateProcess signature testing is in termination.test.ts
 
     it('onOutput accepts OutputHandler', () => {
       const handler = (data: Buffer, type: 'stdout' | 'stderr') => {

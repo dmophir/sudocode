@@ -245,17 +245,37 @@ export class SimpleProcessManager implements IProcessManager {
     });
   }
 
-  async releaseProcess(_processId: string): Promise<void> {
-    void this._activeProcesses;
-    throw new Error('Not implemented');
+  async releaseProcess(processId: string): Promise<void> {
+    await this.terminateProcess(processId);
   }
 
   async terminateProcess(
-    _processId: string,
-    _signal?: NodeJS.Signals
+    processId: string,
+    signal: NodeJS.Signals = 'SIGTERM'
   ): Promise<void> {
-    void this._activeProcesses;
-    throw new Error('Not implemented');
+    const managed = this._activeProcesses.get(processId);
+    if (!managed) {
+      return; // Process not found, nothing to terminate
+    }
+
+    // If already terminated, do nothing (idempotent)
+    if (managed.exitCode !== null || managed.process.killed) {
+      return;
+    }
+
+    // Update status to terminating
+    managed.status = 'terminating';
+
+    // Try graceful shutdown first
+    managed.process.kill(signal);
+
+    // Wait for graceful shutdown (2 seconds)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Force kill if still running
+    if (!managed.process.killed && managed.exitCode === null) {
+      managed.process.kill('SIGKILL');
+    }
   }
 
   async sendInput(processId: string, input: string): Promise<void> {
@@ -312,7 +332,9 @@ export class SimpleProcessManager implements IProcessManager {
   }
 
   async shutdown(): Promise<void> {
-    void this._activeProcesses;
-    throw new Error('Not implemented');
+    const processIds = Array.from(this._activeProcesses.keys());
+    await Promise.all(
+      processIds.map((id) => this.terminateProcess(id, 'SIGTERM'))
+    );
   }
 }
