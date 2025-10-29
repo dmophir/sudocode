@@ -2,6 +2,8 @@ import { WebSocketServer, WebSocket, RawData } from "ws";
 import * as http from "http";
 import { randomUUID } from "crypto";
 
+const LOG_CONNECTIONS = false;
+
 /**
  * WebSocket client information
  */
@@ -86,9 +88,11 @@ class WebSocketManager {
     };
 
     this.clients.set(clientId, client);
-    console.log(
-      `[websocket] Client connected: ${clientId} (total: ${this.clients.size})`
-    );
+    if (LOG_CONNECTIONS) {
+      console.log(
+        `[websocket] Client connected: ${clientId} (total: ${this.clients.size})`
+      );
+    }
 
     // Set up event handlers
     ws.on("message", (data: RawData) => this.handleMessage(clientId, data));
@@ -109,9 +113,11 @@ class WebSocketManager {
   private handleDisconnection(clientId: string): void {
     const client = this.clients.get(clientId);
     if (client) {
-      console.log(
-        `[websocket] Client disconnected: ${clientId} (subscriptions: ${client.subscriptions.size})`
-      );
+      if (LOG_CONNECTIONS) {
+        console.log(
+          `[websocket] Client disconnected: ${clientId} (subscriptions: ${client.subscriptions.size})`
+        );
+      }
       this.clients.delete(clientId);
     }
   }
@@ -205,9 +211,11 @@ class WebSocketManager {
     }
 
     client.subscriptions.add(subscription);
-    console.log(
-      `[websocket] Client ${clientId} subscribed to: ${subscription}`
-    );
+    if (LOG_CONNECTIONS) {
+      console.log(
+        `[websocket] Client ${clientId} subscribed to: ${subscription}`
+      );
+    }
 
     this.sendToClient(clientId, {
       type: "subscribed",
@@ -242,9 +250,11 @@ class WebSocketManager {
     }
 
     client.subscriptions.delete(subscription);
-    console.log(
-      `[websocket] Client ${clientId} unsubscribed from: ${subscription}`
-    );
+    if (LOG_CONNECTIONS) {
+      console.log(
+        `[websocket] Client ${clientId} unsubscribed from: ${subscription}`
+      );
+    }
 
     this.sendToClient(clientId, {
       type: "unsubscribed",
