@@ -80,6 +80,33 @@ const TabHandler = Extension.create({
   },
 })
 
+// Custom extension to add line numbers to block elements
+const LineNumbers = Extension.create({
+  name: 'lineNumbers',
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['heading', 'paragraph', 'codeBlock', 'blockquote', 'orderedList', 'bulletList'],
+        attributes: {
+          lineNumber: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('data-line-number'),
+            renderHTML: (attributes) => {
+              if (!attributes.lineNumber) {
+                return {}
+              }
+              return {
+                'data-line-number': attributes.lineNumber,
+              }
+            },
+          },
+        },
+      },
+    ]
+  },
+})
+
 interface TiptapEditorProps {
   content: string
   editable?: boolean
@@ -90,6 +117,9 @@ interface TiptapEditorProps {
   showToolbar?: boolean
   feedback?: IssueFeedback[]
   onFeedbackClick?: (feedbackId: string) => void
+  showLineNumbers?: boolean
+  selectedLine?: number | null
+  onLineClick?: (lineNumber: number) => void
 }
 
 /**
@@ -113,6 +143,9 @@ export function TiptapEditor({
   showToolbar = false,
   feedback: _feedback = [], // Reserved for future use
   onFeedbackClick,
+  showLineNumbers = false,
+  selectedLine,
+  onLineClick,
 }: TiptapEditorProps) {
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -175,6 +208,7 @@ export function TiptapEditor({
       }),
       ListKit,
       TabHandler,
+      LineNumbers,
       EntityMention,
       FeedbackMark,
     ],
@@ -320,6 +354,156 @@ export function TiptapEditor({
       editorElement.removeEventListener('click', handleClick)
     }
   }, [editor, onFeedbackClick])
+
+  // Calculate and set line numbers based on markdown source
+  useEffect(() => {
+    if (!editor || !showLineNumbers || !content) return
+
+    const applyLineNumbers = () => {
+      const lines = content.split('\n')
+
+      // Parse markdown to identify block start lines
+      let inCodeBlock = false
+      let inList = false
+      const blockLineNumbers: number[] = []
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const trimmedLine = line.trim()
+
+        // Track code blocks
+        if (trimmedLine.startsWith('```')) {
+          inCodeBlock = !inCodeBlock
+          if (!inCodeBlock) {
+            inList = false
+            continue
+          } else {
+            blockLineNumbers.push(i + 1)
+            inList = false
+            continue
+          }
+        }
+
+        if (inCodeBlock) {
+          continue
+        }
+
+        // Skip empty lines
+        if (!trimmedLine) {
+          inList = false
+          continue
+        }
+
+        // Check if this is a block-level element
+        const isHeading = /^#{1,6}\s/.test(trimmedLine)
+        const isBulletList = /^[-*+]\s/.test(trimmedLine)
+        const isOrderedList = /^\d+\.\s/.test(trimmedLine)
+        const isBlockquote = trimmedLine.startsWith('>')
+        const isHorizontalRule = /^[-*_]{3,}$/.test(trimmedLine)
+
+        // For lists, only count the first item
+        if (isBulletList || isOrderedList) {
+          if (!inList) {
+            blockLineNumbers.push(i + 1)
+            inList = true
+          }
+          // Skip subsequent list items
+          continue
+        }
+
+        // Non-list items end the list
+        inList = false
+
+        if (isHeading || isBlockquote || isHorizontalRule ||
+            (i === 0 || !lines[i - 1].trim())) {
+          blockLineNumbers.push(i + 1)
+        }
+      }
+
+      // Apply line numbers to nodes using Tiptap transactions
+      const { state } = editor
+      const { tr } = state
+      let nodeIndex = 0
+
+      // Iterate through top-level blocks using descendants with depth check
+      state.doc.descendants((node, pos, parent) => {
+        // Only process direct children of the document (depth 0 means doc, depth 1 means top-level blocks)
+        if (parent === state.doc && node.isBlock) {
+          const lineNumber = blockLineNumbers[nodeIndex] || (nodeIndex + 1)
+
+          tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            lineNumber: String(lineNumber),
+          })
+
+          nodeIndex++
+          // Don't descend into children of this block
+          return false
+        }
+        // Continue descending for non-block nodes
+        return true
+      })
+
+      if (tr.docChanged) {
+        editor.view.dispatch(tr)
+      }
+    }
+
+    // Use setTimeout to ensure the editor has finished rendering
+    const timeoutId = setTimeout(() => {
+      applyLineNumbers()
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+    }
+  }, [editor, showLineNumbers, content])
+
+  // Handle line number clicks
+  useEffect(() => {
+    if (!editor || !showLineNumbers) return
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+
+      // Check if clicking on the line number pseudo-element area
+      const blockElement = target.closest('.ProseMirror > *') as HTMLElement
+      if (!blockElement) return
+
+      // Get the line number from the data attribute
+      const lineNumber = parseInt(blockElement.getAttribute('data-line-number') || '0')
+
+      if (lineNumber > 0 && onLineClick) {
+        onLineClick(lineNumber)
+      }
+    }
+
+    const editorElement = editor.view.dom
+    editorElement.addEventListener('click', handleClick)
+
+    return () => {
+      editorElement.removeEventListener('click', handleClick)
+    }
+  }, [editor, showLineNumbers, onLineClick])
+
+  // Update selected line styling based on markdown line numbers
+  useEffect(() => {
+    if (!editor || !showLineNumbers) return
+
+    // Remove previous selection
+    const allBlocks = editor.view.dom.querySelectorAll('.ProseMirror > *')
+    allBlocks.forEach((block) => block.classList.remove('selected-line'))
+
+    // Add selection to current line by matching the line number
+    if (selectedLine && selectedLine > 0) {
+      allBlocks.forEach((block) => {
+        const blockLine = parseInt((block as HTMLElement).getAttribute('data-line-number') || '0')
+        if (blockLine === selectedLine) {
+          block.classList.add('selected-line')
+        }
+      })
+    }
+  }, [editor, showLineNumbers, selectedLine])
 
   const handleSave = () => {
     if (!editor || !onSave) return
@@ -622,7 +806,7 @@ export function TiptapEditor({
       )}
 
       {/* Editor content */}
-      <div className="p-6">
+      <div className={`p-6 ${showLineNumbers ? 'tiptap-with-line-numbers' : ''}`}>
         <EditorContent
           editor={editor}
           className="tiptap-editor prose prose-sm dark:prose-invert max-w-none"

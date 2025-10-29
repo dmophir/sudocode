@@ -170,4 +170,201 @@ describe('TiptapEditor', () => {
     // onChange should NOT be called for any of these external updates
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  describe('Line Numbers', () => {
+    it('should display line numbers matching markdown source lines', async () => {
+      // Markdown with known line numbers
+      const markdown = `# Heading on Line 1
+
+Paragraph on line 3
+
+## Subheading on Line 5
+
+- List item 1
+- List item 2
+- List item 3
+
+Another paragraph on line 11
+
+\`\`\`javascript
+const code = "on line 13"
+\`\`\`
+
+Final paragraph on line 17`
+
+      render(
+        <TiptapEditor
+          content={markdown}
+          editable={true}
+          showLineNumbers={true}
+        />
+      )
+
+      // Wait for content to render
+      await waitFor(() => {
+        expect(screen.getByText('Heading on Line 1')).toBeInTheDocument()
+      })
+
+      // Wait for line numbers to be applied
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      // Query all blocks with line numbers
+      const proseMirror = document.querySelector('.ProseMirror')
+      expect(proseMirror).toBeTruthy()
+
+      const blocks = proseMirror!.querySelectorAll(':scope > *')
+
+      // Verify we have the expected number of blocks
+      // 1: heading, 2: paragraph, 3: subheading, 4: bulletList (not 3 items!), 5: paragraph, 6: codeBlock, 7: paragraph
+      expect(blocks.length).toBe(7)
+
+      // Check each block's line number
+      const block1 = blocks[0] as HTMLElement
+      expect(block1.getAttribute('data-line-number')).toBe('1')
+      expect(block1.tagName.toLowerCase()).toBe('h1')
+
+      const block2 = blocks[1] as HTMLElement
+      expect(block2.getAttribute('data-line-number')).toBe('3')
+      expect(block2.tagName.toLowerCase()).toBe('p')
+
+      const block3 = blocks[2] as HTMLElement
+      expect(block3.getAttribute('data-line-number')).toBe('5')
+      expect(block3.tagName.toLowerCase()).toBe('h2')
+
+      const block4 = blocks[3] as HTMLElement
+      expect(block4.getAttribute('data-line-number')).toBe('7') // First list item line
+      expect(block4.tagName.toLowerCase()).toBe('ul')
+
+      const block5 = blocks[4] as HTMLElement
+      expect(block5.getAttribute('data-line-number')).toBe('11')
+      expect(block5.tagName.toLowerCase()).toBe('p')
+
+      const block6 = blocks[5] as HTMLElement
+      expect(block6.getAttribute('data-line-number')).toBe('13')
+      expect(block6.tagName.toLowerCase()).toBe('pre') // code block
+
+      const block7 = blocks[6] as HTMLElement
+      expect(block7.getAttribute('data-line-number')).toBe('17')
+      expect(block7.tagName.toLowerCase()).toBe('p')
+    })
+
+    it('should handle ordered lists with correct line numbers', async () => {
+      const markdown = `# Title
+
+1. First item
+2. Second item
+3. Third item
+
+Next paragraph`
+
+      render(
+        <TiptapEditor
+          content={markdown}
+          editable={true}
+          showLineNumbers={true}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Title')).toBeInTheDocument()
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const proseMirror = document.querySelector('.ProseMirror')
+      const blocks = proseMirror!.querySelectorAll(':scope > *')
+
+      // Should have: heading, orderedList (single block), paragraph
+      expect(blocks.length).toBe(3)
+
+      const heading = blocks[0] as HTMLElement
+      expect(heading.getAttribute('data-line-number')).toBe('1')
+
+      const list = blocks[1] as HTMLElement
+      expect(list.getAttribute('data-line-number')).toBe('3') // Line of first item
+      expect(list.tagName.toLowerCase()).toBe('ol')
+
+      const paragraph = blocks[2] as HTMLElement
+      expect(paragraph.getAttribute('data-line-number')).toBe('7')
+    })
+
+    it('should handle multiple consecutive paragraphs', async () => {
+      const markdown = `Line 1 paragraph
+
+Line 3 paragraph
+
+Line 5 paragraph`
+
+      render(
+        <TiptapEditor
+          content={markdown}
+          editable={true}
+          showLineNumbers={true}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Line 1 paragraph')).toBeInTheDocument()
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const proseMirror = document.querySelector('.ProseMirror')
+      const blocks = proseMirror!.querySelectorAll(':scope > *')
+
+      expect(blocks.length).toBe(3)
+
+      expect((blocks[0] as HTMLElement).getAttribute('data-line-number')).toBe('1')
+      expect((blocks[1] as HTMLElement).getAttribute('data-line-number')).toBe('3')
+      expect((blocks[2] as HTMLElement).getAttribute('data-line-number')).toBe('5')
+    })
+
+    it('should handle mixed content with accurate line mapping', async () => {
+      const markdown = `# Header 1
+
+Content paragraph
+
+## Header 2
+
+- Bullet 1
+- Bullet 2
+
+\`\`\`js
+code block
+\`\`\`
+
+1. Ordered 1
+2. Ordered 2
+
+Final text`
+
+      render(
+        <TiptapEditor
+          content={markdown}
+          editable={true}
+          showLineNumbers={true}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Header 1')).toBeInTheDocument()
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const proseMirror = document.querySelector('.ProseMirror')
+      const blocks = proseMirror!.querySelectorAll(':scope > *')
+
+      // h1(1), p(3), h2(5), ul(7), codeBlock(10), ol(14), p(17)
+      expect(blocks.length).toBe(7)
+
+      expect((blocks[0] as HTMLElement).getAttribute('data-line-number')).toBe('1')
+      expect((blocks[1] as HTMLElement).getAttribute('data-line-number')).toBe('3')
+      expect((blocks[2] as HTMLElement).getAttribute('data-line-number')).toBe('5')
+      expect((blocks[3] as HTMLElement).getAttribute('data-line-number')).toBe('7')
+      expect((blocks[4] as HTMLElement).getAttribute('data-line-number')).toBe('10')
+      expect((blocks[5] as HTMLElement).getAttribute('data-line-number')).toBe('14')
+      expect((blocks[6] as HTMLElement).getAttribute('data-line-number')).toBe('17')
+    })
+  })
 })
