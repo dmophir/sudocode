@@ -171,10 +171,11 @@ export class SimpleProcessManager implements IProcessManager {
     // Set up timeout if configured
     if (config.timeout) {
       timeoutHandle = setTimeout(() => {
-        // Terminate process on timeout
+        // Terminate process on timeout using graceful termination
         if (managedProcess.status === 'busy') {
-          managedProcess.status = 'terminating';
-          childProcess.kill('SIGTERM');
+          this.terminateProcess(id).catch(() => {
+            // Ignore errors during timeout termination
+          });
         }
       }, config.timeout);
     }

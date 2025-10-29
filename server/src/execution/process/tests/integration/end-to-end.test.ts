@@ -13,11 +13,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync } from 'node:fs';
 
-describe.skip('End-to-End Process Execution', () => {
-  // TODO: These integration tests are currently disabled due to:
-  // 1. Test runner hanging after completion (5s cleanup delay in SimpleProcessManager)
-  // 2. Working directory verification test failing with timing/output capture issues
-  // Re-enable after addressing these issues
+describe('End-to-End Process Execution', () => {
+  // Integration tests for process lifecycle management
 
   let manager: SimpleProcessManager;
   let tempDir: string;

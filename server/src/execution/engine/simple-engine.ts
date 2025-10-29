@@ -20,6 +20,8 @@ import type {
   TaskResolver,
 } from './types.js';
 import type { IProcessManager } from '../process/manager.js';
+import { buildClaudeConfig } from '../process/builders/claude.js';
+import type { ManagedProcess } from '../process/types.js';
 
 /**
  * SimpleExecutionEngine - Queue-based task execution with concurrency control
@@ -59,9 +61,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
    * @param config - Engine configuration options
    */
   constructor(
-    // @ts-expect-error - processManager will be used in ISSUE-053 (task execution)
     private _processManager: IProcessManager,
-    // @ts-expect-error - config will be used in future implementations
     private _config: EngineConfig = {}
   ) {
     // Initialize metrics
@@ -212,14 +212,166 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   /**
    * Execute a task
    *
-   * Stub for now - will implement in ISSUE-053
+   * Acquires a process, sends the prompt, collects output, and builds the result.
    *
    * @param task - Task to execute
    * @private
    */
-  private async executeTask(_task: ExecutionTask): Promise<void> {
-    // TODO: Implement in ISSUE-053
-    throw new Error('executeTask not yet implemented');
+  private async executeTask(task: ExecutionTask): Promise<void> {
+    const startTime = new Date();
+    let managedProcess: ManagedProcess | null = null;
+    let output = '';
+    let errorOutput = '';
+
+    try {
+      // Build process configuration
+      const processConfig = buildClaudeConfig({
+        claudePath: this._config.claudePath,
+        workDir: task.workDir,
+        print: true,
+        outputFormat: 'stream-json',
+        dangerouslySkipPermissions: true,
+        env: task.config.env,
+        timeout: task.config.timeout,
+      });
+
+      // Acquire process from manager
+      managedProcess = await this._processManager.acquireProcess(processConfig);
+
+      // Update running task with process reference
+      const runningTask = this.runningTasks.get(task.id);
+      if (runningTask) {
+        runningTask.process = managedProcess;
+      }
+
+      // Set up output collection
+      this._processManager.onOutput(managedProcess.id, (data, type) => {
+        if (type === 'stdout') {
+          output += data.toString();
+        } else {
+          errorOutput += data.toString();
+        }
+      });
+
+      // Set up error handler
+      this._processManager.onError(managedProcess.id, (error) => {
+        errorOutput += `Process error: ${error.message}\n`;
+      });
+
+      // Send the prompt to the process
+      await this._processManager.sendInput(managedProcess.id, task.prompt);
+
+      // Wait for process to complete
+      await this.waitForProcessExit(managedProcess, task.config.timeout);
+
+      // Build execution result
+      const endTime = new Date();
+      const result: ExecutionResult = {
+        taskId: task.id,
+        executionId: managedProcess.id,
+        success: managedProcess.exitCode === 0,
+        exitCode: managedProcess.exitCode ?? -1,
+        output,
+        error: errorOutput || undefined,
+        startedAt: startTime,
+        completedAt: endTime,
+        duration: endTime.getTime() - startTime.getTime(),
+        metadata: this.parseMetadata(output),
+      };
+
+      // Store result
+      this.completedResults.set(task.id, result);
+
+      // Update metrics
+      this.metrics.completedTasks++;
+
+      // Resolve promise for waiters
+      const resolver = this.taskResolvers.get(task.id);
+      if (resolver) {
+        resolver.resolve(result);
+        this.taskResolvers.delete(task.id);
+      }
+
+      // Emit completion event
+      for (const handler of this.completeHandlers) {
+        handler(result);
+      }
+
+      // Release capacity
+      this.trackTaskComplete(task.id);
+    } catch (error) {
+      // Handle execution failure
+      this.handleTaskFailure(task.id, error as Error);
+    } finally {
+      // Clean up process
+      if (managedProcess) {
+        try {
+          await this._processManager.releaseProcess(managedProcess.id);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    }
+  }
+
+  /**
+   * Wait for a process to exit
+   *
+   * @param process - The managed process to wait for
+   * @param timeoutMs - Optional timeout in milliseconds
+   * @private
+   */
+  private async waitForProcessExit(
+    process: ManagedProcess,
+    timeoutMs?: number
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      // Check if already exited
+      if (process.exitCode !== null) {
+        resolve();
+        return;
+      }
+
+      // Set up exit listener
+      const checkInterval = setInterval(() => {
+        if (process.exitCode !== null) {
+          clearInterval(checkInterval);
+          if (process.status === 'crashed') {
+            reject(new Error(`Process crashed with exit code ${process.exitCode}`));
+          } else {
+            resolve();
+          }
+        }
+      }, 10); // Poll every 10ms for responsive detection
+
+      // Set timeout if configured
+      if (timeoutMs) {
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          reject(new Error('Process execution timeout'));
+        }, timeoutMs);
+      }
+    });
+  }
+
+  /**
+   * Parse metadata from stream-json output
+   *
+   * Extracts tools used, files changed, tokens, etc. from the output.
+   *
+   * @param output - Raw output from Claude Code
+   * @returns Parsed metadata
+   * @private
+   */
+  private parseMetadata(_output: string): ExecutionResult['metadata'] {
+    // Stub for now - will enhance in future issues
+    // TODO: Parse stream-json output for metadata
+    return {
+      toolsUsed: [],
+      filesChanged: [],
+      tokensUsed: 0,
+      cost: 0,
+    };
   }
 
   /**
