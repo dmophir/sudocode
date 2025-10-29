@@ -274,8 +274,10 @@ describe('Process I/O Communication', () => {
 
       manager.onOutput(managedProcess.id, (data, type) => {
         if (type === 'stdout') {
-          const line = data.toString().trim();
-          if (line) lines.push(line);
+          // Split by newlines to handle buffered chunks correctly
+          const output = data.toString();
+          const newLines = output.split('\n').filter((line) => line.trim());
+          lines.push(...newLines);
         }
       });
 

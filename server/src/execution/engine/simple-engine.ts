@@ -141,6 +141,9 @@ export class SimpleExecutionEngine implements IExecutionEngine {
         break; // Stop processing to avoid infinite loop
       }
 
+      // Track task as running and update capacity
+      this.trackTaskStart(task);
+
       // Start execution (will implement in ISSUE-053)
       this.executeTask(task).catch((error) => {
         this.handleTaskFailure(task.id, error);
@@ -168,6 +171,45 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   }
 
   /**
+   * Track task as running and update capacity metrics
+   *
+   * @param task - Task to start tracking
+   * @private
+   */
+  private trackTaskStart(task: ExecutionTask): void {
+    // Add to running tasks
+    const runningTask: RunningTask = {
+      task,
+      process: null as any, // Will be set in ISSUE-053 when we spawn process
+      startedAt: new Date(),
+      attempt: 1,
+    };
+    this.runningTasks.set(task.id, runningTask);
+
+    // Update metrics
+    this.metrics.currentlyRunning = this.runningTasks.size;
+    this.metrics.availableSlots = this.metrics.maxConcurrent - this.runningTasks.size;
+  }
+
+  /**
+   * Track task completion and release capacity
+   *
+   * @param taskId - ID of completed task
+   * @private
+   */
+  private trackTaskComplete(taskId: string): void {
+    // Remove from running tasks
+    this.runningTasks.delete(taskId);
+
+    // Update metrics
+    this.metrics.currentlyRunning = this.runningTasks.size;
+    this.metrics.availableSlots = this.metrics.maxConcurrent - this.runningTasks.size;
+
+    // Try to process more tasks now that capacity is available
+    this.processQueue();
+  }
+
+  /**
    * Execute a task
    *
    * Stub for now - will implement in ISSUE-053
@@ -192,6 +234,9 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   private handleTaskFailure(_taskId: string, _error: Error): void {
     // TODO: Implement in ISSUE-055
     this.metrics.failedTasks++;
+
+    // Release capacity
+    this.trackTaskComplete(_taskId);
 
     // Resolve promise with error
     const resolver = this.taskResolvers.get(_taskId);
