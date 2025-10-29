@@ -472,13 +472,13 @@ describe('Process Lifecycle Events', () => {
       // Initial state should be 'busy'
       assert.strictEqual(managedProcess.status, 'busy');
 
-      // Monitor state changes
+      // Monitor state changes (poll very frequently to catch quick transitions)
       const checkInterval = setInterval(() => {
         const currentState = managedProcess.status;
         if (states[states.length - 1] !== currentState) {
           states.push(currentState);
         }
-      }, 50);
+      }, 1);
 
       // Wait for timeout and termination
       await new Promise<void>((resolve) => {

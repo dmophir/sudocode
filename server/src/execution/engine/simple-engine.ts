@@ -44,8 +44,8 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   // Completed task results
   private completedResults = new Map<string, ExecutionResult>();
 
-  // Promise resolvers for waiting
-  private taskResolvers = new Map<string, TaskResolver>();
+  // Promise resolvers for waiting (supports multiple waiters per task)
+  private taskResolvers = new Map<string, TaskResolver[]>();
 
   // Engine metrics
   private metrics: EngineMetrics;
@@ -339,10 +339,10 @@ export class SimpleExecutionEngine implements IExecutionEngine {
       // Update metrics
       this.metrics.completedTasks++;
 
-      // Resolve promise for waiters
-      const resolver = this.taskResolvers.get(task.id);
-      if (resolver) {
-        resolver.resolve(result);
+      // Resolve promises for all waiters
+      const resolvers = this.taskResolvers.get(task.id);
+      if (resolvers) {
+        resolvers.forEach((resolver) => resolver.resolve(result));
         this.taskResolvers.delete(task.id);
       }
 
@@ -502,10 +502,10 @@ export class SimpleExecutionEngine implements IExecutionEngine {
     // Release capacity
     this.trackTaskComplete(_taskId);
 
-    // Resolve promise with error
-    const resolver = this.taskResolvers.get(_taskId);
-    if (resolver) {
-      resolver.reject(_error);
+    // Reject promises for all waiters
+    const resolvers = this.taskResolvers.get(_taskId);
+    if (resolvers) {
+      resolvers.forEach((resolver) => resolver.reject(_error));
       this.taskResolvers.delete(_taskId);
     }
 
@@ -518,11 +518,47 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   /**
    * Cancel a queued or running task
    *
-   * Stub for now - will implement in ISSUE-059
+   * Removes task from queue if still queued, or terminates process if running.
+   * Idempotent - safe to call multiple times or for non-existent tasks.
+   *
+   * @param taskId - ID of task to cancel
    */
-  async cancelTask(_taskId: string): Promise<void> {
-    // TODO: Implement in ISSUE-059
-    throw new Error('cancelTask not yet implemented');
+  async cancelTask(taskId: string): Promise<void> {
+    // Check if task is in queue
+    const queueIndex = this.taskQueue.findIndex((t) => t.id === taskId);
+    if (queueIndex >= 0) {
+      // Remove from queue
+      this.taskQueue.splice(queueIndex, 1);
+      this.metrics.queuedTasks--;
+      return; // Task cancelled before execution
+    }
+
+    // Check if task is currently running
+    const runningTask = this.runningTasks.get(taskId);
+    if (runningTask) {
+      // Terminate the running process
+      try {
+        await this._processManager.terminateProcess(runningTask.process.id);
+      } catch (error) {
+        // Ignore termination errors - process may already be dead
+      }
+
+      // Clean up running task tracking
+      this.runningTasks.delete(taskId);
+
+      // Update metrics
+      this.metrics.currentlyRunning = this.runningTasks.size;
+      this.metrics.availableSlots =
+        this.metrics.maxConcurrent - this.runningTasks.size;
+
+      // Process queue to start next task
+      this.processQueue();
+
+      return; // Task cancelled during execution
+    }
+
+    // Task not found in queue or running - either completed or never existed
+    // This is idempotent, so we just return without error
   }
 
   /**
@@ -560,27 +596,34 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   /**
    * Wait for a task to complete
    *
-   * Stub for now - will implement in ISSUE-060
+   * Returns a promise that resolves with the task result when complete.
+   * Supports multiple concurrent waiters for the same task.
+   *
+   * @param taskId - ID of the task to wait for
+   * @returns Promise resolving to the execution result
    */
   async waitForTask(taskId: string): Promise<ExecutionResult> {
-    // TODO: Implement in ISSUE-060
     // Check if already completed
     const existing = this.completedResults.get(taskId);
     if (existing) return existing;
 
-    // Wait for completion
+    // Wait for completion - support multiple concurrent waiters
     return new Promise((resolve, reject) => {
-      this.taskResolvers.set(taskId, { resolve, reject });
+      const resolvers = this.taskResolvers.get(taskId) || [];
+      resolvers.push({ resolve, reject });
+      this.taskResolvers.set(taskId, resolvers);
     });
   }
 
   /**
    * Wait for multiple tasks to complete
    *
-   * Stub for now - will implement in ISSUE-060
+   * Returns a promise that resolves when all tasks complete.
+   *
+   * @param taskIds - Array of task IDs to wait for
+   * @returns Promise resolving to array of execution results
    */
   async waitForTasks(taskIds: string[]): Promise<ExecutionResult[]> {
-    // TODO: Implement in ISSUE-060
     return Promise.all(taskIds.map((id) => this.waitForTask(id)));
   }
 
@@ -613,10 +656,30 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   /**
    * Gracefully shutdown the engine
    *
-   * Stub for now - will implement in ISSUE-061
+   * Cancels all running tasks, clears the queue, and shuts down the process manager.
+   * Idempotent - safe to call multiple times.
    */
   async shutdown(): Promise<void> {
-    // TODO: Implement in ISSUE-061
-    throw new Error('shutdown not yet implemented');
+    // Clear the task queue (prevent new tasks from starting)
+    this.taskQueue = [];
+    this.metrics.queuedTasks = 0;
+
+    // Cancel all running tasks
+    const runningTaskIds = Array.from(this.runningTasks.keys());
+    await Promise.all(runningTaskIds.map((id) => this.cancelTask(id)));
+
+    // Shutdown the process manager
+    await this._processManager.shutdown();
+
+    // Clear all internal state
+    this.runningTasks.clear();
+    this.completedResults.clear();
+    this.taskResolvers.clear();
+    this.completeHandlers = [];
+    this.failedHandlers = [];
+
+    // Reset metrics
+    this.metrics.currentlyRunning = 0;
+    this.metrics.availableSlots = this.metrics.maxConcurrent;
   }
 }
