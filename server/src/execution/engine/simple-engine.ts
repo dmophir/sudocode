@@ -125,26 +125,44 @@ export class SimpleExecutionEngine implements IExecutionEngine {
    * @private
    */
   private processQueue(): void {
+    // Track if we've made any progress in this pass
+    let tasksProcessed = 0;
+    const initialQueueSize = this.taskQueue.length;
+
     // Check if we have capacity and tasks to process
     while (
       this.taskQueue.length > 0 &&
-      this.runningTasks.size < this.metrics.maxConcurrent
+      this.runningTasks.size < this.metrics.maxConcurrent &&
+      tasksProcessed < initialQueueSize // Prevent infinite loop
     ) {
       const task = this.taskQueue.shift()!;
       this.metrics.queuedTasks--;
+      tasksProcessed++;
 
-      // Check dependencies (will implement in ISSUE-054)
+      // Check if any dependency has failed
+      if (this.hasFailedDependency(task)) {
+        // Fail this task immediately - don't wait for failed dependencies
+        this.handleTaskFailure(
+          task.id,
+          new Error(
+            `Task ${task.id} failed: one or more dependencies failed`
+          )
+        );
+        continue; // Process next task
+      }
+
+      // Check if all dependencies are met
       if (!this.areDependenciesMet(task)) {
-        // Re-queue at end
+        // Re-queue at end - dependencies not yet completed
         this.taskQueue.push(task);
         this.metrics.queuedTasks++;
-        break; // Stop processing to avoid infinite loop
+        continue; // Try next task in queue
       }
 
       // Track task as running and update capacity
       this.trackTaskStart(task);
 
-      // Start execution (will implement in ISSUE-053)
+      // Start execution
       this.executeTask(task).catch((error) => {
         this.handleTaskFailure(task.id, error);
       });
@@ -159,15 +177,48 @@ export class SimpleExecutionEngine implements IExecutionEngine {
    * @private
    */
   private areDependenciesMet(task: ExecutionTask): boolean {
-    // Stub for now - will implement in ISSUE-054
-    // For now, assume no dependencies or all met
+    // No dependencies means dependencies are met
+    if (task.dependencies.length === 0) {
+      return true;
+    }
+
+    // Check each dependency
     for (const depId of task.dependencies) {
       const result = this.completedResults.get(depId);
-      if (!result || !result.success) {
+
+      // Dependency not completed yet
+      if (!result) {
+        return false;
+      }
+
+      // Dependency completed but failed
+      if (!result.success) {
         return false;
       }
     }
+
+    // All dependencies completed successfully
     return true;
+  }
+
+  /**
+   * Check if any task dependency has failed
+   *
+   * @param task - Task to check
+   * @returns True if any dependency failed
+   * @private
+   */
+  private hasFailedDependency(task: ExecutionTask): boolean {
+    for (const depId of task.dependencies) {
+      const result = this.completedResults.get(depId);
+
+      // If dependency completed but failed, return true
+      if (result && !result.success) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -377,14 +428,38 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   /**
    * Handle task failure
    *
-   * Stub for now - will implement with retry logic in ISSUE-055
+   * Creates a failed ExecutionResult and updates metrics.
+   * Will be enhanced with retry logic in ISSUE-055.
    *
    * @param taskId - ID of failed task
    * @param error - Error that occurred
    * @private
    */
   private handleTaskFailure(_taskId: string, _error: Error): void {
-    // TODO: Implement in ISSUE-055
+    // Create a failed execution result
+    const now = new Date();
+    const failedResult: ExecutionResult = {
+      taskId: _taskId,
+      executionId: `failed-${_taskId}`,
+      success: false,
+      exitCode: -1,
+      output: '',
+      error: _error.message,
+      startedAt: now,
+      completedAt: now,
+      duration: 0,
+      metadata: {
+        toolsUsed: [],
+        filesChanged: [],
+        tokensUsed: 0,
+        cost: 0,
+      },
+    };
+
+    // Store the failed result so dependent tasks can check it
+    this.completedResults.set(_taskId, failedResult);
+
+    // Update metrics
     this.metrics.failedTasks++;
 
     // Release capacity
