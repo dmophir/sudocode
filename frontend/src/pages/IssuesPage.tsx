@@ -44,6 +44,20 @@ export default function IssuesPage() {
   const [createDialogStatus, setCreateDialogStatus] = useState<IssueStatus | undefined>()
   const [showArchiveAllDialog, setShowArchiveAllDialog] = useState(false)
 
+  // Collapsed columns state with localStorage persistence
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<IssueStatus>>(() => {
+    try {
+      const saved = localStorage.getItem('issuesPage.collapsedColumns')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        return new Set(parsed)
+      }
+    } catch {
+      // Ignore errors
+    }
+    return new Set()
+  })
+
   // Fetch relationships for all issues
   const { data: relationshipsMap } = useIssueRelationships(issues)
 
@@ -183,6 +197,24 @@ export default function IssuesPage() {
     setShowArchiveAllDialog(false)
   }, [groupedIssues.closed, archiveIssue])
 
+  const handleToggleColumnCollapse = useCallback((status: IssueStatus) => {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev)
+      if (next.has(status)) {
+        next.delete(status)
+      } else {
+        next.add(status)
+      }
+      // Persist to localStorage
+      try {
+        localStorage.setItem('issuesPage.collapsedColumns', JSON.stringify(Array.from(next)))
+      } catch {
+        // Ignore errors
+      }
+      return next
+    })
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -274,6 +306,8 @@ export default function IssuesPage() {
                 onViewIssueDetails={handleViewIssueDetails}
                 selectedIssue={selectedIssue}
                 onArchiveAllClosed={handleArchiveAllClosed}
+                collapsedColumns={collapsedColumns}
+                onToggleColumnCollapse={handleToggleColumnCollapse}
               />
             </Panel>
 
@@ -329,6 +363,8 @@ export default function IssuesPage() {
               onViewIssueDetails={handleViewIssueDetails}
               selectedIssue={selectedIssue}
               onArchiveAllClosed={handleArchiveAllClosed}
+              collapsedColumns={collapsedColumns}
+              onToggleColumnCollapse={handleToggleColumnCollapse}
             />
           </div>
         )}
