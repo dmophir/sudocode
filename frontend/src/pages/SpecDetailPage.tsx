@@ -223,11 +223,7 @@ export default function SpecDetailPage() {
     }
   }
 
-  const handleCreateFeedback = async (data: {
-    type: any
-    content: string
-    anchor?: any
-  }) => {
+  const handleCreateFeedback = async (data: { type: any; content: string; anchor?: any }) => {
     if (!id || !_selectedIssueId) {
       console.error('Cannot create feedback without spec ID and issue ID')
       return
@@ -418,6 +414,7 @@ export default function SpecDetailPage() {
           <AlignedFeedbackPanel
             feedback={feedback}
             positions={feedbackPositions}
+            editorRef={editorContainerRef}
             onFeedbackClick={handleFeedbackClick}
             onDismiss={handleFeedbackDismiss}
             onDelete={handleFeedbackDelete}
