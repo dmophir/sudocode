@@ -1,16 +1,16 @@
 /**
- * Tests for Task Retry Logic (ISSUE-055)
+ * Tests for Task Retry Logic
  *
  * Tests automatic retry behavior, retry limits, and failure propagation.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
-import { SimpleExecutionEngine } from '../../../../src/execution/engine/simple-engine.js';
-import { MockProcessManager } from './mock-process-manager.js';
-import type { ExecutionTask } from '../../../../src/execution/engine/types.js';
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert";
+import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
+import { MockProcessManager } from "./mock-process-manager.js";
+import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
 
-describe('Task Retry Logic (ISSUE-055)', () => {
+describe("Task Retry Logic", () => {
   let engine: SimpleExecutionEngine;
   let processManager: MockProcessManager;
 
@@ -19,14 +19,14 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     engine = new SimpleExecutionEngine(processManager);
   });
 
-  describe('No Retry Behavior', () => {
-    it('does not retry task when maxRetries is undefined', async () => {
+  describe("No Retry Behavior", () => {
+    it("does not retry task when maxRetries is undefined", async () => {
       processManager.shouldFail = true;
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will fail once',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will fail once",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -44,13 +44,13 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       assert.strictEqual(metrics.completedTasks, 0);
     });
 
-    it('does not retry task when maxRetries is 0', async () => {
+    it("does not retry task when maxRetries is 0", async () => {
       processManager.shouldFail = true;
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will fail once',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will fail once",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -71,8 +71,8 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Retry Attempts', () => {
-    it('retries task once when maxRetries is 1', async () => {
+  describe("Retry Attempts", () => {
+    it("retries task once when maxRetries is 1", async () => {
       let attemptCount = 0;
 
       // Track each execution attempt
@@ -83,9 +83,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       processManager.shouldFail = true;
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will retry once',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will retry once",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -105,7 +105,7 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       assert.strictEqual(metrics.failedTasks, 1); // Only final failure counts
     });
 
-    it('retries task multiple times when maxRetries is 3', async () => {
+    it("retries task multiple times when maxRetries is 3", async () => {
       let attemptCount = 0;
 
       processManager.onAcquire = () => {
@@ -115,9 +115,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       processManager.shouldFail = true;
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will retry 3 times',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will retry 3 times",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -138,8 +138,8 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Successful Retry', () => {
-    it('completes task when retry succeeds', async () => {
+  describe("Successful Retry", () => {
+    it("completes task when retry succeeds", async () => {
       let attemptCount = 0;
 
       processManager.onAcquire = () => {
@@ -149,9 +149,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will succeed on retry',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will succeed on retry",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -172,7 +172,7 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       assert.strictEqual(metrics.completedTasks, 1);
     });
 
-    it('completes task when final retry succeeds', async () => {
+    it("completes task when final retry succeeds", async () => {
       let attemptCount = 0;
 
       processManager.onAcquire = () => {
@@ -182,9 +182,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will succeed on final retry',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will succeed on final retry",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -206,8 +206,8 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Retry Priority', () => {
-    it('re-queues retry at front of queue (unshift)', async () => {
+  describe("Retry Priority", () => {
+    it("re-queues retry at front of queue (unshift)", async () => {
       // This test verifies that retries use unshift (front of queue) by checking
       // that a retry happens quickly without waiting for other queued tasks
 
@@ -220,9 +220,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will retry immediately',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will retry immediately",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -246,8 +246,8 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Retry with Dependencies', () => {
-    it('retries task with dependencies', async () => {
+  describe("Retry with Dependencies", () => {
+    it("retries task with dependencies", async () => {
       let task2AttemptCount = 0;
 
       processManager.onAcquire = () => {
@@ -261,9 +261,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
 
       // task-1 succeeds
       const task1: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'First task',
+        id: "task-1",
+        type: "issue",
+        prompt: "First task",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -273,12 +273,12 @@ describe('Task Retry Logic (ISSUE-055)', () => {
 
       // task-2 depends on task-1, will fail once then succeed
       const task2: ExecutionTask = {
-        id: 'task-2',
-        type: 'issue',
-        prompt: 'Second task - depends on first',
+        id: "task-2",
+        type: "issue",
+        prompt: "Second task - depends on first",
         workDir: process.cwd(),
         priority: 0,
-        dependencies: ['task-1'],
+        dependencies: ["task-1"],
         createdAt: new Date(),
         config: {
           maxRetries: 2,
@@ -297,8 +297,8 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Failure Events', () => {
-    it('emits failure event only after all retries exhausted', async () => {
+  describe("Failure Events", () => {
+    it("emits failure event only after all retries exhausted", async () => {
       const failureEvents: string[] = [];
 
       engine.onTaskFailed((taskId) => {
@@ -308,9 +308,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       processManager.shouldFail = true;
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will fail after retries',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will fail after retries",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -327,10 +327,10 @@ describe('Task Retry Logic (ISSUE-055)', () => {
 
       // Should only emit failure event once, after final retry
       assert.strictEqual(failureEvents.length, 1);
-      assert.strictEqual(failureEvents[0], 'task-1');
+      assert.strictEqual(failureEvents[0], "task-1");
     });
 
-    it('does not emit failure event when retry succeeds', async () => {
+    it("does not emit failure event when retry succeeds", async () => {
       const failureEvents: string[] = [];
       let attemptCount = 0;
 
@@ -345,9 +345,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Will succeed on retry',
+        id: "task-1",
+        type: "issue",
+        prompt: "Will succeed on retry",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -367,14 +367,14 @@ describe('Task Retry Logic (ISSUE-055)', () => {
     });
   });
 
-  describe('Edge Cases', () => {
-    it('handles concurrent tasks with different retry configs', async () => {
+  describe("Edge Cases", () => {
+    it("handles concurrent tasks with different retry configs", async () => {
       processManager.shouldFail = true;
 
       const task1: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'No retries',
+        id: "task-1",
+        type: "issue",
+        prompt: "No retries",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -383,9 +383,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task2: ExecutionTask = {
-        id: 'task-2',
-        type: 'issue',
-        prompt: 'With retries',
+        id: "task-2",
+        type: "issue",
+        prompt: "With retries",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],
@@ -405,7 +405,7 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       assert.strictEqual(metrics.failedTasks, 2);
     });
 
-    it('handles very large maxRetries value', async () => {
+    it("handles very large maxRetries value", async () => {
       let attemptCount = 0;
 
       processManager.onAcquire = () => {
@@ -415,9 +415,9 @@ describe('Task Retry Logic (ISSUE-055)', () => {
       };
 
       const task: ExecutionTask = {
-        id: 'task-1',
-        type: 'issue',
-        prompt: 'Many retries',
+        id: "task-1",
+        type: "issue",
+        prompt: "Many retries",
         workDir: process.cwd(),
         priority: 0,
         dependencies: [],

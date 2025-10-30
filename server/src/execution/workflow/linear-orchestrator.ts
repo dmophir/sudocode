@@ -96,7 +96,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       definition: workflow,
       status: 'pending',
       currentStepIndex: 0,
-      context: options?.initialContext || {},
+      context: options?.initialContext || workflow.initialContext || {},
       stepResults: [],
       startedAt: new Date(),
     };
@@ -208,7 +208,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     execution.status = 'paused';
     execution.pausedAt = new Date();
 
-    // Create checkpoint when pausing
+    // Create checkpoint when pausing (currentStepIndex is already up-to-date)
     if (this._storage) {
       await this._saveCheckpoint(execution);
     }
@@ -237,7 +237,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     execution.status = 'cancelled';
     execution.completedAt = new Date();
 
-    // Create final checkpoint
+    // Create final checkpoint (currentStepIndex is already up-to-date)
     if (this._storage) {
       await this._saveCheckpoint(execution);
     }
@@ -281,11 +281,12 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     let status: StepStatus['status'];
     const result = execution.stepResults[stepIndex];
 
-    if (stepIndex < execution.currentStepIndex) {
-      // Step already executed
-      status = result?.success ? 'completed' : 'failed';
+    // Check if result exists first (step has been executed)
+    if (result !== undefined) {
+      // Step has a result, so it's either completed or failed
+      status = result.success ? 'completed' : 'failed';
     } else if (stepIndex === execution.currentStepIndex) {
-      // Currently executing
+      // Currently executing (no result yet)
       status = 'running';
     } else {
       // Not yet executed
@@ -452,9 +453,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     // 2. Execute steps sequentially
     for (let i = execution.currentStepIndex; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
-      execution.currentStepIndex = i;
 
-      // Check if paused or cancelled
+      // Check if paused or cancelled before starting each step
       // Note: Status can be changed externally via pauseWorkflow/cancelWorkflow
       if (['paused', 'cancelled'].includes(execution.status)) {
         return;
@@ -462,6 +462,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
       // Skip steps that have already been executed (for resumed workflows)
       if (execution.stepResults[i] && execution.stepResults[i].success) {
+        // Update currentStepIndex to skip completed step
+        execution.currentStepIndex = i + 1;
         continue;
       }
 
@@ -485,12 +487,16 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           });
           return;
         }
+        // Update currentStepIndex to point to next step before continuing
+        execution.currentStepIndex = i + 1;
         continue;
       }
 
       // Check condition
       if (!this._shouldExecuteStep(step, execution.context)) {
         // Step condition not met, skip it
+        // Update currentStepIndex to point to next step before continuing
+        execution.currentStepIndex = i + 1;
         continue;
       }
 
@@ -526,6 +532,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             });
             return;
           }
+          // Update currentStepIndex to point to next step before continuing
+          execution.currentStepIndex = i + 1;
           continue;
         }
 
@@ -536,6 +544,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
         this._stepCompleteHandlers.forEach((handler) => {
           handler(execution.executionId, step.id, result);
         });
+
+        // Update currentStepIndex to point to next step after successful completion
+        execution.currentStepIndex = i + 1;
 
         // Checkpoint if configured
         if (
@@ -562,6 +573,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           });
           return;
         }
+        // Update currentStepIndex when continuing after error (for checkpoint consistency)
+        execution.currentStepIndex = i + 1;
       }
     }
 

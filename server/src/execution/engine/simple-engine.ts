@@ -7,7 +7,7 @@
  * @module execution/engine/simple-engine
  */
 
-import type { IExecutionEngine } from './engine.js';
+import type { IExecutionEngine } from "./engine.js";
 import type {
   ExecutionTask,
   ExecutionResult,
@@ -18,10 +18,10 @@ import type {
   EngineConfig,
   RunningTask,
   TaskResolver,
-} from './types.js';
-import type { IProcessManager } from '../process/manager.js';
-import { buildClaudeConfig } from '../process/builders/claude.js';
-import type { ManagedProcess } from '../process/types.js';
+} from "./types.js";
+import type { IProcessManager } from "../process/manager.js";
+import { buildClaudeConfig } from "../process/builders/claude.js";
+import type { ManagedProcess } from "../process/types.js";
 
 /**
  * SimpleExecutionEngine - Queue-based task execution with concurrency control
@@ -147,9 +147,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
         // Fail this task immediately - don't wait for failed dependencies
         this.handleTaskFailure(
           task.id,
-          new Error(
-            `Task ${task.id} failed: one or more dependencies failed`
-          )
+          new Error(`Task ${task.id} failed: one or more dependencies failed`)
         );
         continue; // Process next task
       }
@@ -237,7 +235,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
     // Add to running tasks
     const runningTask: RunningTask = {
       task,
-      process: null as any, // Will be set in ISSUE-053 when we spawn process
+      process: null as any,
       startedAt: new Date(),
       attempt,
     };
@@ -245,7 +243,8 @@ export class SimpleExecutionEngine implements IExecutionEngine {
 
     // Update metrics
     this.metrics.currentlyRunning = this.runningTasks.size;
-    this.metrics.availableSlots = this.metrics.maxConcurrent - this.runningTasks.size;
+    this.metrics.availableSlots =
+      this.metrics.maxConcurrent - this.runningTasks.size;
   }
 
   /**
@@ -260,7 +259,8 @@ export class SimpleExecutionEngine implements IExecutionEngine {
 
     // Update metrics
     this.metrics.currentlyRunning = this.runningTasks.size;
-    this.metrics.availableSlots = this.metrics.maxConcurrent - this.runningTasks.size;
+    this.metrics.availableSlots =
+      this.metrics.maxConcurrent - this.runningTasks.size;
 
     // Try to process more tasks now that capacity is available
     this.processQueue();
@@ -277,8 +277,8 @@ export class SimpleExecutionEngine implements IExecutionEngine {
   private async executeTask(task: ExecutionTask): Promise<void> {
     const startTime = new Date();
     let managedProcess: ManagedProcess | null = null;
-    let output = '';
-    let errorOutput = '';
+    let output = "";
+    let errorOutput = "";
 
     try {
       // Build process configuration
@@ -286,7 +286,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
         claudePath: this._config.claudePath,
         workDir: task.workDir,
         print: true,
-        outputFormat: 'stream-json',
+        outputFormat: "stream-json",
         dangerouslySkipPermissions: true,
         env: task.config.env,
         timeout: task.config.timeout,
@@ -303,7 +303,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
 
       // Set up output collection
       this._processManager.onOutput(managedProcess.id, (data, type) => {
-        if (type === 'stdout') {
+        if (type === "stdout") {
           output += data.toString();
         } else {
           errorOutput += data.toString();
@@ -401,9 +401,13 @@ export class SimpleExecutionEngine implements IExecutionEngine {
           this.pollingIntervals.delete(process.id);
 
           if (!currentProcess) {
-            reject(new Error('Process not found'));
-          } else if (currentProcess.status === 'crashed') {
-            reject(new Error(`Process crashed with exit code ${currentProcess.exitCode}`));
+            reject(new Error("Process not found"));
+          } else if (currentProcess.status === "crashed") {
+            reject(
+              new Error(
+                `Process crashed with exit code ${currentProcess.exitCode}`
+              )
+            );
           } else {
             resolve();
           }
@@ -418,7 +422,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
         setTimeout(() => {
           clearInterval(checkInterval);
           this.pollingIntervals.delete(process.id);
-          reject(new Error('Process execution timeout'));
+          reject(new Error("Process execution timeout"));
         }, timeoutMs);
       }
     });
@@ -433,7 +437,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
    * @returns Parsed metadata
    * @private
    */
-  private parseMetadata(_output: string): ExecutionResult['metadata'] {
+  private parseMetadata(_output: string): ExecutionResult["metadata"] {
     // Stub for now - will enhance in future issues
     // TODO: Parse stream-json output for metadata
     return {
@@ -496,7 +500,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
       executionId: `failed-${_taskId}`,
       success: false,
       exitCode: -1,
-      output: '',
+      output: "",
       error: _error.message,
       startedAt: now,
       completedAt: now,
@@ -586,22 +590,19 @@ export class SimpleExecutionEngine implements IExecutionEngine {
 
   /**
    * Get current status of a task
-   *
-   * Stub for now - will implement in ISSUE-057
    */
   getTaskStatus(taskId: string): TaskStatus | null {
-    // TODO: Implement in ISSUE-057
     // Check completed
     const result = this.completedResults.get(taskId);
     if (result) {
-      return { state: 'completed', result };
+      return { state: "completed", result };
     }
 
     // Check running
     const running = this.runningTasks.get(taskId);
     if (running) {
       return {
-        state: 'running',
+        state: "running",
         processId: running.process.id,
         startedAt: running.startedAt,
       };
@@ -610,7 +611,7 @@ export class SimpleExecutionEngine implements IExecutionEngine {
     // Check queued
     const queuePos = this.taskQueue.findIndex((t) => t.id === taskId);
     if (queuePos >= 0) {
-      return { state: 'queued', position: queuePos };
+      return { state: "queued", position: queuePos };
     }
 
     return null;

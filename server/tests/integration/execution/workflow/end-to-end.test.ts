@@ -181,6 +181,11 @@ describe('Workflow Layer Integration Tests', () => {
     });
 
     it('should resume workflow from checkpoint', async () => {
+      // Use slower executor to ensure workflow doesn't complete before pause
+      mockExecutor = new MockResilientExecutor(50);
+      storage = new InMemoryWorkflowStorage();
+      orchestrator = new LinearOrchestrator(mockExecutor as any, storage);
+
       const workflow: WorkflowDefinition = {
         id: 'resume-workflow',
         steps: [
@@ -217,6 +222,11 @@ describe('Workflow Layer Integration Tests', () => {
     });
 
     it('should preserve context across resumption', async () => {
+      // Use slower executor to ensure workflow doesn't complete before pause
+      mockExecutor = new MockResilientExecutor(50);
+      storage = new InMemoryWorkflowStorage();
+      orchestrator = new LinearOrchestrator(mockExecutor as any, storage);
+
       const workflow: WorkflowDefinition = {
         id: 'context-resume-workflow',
         steps: [
@@ -624,7 +634,7 @@ describe('Workflow Layer Integration Tests', () => {
       const taskExecution = executedTasks[0];
       assert.ok(taskExecution.retryPolicy);
       assert.strictEqual(taskExecution.retryPolicy.maxAttempts, 5);
-      assert.strictEqual(taskExecution.retryPolicy.initialDelay, 1000);
+      assert.strictEqual(taskExecution.retryPolicy.backoff.baseDelayMs, 1000);
     });
 
     it('should handle multiple workflows concurrently', async () => {

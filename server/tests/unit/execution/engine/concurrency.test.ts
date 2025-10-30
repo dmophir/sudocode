@@ -1,5 +1,5 @@
 /**
- * Tests for Concurrency Control (ISSUE-052)
+ * Tests for Concurrency Control
  *
  * Tests capacity limits, task tracking, and concurrent execution.
  */

@@ -12,6 +12,7 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "test": "npm run build && NODE_ENV=test node --test dist/**/*.test.js",
+    "test:e2e": "npm run build && RUN_E2E_TESTS=true NODE_ENV=test node --test dist/tests/e2e/**/*.test.js",
     "test:verbose": "npm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc --noEmit"
   },
