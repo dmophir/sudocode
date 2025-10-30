@@ -22,6 +22,10 @@ export type { IWorktreeManager } from './manager.js';
 // Implementation
 export { WorktreeManager } from './manager.js';
 
+// Git CLI
+export type { IGitCli } from './git-cli.js';
+export { GitCli } from './git-cli.js';
+
 // Configuration
 export {
   DEFAULT_WORKTREE_CONFIG,
