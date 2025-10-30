@@ -17,7 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MessageSquare, Archive, ArchiveRestore, Signal, FileText, Code2 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  MessageSquare,
+  MessageSquareOff,
+  MessageSquarePlus,
+  Archive,
+  ArchiveRestore,
+  Signal,
+  FileText,
+  Code2,
+} from 'lucide-react'
 import type { IssueFeedback } from '@/types/api'
 
 const PRIORITY_OPTIONS = [
@@ -40,7 +50,6 @@ export default function SpecDetailPage() {
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [_selectedText, setSelectedText] = useState<string | null>(null) // Reserved for future text selection feature
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(true)
-  const [_selectedIssueId, setSelectedIssueId] = useState<string | undefined>(undefined) // Reserved for feedback creation
   const [viewMode, setViewMode] = useState<'formatted' | 'source'>('formatted')
 
   // Local state for editable fields
@@ -218,20 +227,23 @@ export default function SpecDetailPage() {
   }
 
   const handleFeedbackDelete = (feedbackId: string) => {
-    if (window.confirm('Are you sure you want to delete this feedback?')) {
-      deleteFeedback(feedbackId)
-    }
+    deleteFeedback(feedbackId)
   }
 
-  const handleCreateFeedback = async (data: { type: any; content: string; anchor?: any }) => {
-    if (!id || !_selectedIssueId) {
-      console.error('Cannot create feedback without spec ID and issue ID')
+  const handleCreateFeedback = async (data: {
+    issueId: string
+    type: any
+    content: string
+    anchor?: any
+  }) => {
+    if (!id) {
+      console.error('Cannot create feedback without spec ID')
       return
     }
 
     await createFeedback({
       spec_id: id,
-      issue_id: _selectedIssueId,
+      issue_id: data.issueId,
       feedback_type: data.type,
       content: data.content,
       anchor: data.anchor,
@@ -272,39 +284,31 @@ export default function SpecDetailPage() {
             </div>
           </div>
 
-          {/* Issue selector */}
-          <Select value={_selectedIssueId} onValueChange={setSelectedIssueId}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Select issue..." />
-            </SelectTrigger>
-            <SelectContent>
-              {issues.map((issue) => (
-                <SelectItem key={issue.id} value={issue.id}>
-                  {issue.id}: {issue.title}
-                </SelectItem>
-              ))}
-              {issues.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">No issues available</div>
-              )}
-            </SelectContent>
-          </Select>
-
-          <AddFeedbackDialog
-            issueId={_selectedIssueId}
-            lineNumber={selectedLine || undefined}
-            onSubmit={handleCreateFeedback}
-            disabled={!_selectedIssueId}
-            disabledMessage="Select an issue first to add feedback"
-          />
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFeedbackPanel(!showFeedbackPanel)}
-          >
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Feedback {feedback.length > 0 && `(${feedback.length})`}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFeedbackPanel(!showFeedbackPanel)}
+                >
+                  {showFeedbackPanel ? (
+                    <MessageSquareOff className="h-4 w-4" />
+                  ) : (
+                    <MessageSquare className="h-4 w-4" />
+                  )}
+                  {feedback.length > 0 && (
+                    <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                      {feedback.length}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{showFeedbackPanel ? 'Hide' : 'Show'} feedback</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {spec.archived ? (
             <Button
@@ -418,6 +422,21 @@ export default function SpecDetailPage() {
               onFeedbackClick={handleFeedbackClick}
               onDismiss={handleFeedbackDismiss}
               onDelete={handleFeedbackDelete}
+              addFeedbackButton={
+                <div className="flex justify-center">
+                  <AddFeedbackDialog
+                    issues={issues}
+                    lineNumber={selectedLine || undefined}
+                    onSubmit={handleCreateFeedback}
+                    triggerButton={
+                      <Button variant="default" size="sm">
+                        <MessageSquarePlus className="mr-2 h-4 w-4" />
+                        Add Feedback
+                      </Button>
+                    }
+                  />
+                </div>
+              }
             />
           )}
         </div>

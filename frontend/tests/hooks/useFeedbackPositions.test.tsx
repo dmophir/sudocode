@@ -99,16 +99,14 @@ describe('useFeedbackPositions', () => {
     markElement.textContent = 'Highlighted text'
     mockEditorElement.appendChild(markElement)
 
-    vi.spyOn(markElement, 'getBoundingClientRect').mockReturnValue({
-      top: 200, // 100px below editor top (100)
-      left: 0,
-      right: 800,
-      bottom: 220,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 200,
-      toJSON: () => ({}),
+    // Mock offsetTop instead of getBoundingClientRect (new implementation uses offsetTop)
+    Object.defineProperty(markElement, 'offsetTop', {
+      get: () => 100,
+      configurable: true,
+    })
+    Object.defineProperty(markElement, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -131,7 +129,7 @@ describe('useFeedbackPositions', () => {
     const { result } = renderHook(() => useFeedbackPositions(feedback, editorRef))
 
     await waitFor(() => {
-      expect(result.current.get('FB-001')).toBe(100) // 200 (element top) - 100 (editor top) + 0 (scroll)
+      expect(result.current.get('FB-001')).toBe(100) // offsetTop from element
     })
   })
 
@@ -145,16 +143,14 @@ describe('useFeedbackPositions', () => {
     mockEditorElement.appendChild(p1)
     mockEditorElement.appendChild(p2)
 
-    vi.spyOn(p2, 'getBoundingClientRect').mockReturnValue({
-      top: 150,
-      left: 0,
-      right: 800,
-      bottom: 170,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 150,
-      toJSON: () => ({}),
+    // Mock offsetTop for p2
+    Object.defineProperty(p2, 'offsetTop', {
+      get: () => 50,
+      configurable: true,
+    })
+    Object.defineProperty(p2, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -177,7 +173,7 @@ describe('useFeedbackPositions', () => {
     const { result } = renderHook(() => useFeedbackPositions(feedback, editorRef))
 
     await waitFor(() => {
-      expect(result.current.get('FB-002')).toBe(50) // 150 - 100 + 0
+      expect(result.current.get('FB-002')).toBe(50) // offsetTop from element
     })
   })
 
@@ -193,16 +189,14 @@ describe('useFeedbackPositions', () => {
     mockEditorElement.appendChild(p2)
     mockEditorElement.appendChild(p3)
 
-    vi.spyOn(p2, 'getBoundingClientRect').mockReturnValue({
-      top: 130, // Second element
-      left: 0,
-      right: 800,
-      bottom: 150,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 130,
-      toJSON: () => ({}),
+    // Mock offsetTop for p2 (will be found by index)
+    Object.defineProperty(p2, 'offsetTop', {
+      get: () => 30,
+      configurable: true,
+    })
+    Object.defineProperty(p2, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -225,7 +219,7 @@ describe('useFeedbackPositions', () => {
     const { result } = renderHook(() => useFeedbackPositions(feedback, editorRef))
 
     await waitFor(() => {
-      expect(result.current.get('FB-003')).toBe(30) // 130 - 100 + 0
+      expect(result.current.get('FB-003')).toBe(30) // offsetTop from element
     })
   })
 
@@ -238,28 +232,23 @@ describe('useFeedbackPositions', () => {
     mockEditorElement.appendChild(mark1)
     mockEditorElement.appendChild(mark2)
 
-    vi.spyOn(mark1, 'getBoundingClientRect').mockReturnValue({
-      top: 120,
-      left: 0,
-      right: 800,
-      bottom: 140,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 120,
-      toJSON: () => ({}),
+    // Mock offsetTop for both marks
+    Object.defineProperty(mark1, 'offsetTop', {
+      get: () => 20,
+      configurable: true,
+    })
+    Object.defineProperty(mark1, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
-    vi.spyOn(mark2, 'getBoundingClientRect').mockReturnValue({
-      top: 180,
-      left: 0,
-      right: 800,
-      bottom: 200,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 180,
-      toJSON: () => ({}),
+    Object.defineProperty(mark2, 'offsetTop', {
+      get: () => 80,
+      configurable: true,
+    })
+    Object.defineProperty(mark2, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -289,8 +278,8 @@ describe('useFeedbackPositions', () => {
     const { result } = renderHook(() => useFeedbackPositions(feedback, editorRef))
 
     await waitFor(() => {
-      expect(result.current.get('FB-001')).toBe(20) // 120 - 100
-      expect(result.current.get('FB-002')).toBe(80) // 180 - 100
+      expect(result.current.get('FB-001')).toBe(20) // offsetTop from element
+      expect(result.current.get('FB-002')).toBe(80) // offsetTop from element
     })
   })
 
@@ -322,16 +311,14 @@ describe('useFeedbackPositions', () => {
     mockEditorElement.appendChild(mark)
     mockEditorElement.scrollTop = 100 // Scrolled down 100px
 
-    vi.spyOn(mark, 'getBoundingClientRect').mockReturnValue({
-      top: 120, // Element appears at 120px from viewport top
-      left: 0,
-      right: 800,
-      bottom: 140,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 120,
-      toJSON: () => ({}),
+    // Mock offsetTop - remains constant regardless of scroll
+    Object.defineProperty(mark, 'offsetTop', {
+      get: () => 20,
+      configurable: true,
+    })
+    Object.defineProperty(mark, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -351,9 +338,7 @@ describe('useFeedbackPositions', () => {
     const { result } = renderHook(() => useFeedbackPositions(feedback, editorRef))
 
     await waitFor(() => {
-      // Position = element viewport position (120) - editor viewport position (100) = 20px
-      // This means feedback is 20px from the top of the editor's visible area
-      // As you scroll, this position changes to keep feedback aligned with visible content
+      // Position uses offsetTop which is relative to scroll container
       expect(result.current.get('FB-001')).toBe(20)
     })
   })
@@ -363,16 +348,14 @@ describe('useFeedbackPositions', () => {
     mark.setAttribute('data-feedback-id', 'FB-001')
     mockEditorElement.appendChild(mark)
 
-    vi.spyOn(mark, 'getBoundingClientRect').mockReturnValue({
-      top: 150,
-      left: 0,
-      right: 800,
-      bottom: 170,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 150,
-      toJSON: () => ({}),
+    // Mock offsetTop for mark
+    Object.defineProperty(mark, 'offsetTop', {
+      get: () => 50,
+      configurable: true,
+    })
+    Object.defineProperty(mark, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const editorRef = { current: mockEditorElement }
@@ -403,16 +386,14 @@ describe('useFeedbackPositions', () => {
     mark2.setAttribute('data-feedback-id', 'FB-002')
     mockEditorElement.appendChild(mark2)
 
-    vi.spyOn(mark2, 'getBoundingClientRect').mockReturnValue({
-      top: 200,
-      left: 0,
-      right: 800,
-      bottom: 220,
-      width: 800,
-      height: 20,
-      x: 0,
-      y: 200,
-      toJSON: () => ({}),
+    // Mock offsetTop for mark2
+    Object.defineProperty(mark2, 'offsetTop', {
+      get: () => 100,
+      configurable: true,
+    })
+    Object.defineProperty(mark2, 'offsetParent', {
+      get: () => mockEditorElement,
+      configurable: true,
     })
 
     const updatedFeedback: IssueFeedback[] = [

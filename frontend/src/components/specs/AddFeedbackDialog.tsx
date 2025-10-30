@@ -10,15 +10,19 @@ import {
 import { Button } from '@/components/ui/button'
 import { MessageSquarePlus } from 'lucide-react'
 import { FeedbackForm } from './FeedbackForm'
-import type { FeedbackType, FeedbackAnchor } from '@/types/api'
+import type { FeedbackType, FeedbackAnchor, Issue } from '@/types/api'
 
 interface AddFeedbackDialogProps {
-  issueId?: string
+  issues: Issue[]
   lineNumber?: number
   textSnippet?: string
-  onSubmit: (data: { type: FeedbackType; content: string; anchor?: FeedbackAnchor }) => Promise<void>
-  disabled?: boolean
-  disabledMessage?: string
+  onSubmit: (data: {
+    issueId: string
+    type: FeedbackType
+    content: string
+    anchor?: FeedbackAnchor
+  }) => Promise<void>
+  triggerButton?: React.ReactNode
 }
 
 /**
@@ -31,31 +35,35 @@ interface AddFeedbackDialogProps {
  * - Validates that an issue is selected before allowing submission
  */
 export function AddFeedbackDialog({
-  issueId,
+  issues,
   lineNumber,
   textSnippet,
   onSubmit,
-  disabled = false,
-  disabledMessage = 'Select an issue first',
+  triggerButton,
 }: AddFeedbackDialogProps) {
   const [open, setOpen] = useState(false)
+  const [selectedIssueId, setSelectedIssueId] = useState<string | undefined>()
 
   const handleSubmit = async (data: {
     type: FeedbackType
     content: string
     anchor?: FeedbackAnchor
   }) => {
-    await onSubmit(data)
+    if (!selectedIssueId) return
+    await onSubmit({ issueId: selectedIssueId, ...data })
     setOpen(false)
+    setSelectedIssueId(undefined)
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} title={disabled ? disabledMessage : 'Add feedback'}>
-          <MessageSquarePlus className="mr-2 h-4 w-4" />
-          Add Feedback
-        </Button>
+        {triggerButton || (
+          <Button variant="outline" size="sm">
+            <MessageSquarePlus className="mr-2 h-4 w-4" />
+            Add Feedback
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -66,7 +74,9 @@ export function AddFeedbackDialog({
           </DialogDescription>
         </DialogHeader>
         <FeedbackForm
-          issueId={issueId}
+          issues={issues}
+          selectedIssueId={selectedIssueId}
+          onIssueSelect={setSelectedIssueId}
           lineNumber={lineNumber}
           textSnippet={textSnippet}
           onSubmit={handleSubmit}

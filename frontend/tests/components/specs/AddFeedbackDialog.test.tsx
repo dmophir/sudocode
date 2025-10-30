@@ -8,40 +8,49 @@ import { userEvent } from '@testing-library/user-event'
 import { AddFeedbackDialog } from '@/components/specs/AddFeedbackDialog'
 
 describe('AddFeedbackDialog', () => {
+  const mockIssues = [
+    {
+      id: 'ISSUE-001',
+      uuid: 'uuid-001',
+      title: 'Test Issue 1',
+      content: 'Test content',
+      status: 'open' as const,
+      priority: 1,
+      created_at: '2024-01-01',
+      updated_at: '2024-01-01',
+      archived: false,
+    },
+    {
+      id: 'ISSUE-002',
+      uuid: 'uuid-002',
+      title: 'Test Issue 2',
+      content: 'Test content 2',
+      status: 'open' as const,
+      priority: 2,
+      created_at: '2024-01-01',
+      updated_at: '2024-01-01',
+      archived: false,
+    },
+  ]
+
   it('should render trigger button', () => {
     const onSubmit = vi.fn()
-    render(<AddFeedbackDialog issueId="ISSUE-001" onSubmit={onSubmit} />)
+    render(<AddFeedbackDialog issues={mockIssues} onSubmit={onSubmit} />)
 
     expect(screen.getByRole('button', { name: /add feedback/i })).toBeInTheDocument()
   })
 
-  it('should disable button when no issue selected', () => {
+  it('should disable button when no issues available', () => {
     const onSubmit = vi.fn()
-    render(<AddFeedbackDialog onSubmit={onSubmit} disabled={true} />)
+    render(<AddFeedbackDialog issues={[]} onSubmit={onSubmit} />)
 
-    const button = screen.getByRole('button', { name: /add feedback/i })
-    expect(button).toBeDisabled()
-  })
-
-  it('should show disabled message on hover when disabled', () => {
-    const onSubmit = vi.fn()
-    const disabledMessage = 'Select an issue first'
-    render(
-      <AddFeedbackDialog
-        onSubmit={onSubmit}
-        disabled={true}
-        disabledMessage={disabledMessage}
-      />
-    )
-
-    const button = screen.getByRole('button', { name: /add feedback/i })
-    expect(button).toHaveAttribute('title', disabledMessage)
+    expect(screen.getByRole('button', { name: /add feedback/i })).toBeInTheDocument()
   })
 
   it('should open dialog when button clicked', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(<AddFeedbackDialog issueId="ISSUE-001" onSubmit={onSubmit} />)
+    render(<AddFeedbackDialog issues={mockIssues} onSubmit={onSubmit} />)
 
     const button = screen.getByRole('button', { name: /add feedback/i })
     await user.click(button)
@@ -56,9 +65,7 @@ describe('AddFeedbackDialog', () => {
   it('should show line number in dialog description when provided', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(
-      <AddFeedbackDialog issueId="ISSUE-001" lineNumber={42} onSubmit={onSubmit} />
-    )
+    render(<AddFeedbackDialog issues={mockIssues} lineNumber={42} onSubmit={onSubmit} />)
 
     const button = screen.getByRole('button', { name: /add feedback/i })
     await user.click(button)
@@ -71,7 +78,7 @@ describe('AddFeedbackDialog', () => {
   it('should render feedback form inside dialog', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(<AddFeedbackDialog issueId="ISSUE-001" onSubmit={onSubmit} />)
+    render(<AddFeedbackDialog issues={mockIssues} onSubmit={onSubmit} />)
 
     const button = screen.getByRole('button', { name: /add feedback/i })
     await user.click(button)
@@ -88,7 +95,7 @@ describe('AddFeedbackDialog', () => {
   it('should close dialog when cancel clicked', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(<AddFeedbackDialog issueId="ISSUE-001" onSubmit={onSubmit} />)
+    render(<AddFeedbackDialog issues={mockIssues} onSubmit={onSubmit} />)
 
     // Open dialog
     const openButton = screen.getByRole('button', { name: /add feedback/i })
@@ -110,7 +117,7 @@ describe('AddFeedbackDialog', () => {
   it('should call onSubmit and close dialog when form submitted', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<AddFeedbackDialog issueId="ISSUE-001" onSubmit={onSubmit} />)
+    render(<AddFeedbackDialog issues={mockIssues} onSubmit={onSubmit} />)
 
     // Open dialog
     const openButton = screen.getByRole('button', { name: /add feedback/i })
@@ -119,6 +126,17 @@ describe('AddFeedbackDialog', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
+
+    // Select an issue first
+    const issueSelect = screen.getByRole('combobox', { name: /issue/i })
+    await user.click(issueSelect)
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /issue-001/i })).toBeInTheDocument()
+    })
+
+    const issueOption = screen.getByRole('option', { name: /issue-001/i })
+    await user.click(issueOption)
 
     // Fill form
     const contentInput = screen.getByLabelText(/content/i)
@@ -155,9 +173,7 @@ describe('AddFeedbackDialog', () => {
   it('should include anchor when lineNumber provided', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <AddFeedbackDialog issueId="ISSUE-001" lineNumber={10} onSubmit={onSubmit} />
-    )
+    render(<AddFeedbackDialog issues={mockIssues} lineNumber={10} onSubmit={onSubmit} />)
 
     // Open dialog
     const openButton = screen.getByRole('button', { name: /add feedback/i })
@@ -166,6 +182,17 @@ describe('AddFeedbackDialog', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
+
+    // Select an issue first
+    const issueSelect = screen.getByRole('combobox', { name: /issue/i })
+    await user.click(issueSelect)
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /issue-001/i })).toBeInTheDocument()
+    })
+
+    const issueOption = screen.getByRole('option', { name: /issue-001/i })
+    await user.click(issueOption)
 
     // Fill form
     const contentInput = screen.getByLabelText(/content/i)
@@ -199,7 +226,7 @@ describe('AddFeedbackDialog', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
       <AddFeedbackDialog
-        issueId="ISSUE-001"
+        issues={mockIssues}
         lineNumber={10}
         textSnippet="selected text snippet"
         onSubmit={onSubmit}
@@ -216,6 +243,17 @@ describe('AddFeedbackDialog', () => {
 
     // Verify snippet is shown
     expect(screen.getByText(/"selected text snippet"/i)).toBeInTheDocument()
+
+    // Select an issue first
+    const issueSelect = screen.getByRole('combobox', { name: /issue/i })
+    await user.click(issueSelect)
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /issue-001/i })).toBeInTheDocument()
+    })
+
+    const issueOption = screen.getByRole('option', { name: /issue-001/i })
+    await user.click(issueOption)
 
     // Fill form
     const contentInput = screen.getByLabelText(/content/i)

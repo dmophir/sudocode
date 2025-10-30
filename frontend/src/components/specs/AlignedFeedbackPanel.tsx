@@ -9,6 +9,7 @@ interface AlignedFeedbackPanelProps {
   onFeedbackClick?: (feedback: IssueFeedback) => void
   onDismiss?: (id: string) => void
   onDelete?: (id: string) => void
+  addFeedbackButton?: React.ReactNode
   className?: string
 }
 
@@ -37,6 +38,7 @@ export function AlignedFeedbackPanel({
   onFeedbackClick,
   onDismiss,
   onDelete,
+  addFeedbackButton,
   className = '',
 }: AlignedFeedbackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -53,9 +55,13 @@ export function AlignedFeedbackPanel({
       if (!anchor || !anchor.line_number) {
         posMap.set(fb.id, minTopOffset)
       } else {
-        // Use provided position or fallback to min offset, ensuring minimum top position
-        const pos = Math.max(positions.get(fb.id) ?? minTopOffset, minTopOffset)
-        posMap.set(fb.id, pos)
+        // Anchored comments require an explicit position
+        const pos = positions.get(fb.id)
+        if (pos !== undefined) {
+          // Ensure minimum top position
+          posMap.set(fb.id, Math.max(pos, minTopOffset))
+        }
+        // If no position, don't add to map (feedback won't render)
       }
     })
 
@@ -74,6 +80,9 @@ export function AlignedFeedbackPanel({
     <div
       className={`flex h-full w-80 flex-col bg-background md:w-96 lg:w-[28rem] xl:w-[32rem] ${className}`}
     >
+      {/* Add Feedback Button */}
+      {addFeedbackButton && <div className="p-2">{addFeedbackButton}</div>}
+
       {/* All feedback - absolutely positioned with collision detection */}
       <div className="relative min-h-full flex-1">
         <div ref={panelRef} className="relative w-full pt-4">
@@ -113,13 +122,6 @@ export function AlignedFeedbackPanel({
           )}
         </div>
       </div>
-
-      {/* Empty state */}
-      {feedback.length === 0 && (
-        <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-          No feedback yet
-        </div>
-      )}
     </div>
   )
 }
