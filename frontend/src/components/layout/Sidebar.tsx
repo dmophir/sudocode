@@ -55,9 +55,18 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
           collapsed ? 'w-16' : 'w-64'
         )}
       >
-        {/* Mobile close button */}
-        <div className="flex h-14 items-center justify-between border-b border-border px-4 md:hidden">
-          <span className="font-semibold">Menu</span>
+        {/* Logo section - Desktop */}
+        <div className="hidden h-16 items-center justify-center md:flex">
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className={cn('h-10 w-10 rounded-md transition-all duration-300')}
+          />
+        </div>
+
+        {/* Mobile header with logo and close button */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-4 md:hidden">
+          <img src="/logo.png" alt="Logo" className="h-8 w-8 rounded-md" />
           <button
             onClick={onClose}
             className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -68,7 +77,7 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
         </div>
 
         {/* Desktop collapse toggle */}
-        <div className="hidden md:flex h-12 items-center justify-end px-2 border-b border-border">
+        <div className="hidden h-12 items-center justify-end border-b border-border px-2 md:flex">
           <button
             onClick={onToggleCollapse}
             className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -105,12 +114,8 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
             if (collapsed) {
               return (
                 <Tooltip key={item.path}>
-                  <TooltipTrigger asChild>
-                    {linkContent}
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.label}
-                  </TooltipContent>
+                  <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                  <TooltipContent side="right">{item.label}</TooltipContent>
                 </Tooltip>
               )
             }
@@ -134,7 +139,11 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
                     )}
                     aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                   >
-                    {theme === 'dark' ? <Sun className="h-5 w-5 flex-shrink-0" /> : <Moon className="h-5 w-5 flex-shrink-0" />}
+                    {theme === 'dark' ? (
+                      <Sun className="h-5 w-5 flex-shrink-0" />
+                    ) : (
+                      <Moon className="h-5 w-5 flex-shrink-0" />
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
@@ -149,7 +158,11 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
                 )}
                 aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >
-                {theme === 'dark' ? <Sun className="h-5 w-5 flex-shrink-0" /> : <Moon className="h-5 w-5 flex-shrink-0" />}
+                {theme === 'dark' ? (
+                  <Sun className="h-5 w-5 flex-shrink-0" />
+                ) : (
+                  <Moon className="h-5 w-5 flex-shrink-0" />
+                )}
                 <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
               </button>
             )}
