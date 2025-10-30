@@ -7,3 +7,4 @@
  */
 
 export { SseTransport } from './sse-transport.js';
+export { TransportManager } from './transport-manager.js';
