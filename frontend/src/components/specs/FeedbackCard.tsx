@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MessageSquare, AlertCircle, Lightbulb, Trash2, Check, X } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { IssueFeedback, FeedbackType, FeedbackAnchor } from '@/types/api'
@@ -26,7 +27,7 @@ export function FeedbackCard({
   maxHeight = 200, // Default max height before scrolling
   isCompact = false,
 }: FeedbackCardProps) {
-  const [showActions, setShowActions] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const [isExpanded, setIsExpanded] = useState(!isCompact)
 
   // Parse anchor from JSON string
@@ -81,9 +82,9 @@ export function FeedbackCard({
 
   return (
     <Card
-      className={`relative cursor-pointer transition-shadow hover:shadow-md ${feedback.dismissed ? 'opacity-60' : ''} ${className}`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      className={`relative cursor-pointer border-2 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-lg ${feedback.dismissed ? 'opacity-60' : ''} ${className}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
     >
       <div className="p-3">
@@ -103,9 +104,12 @@ export function FeedbackCard({
             </div>
           </div>
 
-          {/* Actions */}
-          {showActions && (
-            <div className="flex gap-1">
+          {/* Actions - always rendered but visibility controlled by opacity */}
+          {(onDismiss || onDelete) && (
+            <div
+              className="flex gap-1 transition-opacity duration-150"
+              style={{ opacity: isHovered ? 1 : 0 }}
+            >
               {!feedback.dismissed && onDismiss && (
                 <Button
                   variant="ghost"
@@ -115,19 +119,21 @@ export function FeedbackCard({
                     onDismiss(feedback.id)
                   }}
                   title="Dismiss"
+                  className="h-6 w-6 p-0"
                 >
                   <Check className="h-3 w-3" />
                 </Button>
               )}
-              {feedback.dismissed && (
+              {feedback.dismissed && onDismiss && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onDismiss?.(feedback.id)
+                    onDismiss(feedback.id)
                   }}
                   title="Restore"
+                  className="h-6 w-6 p-0"
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -141,6 +147,7 @@ export function FeedbackCard({
                     onDelete(feedback.id)
                   }}
                   title="Delete"
+                  className="h-6 w-6 p-0"
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
@@ -177,7 +184,7 @@ export function FeedbackCard({
         {/* Footer */}
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>From {feedback.issue_id}</span>
-          <span>{new Date(feedback.created_at).toLocaleDateString()}</span>
+          <span>{formatDistanceToNow(new Date(feedback.created_at), { addSuffix: true })}</span>
         </div>
       </div>
     </Card>
