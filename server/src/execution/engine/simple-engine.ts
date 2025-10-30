@@ -318,6 +318,9 @@ export class SimpleExecutionEngine implements IExecutionEngine {
       // Send the prompt to the process
       await this._processManager.sendInput(managedProcess.id, task.prompt);
 
+      // Close stdin to signal EOF (Claude Code waits for stdin to close in --print mode)
+      this._processManager.closeInput(managedProcess.id);
+
       // Wait for process to complete
       await this.waitForProcessExit(managedProcess, task.config.timeout);
 
@@ -391,11 +394,16 @@ export class SimpleExecutionEngine implements IExecutionEngine {
 
       // Set up exit listener
       const checkInterval = setInterval(() => {
-        if (process.exitCode !== null) {
+        // Fetch fresh process state from manager to avoid stale references
+        const currentProcess = this._processManager.getProcess(process.id);
+        if (!currentProcess || currentProcess.exitCode !== null) {
           clearInterval(checkInterval);
           this.pollingIntervals.delete(process.id);
-          if (process.status === 'crashed') {
-            reject(new Error(`Process crashed with exit code ${process.exitCode}`));
+
+          if (!currentProcess) {
+            reject(new Error('Process not found'));
+          } else if (currentProcess.status === 'crashed') {
+            reject(new Error(`Process crashed with exit code ${currentProcess.exitCode}`));
           } else {
             resolve();
           }

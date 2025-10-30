@@ -94,6 +94,10 @@ export class MockProcessManager implements IProcessManager {
     // Mock implementation - does nothing
   }
 
+  closeInput(_processId: string): void {
+    // Mock implementation - does nothing
+  }
+
   onOutput(processId: string, handler: OutputHandler): void {
     if (!this.outputHandlers.has(processId)) {
       this.outputHandlers.set(processId, []);
