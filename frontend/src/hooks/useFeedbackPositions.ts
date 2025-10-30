@@ -72,7 +72,7 @@ export function useFeedbackPositions(
         if (!element && anchor.line_number !== undefined) {
           // Look for elements with line number data attribute
           element = editor.querySelector<HTMLElement>(
-            `[data-line="${anchor.line_number}"]`
+            `[data-line-number="${anchor.line_number}"]`
           )
 
           // If still not found, try to calculate approximate position

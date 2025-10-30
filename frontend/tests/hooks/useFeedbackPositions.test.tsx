@@ -141,7 +141,7 @@ describe('useFeedbackPositions', () => {
     p1.textContent = 'Line 1'
     const p2 = document.createElement('p')
     p2.textContent = 'Line 2'
-    p2.setAttribute('data-line', '2')
+    p2.setAttribute('data-line-number', '2')
     mockEditorElement.appendChild(p1)
     mockEditorElement.appendChild(p2)
 
