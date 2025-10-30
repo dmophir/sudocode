@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { FeedbackCard } from './FeedbackCard'
 import { useCollisionFreePositions } from '@/hooks/useCollisionFreePositions'
 import type { IssueFeedback, FeedbackAnchor } from '@/types/api'
@@ -39,6 +39,8 @@ export function AlignedFeedbackPanel({
   onDelete,
   className = '',
 }: AlignedFeedbackPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
   // Separate general comments from anchored comments
   const { generalComments, anchoredComments } = useMemo(() => {
     const general: IssueFeedback[] = []
@@ -101,7 +103,7 @@ export function AlignedFeedbackPanel({
   }, [anchoredComments, positions])
 
   return (
-    <div className={`flex h-full w-80 flex-col border-l bg-background ${className}`}>
+    <div className={`flex h-full w-80 flex-col bg-background ${className}`}>
       {/* General comments section - sticky at top */}
       {generalComments.length > 0 && (
         <section className="sticky top-0 z-10 border-b bg-muted/30 p-4">
@@ -127,118 +129,140 @@ export function AlignedFeedbackPanel({
       )}
 
       {/* Anchored comments - absolutely positioned with collision detection */}
-      <div className="relative flex-1 overflow-hidden">
-        {/* SVG layer for connectors and cluster indicators */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 1 }}>
-          {/* Draw cluster brackets for nearby feedback */}
-          {feedbackClusters.map((cluster, clusterIndex) => {
-            const clusterPositions = cluster
-              .map((id) => collisionFreePositions.get(id))
-              .filter((p) => p !== undefined)
+      <div className="relative min-h-full flex-1">
+        <div ref={panelRef} className="relative w-full">
+          {/* SVG layer for connectors and cluster indicators */}
+          <svg
+            className="pointer-events-none absolute left-0 top-0 w-full"
+            style={{
+              height: '100%',
+              minHeight:
+                anchoredComments.length > 0
+                  ? `${Math.max(...Array.from(collisionFreePositions.values()).map((p) => p.actualTop + p.height)) + 100}px`
+                  : '100%',
+              zIndex: 1,
+            }}
+          >
+            {/* Draw cluster brackets for nearby feedback */}
+            {feedbackClusters.map((cluster, clusterIndex) => {
+              const clusterPositions = cluster
+                .map((id) => collisionFreePositions.get(id))
+                .filter((p) => p !== undefined)
 
-            if (clusterPositions.length < 2) return null
+              if (clusterPositions.length < 2) return null
 
-            const firstPos = clusterPositions[0]!
-            const lastPos = clusterPositions[clusterPositions.length - 1]!
+              const firstPos = clusterPositions[0]!
+              const lastPos = clusterPositions[clusterPositions.length - 1]!
 
-            const x = 4
-            const startY = firstPos.idealTop
-            const endY = lastPos.idealTop + 20 // Approximate to bottom of last item's anchor
+              const x = 4
+              const startY = firstPos.idealTop
+              const endY = lastPos.idealTop + 20 // Approximate to bottom of last item's anchor
 
-            return (
-              <g key={`cluster-${clusterIndex}`}>
-                {/* Vertical bracket line */}
-                <line
-                  x1={x}
-                  y1={startY}
-                  x2={x}
-                  y2={endY}
-                  className="stroke-muted-foreground/30"
-                  strokeWidth="2"
-                />
-                {/* Top bracket */}
-                <line
-                  x1={x}
-                  y1={startY}
-                  x2={x + 8}
-                  y2={startY}
-                  className="stroke-muted-foreground/30"
-                  strokeWidth="2"
-                />
-                {/* Bottom bracket */}
-                <line
-                  x1={x}
-                  y1={endY}
-                  x2={x + 8}
-                  y2={endY}
-                  className="stroke-muted-foreground/30"
-                  strokeWidth="2"
-                />
-              </g>
-            )
-          })}
+              return (
+                <g key={`cluster-${clusterIndex}`}>
+                  {/* Vertical bracket line */}
+                  <line
+                    x1={x}
+                    y1={startY}
+                    x2={x}
+                    y2={endY}
+                    className="stroke-muted-foreground/30"
+                    strokeWidth="2"
+                  />
+                  {/* Top bracket */}
+                  <line
+                    x1={x}
+                    y1={startY}
+                    x2={x + 8}
+                    y2={startY}
+                    className="stroke-muted-foreground/30"
+                    strokeWidth="2"
+                  />
+                  {/* Bottom bracket */}
+                  <line
+                    x1={x}
+                    y1={endY}
+                    x2={x + 8}
+                    y2={endY}
+                    className="stroke-muted-foreground/30"
+                    strokeWidth="2"
+                  />
+                </g>
+              )
+            })}
 
-          {/* Draw connector lines for displaced feedback */}
+            {/* Draw connector lines for displaced feedback */}
+            {anchoredComments.map((fb) => {
+              const position = collisionFreePositions.get(fb.id)
+              if (!position) return null
+
+              const { idealTop, actualTop } = position
+              const isDisplaced = Math.abs(actualTop - idealTop) > 2 // Allow 2px tolerance
+
+              if (!isDisplaced) return null
+
+              // Draw a connector line from ideal position to actual position
+              const leftMargin = 8 // px-2 = 8px
+              const startX = leftMargin
+              const startY = idealTop
+              const endX = leftMargin
+              const endY = actualTop
+
+              return (
+                <g key={`connector-${fb.id}`}>
+                  {/* Dot at anchor point */}
+                  <circle cx={startX + 4} cy={startY} r="3" className="fill-primary/60" />
+                  {/* Curved connector line */}
+                  <path
+                    d={`M ${startX + 4} ${startY} Q ${startX + 20} ${(startY + endY) / 2}, ${endX + 4} ${endY}`}
+                    className="stroke-primary/40"
+                    strokeWidth="1.5"
+                    fill="none"
+                    strokeDasharray="3,3"
+                  />
+                </g>
+              )
+            })}
+          </svg>
+
+          {/* Feedback cards */}
           {anchoredComments.map((fb) => {
             const position = collisionFreePositions.get(fb.id)
+
+            // Don't render if position is not yet calculated
             if (!position) return null
 
-            const { idealTop, actualTop } = position
-            const isDisplaced = Math.abs(actualTop - idealTop) > 2 // Allow 2px tolerance
-
-            if (!isDisplaced) return null
-
-            // Draw a connector line from ideal position to actual position
-            const leftMargin = 8 // px-2 = 8px
-            const startX = leftMargin
-            const startY = idealTop
-            const endX = leftMargin
-            const endY = actualTop
+            // Check if this feedback is in a cluster (nearby other feedback)
+            const isInCluster = feedbackClusters.some((cluster) => cluster.includes(fb.id))
 
             return (
-              <g key={`connector-${fb.id}`}>
-                {/* Dot at anchor point */}
-                <circle cx={startX + 4} cy={startY} r="3" className="fill-primary/60" />
-                {/* Curved connector line */}
-                <path
-                  d={`M ${startX + 4} ${startY} Q ${startX + 20} ${(startY + endY) / 2}, ${endX + 4} ${endY}`}
-                  className="stroke-primary/40"
-                  strokeWidth="1.5"
-                  fill="none"
-                  strokeDasharray="3,3"
+              <div
+                key={fb.id}
+                className="absolute w-full px-2"
+                style={{ top: `${position.actualTop}px`, zIndex: 10 }}
+              >
+                <FeedbackCard
+                  feedback={fb}
+                  onClick={() => onFeedbackClick?.(fb)}
+                  onDismiss={onDismiss ? () => onDismiss(fb.id) : undefined}
+                  onDelete={onDelete ? () => onDelete(fb.id) : undefined}
+                  maxHeight={200} // Max height before scrolling
+                  isCompact={isInCluster} // Compact mode for clustered feedback
                 />
-              </g>
+              </div>
             )
           })}
-        </svg>
 
-        {/* Feedback cards */}
-        {anchoredComments.map((fb) => {
-          const position = collisionFreePositions.get(fb.id)
-
-          // Don't render if position is not yet calculated
-          if (!position) return null
-
-          // Check if this feedback is in a cluster (nearby other feedback)
-          const isInCluster = feedbackClusters.some((cluster) => cluster.includes(fb.id))
-
-          return (
+          {/* Spacer to ensure panel height matches content */}
+          {anchoredComments.length > 0 && (
             <div
-              key={fb.id}
-              className="absolute w-full px-2"
-              style={{ top: `${position.actualTop}px`, zIndex: 10 }}
-            >
-              <FeedbackCard
-                feedback={fb}
-                onClick={() => onFeedbackClick?.(fb)}
-                onDismiss={onDismiss ? () => onDismiss(fb.id) : undefined}
-                onDelete={onDelete ? () => onDelete(fb.id) : undefined}
-                maxHeight={200} // Max height before scrolling
-                isCompact={isInCluster} // Compact mode for clustered feedback
-              />
-            </div>
-          )
-        })}
+              style={{
+                height: `${Math.max(...Array.from(collisionFreePositions.values()).map((p) => p.actualTop + p.height)) + 100}px`,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Empty state */}

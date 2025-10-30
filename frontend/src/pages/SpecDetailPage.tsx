@@ -331,8 +331,8 @@ export default function SpecDetailPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        <div ref={editorContainerRef} className="flex-1 overflow-auto px-6 py-4">
+      <div ref={editorContainerRef} className="flex flex-1 overflow-auto">
+        <div className="flex-1 px-6 py-4">
           <div className="space-y-3">
             {/* Spec ID and Title */}
             <div className="space-y-2 pb-3">
@@ -414,7 +414,6 @@ export default function SpecDetailPage() {
           <AlignedFeedbackPanel
             feedback={feedback}
             positions={feedbackPositions}
-            editorRef={editorContainerRef}
             onFeedbackClick={handleFeedbackClick}
             onDismiss={handleFeedbackDismiss}
             onDelete={handleFeedbackDelete}

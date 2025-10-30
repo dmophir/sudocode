@@ -55,8 +55,6 @@ export function useFeedbackPositions(
         return
       }
 
-      const editorRect = editor.getBoundingClientRect()
-
       feedback.forEach((fb) => {
         const anchor = parseAnchor(fb.anchor)
 
@@ -64,16 +62,12 @@ export function useFeedbackPositions(
         if (!anchor) return
 
         // Try to find element by feedback ID first (from FeedbackMark)
-        let element = editor.querySelector<HTMLElement>(
-          `[data-feedback-id="${fb.id}"]`
-        )
+        let element = editor.querySelector<HTMLElement>(`[data-feedback-id="${fb.id}"]`)
 
         // If not found, try to find by line number
         if (!element && anchor.line_number !== undefined) {
           // Look for elements with line number data attribute
-          element = editor.querySelector<HTMLElement>(
-            `[data-line-number="${anchor.line_number}"]`
-          )
+          element = editor.querySelector<HTMLElement>(`[data-line-number="${anchor.line_number}"]`)
 
           // If still not found, try to calculate approximate position
           // by finding paragraph/line elements and counting down
@@ -91,10 +85,17 @@ export function useFeedbackPositions(
 
         // If we found an element, calculate its position
         if (element) {
-          const rect = element.getBoundingClientRect()
-          // Calculate position relative to editor's current viewport
-          // This makes feedback move with the visible content as you scroll
-          const top = rect.top - editorRect.top
+          // Get position relative to the document (offsetTop) rather than viewport
+          // This gives us the absolute position within the scrollable content
+          let top = 0
+          let el: HTMLElement | null = element
+
+          // Walk up the tree to calculate offsetTop relative to the scroll container
+          while (el && el !== editor) {
+            top += el.offsetTop
+            el = el.offsetParent as HTMLElement
+          }
+
           newPositions.set(fb.id, top)
         }
       })
