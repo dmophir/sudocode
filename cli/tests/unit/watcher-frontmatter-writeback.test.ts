@@ -79,14 +79,14 @@ The watcher should auto-generate an ID and write it back.
     control = startWatcher({
       db,
       baseDir: tempDir,
-      debounceDelay: 100,
+      debounceDelay: 50,
       ignoreInitial: false,
       onLog: (msg) => logs.push(msg),
       onError: (err) => errors.push(err),
     });
 
     // Wait for watcher to process the file
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     // Read the file again
     const updatedContent = fs.readFileSync(specPath, "utf8");
@@ -139,14 +139,14 @@ This spec already has frontmatter.
     control = startWatcher({
       db,
       baseDir: tempDir,
-      debounceDelay: 100,
+      debounceDelay: 50,
       ignoreInitial: false,
       onLog: (msg) => logs.push(msg),
       onError: (err) => errors.push(err),
     });
 
     // Wait for watcher to process
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     // Read the file again
     const updatedContent = fs.readFileSync(specPath, "utf8");
