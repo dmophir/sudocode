@@ -6,7 +6,7 @@
  * @module execution/workflow/types
  */
 
-import type { RetryPolicy } from '../resilience/types.js';
+import type { RetryPolicy, ResilientExecutionResult } from '../resilience/types.js';
 import type { ExecutionResult } from '../engine/types.js';
 
 /**
@@ -75,7 +75,7 @@ export interface WorkflowExecution {
   /** Shared context across steps */
   context: Record<string, any>;
   /** Results from completed steps */
-  stepResults: ExecutionResult[];
+  stepResults: ResilientExecutionResult[];
   /** When execution started */
   startedAt: Date;
   /** When execution completed */

@@ -39,3 +39,6 @@ export {
   evaluateCondition,
   createContext,
 } from './utils.js';
+
+// Implementation
+export { LinearOrchestrator } from './linear-orchestrator.js';
