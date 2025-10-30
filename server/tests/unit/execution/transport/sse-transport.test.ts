@@ -6,7 +6,7 @@
 
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { SseTransport } from '../sse-transport.js';
+import { SseTransport } from '../../../../src/execution/transport/sse-transport.js';
 import type { Response } from 'express';
 
 describe('SseTransport', () => {

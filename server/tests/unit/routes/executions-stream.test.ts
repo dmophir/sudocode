@@ -11,8 +11,8 @@ import assert from 'node:assert/strict';
 import { mock } from 'node:test';
 import express, { type Express } from 'express';
 import request from 'supertest';
-import { createExecutionStreamRoutes } from '../executions-stream.js';
-import { TransportManager } from '../../execution/transport/transport-manager.js';
+import { createExecutionStreamRoutes } from '../../../src/routes/executions-stream.js';
+import { TransportManager } from '../../../src/execution/transport/transport-manager.js';
 
 describe('Execution Stream Routes', () => {
   let app: Express;

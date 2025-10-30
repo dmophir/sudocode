@@ -6,7 +6,7 @@
 
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { AgUiEventAdapter } from '../ag-ui-adapter.js';
+import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';
 import type {
   IOutputProcessor,
@@ -17,7 +17,7 @@ import type {
   FileChangeHandler,
   ProgressHandler,
   ErrorHandler,
-} from '../types.js';
+} from '../../../../src/execution/output/types.js';
 
 describe('AgUiEventAdapter', () => {
   describe('constructor', () => {

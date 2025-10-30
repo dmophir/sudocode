@@ -9,8 +9,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mock } from 'node:test';
-import { TransportManager, type AgUiEvent } from '../transport-manager.js';
-import { AgUiEventAdapter } from '../../output/ag-ui-adapter.js';
+import { TransportManager, type AgUiEvent } from '../../../../src/execution/transport/transport-manager.js';
+import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';
 
 describe('TransportManager', () => {
