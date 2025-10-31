@@ -2,25 +2,32 @@
  * Tests for ExecutionLifecycleService
  */
 
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
-import type Database from 'better-sqlite3';
-import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
-import { EXECUTIONS_TABLE, SERVER_INDEXES } from '../../../src/services/db.js';
+import { describe, it, before, after } from "node:test";
+import assert from "node:assert";
+import type Database from "better-sqlite3";
+import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
+import { EXECUTIONS_TABLE, SERVER_INDEXES } from "../../../src/services/db.js";
 import {
   ExecutionLifecycleService,
   sanitizeForBranchName,
-} from '../../../src/services/execution-lifecycle.js';
-import { getExecution } from '../../../src/services/executions.js';
-import { generateIssueId } from '@sudocode/cli/dist/id-generator.js';
-import { createIssue } from '@sudocode/cli/dist/operations/index.js';
-import type { IWorktreeManager } from '../../../src/execution/worktree/manager.js';
-import type { WorktreeConfig, WorktreeCreateParams, WorktreeInfo } from '../../../src/execution/worktree/types.js';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+} from "../../../src/services/execution-lifecycle.js";
+import {
+  getExecution,
+  updateExecution,
+} from "../../../src/services/executions.js";
+import { generateIssueId } from "@sudocode/cli/dist/id-generator.js";
+import { createIssue } from "@sudocode/cli/dist/operations/index.js";
+import type { IWorktreeManager } from "../../../src/execution/worktree/manager.js";
+import type {
+  WorktreeConfig,
+  WorktreeCreateParams,
+  WorktreeInfo,
+} from "../../../src/execution/worktree/types.js";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
-describe('ExecutionLifecycleService', () => {
+describe("ExecutionLifecycleService", () => {
   let db: Database.Database;
   let testDbPath: string;
   let testDir: string;
@@ -30,20 +37,20 @@ describe('ExecutionLifecycleService', () => {
   before(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'sudocode-test-lifecycle-')
+      path.join(os.tmpdir(), "sudocode-test-lifecycle-")
     );
-    testDbPath = path.join(testDir, 'cache.db');
+    testDbPath = path.join(testDir, "cache.db");
 
     // Set SUDOCODE_DIR environment variable
     process.env.SUDOCODE_DIR = testDir;
 
     // Create config.json for ID generation
-    const configPath = path.join(testDir, 'config.json');
+    const configPath = path.join(testDir, "config.json");
     const config = {
-      version: '1.0.0',
+      version: "1.0.0",
       id_prefix: {
-        spec: 'SPEC',
-        issue: 'ISSUE',
+        spec: "SPEC",
+        issue: "ISSUE",
       },
     };
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -57,8 +64,8 @@ describe('ExecutionLifecycleService', () => {
     const issueId = generateIssueId(db, testDir);
     const issue = createIssue(db, {
       id: issueId,
-      title: 'Test Issue for Lifecycle',
-      content: 'This is a test issue',
+      title: "Test Issue for Lifecycle",
+      content: "This is a test issue",
     });
     testIssueId = issue.id;
     testIssueTitle = issue.title;
@@ -74,8 +81,8 @@ describe('ExecutionLifecycleService', () => {
     delete process.env.SUDOCODE_DIR;
   });
 
-  describe('createExecutionWithWorktree', () => {
-    it('should create execution with worktree', async () => {
+  describe("createExecutionWithWorktree", () => {
+    it("should create execution with worktree", async () => {
       // Create mock worktree manager
       const mockWorktreeManager = createMockWorktreeManager();
 
@@ -88,34 +95,39 @@ describe('ExecutionLifecycleService', () => {
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
         issueTitle: testIssueTitle,
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
       // Verify execution was created
       assert.ok(result.execution);
       assert.strictEqual(result.execution.issue_id, testIssueId);
-      assert.strictEqual(result.execution.agent_type, 'claude-code');
-      assert.strictEqual(result.execution.target_branch, 'main');
-      assert.strictEqual(result.execution.status, 'running');
+      assert.strictEqual(result.execution.agent_type, "claude-code");
+      assert.strictEqual(result.execution.target_branch, "main");
+      assert.strictEqual(result.execution.status, "running");
 
       // Verify branch name format
-      assert.ok(result.branchName.startsWith('sudocode/'));
-      assert.ok(result.branchName.includes('test-issue-for-lifecycle'));
+      assert.ok(result.branchName.startsWith("sudocode/"));
+      assert.ok(result.branchName.includes("test-issue-for-lifecycle"));
 
       // Verify worktree path format
-      assert.ok(result.worktreePath.includes('.sudocode/worktrees'));
+      assert.ok(result.worktreePath.includes(".sudocode/worktrees"));
 
       // Verify worktree manager was called
       assert.strictEqual(mockWorktreeManager.createWorktreeCalls.length, 1);
       const createCall = mockWorktreeManager.createWorktreeCalls[0];
       assert.strictEqual(createCall.repoPath, testDir);
-      assert.strictEqual(createCall.baseBranch, 'main');
+      assert.strictEqual(createCall.baseBranch, "main");
       assert.strictEqual(createCall.createBranch, true);
+
+      // Cleanup: Mark execution as completed to allow subsequent tests
+      updateExecution(db, result.execution.id, {
+        status: "completed",
+      });
     });
 
-    it('should cleanup worktree if execution creation fails', async () => {
+    it("should cleanup worktree if execution creation fails", async () => {
       // Create mock that succeeds worktree creation
       const mockWorktreeManager = createMockWorktreeManager();
 
@@ -128,13 +140,13 @@ describe('ExecutionLifecycleService', () => {
       // Mock execution creation failure by using invalid issue ID
       try {
         await service.createExecutionWithWorktree({
-          issueId: 'invalid-issue-id',
-          issueTitle: 'Test',
-          agentType: 'claude-code',
-          targetBranch: 'main',
+          issueId: "invalid-issue-id",
+          issueTitle: "Test",
+          agentType: "claude-code",
+          targetBranch: "main",
           repoPath: testDir,
         });
-        assert.fail('Should have thrown error');
+        assert.fail("Should have thrown error");
       } catch (error) {
         // Expected error
       }
@@ -143,7 +155,7 @@ describe('ExecutionLifecycleService', () => {
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
     });
 
-    it('should generate sanitized branch names', async () => {
+    it("should generate sanitized branch names", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -154,27 +166,38 @@ describe('ExecutionLifecycleService', () => {
 
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
-        issueTitle: 'Fix Bug: Auth / Login Issues!',
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        issueTitle: "Fix Bug: Auth / Login Issues!",
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
       // Branch name should be sanitized
-      assert.ok(result.branchName.includes('fix-bug-auth-login-issues'));
-      assert.ok(!result.branchName.includes(':'));
-      assert.ok(!result.branchName.includes('!'));
+      assert.ok(result.branchName.includes("fix-bug-auth-login-issues"));
+      assert.ok(!result.branchName.includes(":"));
+      assert.ok(!result.branchName.includes("!"));
 
       // Check that the title portion (after last slash) is sanitized
-      const titlePortion = result.branchName.split('/').pop();
+      const titlePortion = result.branchName.split("/").pop();
       assert.ok(titlePortion);
-      assert.ok(!titlePortion.includes(':'), 'sanitized portion should not contain colon');
-      assert.ok(!titlePortion.includes('!'), 'sanitized portion should not contain exclamation');
+      assert.ok(
+        !titlePortion.includes(":"),
+        "sanitized portion should not contain colon"
+      );
+      assert.ok(
+        !titlePortion.includes("!"),
+        "sanitized portion should not contain exclamation"
+      );
+
+      // Cleanup: Mark execution as completed to allow subsequent tests
+      updateExecution(db, result.execution.id, {
+        status: "completed",
+      });
     });
   });
 
-  describe('cleanupExecution', () => {
-    it('should cleanup execution worktree', async () => {
+  describe("cleanupExecution", () => {
+    it("should cleanup execution worktree", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -187,8 +210,8 @@ describe('ExecutionLifecycleService', () => {
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
         issueTitle: testIssueTitle,
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
@@ -205,9 +228,14 @@ describe('ExecutionLifecycleService', () => {
       // Verify execution worktree_path was cleared
       const execution = getExecution(db, result.execution.id);
       assert.strictEqual(execution?.worktree_path, null);
+
+      // Cleanup: Mark execution as completed to allow subsequent tests
+      updateExecution(db, result.execution.id, {
+        status: "completed",
+      });
     });
 
-    it('should handle non-existent execution gracefully', async () => {
+    it("should handle non-existent execution gracefully", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -217,13 +245,13 @@ describe('ExecutionLifecycleService', () => {
       );
 
       // Should not throw for non-existent execution
-      await service.cleanupExecution('non-existent-id');
+      await service.cleanupExecution("non-existent-id");
 
       // Verify worktree cleanup was not called
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
     });
 
-    it('should handle execution without worktree', async () => {
+    it("should handle execution without worktree", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -236,13 +264,12 @@ describe('ExecutionLifecycleService', () => {
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
         issueTitle: testIssueTitle,
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
       // Manually clear worktree_path
-      const { updateExecution } = await import('../../../src/services/executions.js');
       updateExecution(db, result.execution.id, {
         worktree_path: null,
       });
@@ -252,17 +279,22 @@ describe('ExecutionLifecycleService', () => {
 
       // Verify worktree cleanup was not called
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
+
+      // Cleanup: Mark execution as completed to allow subsequent tests
+      updateExecution(db, result.execution.id, {
+        status: "completed",
+      });
     });
   });
 
-  describe('cleanupOrphanedWorktrees', () => {
-    it('should cleanup worktrees without execution records', async () => {
+  describe("cleanupOrphanedWorktrees", () => {
+    it("should cleanup worktrees without execution records", async () => {
       const mockWorktreeManager = createMockWorktreeManager({
         worktrees: [
           {
-            path: path.join(testDir, '.sudocode/worktrees/orphaned-exec-id'),
-            branch: 'sudocode/test-branch',
-            commit: 'abc123',
+            path: path.join(testDir, ".sudocode/worktrees/orphaned-exec-id"),
+            branch: "sudocode/test-branch",
+            commit: "abc123",
             isMain: false,
             isLocked: false,
           },
@@ -281,12 +313,12 @@ describe('ExecutionLifecycleService', () => {
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
       assert.ok(
         mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath.includes(
-          'orphaned-exec-id'
+          "orphaned-exec-id"
         )
       );
     });
 
-    it('should cleanup worktrees for completed executions', async () => {
+    it("should cleanup worktrees for completed executions", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -299,22 +331,21 @@ describe('ExecutionLifecycleService', () => {
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
         issueTitle: testIssueTitle,
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
       // Mark execution as completed
-      const { updateExecution } = await import('../../../src/services/executions.js');
       updateExecution(db, result.execution.id, {
-        status: 'completed',
+        status: "completed",
       });
 
       // Add worktree to mock list
       mockWorktreeManager.worktrees.push({
         path: result.worktreePath,
         branch: result.branchName,
-        commit: 'abc123',
+        commit: "abc123",
         isMain: false,
         isLocked: false,
       });
@@ -332,7 +363,7 @@ describe('ExecutionLifecycleService', () => {
       );
     });
 
-    it('should not cleanup worktrees for running executions', async () => {
+    it("should not cleanup worktrees for running executions", async () => {
       const mockWorktreeManager = createMockWorktreeManager();
 
       const service = new ExecutionLifecycleService(
@@ -345,8 +376,8 @@ describe('ExecutionLifecycleService', () => {
       const result = await service.createExecutionWithWorktree({
         issueId: testIssueId,
         issueTitle: testIssueTitle,
-        agentType: 'claude-code',
-        targetBranch: 'main',
+        agentType: "claude-code",
+        targetBranch: "main",
         repoPath: testDir,
       });
 
@@ -354,7 +385,7 @@ describe('ExecutionLifecycleService', () => {
       mockWorktreeManager.worktrees.push({
         path: result.worktreePath,
         branch: result.branchName,
-        commit: 'abc123',
+        commit: "abc123",
         isMain: false,
         isLocked: false,
       });
@@ -366,64 +397,60 @@ describe('ExecutionLifecycleService', () => {
 
       // Verify cleanup was NOT called (execution still running)
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
+
+      // Cleanup: Mark execution as completed to allow subsequent tests
+      updateExecution(db, result.execution.id, {
+        status: "completed",
+      });
     });
   });
 
-  describe('sanitizeForBranchName', () => {
-    it('should convert to lowercase', () => {
+  describe("sanitizeForBranchName", () => {
+    it("should convert to lowercase", () => {
       assert.strictEqual(
-        sanitizeForBranchName('UPPERCASE Text'),
-        'uppercase-text'
+        sanitizeForBranchName("UPPERCASE Text"),
+        "uppercase-text"
       );
     });
 
-    it('should replace spaces with hyphens', () => {
+    it("should replace spaces with hyphens", () => {
+      assert.strictEqual(sanitizeForBranchName("fix auth bug"), "fix-auth-bug");
+    });
+
+    it("should replace slashes with hyphens", () => {
       assert.strictEqual(
-        sanitizeForBranchName('fix auth bug'),
-        'fix-auth-bug'
+        sanitizeForBranchName("feature/auth/login"),
+        "feature-auth-login"
       );
     });
 
-    it('should replace slashes with hyphens', () => {
+    it("should remove special characters", () => {
+      assert.strictEqual(sanitizeForBranchName("fix: bug! @#$%"), "fix-bug");
+    });
+
+    it("should remove consecutive hyphens", () => {
       assert.strictEqual(
-        sanitizeForBranchName('feature/auth/login'),
-        'feature-auth-login'
+        sanitizeForBranchName("fix   bug---here"),
+        "fix-bug-here"
       );
     });
 
-    it('should remove special characters', () => {
-      assert.strictEqual(
-        sanitizeForBranchName('fix: bug! @#$%'),
-        'fix-bug'
-      );
+    it("should remove leading/trailing hyphens", () => {
+      assert.strictEqual(sanitizeForBranchName("  -fix bug-  "), "fix-bug");
     });
 
-    it('should remove consecutive hyphens', () => {
-      assert.strictEqual(
-        sanitizeForBranchName('fix   bug---here'),
-        'fix-bug-here'
-      );
-    });
-
-    it('should remove leading/trailing hyphens', () => {
-      assert.strictEqual(
-        sanitizeForBranchName('  -fix bug-  '),
-        'fix-bug'
-      );
-    });
-
-    it('should limit length to 50 characters', () => {
-      const longString = 'a'.repeat(100);
+    it("should limit length to 50 characters", () => {
+      const longString = "a".repeat(100);
       const result = sanitizeForBranchName(longString);
       assert.strictEqual(result.length, 50);
     });
 
-    it('should handle empty string', () => {
-      assert.strictEqual(sanitizeForBranchName(''), '');
+    it("should handle empty string", () => {
+      assert.strictEqual(sanitizeForBranchName(""), "");
     });
 
-    it('should handle string with only special characters', () => {
-      assert.strictEqual(sanitizeForBranchName('@#$%^&*()'), '');
+    it("should handle string with only special characters", () => {
+      assert.strictEqual(sanitizeForBranchName("@#$%^&*()"), "");
     });
   });
 });
@@ -439,19 +466,19 @@ function createMockWorktreeManager(options?: {
   worktrees: WorktreeInfo[];
 } {
   const mockConfig: WorktreeConfig = {
-    worktreeStoragePath: '.sudocode/worktrees',
+    worktreeStoragePath: ".sudocode/worktrees",
     autoCreateBranches: true,
     autoDeleteBranches: false,
     enableSparseCheckout: false,
     sparseCheckoutPatterns: undefined,
-    branchPrefix: 'sudocode',
+    branchPrefix: "sudocode",
     cleanupOrphanedWorktreesOnStartup: true,
   };
 
   const mock = {
     createWorktreeCalls: [] as WorktreeCreateParams[],
     cleanupWorktreeCalls: [] as { worktreePath: string; repoPath?: string }[],
-    worktrees: options?.worktrees || [] as WorktreeInfo[],
+    worktrees: options?.worktrees || ([] as WorktreeInfo[]),
 
     async createWorktree(params: WorktreeCreateParams): Promise<void> {
       mock.createWorktreeCalls.push(params);
@@ -462,7 +489,10 @@ function createMockWorktreeManager(options?: {
       // No-op for tests
     },
 
-    async cleanupWorktree(worktreePath: string, repoPath?: string): Promise<void> {
+    async cleanupWorktree(
+      worktreePath: string,
+      repoPath?: string
+    ): Promise<void> {
       mock.cleanupWorktreeCalls.push({ worktreePath, repoPath });
       // Remove from worktrees list if present
       const index = mock.worktrees.findIndex((w) => w.path === worktreePath);
@@ -488,7 +518,7 @@ function createMockWorktreeManager(options?: {
     },
 
     async listBranches(): Promise<string[]> {
-      return ['main', 'develop', 'feature/test'];
+      return ["main", "develop", "feature/test"];
     },
   };
 

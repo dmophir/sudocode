@@ -117,7 +117,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     // Find all STEP_STARTED events
     const stepStartedEvents = capturedEvents.filter(
@@ -150,7 +151,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     // Find STEP_FINISHED event
     const stepFinishedEvent = capturedEvents.find(
@@ -179,7 +181,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     // Find RUN_FINISHED event
     const runFinishedEvent = capturedEvents.find(
@@ -226,12 +229,11 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    try {
-      await orchestrator.startWorkflow(workflow, '/test');
-      assert.fail('Should have thrown an error');
-    } catch (error) {
-      // Expected error
-    }
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const execution = await orchestrator.waitForWorkflow(executionId);
+
+    // Verify workflow failed
+    assert.strictEqual(execution.status, 'failed');
 
     // Find RUN_ERROR event
     const runErrorEvent = capturedEvents.find(
@@ -300,11 +302,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    try {
-      await orchestrator.startWorkflow(workflow, '/test');
-    } catch (error) {
-      // Expected error
-    }
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     // Find STEP_FINISHED event with error status
     const stepFinishedEvent = capturedEvents.find(
@@ -336,7 +335,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     // Filter to lifecycle events only
     const lifecycleEvents = capturedEvents.filter((e) =>
@@ -482,7 +482,8 @@ describe('LinearOrchestrator AG-UI Events', () => {
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.waitForWorkflow(executionId);
 
     const stepFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.STEP_FINISHED

@@ -15,26 +15,55 @@ export const EXECUTIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS executions (
     id TEXT PRIMARY KEY,
     issue_id TEXT NOT NULL,
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('claude-code', 'codex')),
-    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'stopped')),
 
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    exit_code INTEGER,
-    error_message TEXT,
+    -- Execution mode and configuration (SPEC-011 fields - nullable for legacy)
+    mode TEXT CHECK(mode IN ('worktree', 'local')),
+    prompt TEXT,
+    config TEXT,
 
+    -- Process information (legacy + new)
+    agent_type TEXT CHECK(agent_type IN ('claude-code', 'codex')),
+    session_id TEXT,
+    workflow_execution_id TEXT,
+
+    -- Git/branch information
+    target_branch TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
     before_commit TEXT,
     after_commit TEXT,
-    target_branch TEXT,
     worktree_path TEXT,
 
-    session_id TEXT,
-    summary TEXT,
+    -- Status (unified - supports both old and new statuses)
+    status TEXT NOT NULL CHECK(status IN (
+        'preparing', 'pending', 'running', 'paused',
+        'completed', 'failed', 'cancelled', 'stopped'
+    )),
 
+    -- Timing (Unix timestamps)
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    started_at INTEGER,
+    completed_at INTEGER,
+    cancelled_at INTEGER,
 
-    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+    -- Results and metadata
+    exit_code INTEGER,
+    error_message TEXT,
+    error TEXT,
+    model TEXT,
+    summary TEXT,
+    files_changed TEXT,
+
+    -- Relationships (SPEC-011)
+    parent_execution_id TEXT,
+
+    -- Multi-step workflow support (future extension)
+    step_type TEXT,
+    step_index INTEGER,
+    step_config TEXT,
+
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_execution_id) REFERENCES executions(id) ON DELETE SET NULL
 );
 `;
 
@@ -45,6 +74,11 @@ export const SERVER_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_executions_issue_id ON executions(issue_id);
 CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
 CREATE INDEX IF NOT EXISTS idx_executions_session_id ON executions(session_id);
+CREATE INDEX IF NOT EXISTS idx_executions_parent ON executions(parent_execution_id);
+CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions(created_at);
+CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_execution_id);
+CREATE INDEX IF NOT EXISTS idx_executions_workflow_step ON executions(workflow_execution_id, step_index);
+CREATE INDEX IF NOT EXISTS idx_executions_step_type ON executions(step_type);
 `;
 
 /**

@@ -182,7 +182,7 @@ describe('Workflow Layer Integration Tests', () => {
 
     it('should resume workflow from checkpoint', async () => {
       // Use slower executor to ensure workflow doesn't complete before pause
-      mockExecutor = new MockResilientExecutor(50);
+      mockExecutor = new MockResilientExecutor(200);
       storage = new InMemoryWorkflowStorage();
       orchestrator = new LinearOrchestrator(mockExecutor as any, storage);
 
@@ -200,15 +200,11 @@ describe('Workflow Layer Integration Tests', () => {
         checkpointInterval: 1,
       });
 
-      // Wait for partial execution (80ms = just past 1 step, before 2nd completes)
-      // With 50ms delay per step, 80ms = 1 step completed + 30ms into step 2
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      // Wait for partial execution (450ms = 2 steps complete, workflow still running)
+      // With 200ms delay per step, 450ms = 2 steps completed + time to pause cleanly
+      await new Promise((resolve) => setTimeout(resolve, 450));
 
-      // Check if workflow is still running before attempting to pause
-      const executionBefore = orchestrator.getExecution(executionId);
-      if (executionBefore && executionBefore.status !== 'completed') {
-        await orchestrator.pauseWorkflow(executionId);
-      }
+      await orchestrator.pauseWorkflow(executionId);
 
       // Verify checkpoint was created
       const checkpoints = await storage.listCheckpoints('resume-workflow');
@@ -229,7 +225,7 @@ describe('Workflow Layer Integration Tests', () => {
 
     it('should preserve context across resumption', async () => {
       // Use slower executor to ensure workflow doesn't complete before pause
-      mockExecutor = new MockResilientExecutor(50);
+      mockExecutor = new MockResilientExecutor(200);
       storage = new InMemoryWorkflowStorage();
       orchestrator = new LinearOrchestrator(mockExecutor as any, storage);
 
@@ -247,14 +243,10 @@ describe('Workflow Layer Integration Tests', () => {
         checkpointInterval: 1,
       });
 
-      // Wait 100ms to pause after 1-2 steps complete but before workflow finishes (3 steps × 50ms = 150ms)
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Wait 300ms to pause after 1-2 steps complete but before workflow finishes (3 steps × 200ms = 600ms)
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Check if workflow is still running before attempting to pause
-      const executionBefore = orchestrator.getExecution(executionId);
-      if (executionBefore && executionBefore.status !== 'completed') {
-        await orchestrator.pauseWorkflow(executionId);
-      }
+      await orchestrator.pauseWorkflow(executionId);
 
       const checkpointBefore = await storage.loadCheckpoint(executionId);
       const contextBefore = checkpointBefore?.state.context;

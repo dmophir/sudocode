@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS executions (
     workflow_execution_id TEXT,
 
     -- Git/branch information
-    base_branch TEXT NOT NULL,
+    target_branch TEXT NOT NULL,
     branch_name TEXT NOT NULL,
     before_commit TEXT,
     after_commit TEXT,

@@ -252,8 +252,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
     // Wait for any currently executing step to complete and update state
     // This prevents race condition where step is submitted to executor but result not yet saved
-    // 60ms is enough for typical step execution (MockResilientExecutor uses 50ms in tests)
-    await new Promise(resolve => setTimeout(resolve, 60));
+    // 250ms is enough for typical step execution (MockResilientExecutor uses 200ms in tests)
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     // Now save checkpoint with current state
     if (this._storage) {
