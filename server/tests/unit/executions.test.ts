@@ -81,6 +81,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
 
       assert.ok(execution);
@@ -97,13 +99,16 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "codex",
+        target_branch: "main",
+        branch_name: "main",
       });
 
       assert.ok(execution);
       assert.strictEqual(execution.agent_type, "codex");
       assert.strictEqual(execution.status, "running");
       assert.strictEqual(execution.before_commit, null);
-      assert.strictEqual(execution.target_branch, null);
+      assert.strictEqual(execution.target_branch, "main");
+      assert.strictEqual(execution.branch_name, "main");
       assert.strictEqual(execution.worktree_path, null);
     });
 
@@ -113,12 +118,14 @@ describe("Executions Service", () => {
         agent_type: "claude-code",
         before_commit: "abc123def456",
         target_branch: "main",
+        branch_name: "main",
         worktree_path: "/tmp/worktree",
       });
 
       assert.ok(execution);
       assert.strictEqual(execution.before_commit, "abc123def456");
       assert.strictEqual(execution.target_branch, "main");
+      assert.strictEqual(execution.branch_name, "main");
       assert.strictEqual(execution.worktree_path, "/tmp/worktree");
     });
   });
@@ -130,6 +137,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
       executionId = execution.id;
     });
@@ -154,10 +163,14 @@ describe("Executions Service", () => {
       createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
       createExecution(db, {
         issue_id: testIssueId,
         agent_type: "codex",
+        target_branch: "main",
+        branch_name: "main",
       });
     });
 
@@ -187,6 +200,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
       executionId = execution.id;
     });
@@ -256,12 +271,16 @@ describe("Executions Service", () => {
       const exec1 = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
       updateExecution(db, exec1.id, { status: "completed" });
 
       const exec2 = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "codex",
+        target_branch: "main",
+        branch_name: "main",
       });
       updateExecution(db, exec2.id, { status: "failed" });
     });
@@ -300,6 +319,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
       });
       executionId = execution.id;
     });
@@ -326,6 +347,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
+        target_branch: "main",
+        branch_name: "main",
         before_commit: "abc123",
       });
 
@@ -362,6 +385,8 @@ describe("Executions Service", () => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "codex",
+        target_branch: "main",
+        branch_name: "main",
       });
 
       // Mark as failed

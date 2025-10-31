@@ -10,11 +10,13 @@ import { randomUUID } from "crypto";
  * Input for creating a new execution
  */
 export interface CreateExecutionInput {
+  id?: string;                 // Optional, auto-generated if not provided
   issue_id: string;
   agent_type: AgentType;
   before_commit?: string;
-  target_branch?: string;
-  worktree_path?: string;
+  target_branch: string;      // Required for worktree integration
+  branch_name: string;         // Required for worktree integration
+  worktree_path?: string;      // Optional, set after worktree creation
 }
 
 /**
@@ -39,7 +41,7 @@ export function createExecution(
   db: Database.Database,
   input: CreateExecutionInput
 ): Execution {
-  const id = randomUUID();
+  const id = input.id || randomUUID();
   const now = Math.floor(Date.now() / 1000);
 
   const stmt = db.prepare(`
@@ -51,10 +53,11 @@ export function createExecution(
       started_at,
       before_commit,
       target_branch,
+      branch_name,
       worktree_path,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -64,7 +67,8 @@ export function createExecution(
     "running" as ExecutionStatus,
     now,
     input.before_commit || null,
-    input.target_branch || null,
+    input.target_branch,
+    input.branch_name,
     input.worktree_path || null,
     now,
     now
