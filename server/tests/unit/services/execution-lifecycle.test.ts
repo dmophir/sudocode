@@ -275,7 +275,7 @@ describe('ExecutionLifecycleService', () => {
         mockWorktreeManager
       );
 
-      await service.cleanupOrphanedWorktrees(testDir);
+      await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was called for orphaned worktree
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
@@ -322,7 +322,7 @@ describe('ExecutionLifecycleService', () => {
       // Reset call counts
       mockWorktreeManager.cleanupWorktreeCalls = [];
 
-      await service.cleanupOrphanedWorktrees(testDir);
+      await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was called
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
@@ -362,7 +362,7 @@ describe('ExecutionLifecycleService', () => {
       // Reset call counts
       mockWorktreeManager.cleanupWorktreeCalls = [];
 
-      await service.cleanupOrphanedWorktrees(testDir);
+      await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was NOT called (execution still running)
       assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
@@ -481,6 +481,14 @@ function createMockWorktreeManager(options?: {
 
     getConfig(): WorktreeConfig {
       return { ...mockConfig };
+    },
+
+    async isValidRepo(): Promise<boolean> {
+      return true;
+    },
+
+    async listBranches(): Promise<string[]> {
+      return ['main', 'develop', 'feature/test'];
     },
   };
 

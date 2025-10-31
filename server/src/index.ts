@@ -11,6 +11,9 @@ import type Database from "better-sqlite3";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { initDatabase, getDatabaseInfo } from "./services/db.js";
+import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
+import { WorktreeManager } from "./execution/worktree/manager.js";
+import { getWorktreeConfig } from "./execution/worktree/config.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
@@ -43,29 +46,54 @@ const SUDOCODE_DIR =
 const DB_PATH = path.join(SUDOCODE_DIR, "cache.db");
 
 // Initialize database and transport manager
-let db: Database.Database;
+let db!: Database.Database;
 let watcher: ServerWatcherControl | null = null;
-let transportManager: TransportManager;
+let transportManager!: TransportManager;
 
-try {
-  console.log(`Initializing database at: ${DB_PATH}`);
-  db = initDatabase({ path: DB_PATH });
-  const info = getDatabaseInfo(db);
-  console.log(`Database initialized with ${info.tables.length} tables`);
-  if (!info.hasCliTables) {
-    // TODO: Automatically import and sync.
-    console.warn(
-      "Warning: CLI tables not found. Run 'sudocode sync' to initialize the database."
-    );
+// Async initialization function
+async function initialize() {
+  try {
+    console.log(`Initializing database at: ${DB_PATH}`);
+    db = initDatabase({ path: DB_PATH });
+    const info = getDatabaseInfo(db);
+    console.log(`Database initialized with ${info.tables.length} tables`);
+    if (!info.hasCliTables) {
+      // TODO: Automatically import and sync.
+      console.warn(
+        "Warning: CLI tables not found. Run 'sudocode sync' to initialize the database."
+      );
+    }
+
+    // Initialize transport manager for SSE streaming
+    transportManager = new TransportManager();
+    console.log('Transport manager initialized');
+
+    // Cleanup orphaned worktrees on startup (if configured)
+    const worktreeConfig = getWorktreeConfig(process.cwd());
+    if (worktreeConfig.cleanupOrphanedWorktreesOnStartup) {
+      try {
+        console.log('Cleaning up orphaned worktrees...');
+        const worktreeManager = new WorktreeManager(worktreeConfig);
+        const lifecycleService = new ExecutionLifecycleService(
+          db,
+          process.cwd(),
+          worktreeManager
+        );
+        await lifecycleService.cleanupOrphanedWorktrees();
+        console.log('Orphaned worktree cleanup complete');
+      } catch (error) {
+        console.error('Failed to cleanup orphaned worktrees:', error);
+        // Don't exit - this is best-effort cleanup
+      }
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    process.exit(1);
   }
-
-  // Initialize transport manager for SSE streaming
-  transportManager = new TransportManager();
-  console.log('Transport manager initialized');
-} catch (error) {
-  console.error("Failed to initialize database:", error);
-  process.exit(1);
 }
+
+// Run initialization
+await initialize();
 
 // Start file watcher (enabled by default, disable with WATCH=false)
 const WATCH_ENABLED = process.env.WATCH !== "false";

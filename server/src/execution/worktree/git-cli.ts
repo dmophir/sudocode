@@ -101,6 +101,24 @@ export interface IGitCli {
     worktreePath: string,
     patterns: string[]
   ): Promise<void>;
+
+  /**
+   * Check if a path is a valid git repository
+   * Equivalent to: git rev-parse --git-dir
+   *
+   * @param repoPath - Path to check
+   * @returns Promise resolving to true if valid repo, false otherwise
+   */
+  isValidRepo(repoPath: string): Promise<boolean>;
+
+  /**
+   * List all branches in a repository
+   * Equivalent to: git branch --list --all --format='%(refname:short)'
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Promise resolving to array of branch names
+   */
+  listBranches(repoPath: string): Promise<string[]>;
 }
 
 /**
@@ -293,5 +311,31 @@ export class GitCli implements IGitCli {
     const escapedPatterns = patterns.map((p) => this.escapeShellArg(p)).join(' ');
     const command = `git sparse-checkout set ${escapedPatterns}`;
     this.execGit(command, worktreePath);
+  }
+
+  async isValidRepo(repoPath: string): Promise<boolean> {
+    try {
+      this.execGit('git rev-parse --git-dir', repoPath);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async listBranches(repoPath: string): Promise<string[]> {
+    const output = this.execGit(
+      `git branch --list --all --format='%(refname:short)'`,
+      repoPath
+    );
+
+    return output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((branch) => {
+        // Remove 'origin/' prefix if present for remote branches
+        // This gives us both local and remote branch names in a consistent format
+        return branch.replace(/^remotes\/origin\//, '');
+      });
   }
 }

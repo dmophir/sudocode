@@ -78,6 +78,18 @@ class MockGitCli implements IGitCli {
     if (this.shouldThrow) throw this.shouldThrow;
   }
 
+  async isValidRepo(_repoPath: string): Promise<boolean> {
+    this.calls.push({ method: 'isValidRepo', args: arguments as any });
+    if (this.shouldThrow) throw this.shouldThrow;
+    return true;
+  }
+
+  async listBranches(_repoPath: string): Promise<string[]> {
+    this.calls.push({ method: 'listBranches', args: arguments as any });
+    if (this.shouldThrow) throw this.shouldThrow;
+    return ['main', 'develop', 'feature/test'];
+  }
+
   getCallCount(method: string): number {
     return this.calls.filter((c) => c.method === method).length;
   }
@@ -95,6 +107,7 @@ describe('WorktreeManager', () => {
   let originalExistsSync: typeof fs.existsSync;
   let originalMkdirSync: typeof fs.mkdirSync;
   let originalRmSync: typeof fs.rmSync;
+  let originalRealpathSync: typeof fs.realpathSync;
 
   beforeEach(() => {
     config = {
@@ -113,11 +126,14 @@ describe('WorktreeManager', () => {
     originalExistsSync = fs.existsSync;
     originalMkdirSync = fs.mkdirSync;
     originalRmSync = fs.rmSync;
+    originalRealpathSync = fs.realpathSync;
 
     // Mock fs by default to return true
     (fs.existsSync as any) = () => true;
     (fs.mkdirSync as any) = () => {};
     (fs.rmSync as any) = () => {};
+    // Mock realpathSync to return the path unchanged (no symlinks in tests)
+    (fs.realpathSync as any) = (path: string) => path;
 
     manager = new WorktreeManager(config, mockGit);
   });
@@ -127,6 +143,7 @@ describe('WorktreeManager', () => {
     fs.existsSync = originalExistsSync;
     fs.mkdirSync = originalMkdirSync;
     fs.rmSync = originalRmSync;
+    fs.realpathSync = originalRealpathSync;
   });
 
   describe('createWorktree', () => {

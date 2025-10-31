@@ -121,28 +121,83 @@ export const EXECUTIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS executions (
     id TEXT PRIMARY KEY,
     issue_id TEXT NOT NULL,
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('claude-code', 'codex')),
-    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'stopped')),
 
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    exit_code INTEGER,
-    error_message TEXT,
+    -- Execution mode and configuration (SPEC-011 fields - nullable for legacy)
+    mode TEXT CHECK(mode IN ('worktree', 'local')),
+    prompt TEXT,
+    config TEXT,
 
+    -- Process information (legacy + new)
+    agent_type TEXT CHECK(agent_type IN ('claude-code', 'codex')),
+    session_id TEXT,
+    workflow_execution_id TEXT,
+
+    -- Git/branch information
+    base_branch TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
     before_commit TEXT,
     after_commit TEXT,
-    target_branch TEXT NOT NULL,
     worktree_path TEXT,
 
-    branch_name TEXT NOT NULL,
+    -- Status (unified - supports both old and new statuses)
+    status TEXT NOT NULL CHECK(status IN (
+        'preparing', 'pending', 'running', 'paused',
+        'completed', 'failed', 'cancelled', 'stopped'
+    )),
 
-    session_id TEXT,
-    summary TEXT,
-
+    -- Timing (Unix timestamps)
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    started_at INTEGER,
+    completed_at INTEGER,
+    cancelled_at INTEGER,
 
-    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+    -- Results and metadata
+    exit_code INTEGER,
+    error_message TEXT,
+    error TEXT,
+    model TEXT,
+    summary TEXT,
+    files_changed TEXT,
+
+    -- Relationships (SPEC-011)
+    parent_execution_id TEXT,
+
+    -- Multi-step workflow support (future extension)
+    step_type TEXT,
+    step_index INTEGER,
+    step_config TEXT,
+
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_execution_id) REFERENCES executions(id) ON DELETE SET NULL
+);
+`;
+
+// Prompt templates table (SPEC-011)
+export const PROMPT_TEMPLATES_TABLE = `
+CREATE TABLE IF NOT EXISTS prompt_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    type TEXT NOT NULL CHECK(type IN ('issue', 'spec', 'custom')),
+    template TEXT NOT NULL,
+    variables TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+`;
+
+// Execution logs table - stores detailed execution output
+// Logs are stored in JSONL format (newline-delimited JSON)
+export const EXECUTION_LOGS_TABLE = `
+CREATE TABLE IF NOT EXISTS execution_logs (
+    execution_id TEXT PRIMARY KEY,
+    logs TEXT NOT NULL DEFAULT '',
+    byte_size INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
 );
 `;
 
@@ -201,6 +256,21 @@ export const EXECUTIONS_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_executions_issue_id ON executions(issue_id);
 CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
 CREATE INDEX IF NOT EXISTS idx_executions_session_id ON executions(session_id);
+CREATE INDEX IF NOT EXISTS idx_executions_parent ON executions(parent_execution_id);
+CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions(created_at);
+CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_execution_id);
+CREATE INDEX IF NOT EXISTS idx_executions_workflow_step ON executions(workflow_execution_id, step_index);
+CREATE INDEX IF NOT EXISTS idx_executions_step_type ON executions(step_type);
+`;
+
+export const PROMPT_TEMPLATES_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_templates_type ON prompt_templates(type);
+CREATE INDEX IF NOT EXISTS idx_templates_default ON prompt_templates(is_default);
+`;
+
+export const EXECUTION_LOGS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_execution_logs_updated_at ON execution_logs(updated_at);
+CREATE INDEX IF NOT EXISTS idx_execution_logs_byte_size ON execution_logs(byte_size);
 `;
 
 /**

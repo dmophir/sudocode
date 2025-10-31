@@ -87,14 +87,50 @@ export class ExecutionLifecycleService {
     params: CreateExecutionWithWorktreeParams
   ): Promise<CreateExecutionWithWorktreeResult> {
     const { issueId, issueTitle, agentType, targetBranch, repoPath } = params;
+
+    // Validation 1: Check for existing active execution for this issue
+    const existingExecution = this.db
+      .prepare(
+        `SELECT id FROM executions
+         WHERE issue_id = ?
+         AND status = 'running'
+         AND worktree_path IS NOT NULL`
+      )
+      .get(issueId) as { id: string } | undefined;
+
+    if (existingExecution) {
+      throw new Error(
+        `Active execution already exists for issue ${issueId}: ${existingExecution.id}`
+      );
+    }
+
+    // Validation 2: Validate git repository
+    const isValidRepo = await this.worktreeManager.isValidRepo(repoPath);
+    if (!isValidRepo) {
+      throw new Error(`Not a git repository: ${repoPath}`);
+    }
+
+    // Validation 3: Validate target branch exists
+    const branches = await this.worktreeManager.listBranches(repoPath);
+    if (!branches.includes(targetBranch)) {
+      throw new Error(`Target branch does not exist: ${targetBranch}`);
+    }
+
     const config = this.worktreeManager.getConfig();
 
     // Generate execution ID
     const executionId = randomUUID();
 
-    // Generate branch name: {branchPrefix}/{execution-id}/{sanitized-issue-title}
-    const sanitizedTitle = sanitizeForBranchName(issueTitle);
-    const branchName = `${config.branchPrefix}/${executionId.substring(0, 8)}/${sanitizedTitle}`;
+    // Determine branch name based on autoCreateBranches setting
+    let branchName: string;
+    if (config.autoCreateBranches) {
+      // Generate branch name: {branchPrefix}/{execution-id}/{sanitized-issue-title}
+      const sanitizedTitle = sanitizeForBranchName(issueTitle);
+      branchName = `${config.branchPrefix}/${executionId.substring(0, 8)}/${sanitizedTitle}`;
+    } else {
+      // Use target branch directly when not auto-creating branches
+      branchName = targetBranch;
+    }
 
     // Generate worktree path: {repoPath}/{worktreeStoragePath}/{execution-id}
     const worktreePath = path.join(
@@ -204,10 +240,10 @@ export class ExecutionLifecycleService {
    *
    * Finds worktrees that are registered in git but don't have
    * corresponding execution records, or vice versa.
-   *
-   * @param repoPath - Path to repository
+   * Also cleans up worktrees for finished executions (completed/failed/stopped).
    */
-  async cleanupOrphanedWorktrees(repoPath: string): Promise<void> {
+  async cleanupOrphanedWorktrees(): Promise<void> {
+    const repoPath = this.repoPath;
     const config = this.worktreeManager.getConfig();
 
     try {

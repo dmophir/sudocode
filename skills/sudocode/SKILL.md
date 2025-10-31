@@ -76,6 +76,8 @@ Formats supported:
 - [ ] Ask user which work to pursue (if not specified)
 ```
 
+If you were assigned an issue, work ONLY on implementing the requirements of the issue.
+
 ### Essential Tools
 
 ```

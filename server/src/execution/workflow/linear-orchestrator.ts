@@ -49,6 +49,7 @@ import type { ExecutionLifecycleService } from '../../services/execution-lifecyc
 export class LinearOrchestrator implements IWorkflowOrchestrator {
   // Internal state
   private _executions = new Map<string, WorkflowExecution>();
+  private _cleanedUpExecutions = new Set<string>(); // Track which executions have been cleaned up
   private _storage?: IWorkflowStorage;
   private _executor: IResilientExecutor;
   private _agUiAdapter?: AgUiEventAdapter;
@@ -140,14 +141,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
         }
 
         // Cleanup execution resources (worktree)
-        if (this._lifecycleService && execution.dbExecutionId) {
-          this._lifecycleService.cleanupExecution(execution.dbExecutionId).catch((cleanupError) => {
-            console.error(
-              `Failed to cleanup execution ${execution.dbExecutionId}:`,
-              cleanupError
-            );
-          });
-        }
+        this._cleanupExecution(execution).catch(() => {
+          // Error already logged in _cleanupExecution
+        });
       }
     );
 
@@ -226,14 +222,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       }
 
       // Cleanup execution resources (worktree)
-      if (this._lifecycleService && execution.dbExecutionId) {
-        this._lifecycleService.cleanupExecution(execution.dbExecutionId).catch((cleanupError) => {
-          console.error(
-            `Failed to cleanup execution ${execution.dbExecutionId}:`,
-            cleanupError
-          );
-        });
-      }
+      this._cleanupExecution(execution).catch(() => {
+        // Error already logged in _cleanupExecution
+      });
     });
 
     return executionId;
@@ -304,17 +295,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     });
 
     // Cleanup execution resources (worktree)
-    if (this._lifecycleService && execution.dbExecutionId) {
-      try {
-        await this._lifecycleService.cleanupExecution(execution.dbExecutionId);
-      } catch (error) {
-        // Log error but don't fail
-        console.error(
-          `Failed to cleanup execution ${execution.dbExecutionId}:`,
-          error
-        );
-      }
-    }
+    await this._cleanupExecution(execution);
   }
 
   /**
@@ -562,6 +543,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           this._workflowFailedHandlers.forEach((handler) => {
             handler(execution.executionId, error);
           });
+
+          // Cleanup execution resources (worktree)
+          await this._cleanupExecution(execution);
           return;
         }
         // Update currentStepIndex to point to next step before continuing
@@ -615,6 +599,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             this._workflowFailedHandlers.forEach((handler) => {
               handler(execution.executionId, error);
             });
+
+            // Cleanup execution resources (worktree)
+            await this._cleanupExecution(execution);
             return;
           }
           // Update currentStepIndex to point to next step before continuing
@@ -682,6 +669,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             );
           }
 
+          // Cleanup execution resources (worktree)
+          await this._cleanupExecution(execution);
           return;
         }
         // Update currentStepIndex when continuing after error (for checkpoint consistency)
@@ -714,17 +703,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     }
 
     // 5. Cleanup execution resources (worktree)
-    if (this._lifecycleService && execution.dbExecutionId) {
-      try {
-        await this._lifecycleService.cleanupExecution(execution.dbExecutionId);
-      } catch (error) {
-        // Log error but don't fail the workflow
-        console.error(
-          `Failed to cleanup execution ${execution.dbExecutionId}:`,
-          error
-        );
-      }
-    }
+    await this._cleanupExecution(execution);
   }
 
   /**
@@ -760,6 +739,38 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     this._checkpointHandlers.forEach((handler) => {
       handler(checkpoint);
     });
+  }
+
+  /**
+   * Clean up execution resources (worktree)
+   * Ensures cleanup is called only once per execution
+   *
+   * @param execution - Workflow execution to cleanup
+   * @private
+   */
+  private async _cleanupExecution(execution: WorkflowExecution): Promise<void> {
+    // Skip if no lifecycle service or no execution ID
+    if (!this._lifecycleService || !execution.dbExecutionId) {
+      return;
+    }
+
+    // Skip if already cleaned up
+    if (this._cleanedUpExecutions.has(execution.dbExecutionId)) {
+      return;
+    }
+
+    // Mark as cleaned up before calling cleanup (to prevent race conditions)
+    this._cleanedUpExecutions.add(execution.dbExecutionId);
+
+    try {
+      await this._lifecycleService.cleanupExecution(execution.dbExecutionId);
+    } catch (error) {
+      // Log error but don't fail
+      console.error(
+        `Failed to cleanup execution ${execution.dbExecutionId}:`,
+        error
+      );
+    }
   }
 
   /**

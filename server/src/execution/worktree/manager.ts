@@ -85,6 +85,22 @@ export interface IWorktreeManager {
    * @returns Current worktree configuration
    */
   getConfig(): WorktreeConfig;
+
+  /**
+   * Check if a path is a valid git repository
+   *
+   * @param repoPath - Path to check
+   * @returns Promise resolving to true if valid repo, false otherwise
+   */
+  isValidRepo(repoPath: string): Promise<boolean>;
+
+  /**
+   * List all branches in a repository
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Promise resolving to array of branch names
+   */
+  listBranches(repoPath: string): Promise<string[]>;
 }
 
 /**
@@ -217,7 +233,19 @@ export class WorktreeManager implements IWorktreeManager {
       let branchName: string | undefined;
       try {
         const worktrees = await this.git.worktreeList(effectiveRepoPath);
-        const worktreeInfo = worktrees.find((w) => w.path === worktreePath);
+
+        // Normalize paths for comparison (resolves symlinks like /var -> /private/var on macOS)
+        const normalizedWorktreePath = fs.realpathSync(worktreePath);
+        const worktreeInfo = worktrees.find((w) => {
+          try {
+            const normalizedGitPath = fs.realpathSync(w.path);
+            return normalizedGitPath === normalizedWorktreePath;
+          } catch {
+            // If path doesn't exist, try direct comparison
+            return w.path === worktreePath;
+          }
+        });
+
         if (worktreeInfo) {
           branchName = worktreeInfo.branch;
         }
@@ -278,7 +306,18 @@ export class WorktreeManager implements IWorktreeManager {
 
       // 2. Check worktree is registered in git metadata
       const worktrees = await this.git.worktreeList(repoPath);
-      const isRegistered = worktrees.some((w) => w.path === worktreePath);
+
+      // Normalize paths for comparison (resolves symlinks like /var -> /private/var on macOS)
+      const normalizedWorktreePath = fs.realpathSync(worktreePath);
+      const isRegistered = worktrees.some((w) => {
+        try {
+          const normalizedGitPath = fs.realpathSync(w.path);
+          return normalizedGitPath === normalizedWorktreePath;
+        } catch {
+          // If path doesn't exist, try direct comparison
+          return w.path === worktreePath;
+        }
+      });
 
       return isRegistered;
     } catch (error) {
@@ -293,6 +332,14 @@ export class WorktreeManager implements IWorktreeManager {
 
   getConfig(): WorktreeConfig {
     return { ...this.config };
+  }
+
+  async isValidRepo(repoPath: string): Promise<boolean> {
+    return this.git.isValidRepo(repoPath);
+  }
+
+  async listBranches(repoPath: string): Promise<string[]> {
+    return this.git.listBranches(repoPath);
   }
 
   /**
