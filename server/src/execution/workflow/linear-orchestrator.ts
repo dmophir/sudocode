@@ -34,6 +34,7 @@ import {
   extractValue,
   evaluateCondition,
 } from './utils.js';
+import type { AgUiEventAdapter } from '../output/ag-ui-adapter.js';
 
 /**
  * LinearOrchestrator - Sequential workflow execution with state management
@@ -49,6 +50,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
   private _executions = new Map<string, WorkflowExecution>();
   private _storage?: IWorkflowStorage;
   private _executor: IResilientExecutor;
+  private _agUiAdapter?: AgUiEventAdapter;
 
   // Event handlers
   private _workflowStartHandlers: WorkflowStartHandler[] = [];
@@ -67,10 +69,16 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
    *
    * @param executor - Resilient executor for running tasks
    * @param storage - Optional storage for checkpoints
+   * @param agUiAdapter - Optional AG-UI event adapter for real-time event streaming
    */
-  constructor(executor: IResilientExecutor, storage?: IWorkflowStorage) {
+  constructor(
+    executor: IResilientExecutor,
+    storage?: IWorkflowStorage,
+    agUiAdapter?: AgUiEventAdapter
+  ) {
     this._executor = executor;
     this._storage = storage;
+    this._agUiAdapter = agUiAdapter;
   }
 
   /**
@@ -115,6 +123,14 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
         this._workflowFailedHandlers.forEach((handler) => {
           handler(execution.executionId, error);
         });
+
+        // Emit AG-UI RUN_ERROR event
+        if (this._agUiAdapter) {
+          this._agUiAdapter.emitRunError(
+            error.message,
+            error.stack
+          );
+        }
       }
     );
 
@@ -183,6 +199,14 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       this._workflowFailedHandlers.forEach((handler) => {
         handler(execution.executionId, error);
       });
+
+      // Emit AG-UI RUN_ERROR event
+      if (this._agUiAdapter) {
+        this._agUiAdapter.emitRunError(
+          error.message,
+          error.stack
+        );
+      }
     });
 
     return executionId;
@@ -455,6 +479,14 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       handler(execution.executionId, workflow.id);
     });
 
+    // Emit AG-UI RUN_STARTED event
+    if (this._agUiAdapter) {
+      this._agUiAdapter.emitRunStarted({
+        workflowId: workflow.id,
+        executionId: execution.executionId,
+      });
+    }
+
     // 2. Execute steps sequentially
     for (let i = execution.currentStepIndex; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
@@ -510,6 +542,14 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
         handler(execution.executionId, step.id, i);
       });
 
+      // Emit AG-UI STEP_STARTED event
+      if (this._agUiAdapter) {
+        this._agUiAdapter.emitStepStarted(
+          step.id,
+          step.taskType || `Step ${i + 1}`
+        );
+      }
+
       // Execute step
       try {
         const result = await this._executeStep(step, execution, workDir);
@@ -550,6 +590,15 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           handler(execution.executionId, step.id, result);
         });
 
+        // Emit AG-UI STEP_FINISHED event (success)
+        if (this._agUiAdapter) {
+          this._agUiAdapter.emitStepFinished(
+            step.id,
+            'success',
+            result.output
+          );
+        }
+
         // Update currentStepIndex to point to next step after successful completion
         execution.currentStepIndex = i + 1;
 
@@ -567,6 +616,14 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           handler(execution.executionId, step.id, error as Error);
         });
 
+        // Emit AG-UI STEP_FINISHED event (error)
+        if (this._agUiAdapter) {
+          this._agUiAdapter.emitStepFinished(
+            step.id,
+            'error'
+          );
+        }
+
         if (!workflow.config?.continueOnStepFailure) {
           execution.status = 'failed';
           execution.completedAt = new Date();
@@ -576,6 +633,15 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           this._workflowFailedHandlers.forEach((handler) => {
             handler(execution.executionId, error as Error);
           });
+
+          // Emit AG-UI RUN_ERROR event
+          if (this._agUiAdapter) {
+            this._agUiAdapter.emitRunError(
+              (error as Error).message,
+              (error as Error).stack
+            );
+          }
+
           return;
         }
         // Update currentStepIndex when continuing after error (for checkpoint consistency)
@@ -601,6 +667,11 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     this._workflowCompleteHandlers.forEach((handler) => {
       handler(execution.executionId, result);
     });
+
+    // Emit AG-UI RUN_FINISHED event
+    if (this._agUiAdapter) {
+      this._agUiAdapter.emitRunFinished(result);
+    }
   }
 
   /**

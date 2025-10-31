@@ -13,6 +13,8 @@ import {
   type RunStartedEvent,
   type RunFinishedEvent,
   type RunErrorEvent,
+  type StepStartedEvent,
+  type StepFinishedEvent,
   type ToolCallStartEvent,
   type ToolCallArgsEvent,
   type ToolCallEndEvent,
@@ -43,6 +45,8 @@ export type AgUiEventListener = (event:
   | RunStartedEvent
   | RunFinishedEvent
   | RunErrorEvent
+  | StepStartedEvent
+  | StepFinishedEvent
   | ToolCallStartEvent
   | ToolCallArgsEvent
   | ToolCallEndEvent
@@ -360,6 +364,8 @@ export class AgUiEventAdapter {
     | RunStartedEvent
     | RunFinishedEvent
     | RunErrorEvent
+    | StepStartedEvent
+    | StepFinishedEvent
     | ToolCallStartEvent
     | ToolCallArgsEvent
     | ToolCallEndEvent
@@ -375,6 +381,69 @@ export class AgUiEventAdapter {
         console.error('Error in AG-UI event listener:', error);
       }
     });
+  }
+
+  /**
+   * Emit STEP_STARTED event for workflow step execution
+   *
+   * @param stepId - Unique identifier for the step (stored in rawEvent)
+   * @param stepName - Human-readable name of the step
+   */
+  emitStepStarted(stepId: string, stepName: string): void {
+    const event: StepStartedEvent = {
+      type: EventType.STEP_STARTED,
+      timestamp: Date.now(),
+      stepName,
+      rawEvent: {
+        runId: this.runId,
+        stepId,
+      },
+    };
+    this.emit(event);
+  }
+
+  /**
+   * Emit STEP_FINISHED event for workflow step completion
+   *
+   * @param stepId - Unique identifier for the step (stored in rawEvent)
+   * @param status - Status of the step ('success' or 'error', stored in rawEvent)
+   * @param output - Optional output data from the step (stored in rawEvent)
+   */
+  emitStepFinished(
+    stepId: string,
+    status: 'success' | 'error',
+    output?: any
+  ): void {
+    const event: StepFinishedEvent = {
+      type: EventType.STEP_FINISHED,
+      timestamp: Date.now(),
+      stepName: stepId, // Use stepId as stepName for now
+      rawEvent: {
+        runId: this.runId,
+        stepId,
+        status,
+        ...(output && { output }),
+      },
+    };
+    this.emit(event);
+  }
+
+  /**
+   * Emit RUN_ERROR event when workflow execution fails
+   *
+   * @param message - Error message
+   * @param stack - Optional error stack trace
+   * @param code - Optional error code
+   */
+  emitRunError(message: string, stack?: string, code?: string): void {
+    const event: RunErrorEvent = {
+      type: EventType.RUN_ERROR,
+      timestamp: Date.now(),
+      message,
+      ...(code && { code }),
+      ...(stack && { rawEvent: { stack } }),
+    };
+    this.emit(event);
   }
 
   /**

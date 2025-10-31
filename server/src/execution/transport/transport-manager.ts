@@ -12,6 +12,8 @@ import type {
   RunStartedEvent,
   RunFinishedEvent,
   RunErrorEvent,
+  StepStartedEvent,
+  StepFinishedEvent,
   ToolCallStartEvent,
   ToolCallArgsEvent,
   ToolCallEndEvent,
@@ -29,6 +31,8 @@ export type AgUiEvent =
   | RunStartedEvent
   | RunFinishedEvent
   | RunErrorEvent
+  | StepStartedEvent
+  | StepFinishedEvent
   | ToolCallStartEvent
   | ToolCallArgsEvent
   | ToolCallEndEvent
