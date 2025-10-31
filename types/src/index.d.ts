@@ -230,7 +230,8 @@ export interface Execution {
   // Git context (captured before/after)
   before_commit: string | null;
   after_commit: string | null;
-  target_branch: string | null;
+  target_branch: string;
+  branch_name: string;
   worktree_path: string | null;
 
   // Session tracking (for resume/fork)
