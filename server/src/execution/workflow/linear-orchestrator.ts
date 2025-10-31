@@ -35,6 +35,7 @@ import {
   evaluateCondition,
 } from './utils.js';
 import type { AgUiEventAdapter } from '../output/ag-ui-adapter.js';
+import type { ExecutionLifecycleService } from '../../services/execution-lifecycle.js';
 
 /**
  * LinearOrchestrator - Sequential workflow execution with state management
@@ -51,6 +52,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
   private _storage?: IWorkflowStorage;
   private _executor: IResilientExecutor;
   private _agUiAdapter?: AgUiEventAdapter;
+  private _lifecycleService?: ExecutionLifecycleService;
 
   // Event handlers
   private _workflowStartHandlers: WorkflowStartHandler[] = [];
@@ -70,15 +72,18 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
    * @param executor - Resilient executor for running tasks
    * @param storage - Optional storage for checkpoints
    * @param agUiAdapter - Optional AG-UI event adapter for real-time event streaming
+   * @param lifecycleService - Optional execution lifecycle service for worktree management
    */
   constructor(
     executor: IResilientExecutor,
     storage?: IWorkflowStorage,
-    agUiAdapter?: AgUiEventAdapter
+    agUiAdapter?: AgUiEventAdapter,
+    lifecycleService?: ExecutionLifecycleService
   ) {
     this._executor = executor;
     this._storage = storage;
     this._agUiAdapter = agUiAdapter;
+    this._lifecycleService = lifecycleService;
   }
 
   /**
@@ -95,6 +100,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     options?: {
       checkpointInterval?: number;
       initialContext?: Record<string, any>;
+      executionId?: string;
     }
   ): Promise<string> {
     // 1. Create execution
@@ -107,6 +113,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       context: options?.initialContext || workflow.initialContext || {},
       stepResults: [],
       startedAt: new Date(),
+      dbExecutionId: options?.executionId,
     };
 
     // 2. Store execution
@@ -130,6 +137,16 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             error.message,
             error.stack
           );
+        }
+
+        // Cleanup execution resources (worktree)
+        if (this._lifecycleService && execution.dbExecutionId) {
+          this._lifecycleService.cleanupExecution(execution.dbExecutionId).catch((cleanupError) => {
+            console.error(
+              `Failed to cleanup execution ${execution.dbExecutionId}:`,
+              cleanupError
+            );
+          });
         }
       }
     );
@@ -207,6 +224,16 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           error.stack
         );
       }
+
+      // Cleanup execution resources (worktree)
+      if (this._lifecycleService && execution.dbExecutionId) {
+        this._lifecycleService.cleanupExecution(execution.dbExecutionId).catch((cleanupError) => {
+          console.error(
+            `Failed to cleanup execution ${execution.dbExecutionId}:`,
+            cleanupError
+          );
+        });
+      }
     });
 
     return executionId;
@@ -275,6 +302,19 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     this._cancelHandlers.forEach((handler) => {
       handler(executionId);
     });
+
+    // Cleanup execution resources (worktree)
+    if (this._lifecycleService && execution.dbExecutionId) {
+      try {
+        await this._lifecycleService.cleanupExecution(execution.dbExecutionId);
+      } catch (error) {
+        // Log error but don't fail
+        console.error(
+          `Failed to cleanup execution ${execution.dbExecutionId}:`,
+          error
+        );
+      }
+    }
   }
 
   /**
@@ -671,6 +711,19 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     // Emit AG-UI RUN_FINISHED event
     if (this._agUiAdapter) {
       this._agUiAdapter.emitRunFinished(result);
+    }
+
+    // 5. Cleanup execution resources (worktree)
+    if (this._lifecycleService && execution.dbExecutionId) {
+      try {
+        await this._lifecycleService.cleanupExecution(execution.dbExecutionId);
+      } catch (error) {
+        // Log error but don't fail the workflow
+        console.error(
+          `Failed to cleanup execution ${execution.dbExecutionId}:`,
+          error
+        );
+      }
     }
   }
 

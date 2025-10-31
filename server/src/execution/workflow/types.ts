@@ -88,6 +88,8 @@ export interface WorkflowExecution {
   error?: string;
   /** Additional metadata */
   metadata?: Record<string, any>;
+  /** Database execution record ID (for lifecycle management) */
+  dbExecutionId?: string;
 }
 
 /**
