@@ -1,26 +1,24 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FileText, ListTodo, X, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
+import { FileText, ListTodo, X, Settings, HelpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { SettingsDialog } from './SettingsDialog'
+import { HelpDialog } from './HelpDialog'
 
 interface SidebarProps {
   open: boolean
   collapsed: boolean
   onClose?: () => void
-  onToggleCollapse?: () => void
 }
 
-export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: SidebarProps) {
+export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
   const location = useLocation()
-  const { theme, setTheme } = useTheme()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path)
-  }
-
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
   const navItems = [
@@ -76,17 +74,6 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
           </button>
         </div>
 
-        {/* Desktop collapse toggle */}
-        <div className="hidden h-12 items-center justify-end border-b border-border px-2 md:flex">
-          <button
-            onClick={onToggleCollapse}
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-        </div>
-
         {/* Navigation */}
         <nav className={cn('flex-1 space-y-1 p-2', collapsed ? 'px-2' : 'px-3')}>
           {navItems.map((item) => {
@@ -124,58 +111,77 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
           })}
         </nav>
 
-        {/* Bottom section with settings */}
-        <div className="border-t border-border">
-          {/* Settings/Theme toggle */}
+        {/* Bottom section with help and settings */}
+        <div>
           <div className={cn('space-y-1 p-2', collapsed ? 'px-2' : 'px-3')}>
+            {/* Help button */}
             {collapsed ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={toggleTheme}
+                    onClick={() => setHelpOpen(true)}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                       collapsed && 'justify-center px-2'
                     )}
-                    aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                    aria-label="Help"
                   >
-                    {theme === 'dark' ? (
-                      <Sun className="h-5 w-5 flex-shrink-0" />
-                    ) : (
-                      <Moon className="h-5 w-5 flex-shrink-0" />
-                    )}
+                    <HelpCircle className="h-5 w-5 flex-shrink-0" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right">
-                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                </TooltipContent>
+                <TooltipContent side="right">Help</TooltipContent>
               </Tooltip>
             ) : (
               <button
-                onClick={toggleTheme}
+                onClick={() => setHelpOpen(true)}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
                 )}
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                aria-label="Help"
               >
-                {theme === 'dark' ? (
-                  <Sun className="h-5 w-5 flex-shrink-0" />
-                ) : (
-                  <Moon className="h-5 w-5 flex-shrink-0" />
+                <HelpCircle className="h-5 w-5 flex-shrink-0" />
+                <span>Help</span>
+              </button>
+            )}
+
+            {/* Settings button */}
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setSettingsOpen(true)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                      collapsed && 'justify-center px-2'
+                    )}
+                    aria-label="Settings"
+                  >
+                    <Settings className="h-5 w-5 flex-shrink-0" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Settings</TooltipContent>
+              </Tooltip>
+            ) : (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
                 )}
-                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+                aria-label="Settings"
+              >
+                <Settings className="h-5 w-5 flex-shrink-0" />
+                <span>Settings</span>
               </button>
             )}
           </div>
-
-          {/* Footer info */}
-          {!collapsed && (
-            <div className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">Phase 1 MVP</p>
-            </div>
-          )}
         </div>
       </aside>
+
+      {/* Help Dialog */}
+      <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      {/* Settings Dialog */}
+      <SettingsDialog isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </TooltipProvider>
   )
 }

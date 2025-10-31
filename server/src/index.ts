@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import * as path from "path";
 import * as http from "http";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 import type Database from "better-sqlite3";
 
 // ES Module __dirname equivalent
@@ -142,6 +143,42 @@ app.get("/health", (_req: Request, res: Response) => {
       hasCliTables: dbInfo.hasCliTables,
     },
   });
+});
+
+// Version endpoint - returns versions of all packages
+app.get("/api/version", (_req: Request, res: Response) => {
+  try {
+    // Read package.json files - going up from server/dist to project root
+    const projectRoot = path.join(__dirname, "../..");
+    const cliPackagePath = path.join(projectRoot, "cli/package.json");
+    const serverPackagePath = path.join(projectRoot, "server/package.json");
+    const frontendPackagePath = path.join(projectRoot, "frontend/package.json");
+
+    const cliPackage = JSON.parse(readFileSync(cliPackagePath, "utf-8"));
+    const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf-8"));
+    const frontendPackage = JSON.parse(readFileSync(frontendPackagePath, "utf-8"));
+
+    res.status(200).json({
+      cli: cliPackage.version,
+      server: serverPackage.version,
+      frontend: frontendPackage.version,
+    });
+  } catch (error) {
+    console.error("Failed to read version information:", error);
+    res.status(500).json({ error: "Failed to read version information" });
+  }
+});
+
+// Config endpoint - returns sudocode configuration
+app.get("/api/config", (_req: Request, res: Response) => {
+  try {
+    const configPath = path.join(SUDOCODE_DIR, "config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    res.status(200).json(config);
+  } catch (error) {
+    console.error("Failed to read config:", error);
+    res.status(500).json({ error: "Failed to read config" });
+  }
 });
 
 // WebSocket stats endpoint
