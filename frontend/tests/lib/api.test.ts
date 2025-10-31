@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { issuesApi, specsApi, relationshipsApi, feedbackApi } from '@/lib/api'
+import { issuesApi, specsApi, relationshipsApi, feedbackApi, executionsApi } from '@/lib/api'
 
 // Mock the entire api module
 vi.mock('@/lib/api', async () => {
@@ -32,6 +32,14 @@ vi.mock('@/lib/api', async () => {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+    },
+    executionsApi: {
+      prepare: vi.fn(),
+      create: vi.fn(),
+      getById: vi.fn(),
+      list: vi.fn(),
+      createFollowUp: vi.fn(),
+      cancel: vi.fn(),
     },
   }
 })
@@ -154,6 +162,66 @@ describe('API Module', () => {
       }
       feedbackApi.create(data)
       expect(feedbackApi.create).toHaveBeenCalledWith(data)
+    })
+  })
+
+  describe('executionsApi', () => {
+    it('should have all required methods', () => {
+      expect(executionsApi).toHaveProperty('prepare')
+      expect(executionsApi).toHaveProperty('create')
+      expect(executionsApi).toHaveProperty('getById')
+      expect(executionsApi).toHaveProperty('list')
+      expect(executionsApi).toHaveProperty('createFollowUp')
+      expect(executionsApi).toHaveProperty('cancel')
+    })
+
+    it('should call prepare with issue id', () => {
+      executionsApi.prepare('ISSUE-001')
+      expect(executionsApi.prepare).toHaveBeenCalledWith('ISSUE-001')
+    })
+
+    it('should call prepare with issue id and config', () => {
+      const config = { mode: 'worktree' as const }
+      executionsApi.prepare('ISSUE-001', { config })
+      expect(executionsApi.prepare).toHaveBeenCalledWith('ISSUE-001', { config })
+    })
+
+    it('should call create with issue id and request data', () => {
+      const request = {
+        config: {
+          mode: 'worktree' as const,
+          baseBranch: 'main',
+          cleanupMode: 'auto' as const,
+        },
+        prompt: 'Implement feature X',
+      }
+
+      executionsApi.create('ISSUE-001', request)
+      expect(executionsApi.create).toHaveBeenCalledWith('ISSUE-001', request)
+    })
+
+    it('should call getById with execution id', () => {
+      executionsApi.getById('exec-123')
+      expect(executionsApi.getById).toHaveBeenCalledWith('exec-123')
+    })
+
+    it('should call list with issue id', () => {
+      executionsApi.list('ISSUE-001')
+      expect(executionsApi.list).toHaveBeenCalledWith('ISSUE-001')
+    })
+
+    it('should call createFollowUp with execution id and feedback', () => {
+      const request = {
+        feedback: 'Please also add tests',
+      }
+
+      executionsApi.createFollowUp('exec-123', request)
+      expect(executionsApi.createFollowUp).toHaveBeenCalledWith('exec-123', request)
+    })
+
+    it('should call cancel with execution id', () => {
+      executionsApi.cancel('exec-123')
+      expect(executionsApi.cancel).toHaveBeenCalledWith('exec-123')
     })
   })
 })

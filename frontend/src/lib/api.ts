@@ -14,6 +14,13 @@ import type {
   CreateFeedbackRequest,
   UpdateFeedbackRequest,
 } from '@/types/api'
+import type {
+  Execution,
+  ExecutionPrepareResult,
+  PrepareExecutionRequest,
+  CreateExecutionRequest,
+  CreateFollowUpRequest,
+} from '@/types/execution'
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
@@ -112,6 +119,32 @@ export const feedbackApi = {
   create: (data: CreateFeedbackRequest) => post<IssueFeedback>('/feedback', data),
   update: (id: string, data: UpdateFeedbackRequest) => put<IssueFeedback>(`/feedback/${id}`, data),
   delete: (id: string) => del(`/feedback/${id}`),
+}
+
+/**
+ * Executions API
+ */
+export const executionsApi = {
+  // Prepare execution (preview template and gather context)
+  prepare: (issueId: string, request?: PrepareExecutionRequest) =>
+    post<ExecutionPrepareResult>(`/issues/${issueId}/executions/prepare`, request),
+
+  // Create and start execution
+  create: (issueId: string, request: CreateExecutionRequest) =>
+    post<Execution>(`/issues/${issueId}/executions`, request),
+
+  // Get execution by ID
+  getById: (executionId: string) => get<Execution>(`/executions/${executionId}`),
+
+  // List executions for issue
+  list: (issueId: string) => get<Execution[]>(`/issues/${issueId}/executions`),
+
+  // Create follow-up execution
+  createFollowUp: (executionId: string, request: CreateFollowUpRequest) =>
+    post<Execution>(`/executions/${executionId}/followup`, request),
+
+  // Cancel execution
+  cancel: (executionId: string) => del(`/executions/${executionId}`),
 }
 
 export default api
