@@ -7,7 +7,7 @@ When writing specs and creating issues that refer to specs, make sure to created
 
 ## Testing Best Practices
 
-This repository uses **Vitest** as the testing framework for all packages (frontend, CLI, and MCP, backend server).
+This repository uses **Vitest** as the testing framework for the frontend packages. For the CLI, and MCP, backend server, use Node test runner.
 
 ### Running Tests
 
