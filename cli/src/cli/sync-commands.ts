@@ -16,6 +16,7 @@ import {
   generateUniqueFilename,
   findExistingSpecFile,
 } from "../filename-generator.js";
+import { isInitialized, performInitialization } from "./init-commands.js";
 
 export interface CommandContext {
   db: Database.Database;
@@ -33,6 +34,27 @@ export async function handleSync(
   ctx: CommandContext,
   options: SyncOptions
 ): Promise<void> {
+  // Check if sudocode is initialized, auto-initialize if not
+  if (!isInitialized(ctx.outputDir)) {
+    console.log(chalk.blue("Initializing sudocode..."));
+    console.log();
+
+    try {
+      await performInitialization({
+        specPrefix: "SPEC",
+        issuePrefix: "ISSUE",
+        dir: ctx.outputDir,
+        jsonOutput: ctx.jsonOutput,
+      });
+    } catch (error) {
+      console.error(chalk.red("✗ Auto-initialization failed"));
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+
+    console.log();
+  }
+
   if (options.watch) {
     // Start file watcher
     console.log(chalk.blue("Starting file watcher..."));

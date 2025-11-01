@@ -41,6 +41,7 @@ import {
   handleFeedbackRelocate,
 } from "./cli/feedback-commands.js";
 import { handleServerStart } from "./cli/server-commands.js";
+import { handleInit } from "./cli/init-commands.js";
 import { VERSION } from "./version.js";
 
 // Global state
@@ -144,142 +145,10 @@ program
   .option("--spec-prefix <prefix>", "ID prefix for specs", "SPEC")
   .option("--issue-prefix <prefix>", "ID prefix for issues", "ISSUE")
   .action(async (options) => {
-    const specPrefix = options.specPrefix || "SPEC";
-    const issuePrefix = options.issuePrefix || "ISSUE";
-    const dir = path.join(process.cwd(), ".sudocode");
-
-    try {
-      // Create directory structure
-      fs.mkdirSync(dir, { recursive: true });
-      fs.mkdirSync(path.join(dir, "specs"), { recursive: true });
-      fs.mkdirSync(path.join(dir, "issues"), { recursive: true });
-
-      // Track what was preserved
-      const preserved: string[] = [];
-
-      // Initialize database only if it doesn't exist
-      const dbPath = path.join(dir, "cache.db");
-      const dbExists = fs.existsSync(dbPath);
-      let database: Database.Database;
-
-      if (dbExists) {
-        preserved.push("cache.db");
-        // Open existing database
-        database = initDatabase({ path: dbPath });
-      } else {
-        // Ensure the database directory exists before creating the database
-        fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-        database = initDatabase({ path: dbPath });
-      }
-
-      // Create config.json (version-controlled)
-      const config = {
-        version: VERSION,
-        id_prefix: {
-          spec: specPrefix,
-          issue: issuePrefix,
-        },
-        worktree: {
-          worktreeStoragePath: ".sudocode/worktrees",
-          autoCreateBranches: true,
-          autoDeleteBranches: false,
-          enableSparseCheckout: false,
-          branchPrefix: "sudocode",
-          cleanupOrphanedWorktreesOnStartup: true,
-        },
-      };
-      fs.writeFileSync(
-        path.join(dir, "config.json"),
-        JSON.stringify(config, null, 2),
-        "utf8"
-      );
-
-      let hasSpecsData = false;
-      let hasIssuesData = false;
-      // Create empty JSONL files only if they don't exist
-      const specsPath = path.join(dir, "specs.jsonl");
-      if (fs.existsSync(specsPath)) {
-        preserved.push("specs.jsonl");
-        const content = fs.readFileSync(specsPath, "utf8");
-        hasSpecsData = content.trim().length > 0;
-      } else {
-        fs.writeFileSync(specsPath, "", "utf8");
-      }
-
-      const issuesPath = path.join(dir, "issues.jsonl");
-      if (fs.existsSync(issuesPath)) {
-        preserved.push("issues.jsonl");
-        const content = fs.readFileSync(issuesPath, "utf8");
-        hasIssuesData = content.trim().length > 0;
-      } else {
-        fs.writeFileSync(issuesPath, "", "utf8");
-      }
-
-      if (hasSpecsData || hasIssuesData) {
-        try {
-          console.log(chalk.blue("Importing from existing JSONL files..."));
-          const { importFromJSONL } = await import("./import.js");
-          const result = await importFromJSONL(database, {
-            inputDir: dir,
-            resolveCollisions: true,
-          });
-
-          // Report import results
-          if (result.specs.added > 0 || result.specs.updated > 0) {
-            console.log(
-              chalk.gray(
-                `  Specs: ${result.specs.added} added, ${result.specs.updated} updated`
-              )
-            );
-          }
-          if (result.issues.added > 0 || result.issues.updated > 0) {
-            console.log(
-              chalk.gray(
-                `  Issues: ${result.issues.added} added, ${result.issues.updated} updated`
-              )
-            );
-          }
-          if (result.collisions.length > 0) {
-            console.log(
-              chalk.yellow(
-                `  Resolved ${result.collisions.length} ID collisions`
-              )
-            );
-          }
-        } catch (importError) {
-          // Log warning but continue with initialization
-          console.log(
-            chalk.yellow(
-              `  Warning: Failed to import JSONL data - ${importError instanceof Error ? importError.message : String(importError)}`
-            )
-          );
-        }
-      }
-
-      // Create .gitignore file
-      const gitignoreContent = `cache.db*
-issues/
-specs/
-`;
-      fs.writeFileSync(path.join(dir, ".gitignore"), gitignoreContent, "utf8");
-
-      database.close();
-
-      console.log(chalk.green("✓ Initialized sudocode in"), chalk.cyan(dir));
-      console.log(chalk.gray(`  Spec prefix: ${specPrefix}`));
-      console.log(chalk.gray(`  Issue prefix: ${issuePrefix}`));
-      console.log(chalk.gray(`  Database: ${dbPath}`));
-
-      if (preserved.length > 0) {
-        console.log(
-          chalk.yellow(`  Preserved existing: ${preserved.join(", ")}`)
-        );
-      }
-    } catch (error) {
-      console.error(chalk.red("✗ Initialization failed"));
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exit(1);
-    }
+    await handleInit({
+      specPrefix: options.specPrefix,
+      issuePrefix: options.issuePrefix,
+    });
   });
 
 // ============================================================================
