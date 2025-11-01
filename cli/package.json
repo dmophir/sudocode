@@ -22,7 +22,7 @@
     "issues"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@sudocode/types": "^0.1.0",
     "better-sqlite3": "^11.8.1",

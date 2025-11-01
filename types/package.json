@@ -19,7 +19,7 @@
   },
   "keywords": ["sudocode", "types", "typescript"],
   "author": "sudocode AI",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "files": ["src/index.d.ts", "dist"],
   "devDependencies": {
     "typescript": "^5.0.0"

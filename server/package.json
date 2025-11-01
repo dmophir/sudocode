@@ -23,6 +23,7 @@
     "websocket"
   ],
   "author": "sudocode AI",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ag-ui/core": "^0.0.39",
     "@sudocode/cli": "^0.1.0",

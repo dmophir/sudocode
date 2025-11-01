@@ -30,7 +30,7 @@
     "start:server": "SUDOCODE_DIR=$(pwd)/.sudocode npm start --workspace=server"
   },
   "author": "sudocode AI",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "typescript": "^5.3.3"
   }
