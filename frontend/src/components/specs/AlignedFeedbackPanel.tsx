@@ -1,7 +1,19 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { FeedbackCard } from './FeedbackCard'
 import { useCollisionFreePositions } from '@/hooks/useCollisionFreePositions'
-import type { IssueFeedback, FeedbackAnchor } from '@/types/api'
+import type {
+  IssueFeedback,
+  FeedbackAnchor,
+  Relationship,
+  EntityType,
+  RelationshipType,
+} from '@/types/api'
+import { RelationshipList } from '@/components/relationships/RelationshipList'
+import { RelationshipForm } from '@/components/relationships/RelationshipForm'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Plus } from 'lucide-react'
 
 interface AlignedFeedbackPanelProps {
   feedback: IssueFeedback[]
@@ -11,6 +23,14 @@ interface AlignedFeedbackPanelProps {
   onDelete?: (id: string) => void
   addFeedbackButton?: React.ReactNode
   className?: string
+  relationships?: Relationship[]
+  currentEntityId?: string
+  onDeleteRelationship?: (relationship: Relationship) => void
+  onCreateRelationship?: (
+    toId: string,
+    toType: EntityType,
+    relationshipType: RelationshipType
+  ) => void
 }
 
 /**
@@ -40,8 +60,24 @@ export function AlignedFeedbackPanel({
   onDelete,
   addFeedbackButton,
   className = '',
+  relationships,
+  currentEntityId,
+  onDeleteRelationship,
+  onCreateRelationship,
 }: AlignedFeedbackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const [showAddRelationship, setShowAddRelationship] = useState(false)
+
+  const handleCreateRelationship = (
+    toId: string,
+    toType: EntityType,
+    relationshipType: RelationshipType
+  ) => {
+    if (onCreateRelationship) {
+      onCreateRelationship(toId, toType, relationshipType)
+      setShowAddRelationship(false)
+    }
+  }
 
   // Prepare positions for all feedback, treating general comments as position 0
   const allFeedbackPositions = useMemo(() => {
@@ -80,6 +116,58 @@ export function AlignedFeedbackPanel({
     <div
       className={`flex h-full w-80 flex-col bg-background md:w-96 lg:w-[28rem] xl:w-[32rem] ${className}`}
     >
+      {/* Relationships Section */}
+      {currentEntityId && (
+        <div className="border-b p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Relationships</h3>
+              {relationships && relationships.length > 0 && (
+                <Badge variant="secondary">{relationships.length}</Badge>
+              )}
+              {onCreateRelationship && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setShowAddRelationship(true)}
+                  className="h-6"
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add
+                </Button>
+              )}
+            </div>
+          </div>
+          {relationships && relationships.length > 0 && (
+            <RelationshipList
+              relationships={relationships}
+              currentEntityId={currentEntityId}
+              currentEntityType="spec"
+              onDelete={onDeleteRelationship}
+              showEmpty={false}
+              showGroupHeaders={false}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Add Relationship Dialog */}
+      <Dialog open={showAddRelationship} onOpenChange={setShowAddRelationship}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Relationship</DialogTitle>
+          </DialogHeader>
+          {currentEntityId && (
+            <RelationshipForm
+              fromId={currentEntityId}
+              fromType="spec"
+              onSubmit={handleCreateRelationship}
+              onCancel={() => setShowAddRelationship(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Add Feedback Button */}
       {addFeedbackButton && <div className="p-2">{addFeedbackButton}</div>}
 
