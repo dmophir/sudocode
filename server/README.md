@@ -24,13 +24,12 @@ npm run build
 npm run dev
 ```
 
-The server will start on `http://localhost:3002` by default.
+The server will start on `http://localhost:3000` by default.
 
 ### Environment Variables
 
-- `PORT` - Server port (default: 3002)
+- `PORT` - Server port (default: 3000)
 - `SUDOCODE_DB_PATH` - Path to SQLite database (default: `.sudocode/cache.db`)
-- `NODE_ENV` - Environment mode (`development` or `production`)
 - `WATCH` - Enable file watcher (default: true, set to `false` to disable)
 - `WATCH_DEBOUNCE` - File watcher debounce delay in ms (default: 2000)
 - `SYNC_JSONL_TO_MARKDOWN` - Sync JSONL to markdown on file changes (default: false)
@@ -99,13 +98,6 @@ npm run build
 npm run build --workspace=server
 ```
 
-### Run in Production
-
-```bash
-# Set NODE_ENV=production to enable frontend serving
-NODE_ENV=production node dist/src/index.js
-```
-
 In production mode, the server will:
 1. Serve the built frontend from `../frontend/dist`
 2. Handle SPA routing (serve `index.html` for non-API routes)
@@ -157,9 +149,9 @@ Test production mode locally:
 # Build everything
 npm run build
 
-# Run server in production mode
+# Run server
 cd server
-NODE_ENV=production node dist/src/index.js
+node dist/src/index.js
 ```
 
 Open `http://localhost:3002` to see the served frontend.

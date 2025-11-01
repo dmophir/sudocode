@@ -39,7 +39,8 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const DEFAULT_PORT = 3000;
+const MAX_PORT_ATTEMPTS = 20;
 
 // Falls back to current directory for development/testing
 const SUDOCODE_DIR =
@@ -67,13 +68,13 @@ async function initialize() {
 
     // Initialize transport manager for SSE streaming
     transportManager = new TransportManager();
-    console.log('Transport manager initialized');
+    console.log("Transport manager initialized");
 
     // Cleanup orphaned worktrees on startup (if configured)
     const worktreeConfig = getWorktreeConfig(process.cwd());
     if (worktreeConfig.cleanupOrphanedWorktreesOnStartup) {
       try {
-        console.log('Cleaning up orphaned worktrees...');
+        console.log("Cleaning up orphaned worktrees...");
         const worktreeManager = new WorktreeManager(worktreeConfig);
         const lifecycleService = new ExecutionLifecycleService(
           db,
@@ -81,9 +82,9 @@ async function initialize() {
           worktreeManager
         );
         await lifecycleService.cleanupOrphanedWorktrees();
-        console.log('Orphaned worktree cleanup complete');
+        console.log("Orphaned worktree cleanup complete");
       } catch (error) {
-        console.error('Failed to cleanup orphaned worktrees:', error);
+        console.error("Failed to cleanup orphaned worktrees:", error);
         // Don't exit - this is best-effort cleanup
       }
     }
@@ -187,7 +188,9 @@ app.get("/api/version", (_req: Request, res: Response) => {
 
     const cliPackage = JSON.parse(readFileSync(cliPackagePath, "utf-8"));
     const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf-8"));
-    const frontendPackage = JSON.parse(readFileSync(frontendPackagePath, "utf-8"));
+    const frontendPackage = JSON.parse(
+      readFileSync(frontendPackagePath, "utf-8")
+    );
 
     res.status(200).json({
       cli: cliPackage.version,
@@ -239,17 +242,84 @@ app.get("*", (req: Request, res: Response) => {
   }
 });
 
-// Create HTTP server and initialize WebSocket
+// Create HTTP server
 const server = http.createServer(app);
 
-// Initialize WebSocket server
+/**
+ * Attempts to start the server on the given port, incrementing if unavailable.
+ * Only scans for ports if no explicit PORT was provided.
+ */
+async function startServer(
+  initialPort: number,
+  maxAttempts: number
+): Promise<number> {
+  const explicitPort = process.env.PORT;
+  const shouldScan = !explicitPort;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const port = initialPort + attempt;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const errorHandler = (err: NodeJS.ErrnoException) => {
+          server.removeListener("error", errorHandler);
+          server.removeListener("listening", listeningHandler);
+          reject(err);
+        };
+
+        const listeningHandler = () => {
+          server.removeListener("error", errorHandler);
+          resolve();
+        };
+
+        server.once("error", errorHandler);
+        server.once("listening", listeningHandler);
+        server.listen(port);
+      });
+
+      // Success! Return the port we successfully bound to
+      return port;
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
+
+      if (error.code === "EADDRINUSE") {
+        if (!shouldScan) {
+          // Explicit port was specified and it's in use - fail immediately
+          throw new Error(
+            `Port ${port} is already in use. Please specify a different PORT.`
+          );
+        }
+
+        // Port is in use, try next one if we have attempts left
+        if (attempt < maxAttempts - 1) {
+          console.log(`Port ${port} is already in use, trying ${port + 1}...`);
+          continue;
+        } else {
+          throw new Error(
+            `Could not find an available port after ${maxAttempts} attempts (${initialPort}-${port})`
+          );
+        }
+      } else {
+        // Some other error - fail immediately
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`Could not start server after ${maxAttempts} attempts`);
+}
+
+// Start listening with port scanning
+const startPort = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : DEFAULT_PORT;
+const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
+
+// Initialize WebSocket server AFTER successfully binding to a port
 initWebSocketServer(server, "/ws");
 
-// Start listening
-server.listen(PORT, () => {
-  console.log(`sudocode local server running on http://localhost:${PORT}`);
-  console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
-});
+console.log(`sudocode local server running on http://localhost:${actualPort}`);
+console.log(`WebSocket server available at ws://localhost:${actualPort}/ws`);
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
