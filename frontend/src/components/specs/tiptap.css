@@ -394,3 +394,12 @@
 .tiptap-with-line-numbers .ProseMirror > * *::before {
   content: none;
 }
+
+/* Placeholder styles */
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: hsl(var(--muted-foreground));
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

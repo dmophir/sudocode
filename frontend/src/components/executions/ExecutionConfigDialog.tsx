@@ -130,14 +130,17 @@ export function ExecutionConfigDialog({
             )}
 
             {/* Related Context */}
-            {prepareResult && (prepareResult.relatedSpecs.length > 0 || prepareResult.relatedFeedback.length > 0) && (
+            {prepareResult && (
+              (prepareResult.relatedSpecs?.length ?? 0) > 0 ||
+              (prepareResult.relatedFeedback?.length ?? 0) > 0
+            ) && (
               <div className="rounded-lg border bg-muted/50 p-3">
                 <p className="text-sm font-medium mb-2">Context Included</p>
                 <div className="space-y-1 text-sm text-muted-foreground">
-                  {prepareResult.relatedSpecs.length > 0 && (
+                  {(prepareResult.relatedSpecs?.length ?? 0) > 0 && (
                     <p>• {prepareResult.relatedSpecs.length} related spec(s)</p>
                   )}
-                  {prepareResult.relatedFeedback.length > 0 && (
+                  {(prepareResult.relatedFeedback?.length ?? 0) > 0 && (
                     <p>• {prepareResult.relatedFeedback.length} feedback item(s)</p>
                   )}
                 </div>

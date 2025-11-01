@@ -1,6 +1,7 @@
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Placeholder from '@tiptap/extension-placeholder'
 import { common, createLowlight } from 'lowlight'
 import { useEffect, useState, useRef } from 'react'
 import { unified } from 'unified'
@@ -227,6 +228,7 @@ interface TiptapEditorProps {
   showLineNumbers?: boolean
   selectedLine?: number | null
   onLineClick?: (lineNumber: number) => void
+  placeholder?: string
 }
 
 /**
@@ -253,6 +255,7 @@ export function TiptapEditor({
   showLineNumbers = false,
   selectedLine,
   onLineClick,
+  placeholder,
 }: TiptapEditorProps) {
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -286,6 +289,10 @@ export function TiptapEditor({
         HTMLAttributes: {
           class: 'bg-muted/50 rounded-md p-4 font-mono text-sm my-4 overflow-x-auto',
         },
+      }),
+      Placeholder.configure({
+        placeholder: placeholder,
+        emptyEditorClass: 'is-editor-empty',
       }),
       Table.extend({
         addNodeView() {

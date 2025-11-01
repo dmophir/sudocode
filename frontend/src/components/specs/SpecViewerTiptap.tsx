@@ -43,9 +43,10 @@ export function SpecViewerTiptap({
           editable={true}
           onChange={onChange}
           onCancel={() => {}}
-          showLineNumbers={true}
+          showLineNumbers={false}
           selectedLine={selectedLine}
           onLineClick={onLineClick}
+          placeholder="Spec content..."
         />
       ) : (
         <SpecViewer
@@ -55,7 +56,7 @@ export function SpecViewerTiptap({
           onLineClick={onLineClick}
           onTextSelect={onTextSelect}
           onFeedbackClick={onFeedbackClick}
-          showLineNumbers={true}
+          showLineNumbers={false}
           editable={true}
           onChange={onChange}
         />

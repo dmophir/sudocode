@@ -102,7 +102,7 @@ export function IssueEditor({ issue, onSave, onCancel, isLoading = false }: Issu
       {/* Content (Markdown) */}
       <div className="space-y-2">
         <Label htmlFor="content">Details</Label>
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden rounded-md border">
           <TiptapEditor
             content={content}
             editable={true}
@@ -114,6 +114,7 @@ export function IssueEditor({ issue, onSave, onCancel, isLoading = false }: Issu
               }
             }}
             className="min-h-[300px]"
+            placeholder="Issue description..."
           />
         </Card>
       </div>

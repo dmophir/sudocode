@@ -407,23 +407,6 @@ export function IssuePanel({
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Run Agent Button */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => setShowExecutionConfigDialog(true)}
-                    disabled={issue.archived || isUpdating}
-                    variant="default"
-                    size="sm"
-                    className="gap-2"
-                  >
-                    <Play className="h-4 w-4" />
-                    Run Agent
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Configure and start agent execution</TooltipContent>
-              </Tooltip>
-
               {/* View mode toggle - shown inline in panel */}
               {showViewToggleInline && (
                 <div className="mr-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
@@ -622,12 +605,9 @@ export function IssuePanel({
               )}
             </div>
 
-            {/* Execution History */}
-            <ExecutionHistory issueId={issue.id} />
-
             {/* Content Editor */}
             <div className="space-y-2">
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden rounded-md border">
                 {viewMode === 'formatted' ? (
                   <TiptapEditor
                     content={content}
@@ -638,6 +618,7 @@ export function IssuePanel({
                       setHasChanges(false)
                     }}
                     className="min-h-[200px]"
+                    placeholder="Issue description..."
                   />
                 ) : (
                   <div className="p-4">
@@ -645,7 +626,7 @@ export function IssuePanel({
                       ref={textareaRef}
                       value={content}
                       onChange={(e) => handleContentChange(e.target.value)}
-                      placeholder="Write issue description in markdown..."
+                      placeholder="Issue description in markdown..."
                       className="w-full resize-none border-none bg-transparent font-mono text-sm leading-6 outline-none focus:ring-0"
                       spellCheck={false}
                       style={{ minHeight: '200px' }}
@@ -664,6 +645,30 @@ export function IssuePanel({
                 </div>
               </div>
             )}
+
+            {/* Execution History */}
+            <ExecutionHistory issueId={issue.id} />
+          </div>
+        </div>
+
+        {/* Fixed Footer - Execution Actions */}
+        <div className="border-t bg-background px-6 py-3">
+          <div className="flex items-center justify-end gap-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => setShowExecutionConfigDialog(true)}
+                  disabled={issue.archived || isUpdating}
+                  variant="default"
+                  size="xs"
+                  className="gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Run Agent
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Configure and start agent execution</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
