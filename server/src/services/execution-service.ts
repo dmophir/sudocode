@@ -16,6 +16,7 @@ import {
   getExecution,
   updateExecution,
 } from './executions.js';
+import { getDefaultTemplate, getTemplateById } from './prompt-templates.js';
 import { randomUUID } from 'crypto';
 
 /**
@@ -150,14 +151,24 @@ export class ExecutionService {
           : undefined,
     };
 
-    // 4. Get default template (simplified for now - future: support custom templates)
-    const defaultTemplate = this.getDefaultIssueTemplate();
+    // 4. Get template (use custom template if provided, otherwise default)
+    let template: string;
+    if (options?.templateId) {
+      const customTemplate = getTemplateById(this.db, options.templateId);
+      if (!customTemplate) {
+        throw new Error(`Template ${options.templateId} not found`);
+      }
+      template = customTemplate.template;
+    } else {
+      const defaultTemplate = getDefaultTemplate(this.db, 'issue');
+      if (!defaultTemplate) {
+        throw new Error('Default issue template not found');
+      }
+      template = defaultTemplate.template;
+    }
 
     // 5. Render template
-    const renderedPrompt = this.templateEngine.render(
-      defaultTemplate,
-      context
-    );
+    const renderedPrompt = this.templateEngine.render(template, context);
 
     // 6. Get default config
     const defaultConfig: ExecutionConfig = {
@@ -395,32 +406,4 @@ export class ExecutionService {
     return getExecution(this.db, executionId);
   }
 
-  /**
-   * Get default issue template
-   *
-   * Returns the default template for rendering issue prompts.
-   * Future: Load from database templates table.
-   *
-   * @returns Default template string
-   */
-  private getDefaultIssueTemplate(): string {
-    return `Fix issue {{issueId}}: {{title}}
-
-## Description
-{{description}}
-
-{{#if relatedSpecs}}
-## Related Specifications
-{{#each relatedSpecs}}
-- [[{{id}}]]: {{title}}
-{{/each}}
-{{/if}}
-
-Please implement a solution for this issue. Make sure to:
-1. Read and understand the issue requirements
-2. Check related specifications for context
-3. Write clean, well-tested code
-4. Update documentation if needed
-`;
-  }
 }

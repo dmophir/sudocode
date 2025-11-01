@@ -14,6 +14,7 @@ import {
   EXECUTION_LOGS_TABLE,
   EXECUTION_LOGS_INDEXES,
 } from "@sudocode/types/schema";
+import { initializeDefaultTemplates } from "./prompt-templates.js";
 
 /**
  * Database configuration
@@ -61,6 +62,9 @@ export function initDatabase(config: DatabaseConfig): Database.Database {
   db.exec(EXECUTIONS_INDEXES);
   db.exec(PROMPT_TEMPLATES_INDEXES);
   db.exec(EXECUTION_LOGS_INDEXES);
+
+  // Initialize default prompt templates
+  initializeDefaultTemplates(db);
 
   return db;
 }

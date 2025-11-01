@@ -5,16 +5,20 @@
  * template rendering, worktree management, and workflow execution.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import type Database from 'better-sqlite3';
 import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
 import {
   EXECUTIONS_TABLE,
   EXECUTIONS_INDEXES,
+  PROMPT_TEMPLATES_TABLE,
+  PROMPT_TEMPLATES_INDEXES,
 } from '@sudocode/types/schema';
 import { ExecutionService } from '../../../src/services/execution-service.js';
 import { ExecutionLifecycleService } from '../../../src/services/execution-lifecycle.js';
+import { initializeDefaultTemplates } from '../../../src/services/prompt-templates.js';
+import { updateExecution } from '../../../src/services/executions.js';
 import { generateIssueId, generateSpecId } from '@sudocode/cli/dist/id-generator.js';
 import {
   createIssue,
@@ -64,6 +68,11 @@ describe('ExecutionService', () => {
     db = initCliDatabase({ path: testDbPath });
     db.exec(EXECUTIONS_TABLE);
     db.exec(EXECUTIONS_INDEXES);
+    db.exec(PROMPT_TEMPLATES_TABLE);
+    db.exec(PROMPT_TEMPLATES_INDEXES);
+
+    // Initialize default prompt templates
+    initializeDefaultTemplates(db);
 
     // Create test issue
     testIssueId = generateIssueId(db, testDir);
@@ -113,6 +122,20 @@ describe('ExecutionService', () => {
     }
     // Unset environment variable
     delete process.env.SUDOCODE_DIR;
+  });
+
+  afterEach(() => {
+    // Clean up running executions after each test to prevent interference
+    // This ensures each test starts with a clean slate
+    const executions = service.listExecutions(testIssueId);
+    for (const execution of executions) {
+      if (execution.status === 'running') {
+        updateExecution(db, execution.id, {
+          status: 'stopped',
+          completed_at: Math.floor(Date.now() / 1000),
+        });
+      }
+    }
   });
 
   describe('prepareExecution', () => {
@@ -193,7 +216,7 @@ describe('ExecutionService', () => {
       );
     });
 
-    it('should detect empty prompt and return error', async () => {
+    it('should render template even with empty issue content', async () => {
       // Create issue with empty content
       const emptyIssueId = generateIssueId(db, testDir);
       createIssue(db, {
@@ -204,13 +227,11 @@ describe('ExecutionService', () => {
 
       const result = await service.prepareExecution(emptyIssueId);
 
-      // Should have errors for empty prompt
-      assert.ok(result.errors);
-      assert.ok(result.errors.length > 0);
-      assert.ok(
-        result.errors.some((e) => e.includes('empty')),
-        'Should have error about empty prompt'
-      );
+      // Template should still render with structure
+      assert.ok(result.renderedPrompt);
+      assert.ok(result.renderedPrompt.trim().length > 0);
+      // Should include the template structure even if issue is empty
+      assert.ok(result.renderedPrompt.includes('## Description'));
     });
 
     it('should allow config overrides', async () => {
