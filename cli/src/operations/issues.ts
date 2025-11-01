@@ -5,6 +5,7 @@
 import type Database from "better-sqlite3";
 import type { Issue, IssueStatus } from "../types.js";
 import { generateUUID } from "../id-generator.js";
+import { getIncomingRelationships } from "./relationships.js";
 
 export interface CreateIssueInput {
   id: string;
@@ -242,7 +243,7 @@ export function updateIssue(
     updates.push("parent_id = @parent_id");
     params.parent_id = input.parent_id;
   }
-  if (input.archived !== undefined && (input.archived ? 1 : 0) !== existing.archived) {
+  if (input.archived !== undefined && (input.archived ? 1 : 0) !== (existing.archived as unknown as number)) {
     updates.push("archived = @archived");
     params.archived = input.archived ? 1 : 0;
 
@@ -288,6 +289,12 @@ export function updateIssue(
     if (!updated) {
       throw new Error(`Failed to update issue ${id}`);
     }
+
+    // If status changed to 'closed', update any dependent blocked issues
+    if (input.status === 'closed' && existing.status !== 'closed') {
+      updateDependentBlockedIssues(db, id);
+    }
+
     return updated;
   } catch (error: any) {
     if (error.code && error.code.startsWith("SQLITE_CONSTRAINT")) {
@@ -295,6 +302,71 @@ export function updateIssue(
     }
     throw error;
   }
+}
+
+/**
+ * Update status of issues that were blocked by the given issue
+ * Called when a blocker issue is closed
+ */
+function updateDependentBlockedIssues(
+  db: Database.Database,
+  closedIssueId: string
+): void {
+  // Find all issues that are blocked by this issue
+  // (issues that have a 'blocks' relationship pointing to this issue)
+  const dependentRelationships = getIncomingRelationships(
+    db,
+    closedIssueId,
+    'issue',
+    'blocks'
+  );
+
+  for (const rel of dependentRelationships) {
+    const blockedIssueId = rel.from_id;
+    const blockedIssue = getIssue(db, blockedIssueId);
+
+    // Only update if the issue is currently marked as 'blocked'
+    if (!blockedIssue || blockedIssue.status !== 'blocked') {
+      continue;
+    }
+
+    // Check if this issue has any other open/in_progress/blocked blockers
+    const hasOtherBlockers = hasOpenBlockers(db, blockedIssueId, closedIssueId);
+
+    // If no other blockers, update status from 'blocked' to 'open'
+    if (!hasOtherBlockers) {
+      const updateStmt = db.prepare(`
+        UPDATE issues
+        SET status = 'open', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      updateStmt.run(blockedIssueId);
+    }
+  }
+}
+
+/**
+ * Check if an issue has any open blockers (excluding the specified blocker)
+ */
+function hasOpenBlockers(
+  db: Database.Database,
+  issueId: string,
+  excludeBlockerId?: string
+): boolean {
+  const stmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM relationships r
+    JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
+    WHERE r.from_id = ?
+      AND r.from_type = 'issue'
+      AND r.relationship_type = 'blocks'
+      AND blocker.status IN ('open', 'in_progress', 'blocked')
+      ${excludeBlockerId ? 'AND blocker.id != ?' : ''}
+  `);
+
+  const params = excludeBlockerId ? [issueId, excludeBlockerId] : [issueId];
+  const result = stmt.get(...params) as { count: number };
+  return result.count > 0;
 }
 
 /**

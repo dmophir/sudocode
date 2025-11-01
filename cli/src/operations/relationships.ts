@@ -4,6 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import type { Relationship, EntityType, RelationshipType } from '../types.js';
+import { getIssue } from './issues.js';
 
 export interface CreateRelationshipInput {
   from_id: string;
@@ -80,6 +81,11 @@ export function addRelationship(
       throw new Error('Failed to create relationship');
     }
 
+    // Auto-update blocked status when adding a 'blocks' relationship
+    if (input.relationship_type === 'blocks' && input.from_type === 'issue' && input.to_type === 'issue') {
+      autoUpdateBlockedStatusOnAdd(db, input.from_id, input.to_id);
+    }
+
     return rel;
   } catch (error: any) {
     if (error.code && error.code.startsWith('SQLITE_CONSTRAINT')) {
@@ -88,6 +94,32 @@ export function addRelationship(
       );
     }
     throw error;
+  }
+}
+
+/**
+ * Auto-update blocked status when adding a 'blocks' relationship
+ */
+function autoUpdateBlockedStatusOnAdd(
+  db: Database.Database,
+  blockedIssueId: string,
+  blockerIssueId: string
+): void {
+  const blockerIssue = getIssue(db, blockerIssueId);
+
+  // Only set to 'blocked' if the blocker is not closed
+  if (blockerIssue && blockerIssue.status !== 'closed') {
+    const blockedIssue = getIssue(db, blockedIssueId);
+
+    // Only update if currently open or in_progress (don't override other statuses)
+    if (blockedIssue && (blockedIssue.status === 'open' || blockedIssue.status === 'in_progress')) {
+      const updateStmt = db.prepare(`
+        UPDATE issues
+        SET status = 'blocked', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      updateStmt.run(blockedIssueId);
+    }
   }
 }
 
@@ -131,7 +163,61 @@ export function removeRelationship(
   `);
 
   const result = stmt.run(from_id, from_type, to_id, to_type, relationship_type);
-  return result.changes > 0;
+  const removed = result.changes > 0;
+
+  // Auto-update blocked status when removing a 'blocks' relationship
+  if (removed && relationship_type === 'blocks' && from_type === 'issue' && to_type === 'issue') {
+    autoUpdateBlockedStatusOnRemove(db, from_id);
+  }
+
+  return removed;
+}
+
+/**
+ * Auto-update blocked status when removing a 'blocks' relationship
+ */
+function autoUpdateBlockedStatusOnRemove(
+  db: Database.Database,
+  blockedIssueId: string
+): void {
+  const blockedIssue = getIssue(db, blockedIssueId);
+
+  // Only unblock if currently blocked
+  if (blockedIssue && blockedIssue.status === 'blocked') {
+    // Check if there are any other open blockers
+    const hasOtherBlockers = hasOpenBlockers(db, blockedIssueId);
+
+    // If no other blockers, unblock the issue
+    if (!hasOtherBlockers) {
+      const updateStmt = db.prepare(`
+        UPDATE issues
+        SET status = 'open', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      updateStmt.run(blockedIssueId);
+    }
+  }
+}
+
+/**
+ * Check if an issue has any open blockers
+ */
+function hasOpenBlockers(
+  db: Database.Database,
+  issueId: string
+): boolean {
+  const stmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM relationships r
+    JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
+    WHERE r.from_id = ?
+      AND r.from_type = 'issue'
+      AND r.relationship_type = 'blocks'
+      AND blocker.status IN ('open', 'in_progress', 'blocked')
+  `);
+
+  const result = stmt.get(issueId) as { count: number };
+  return result.count > 0;
 }
 
 /**
