@@ -363,6 +363,39 @@ export class ExecutionService {
   }
 
   /**
+   * List all executions for an issue
+   *
+   * Returns all executions associated with a specific issue,
+   * ordered by creation time (most recent first).
+   *
+   * @param issueId - ID of issue to list executions for
+   * @returns Array of executions for the issue
+   */
+  listExecutions(issueId: string): Execution[] {
+    const executions = this.db
+      .prepare(
+        `
+      SELECT * FROM executions
+      WHERE issue_id = ?
+      ORDER BY created_at DESC
+    `
+      )
+      .all(issueId) as Execution[];
+
+    return executions;
+  }
+
+  /**
+   * Get a single execution by ID
+   *
+   * @param executionId - ID of execution to retrieve
+   * @returns Execution or null if not found
+   */
+  getExecution(executionId: string): Execution | null {
+    return getExecution(this.db, executionId);
+  }
+
+  /**
    * Get default issue template
    *
    * Returns the default template for rendering issue prompts.
