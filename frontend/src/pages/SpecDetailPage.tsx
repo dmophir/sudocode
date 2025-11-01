@@ -39,6 +39,9 @@ const PRIORITY_OPTIONS = [
   { value: '4', label: 'None (P4)' },
 ]
 
+const SHOW_FEEDBACK_STORAGE_KEY = 'sudocode:specs:showFeedbackPanel'
+const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
+
 export default function SpecDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -50,8 +53,14 @@ export default function SpecDetailPage() {
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [_selectedText, setSelectedText] = useState<string | null>(null) // Reserved for future text selection feature
-  const [showFeedbackPanel, setShowFeedbackPanel] = useState(true)
-  const [viewMode, setViewMode] = useState<'formatted' | 'source'>('formatted')
+  const [showFeedbackPanel, setShowFeedbackPanel] = useState(() => {
+    const stored = localStorage.getItem(SHOW_FEEDBACK_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : true
+  })
+  const [viewMode, setViewMode] = useState<'formatted' | 'source'>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : 'formatted'
+  })
 
   // Local state for editable fields
   const [title, setTitle] = useState('')
@@ -183,6 +192,16 @@ export default function SpecDetailPage() {
       }
     }
   }, [])
+
+  // Save feedback panel preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(SHOW_FEEDBACK_STORAGE_KEY, JSON.stringify(showFeedbackPanel))
+  }, [showFeedbackPanel])
+
+  // Save view mode preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(viewMode))
+  }, [viewMode])
 
   if (isLoading) {
     return (
@@ -346,7 +365,7 @@ export default function SpecDetailPage() {
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
               <Button
-                variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+                variant={viewMode === 'formatted' ? 'outline' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('formatted')}
                 className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -355,7 +374,7 @@ export default function SpecDetailPage() {
                 Formatted
               </Button>
               <Button
-                variant={viewMode === 'source' ? 'default' : 'ghost'}
+                variant={viewMode === 'source' ? 'outline' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('source')}
                 className={`h-7 rounded-sm ${viewMode === 'source' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}

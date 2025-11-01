@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useIssue, useIssues } from '@/hooks/useIssues'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { Button } from '@/components/ui/button'
 import { DeleteIssueDialog } from '@/components/issues/DeleteIssueDialog'
 import { Archive, ArchiveRestore, Trash2, FileText, Code2 } from 'lucide-react'
+
+const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
 
 export default function IssueDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -13,7 +15,10 @@ export default function IssueDetailPage() {
   const { updateIssue, deleteIssue, archiveIssue, unarchiveIssue, isUpdating, isDeleting } =
     useIssues()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [viewMode, setViewMode] = useState<'formatted' | 'markdown'>('formatted')
+  const [viewMode, setViewMode] = useState<'formatted' | 'markdown'>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : 'formatted'
+  })
 
   const handleUpdate = (data: Parameters<typeof updateIssue>[0]['data']) => {
     if (!id) return
@@ -35,6 +40,11 @@ export default function IssueDetailPage() {
     unarchiveIssue(issueId)
     navigate('/issues')
   }
+
+  // Save view mode preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(viewMode))
+  }, [viewMode])
 
   if (isLoading) {
     return (
@@ -74,7 +84,7 @@ export default function IssueDetailPage() {
           {/* View mode toggle */}
           <div className="mr-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
             <Button
-              variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+              variant={viewMode === 'formatted' ? 'outline' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('formatted')}
               className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -83,7 +93,7 @@ export default function IssueDetailPage() {
               Formatted
             </Button>
             <Button
-              variant={viewMode === 'markdown' ? 'default' : 'ghost'}
+              variant={viewMode === 'markdown' ? 'outline' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('markdown')}
               className={`h-7 rounded-sm ${viewMode === 'markdown' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}

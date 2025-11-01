@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { FeedbackCard } from './FeedbackCard'
 import { useCollisionFreePositions } from '@/hooks/useCollisionFreePositions'
 import type {
@@ -13,7 +13,9 @@ import { RelationshipForm } from '@/components/relationships/RelationshipForm'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
+
+const RELATIONSHIPS_COLLAPSED_STORAGE_KEY = 'sudocode:specs:showRelationshipsCollapsed'
 
 interface AlignedFeedbackPanelProps {
   feedback: IssueFeedback[]
@@ -67,6 +69,10 @@ export function AlignedFeedbackPanel({
 }: AlignedFeedbackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [showAddRelationship, setShowAddRelationship] = useState(false)
+  const [isRelationshipsCollapsed, setIsRelationshipsCollapsed] = useState(() => {
+    const stored = localStorage.getItem(RELATIONSHIPS_COLLAPSED_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : false
+  })
 
   const handleCreateRelationship = (
     toId: string,
@@ -78,6 +84,14 @@ export function AlignedFeedbackPanel({
       setShowAddRelationship(false)
     }
   }
+
+  // Save relationships collapsed preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(
+      RELATIONSHIPS_COLLAPSED_STORAGE_KEY,
+      JSON.stringify(isRelationshipsCollapsed)
+    )
+  }, [isRelationshipsCollapsed])
 
   // Prepare positions for all feedback, treating general comments as position 0
   const allFeedbackPositions = useMemo(() => {
@@ -118,27 +132,38 @@ export function AlignedFeedbackPanel({
     >
       {/* Relationships Section */}
       {currentEntityId && (
-        <div className="border-b p-4">
-          <div className="mb-2 flex items-center justify-between">
+        <div className="p-2">
+          <div
+            className="mb-2 flex cursor-pointer items-center justify-between rounded-md border p-2"
+            onClick={() => setIsRelationshipsCollapsed(!isRelationshipsCollapsed)}
+          >
             <div className="flex items-center gap-2">
+              {isRelationshipsCollapsed ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              )}
               <h3 className="text-sm font-medium text-muted-foreground">Relationships</h3>
               {relationships && relationships.length > 0 && (
                 <Badge variant="secondary">{relationships.length}</Badge>
               )}
-              {onCreateRelationship && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => setShowAddRelationship(true)}
-                  className="h-6"
-                >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Add
-                </Button>
-              )}
             </div>
+            {onCreateRelationship && (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAddRelationship(true)
+                }}
+                className="h-6"
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            )}
           </div>
-          {relationships && relationships.length > 0 && (
+          {!isRelationshipsCollapsed && relationships && relationships.length > 0 && (
             <RelationshipList
               relationships={relationships}
               currentEntityId={currentEntityId}

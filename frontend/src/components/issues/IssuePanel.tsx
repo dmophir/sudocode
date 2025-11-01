@@ -37,6 +37,8 @@ import { useRelationshipMutations } from '@/hooks/useRelationshipMutations'
 import { TiptapEditor } from '@/components/specs/TiptapEditor'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
+const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
+
 interface IssuePanelProps {
   issue: Issue
   onClose?: () => void
@@ -88,7 +90,10 @@ export function IssuePanel({
   const [title, setTitle] = useState(issue.title)
   const [content, setContent] = useState(issue.content || '')
   const [status, setStatus] = useState<IssueStatus>(issue.status)
-  const [internalViewMode, setInternalViewMode] = useState<'formatted' | 'markdown'>('formatted')
+  const [internalViewMode, setInternalViewMode] = useState<'formatted' | 'markdown'>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : 'formatted'
+  })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Use external viewMode if provided, otherwise use internal state
@@ -134,6 +139,14 @@ export function IssuePanel({
     // Reset hasChanges to prevent saving old content to new issue
     setHasChanges(false)
   }, [issue.id])
+
+  // Save internal view mode preference to localStorage
+  useEffect(() => {
+    // Only save if we're using internal view mode (not externally controlled)
+    if (!externalViewMode) {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(internalViewMode))
+    }
+  }, [internalViewMode, externalViewMode])
 
   // Update form values when issue changes
   useEffect(() => {
@@ -414,7 +427,7 @@ export function IssuePanel({
               {showViewToggleInline && (
                 <div className="mr-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
                   <Button
-                    variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+                    variant={viewMode === 'formatted' ? 'outline' : 'ghost'}
                     size="sm"
                     onClick={() => handleViewModeChange('formatted')}
                     className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -423,7 +436,7 @@ export function IssuePanel({
                     Formatted
                   </Button>
                   <Button
-                    variant={viewMode === 'markdown' ? 'default' : 'ghost'}
+                    variant={viewMode === 'markdown' ? 'outline' : 'ghost'}
                     size="sm"
                     onClick={() => handleViewModeChange('markdown')}
                     className={`h-7 rounded-sm ${viewMode === 'markdown' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
