@@ -12,7 +12,7 @@ import type Database from 'better-sqlite3';
 import type { AgentType, Execution } from '@sudocode/types';
 import { WorktreeManager, type IWorktreeManager } from '../execution/worktree/manager.js';
 import { getWorktreeConfig } from '../execution/worktree/config.js';
-import { createExecution, getExecution, updateExecution } from './executions.js';
+import { createExecution, getExecution } from './executions.js';
 import { randomUUID } from 'crypto';
 
 /**
@@ -193,6 +193,10 @@ export class ExecutionLifecycleService {
    * Removes the worktree from filesystem and git metadata.
    * Branch deletion is controlled by autoDeleteBranches config.
    *
+   * IMPORTANT: The worktree_path is NEVER cleared from the database.
+   * This allows follow-up executions to find and reuse the same worktree path.
+   * The filesystem worktree is deleted, but the path remains in the DB as a historical record.
+   *
    * @param executionId - ID of execution to cleanup
    * @throws Error if cleanup fails
    */
@@ -205,13 +209,16 @@ export class ExecutionLifecycleService {
       return;
     }
 
-    // If execution has a worktree path, clean it up
+    // If execution has a worktree path, clean up the filesystem worktree
+    // but KEEP the worktree_path in the database for follow-up executions
     if (execution.worktree_path) {
       try {
         await this.worktreeManager.cleanupWorktree(
           execution.worktree_path,
           this.repoPath
         );
+        // NOTE: We do NOT set worktree_path to null in the database
+        // Follow-up executions need this path to recreate the worktree
       } catch (error) {
         // Log error but don't fail - cleanup is best-effort
         console.error(
@@ -219,19 +226,6 @@ export class ExecutionLifecycleService {
           error
         );
       }
-    }
-
-    // Update execution status to mark as cleaned up
-    try {
-      updateExecution(this.db, executionId, {
-        worktree_path: null,
-      });
-    } catch (error) {
-      // Log error but don't fail
-      console.error(
-        `Failed to update execution ${executionId} after cleanup:`,
-        error
-      );
     }
   }
 
@@ -289,10 +283,8 @@ export class ExecutionLifecycleService {
           );
           try {
             await this.worktreeManager.cleanupWorktree(worktreePath, repoPath);
-            // Update execution to clear worktree_path
-            updateExecution(this.db, executionId, {
-              worktree_path: null,
-            });
+            // NOTE: We do NOT set worktree_path to null in the database
+            // Follow-up executions need this path to recreate the worktree
           } catch (error) {
             console.error(
               `Failed to cleanup worktree for finished execution ${executionId}:`,

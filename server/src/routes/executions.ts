@@ -8,20 +8,23 @@
 import { Router, Request, Response } from 'express';
 import type Database from 'better-sqlite3';
 import { ExecutionService } from '../services/execution-service.js';
+import type { TransportManager } from '../execution/transport/transport-manager.js';
 
 /**
  * Create executions router
  *
  * @param db - Database instance
  * @param repoPath - Path to git repository
+ * @param transportManager - Optional transport manager for SSE streaming
  * @returns Express router with execution endpoints
  */
 export function createExecutionsRouter(
   db: Database.Database,
-  repoPath: string
+  repoPath: string,
+  transportManager?: TransportManager
 ): Router {
   const router = Router();
-  const executionService = new ExecutionService(db, repoPath);
+  const executionService = new ExecutionService(db, repoPath, undefined, transportManager);
 
   /**
    * POST /api/issues/:issueId/executions/prepare

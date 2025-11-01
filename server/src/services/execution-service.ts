@@ -403,6 +403,28 @@ export class ExecutionService {
       );
     }
 
+    // Check if worktree still exists on filesystem, recreate if needed
+    if (this.lifecycleService) {
+      const fs = await import('fs');
+      const worktreeExists = fs.existsSync(prevExecution.worktree_path);
+
+      if (!worktreeExists) {
+        console.log(
+          `Recreating worktree for follow-up execution: ${prevExecution.worktree_path}`
+        );
+
+        // Recreate the worktree using the same path and branch
+        const worktreeManager = (this.lifecycleService as any).worktreeManager;
+        await worktreeManager.createWorktree({
+          repoPath: this.repoPath,
+          branchName: prevExecution.branch_name,
+          worktreePath: prevExecution.worktree_path,
+          baseBranch: prevExecution.target_branch,
+          createBranch: false, // Branch already exists, just recreate worktree
+        });
+      }
+    }
+
     // 2. Prepare execution to get rendered prompt
     const prepareResult = await this.prepareExecution(prevExecution.issue_id);
 
@@ -542,16 +564,17 @@ Please continue working on this issue, taking into account the feedback above.`;
     // Get orchestrator from active map
     const orchestrator = this.activeOrchestrators.get(executionId);
     if (orchestrator) {
-      // Cancel via orchestrator (this will trigger cleanup and DB update via event handlers)
+      // Cancel via orchestrator
       await orchestrator.cancelWorkflow(executionId);
-    } else {
-      // Orchestrator not found (execution may have already completed)
-      // Just update status in database
-      updateExecution(this.db, executionId, {
-        status: "stopped",
-        completed_at: Math.floor(Date.now() / 1000),
-      });
+      // Remove from active map
+      this.activeOrchestrators.delete(executionId);
     }
+
+    // Update status in database (orchestrator.cancelWorkflow doesn't emit events for DB update)
+    updateExecution(this.db, executionId, {
+      status: "stopped",
+      completed_at: Math.floor(Date.now() / 1000),
+    });
   }
 
   /**

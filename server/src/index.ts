@@ -158,7 +158,7 @@ app.use("/api/specs", createSpecsRouter(db));
 app.use("/api/relationships", createRelationshipsRouter(db));
 app.use("/api/feedback", createFeedbackRouter(db));
 // Mount execution routes (must be before stream routes to avoid conflicts)
-app.use("/api", createExecutionsRouter(db, process.cwd()));
+app.use("/api", createExecutionsRouter(db, process.cwd(), transportManager));
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
 // Health check endpoint
