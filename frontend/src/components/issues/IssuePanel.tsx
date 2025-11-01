@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Plus,
   Archive,
@@ -569,8 +570,8 @@ export function IssuePanel({
               {/* Timestamp */}
               <div className="ml-auto text-xs text-muted-foreground">
                 {issue.closed_at
-                  ? `Closed at ${new Date(issue.closed_at).toLocaleString()}`
-                  : `Updated ${new Date(issue.updated_at).toLocaleString()}`}
+                  ? `Closed ${formatDistanceToNow(new Date(issue.closed_at.endsWith('Z') ? issue.closed_at : issue.closed_at + 'Z'), { addSuffix: true })}`
+                  : `Updated ${formatDistanceToNow(new Date(issue.updated_at.endsWith('Z') ? issue.updated_at : issue.updated_at + 'Z'), { addSuffix: true })}`}
               </div>
             </div>
 

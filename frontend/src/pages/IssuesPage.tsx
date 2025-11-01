@@ -272,7 +272,7 @@ export default function IssuesPage() {
             className="text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add Issue
+            Create Issue
           </Button>
         </div>
       </div>

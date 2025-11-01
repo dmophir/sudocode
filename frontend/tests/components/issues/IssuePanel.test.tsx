@@ -208,7 +208,7 @@ describe('IssuePanel', () => {
   it('should not show closed_at when issue is not closed', () => {
     renderWithProviders(<IssuePanel issue={mockIssue} />)
 
-    expect(screen.queryByText(/Closed at/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Closed/)).not.toBeInTheDocument()
   })
 
   it('should show closed_at when issue is closed', () => {
@@ -220,7 +220,7 @@ describe('IssuePanel', () => {
 
     renderWithProviders(<IssuePanel issue={closedIssue} />)
 
-    expect(screen.getByText(/Closed at/)).toBeInTheDocument()
+    expect(screen.getByText(/Closed.*ago/)).toBeInTheDocument()
   })
 
   it('should not show assignee section when assignee is undefined', () => {
@@ -288,9 +288,7 @@ describe('IssuePanel', () => {
   it('should disable Archive button when isUpdating is true', () => {
     const onArchive = vi.fn()
 
-    renderWithProviders(
-      <IssuePanel issue={mockIssue} onArchive={onArchive} isUpdating={true} />
-    )
+    renderWithProviders(<IssuePanel issue={mockIssue} onArchive={onArchive} isUpdating={true} />)
 
     expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
   })

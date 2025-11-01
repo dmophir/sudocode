@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 import { useSpec, useSpecFeedback, useSpecs } from '@/hooks/useSpecs'
 import { useIssues } from '@/hooks/useIssues'
 import { useFeedback } from '@/hooks/useFeedback'
@@ -488,7 +489,7 @@ export default function SpecDetailPage() {
                 <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
                   {spec.updated_at && (
                     <div className="ml-auto flex items-center text-xs text-muted-foreground">
-                      Updated at {new Date(spec.updated_at).toLocaleString()}
+                      Updated {formatDistanceToNow(new Date(spec.updated_at.endsWith('Z') ? spec.updated_at : spec.updated_at + 'Z'), { addSuffix: true })}
                     </div>
                   )}
                 </div>
