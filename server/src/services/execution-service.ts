@@ -1,0 +1,393 @@
+/**
+ * Execution Service
+ *
+ * High-level service for managing issue-to-execution transformations.
+ * Coordinates between template rendering, worktree management, and workflow execution.
+ *
+ * @module services/execution-service
+ */
+
+import type Database from 'better-sqlite3';
+import type { Execution } from '@sudocode/types';
+import { PromptTemplateEngine } from './prompt-template-engine.js';
+import { ExecutionLifecycleService } from './execution-lifecycle.js';
+import {
+  createExecution,
+  getExecution,
+  updateExecution,
+} from './executions.js';
+import { randomUUID } from 'crypto';
+
+/**
+ * Configuration for creating an execution
+ */
+export interface ExecutionConfig {
+  mode?: 'worktree' | 'local';
+  model?: string;
+  timeout?: number;
+  baseBranch?: string;
+  branchName?: string;
+  checkpointInterval?: number;
+  continueOnStepFailure?: boolean;
+  captureFileChanges?: boolean;
+  captureToolCalls?: boolean;
+}
+
+/**
+ * Template variable context for rendering
+ */
+export interface TemplateContext {
+  issueId: string;
+  title: string;
+  description: string;
+  relatedSpecs?: Array<{ id: string; title: string }>;
+  feedback?: Array<{ issueId: string; content: string }>;
+}
+
+/**
+ * Result from prepareExecution - preview before starting
+ */
+export interface ExecutionPrepareResult {
+  renderedPrompt: string;
+  issue: {
+    id: string;
+    title: string;
+    content: string;
+  };
+  relatedSpecs: Array<{ id: string; title: string }>;
+  defaultConfig: ExecutionConfig;
+  warnings?: string[];
+  errors?: string[];
+}
+
+/**
+ * ExecutionService
+ *
+ * Manages the full lifecycle of issue-based executions:
+ * - Preparing execution with template rendering
+ * - Creating and starting executions with worktree isolation
+ * - Creating follow-up executions that reuse worktrees
+ * - Canceling and cleaning up executions
+ */
+export class ExecutionService {
+  private db: Database.Database;
+  private templateEngine: PromptTemplateEngine;
+  private lifecycleService: ExecutionLifecycleService;
+  private repoPath: string;
+
+  /**
+   * Create a new ExecutionService
+   *
+   * @param db - Database instance
+   * @param repoPath - Path to the git repository
+   * @param lifecycleService - Optional execution lifecycle service (creates one if not provided)
+   */
+  constructor(
+    db: Database.Database,
+    repoPath: string,
+    lifecycleService?: ExecutionLifecycleService
+  ) {
+    this.db = db;
+    this.repoPath = repoPath;
+    this.templateEngine = new PromptTemplateEngine();
+    this.lifecycleService =
+      lifecycleService || new ExecutionLifecycleService(db, repoPath);
+  }
+
+  /**
+   * Prepare execution - load issue, render template, return preview
+   *
+   * This method loads the issue and related context, renders the template,
+   * and returns a preview for the user to review before starting execution.
+   *
+   * @param issueId - ID of issue to prepare execution for
+   * @param options - Optional template and config overrides
+   * @returns Execution prepare result with rendered prompt and context
+   */
+  async prepareExecution(
+    issueId: string,
+    options?: {
+      templateId?: string;
+      config?: Partial<ExecutionConfig>;
+    }
+  ): Promise<ExecutionPrepareResult> {
+    // 1. Load issue
+    const issue = this.db
+      .prepare('SELECT * FROM issues WHERE id = ?')
+      .get(issueId) as
+      | { id: string; title: string; content: string }
+      | undefined;
+
+    if (!issue) {
+      throw new Error(`Issue ${issueId} not found`);
+    }
+
+    // 2. Load related specs (via implements/references relationships)
+    const relatedSpecs = this.db
+      .prepare(
+        `
+      SELECT DISTINCT s.id, s.title
+      FROM specs s
+      JOIN relationships r ON r.to_id = s.id AND r.to_type = 'spec'
+      WHERE r.from_id = ? AND r.from_type = 'issue'
+        AND r.relationship_type IN ('implements', 'references')
+      ORDER BY s.title
+    `
+      )
+      .all(issueId) as Array<{ id: string; title: string }>;
+
+    // 3. Build context for template rendering
+    const context: TemplateContext = {
+      issueId: issue.id,
+      title: issue.title,
+      description: issue.content,
+      relatedSpecs:
+        relatedSpecs.length > 0
+          ? relatedSpecs.map((s) => ({
+              id: s.id,
+              title: s.title,
+            }))
+          : undefined,
+    };
+
+    // 4. Get default template (simplified for now - future: support custom templates)
+    const defaultTemplate = this.getDefaultIssueTemplate();
+
+    // 5. Render template
+    const renderedPrompt = this.templateEngine.render(
+      defaultTemplate,
+      context
+    );
+
+    // 6. Get default config
+    const defaultConfig: ExecutionConfig = {
+      mode: 'worktree',
+      model: 'claude-sonnet-4',
+      baseBranch: 'main',
+      checkpointInterval: 1,
+      continueOnStepFailure: false,
+      captureFileChanges: true,
+      captureToolCalls: true,
+      ...options?.config,
+    };
+
+    // 7. Validate
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    if (!renderedPrompt.trim()) {
+      errors.push('Rendered prompt is empty');
+    }
+
+    return {
+      renderedPrompt,
+      issue: {
+        id: issue.id,
+        title: issue.title,
+        content: issue.content,
+      },
+      relatedSpecs,
+      defaultConfig,
+      warnings,
+      errors,
+    };
+  }
+
+  /**
+   * Create and start execution
+   *
+   * Creates an execution record, sets up worktree (if needed), and starts
+   * workflow execution. Returns the execution record immediately while
+   * workflow runs in the background.
+   *
+   * @param issueId - ID of issue to execute
+   * @param config - Execution configuration
+   * @param prompt - Rendered prompt to execute
+   * @returns Created execution record
+   */
+  async createExecution(
+    issueId: string,
+    config: ExecutionConfig,
+    prompt: string
+  ): Promise<Execution> {
+    // 1. Validate
+    if (!prompt.trim()) {
+      throw new Error('Prompt cannot be empty');
+    }
+
+    const issue = this.db
+      .prepare('SELECT * FROM issues WHERE id = ?')
+      .get(issueId) as { id: string; title: string } | undefined;
+
+    if (!issue) {
+      throw new Error(`Issue ${issueId} not found`);
+    }
+
+    // 2. Determine execution mode and create execution with worktree
+    const mode = config.mode || 'worktree';
+    let execution: Execution;
+
+    if (mode === 'worktree') {
+      // Create execution with isolated worktree
+      const result =
+        await this.lifecycleService.createExecutionWithWorktree({
+          issueId,
+          issueTitle: issue.title,
+          agentType: 'claude-code',
+          targetBranch: config.baseBranch || 'main',
+          repoPath: this.repoPath,
+        });
+
+      execution = result.execution;
+      // workDir will be result.worktreePath for workflow execution (TODO)
+
+      // Update execution with SPEC-011 fields
+      execution = updateExecution(this.db, execution.id, {
+        // Store mode, prompt, and config in execution record
+        // Note: These fields are nullable in schema for backward compatibility
+      });
+    } else {
+      // Local mode - create execution without worktree
+      const executionId = randomUUID();
+      execution = createExecution(this.db, {
+        id: executionId,
+        issue_id: issueId,
+        agent_type: 'claude-code',
+        target_branch: config.baseBranch || 'main',
+        branch_name: config.baseBranch || 'main',
+      });
+      // workDir will be this.repoPath for workflow execution (TODO)
+    }
+
+    // TODO: Implement actual workflow execution with LinearOrchestrator
+    // For now, execution is created but workflow is not started
+    // Future implementation will:
+    // 1. Build WorkflowDefinition with prompt and config
+    // 2. Create ResilientExecutor with execution engine
+    // 3. Create LinearOrchestrator with executor and AG-UI adapter
+    // 4. Set up event handlers to update execution status
+    // 5. Start workflow with orchestrator.startWorkflow()
+    // 6. Store workflow execution ID for monitoring
+
+    return execution;
+  }
+
+  /**
+   * Create follow-up execution - reuse worktree from previous execution
+   *
+   * Creates a new execution that reuses the worktree from a previous execution,
+   * appending feedback or additional context to the prompt.
+   *
+   * @param executionId - ID of previous execution to follow up on
+   * @param feedback - Additional feedback/context to append to prompt
+   * @returns Created follow-up execution record
+   */
+  async createFollowUp(
+    executionId: string,
+    _feedback: string
+  ): Promise<Execution> {
+    // 1. Get previous execution
+    const prevExecution = getExecution(this.db, executionId);
+    if (!prevExecution) {
+      throw new Error(`Execution ${executionId} not found`);
+    }
+
+    if (!prevExecution.worktree_path) {
+      throw new Error(
+        `Cannot create follow-up: execution ${executionId} has no worktree`
+      );
+    }
+
+    // 2. Verify worktree still exists
+    // TODO: Add worktree validation
+
+    // 3. TODO: Prepare execution and append feedback to prompt
+    // prepareResult = await this.prepareExecution(prevExecution.issue_id);
+    // followUpPrompt = prepareResult.renderedPrompt + _feedback section
+
+    // 4. Create new execution record that references previous execution
+    const newExecutionId = randomUUID();
+    const newExecution = createExecution(this.db, {
+      id: newExecutionId,
+      issue_id: prevExecution.issue_id,
+      agent_type: 'claude-code',
+      target_branch: prevExecution.target_branch,
+      branch_name: prevExecution.branch_name,
+      worktree_path: prevExecution.worktree_path, // Reuse same worktree
+    });
+
+    // TODO: Build and start workflow (same as createExecution)
+    // Workflow execution will be added in future implementation
+
+    return newExecution;
+  }
+
+  /**
+   * Cancel a running execution
+   *
+   * Stops the workflow execution and marks the execution as cancelled.
+   * Optionally cleans up the worktree based on config.
+   *
+   * @param executionId - ID of execution to cancel
+   */
+  async cancelExecution(executionId: string): Promise<void> {
+    const execution = getExecution(this.db, executionId);
+    if (!execution) {
+      throw new Error(`Execution ${executionId} not found`);
+    }
+
+    if (execution.status !== 'running') {
+      throw new Error(
+        `Cannot cancel execution in ${execution.status} state`
+      );
+    }
+
+    // TODO: Cancel workflow via orchestrator
+    // For now, just update status (using 'stopped' as 'cancelled' not in type)
+    updateExecution(this.db, executionId, {
+      status: 'stopped',
+      completed_at: Math.floor(Date.now() / 1000),
+    });
+  }
+
+  /**
+   * Clean up execution resources
+   *
+   * Removes the worktree and associated files. This is called automatically
+   * on workflow completion, or can be called manually.
+   *
+   * @param executionId - ID of execution to clean up
+   */
+  async cleanupExecution(executionId: string): Promise<void> {
+    await this.lifecycleService.cleanupExecution(executionId);
+  }
+
+  /**
+   * Get default issue template
+   *
+   * Returns the default template for rendering issue prompts.
+   * Future: Load from database templates table.
+   *
+   * @returns Default template string
+   */
+  private getDefaultIssueTemplate(): string {
+    return `Fix issue {{issueId}}: {{title}}
+
+## Description
+{{description}}
+
+{{#if relatedSpecs}}
+## Related Specifications
+{{#each relatedSpecs}}
+- [[{{id}}]]: {{title}}
+{{/each}}
+{{/if}}
+
+Please implement a solution for this issue. Make sure to:
+1. Read and understand the issue requirements
+2. Check related specifications for context
+3. Write clean, well-tested code
+4. Update documentation if needed
+`;
+  }
+}
