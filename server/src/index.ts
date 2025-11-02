@@ -47,6 +47,7 @@ const MAX_PORT_ATTEMPTS = 20;
 const SUDOCODE_DIR =
   process.env.SUDOCODE_DIR || path.join(process.cwd(), ".sudocode");
 const DB_PATH = path.join(SUDOCODE_DIR, "cache.db");
+// TODO: Include sudocode install package for serving static files.
 
 // Derive repo root from SUDOCODE_DIR (which is <repo>/.sudocode)
 // This ensures consistency across database and execution paths
@@ -240,7 +241,7 @@ app.get("/ws/stats", (_req: Request, res: Response) => {
 });
 
 // Serve static frontend from sudocode installation directory
-const frontendPath = path.join(__dirname, "../../frontend/dist");
+const frontendPath = path.join(__dirname, "../../../frontend/dist");
 console.log(`[server] Serving static frontend from: ${frontendPath}`);
 
 // Serve static files
