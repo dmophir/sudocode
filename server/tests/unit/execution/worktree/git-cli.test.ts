@@ -218,6 +218,26 @@ HEAD abc123def456
     });
   });
 
+  describe('getCurrentCommit', () => {
+    it('should execute git rev-parse HEAD command', async () => {
+      gitCli.mockOutput = 'abc123def456789\n';
+
+      const commit = await gitCli.getCurrentCommit('/repo');
+
+      assert.ok(gitCli.lastCommand.includes('git rev-parse HEAD'));
+      assert.strictEqual(gitCli.lastCwd, '/repo');
+      assert.strictEqual(commit, 'abc123def456789');
+    });
+
+    it('should trim whitespace from commit SHA', async () => {
+      gitCli.mockOutput = '  abc123def456789  \n  ';
+
+      const commit = await gitCli.getCurrentCommit('/repo');
+
+      assert.strictEqual(commit, 'abc123def456789');
+    });
+  });
+
   describe('error handling', () => {
     it('should throw WorktreeError on git command failure', async () => {
       const error: any = new Error('Command failed');

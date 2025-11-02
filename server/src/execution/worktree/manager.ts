@@ -7,16 +7,16 @@
  * @module execution/worktree/manager
  */
 
-import { Mutex } from 'async-mutex';
-import fs from 'fs';
-import path from 'path';
+import { Mutex } from "async-mutex";
+import fs from "fs";
+import path from "path";
 import type {
   WorktreeCreateParams,
   WorktreeConfig,
   WorktreeInfo,
-} from './types.js';
-import { WorktreeError, WorktreeErrorCode } from './types.js';
-import { GitCli, type IGitCli } from './git-cli.js';
+} from "./types.js";
+import { WorktreeError, WorktreeErrorCode } from "./types.js";
+import { GitCli, type IGitCli } from "./git-cli.js";
 
 /**
  * IWorktreeManager - Interface for worktree management
@@ -146,12 +146,22 @@ export class WorktreeManager implements IWorktreeManager {
   }
 
   async createWorktree(params: WorktreeCreateParams): Promise<void> {
-    const { repoPath, branchName, worktreePath, baseBranch, createBranch } = params;
+    const {
+      repoPath,
+      branchName,
+      worktreePath,
+      baseBranch: _baseBranch,
+      createBranch,
+      commitSha,
+    } = params;
 
     try {
       // 1. Create branch if requested
       if (createBranch) {
-        await this.git.createBranch(repoPath, branchName, baseBranch);
+        // Use the specified commit SHA or the current HEAD commit SHA to branch from
+        const targetCommit =
+          commitSha || (await this.git.getCurrentCommit(repoPath));
+        await this.git.createBranch(repoPath, branchName, targetCommit);
       }
 
       // 2. Create parent directory if needed
@@ -164,7 +174,10 @@ export class WorktreeManager implements IWorktreeManager {
       await this.git.worktreeAdd(repoPath, worktreePath, branchName);
 
       // 4. Apply sparse-checkout if configured
-      if (this.config.enableSparseCheckout && this.config.sparseCheckoutPatterns) {
+      if (
+        this.config.enableSparseCheckout &&
+        this.config.sparseCheckoutPatterns
+      ) {
         await this.git.configureSparseCheckout(
           worktreePath,
           this.config.sparseCheckoutPatterns
@@ -212,14 +225,18 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 
-  async cleanupWorktree(worktreePath: string, repoPath?: string): Promise<void> {
+  async cleanupWorktree(
+    worktreePath: string,
+    repoPath?: string
+  ): Promise<void> {
     // Get lock for this specific path
     const lock = this.getLock(worktreePath);
     const release = await lock.acquire();
 
     try {
       // Infer repoPath if not provided (try to find from worktree)
-      const effectiveRepoPath = repoPath || await this.inferRepoPath(worktreePath);
+      const effectiveRepoPath =
+        repoPath || (await this.inferRepoPath(worktreePath));
 
       if (!effectiveRepoPath) {
         // Can't determine repo path, just cleanup the directory
@@ -264,8 +281,8 @@ export class WorktreeManager implements IWorktreeManager {
       const worktreeName = path.basename(worktreePath);
       const metadataPath = path.join(
         effectiveRepoPath,
-        '.git',
-        'worktrees',
+        ".git",
+        "worktrees",
         worktreeName
       );
       if (fs.existsSync(metadataPath)) {
@@ -285,7 +302,11 @@ export class WorktreeManager implements IWorktreeManager {
       }
 
       // 5. Delete branch if configured
-      if (this.config.autoDeleteBranches && branchName && branchName !== '(detached)') {
+      if (
+        this.config.autoDeleteBranches &&
+        branchName &&
+        branchName !== "(detached)"
+      ) {
         try {
           await this.git.deleteBranch(effectiveRepoPath, branchName, true);
         } catch (error) {
@@ -297,7 +318,10 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 
-  async isWorktreeValid(repoPath: string, worktreePath: string): Promise<boolean> {
+  async isWorktreeValid(
+    repoPath: string,
+    worktreePath: string
+  ): Promise<boolean> {
     try {
       // 1. Check filesystem path exists
       if (!fs.existsSync(worktreePath)) {
@@ -372,7 +396,10 @@ export class WorktreeManager implements IWorktreeManager {
         await this.git.worktreeAdd(repoPath, worktreePath, branchName);
 
         // Apply sparse-checkout if configured
-        if (this.config.enableSparseCheckout && this.config.sparseCheckoutPatterns) {
+        if (
+          this.config.enableSparseCheckout &&
+          this.config.sparseCheckoutPatterns
+        ) {
           await this.git.configureSparseCheckout(
             worktreePath,
             this.config.sparseCheckoutPatterns
@@ -396,8 +423,8 @@ export class WorktreeManager implements IWorktreeManager {
           const worktreeName = path.basename(worktreePath);
           const metadataPath = path.join(
             repoPath,
-            '.git',
-            'worktrees',
+            ".git",
+            "worktrees",
             worktreeName
           );
           if (fs.existsSync(metadataPath)) {
@@ -422,23 +449,25 @@ export class WorktreeManager implements IWorktreeManager {
    * @param worktreePath - Path to worktree
    * @returns Repository path or undefined
    */
-  private async inferRepoPath(worktreePath: string): Promise<string | undefined> {
+  private async inferRepoPath(
+    worktreePath: string
+  ): Promise<string | undefined> {
     try {
       if (!fs.existsSync(worktreePath)) {
         return undefined;
       }
 
       // Try to use git to find the common git directory
-      const { execSync } = await import('child_process');
-      const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      const { execSync } = await import("child_process");
+      const gitCommonDir = execSync("git rev-parse --git-common-dir", {
         cwd: worktreePath,
-        encoding: 'utf8',
+        encoding: "utf8",
       }).trim();
 
       // git-common-dir gives us the .git directory
       // We need the working directory (parent of .git)
       const gitDirPath = path.resolve(worktreePath, gitCommonDir);
-      if (path.basename(gitDirPath) === '.git') {
+      if (path.basename(gitDirPath) === ".git") {
         return path.dirname(gitDirPath);
       }
 
@@ -448,4 +477,3 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 }
-

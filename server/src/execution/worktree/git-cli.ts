@@ -68,12 +68,12 @@ export interface IGitCli {
    *
    * @param repoPath - Path to the git repository
    * @param branchName - Name of the new branch
-   * @param baseBranch - Base branch to branch from
+   * @param baseBranchOrCommit - Base branch or commit SHA to branch from
    */
   createBranch(
     repoPath: string,
     branchName: string,
-    baseBranch: string
+    baseBranchOrCommit: string
   ): Promise<void>;
 
   /**
@@ -119,6 +119,15 @@ export interface IGitCli {
    * @returns Promise resolving to array of branch names
    */
   listBranches(repoPath: string): Promise<string[]>;
+
+  /**
+   * Get current HEAD commit SHA
+   * Equivalent to: git rev-parse HEAD
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Promise resolving to the current HEAD commit SHA
+   */
+  getCurrentCommit(repoPath: string): Promise<string>;
 }
 
 /**
@@ -279,10 +288,10 @@ export class GitCli implements IGitCli {
   async createBranch(
     repoPath: string,
     branchName: string,
-    baseBranch: string
+    baseBranchOrCommit: string
   ): Promise<void> {
     const escapedBranch = this.escapeShellArg(branchName);
-    const escapedBase = this.escapeShellArg(baseBranch);
+    const escapedBase = this.escapeShellArg(baseBranchOrCommit);
 
     const command = `git branch ${escapedBranch} ${escapedBase}`;
     this.execGit(command, repoPath);
@@ -337,5 +346,10 @@ export class GitCli implements IGitCli {
         // This gives us both local and remote branch names in a consistent format
         return branch.replace(/^remotes\/origin\//, '');
       });
+  }
+
+  async getCurrentCommit(repoPath: string): Promise<string> {
+    const output = this.execGit('git rev-parse HEAD', repoPath);
+    return output.trim();
   }
 }

@@ -90,6 +90,12 @@ class MockGitCli implements IGitCli {
     return ['main', 'develop', 'feature/test'];
   }
 
+  async getCurrentCommit(_repoPath: string): Promise<string> {
+    this.calls.push({ method: 'getCurrentCommit', args: arguments as any });
+    if (this.shouldThrow) throw this.shouldThrow;
+    return 'abc123def456789';
+  }
+
   getCallCount(method: string): number {
     return this.calls.filter((c) => c.method === method).length;
   }
@@ -158,11 +164,17 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree(params);
 
+      // Should get current commit first
+      assert.strictEqual(mockGit.getCallCount('getCurrentCommit'), 1);
+      const commitCall = mockGit.getCall('getCurrentCommit', 0);
+      assert.strictEqual(commitCall[0], '/repo');
+
+      // Should create branch from current commit SHA, not base branch
       assert.strictEqual(mockGit.getCallCount('createBranch'), 1);
-      const call = mockGit.getCall('createBranch', 0);
-      assert.strictEqual(call[0], '/repo');
-      assert.strictEqual(call[1], 'feature-branch');
-      assert.strictEqual(call[2], 'main');
+      const branchCall = mockGit.getCall('createBranch', 0);
+      assert.strictEqual(branchCall[0], '/repo');
+      assert.strictEqual(branchCall[1], 'feature-branch');
+      assert.strictEqual(branchCall[2], 'abc123def456789'); // commit SHA, not 'main'
     });
 
     it('should not create branch if createBranch is false', async () => {

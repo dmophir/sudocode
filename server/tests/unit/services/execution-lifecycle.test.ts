@@ -225,9 +225,9 @@ describe("ExecutionLifecycleService", () => {
         result.worktreePath
       );
 
-      // Verify execution worktree_path was cleared
+      // Verify execution worktree_path is still set (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, null);
+      assert.strictEqual(execution?.worktree_path, result.worktreePath);
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {

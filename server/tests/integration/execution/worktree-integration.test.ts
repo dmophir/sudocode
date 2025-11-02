@@ -132,12 +132,12 @@ describe('Worktree Integration Tests', () => {
       // Cleanup worktree
       await service.cleanupExecution(result.execution.id);
 
-      // Verify worktree was removed
+      // Verify worktree was removed from filesystem
       assert.ok(!fs.existsSync(result.worktreePath));
 
-      // Verify execution record was updated
+      // Verify execution record still has worktree_path (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, null);
+      assert.strictEqual(execution?.worktree_path, result.worktreePath);
     });
 
     it('should work with existing branch when autoCreateBranches is false', async () => {
@@ -216,16 +216,16 @@ describe('Worktree Integration Tests', () => {
       // Cleanup worktree
       await service.cleanupExecution(result.execution.id);
 
-      // Verify worktree was removed
+      // Verify worktree was removed from filesystem
       assert.ok(!fs.existsSync(worktreePath));
 
       // Verify branch was deleted (autoDeleteBranches is true)
       const branches = await worktreeManager.listBranches(gitRepoPath);
       assert.ok(!branches.includes(branchName));
 
-      // Verify execution record was updated
+      // Verify execution record still has worktree_path (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, null);
+      assert.strictEqual(execution?.worktree_path, worktreePath);
     });
   });
 
@@ -323,15 +323,15 @@ describe('Worktree Integration Tests', () => {
       // Run orphaned cleanup
       await service.cleanupOrphanedWorktrees();
 
-      // Verify worktrees were cleaned up
+      // Verify worktrees were cleaned up from filesystem
       assert.ok(!fs.existsSync(result1.worktreePath));
       assert.ok(!fs.existsSync(result2.worktreePath));
 
-      // Verify execution records were updated
+      // Verify execution records still have worktree_path (for follow-up executions)
       const exec1 = getExecution(db, result1.execution.id);
       const exec2 = getExecution(db, result2.execution.id);
-      assert.strictEqual(exec1?.worktree_path, null);
-      assert.strictEqual(exec2?.worktree_path, null);
+      assert.strictEqual(exec1?.worktree_path, result1.worktreePath);
+      assert.strictEqual(exec2?.worktree_path, result2.worktreePath);
     });
 
     it('should cleanup worktrees without execution records', async () => {
