@@ -5,8 +5,7 @@
  * Uses mock engine to verify integration without requiring actual process execution.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { ResilientExecutor } from '../../../../src/execution/resilience/resilient-executor.js';
 import type { IExecutionEngine } from '../../../../src/execution/engine/engine.js';
 import type {
@@ -152,9 +151,9 @@ describe('Resilience Layer Integration with Engine Layer', () => {
 
       // Verify engine methods were called
       const submittedTasks = mockEngine.getSubmittedTasks();
-      assert.strictEqual(submittedTasks.length, 1);
-      assert.strictEqual(submittedTasks[0].id, 'test-task');
-      assert.strictEqual(result.success, true);
+      expect(submittedTasks.length).toBe(1);
+      expect(submittedTasks[0].id).toBe('test-task');
+      expect(result.success).toBe(true);
     });
 
     it('should retry through engine on failure', async () => {
@@ -187,9 +186,9 @@ describe('Resilience Layer Integration with Engine Layer', () => {
       const result = await executor.executeTask(task, policy);
 
       // Verify retries happened
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(result.totalAttempts, 3); // Failed 2 times, succeeded on 3rd
-      assert.strictEqual(mockEngine.getSubmittedTasks().length, 3);
+      expect(result.success).toBe(true);
+      expect(result.totalAttempts).toBe(3); // Failed 2 times, succeeded on 3rd
+      expect(mockEngine.getSubmittedTasks().length).toBe(3);
     });
 
     it('should handle circuit breaker with engine', async () => {
@@ -225,8 +224,8 @@ describe('Resilience Layer Integration with Engine Layer', () => {
 
       // Circuit should be open
       const breaker = executor.getCircuitBreaker('spec');
-      assert.ok(breaker !== null);
-      assert.strictEqual(breaker.state, 'open');
+      expect(breaker !== null).toBeTruthy();
+      expect(breaker.state).toBe('open');
 
       // Next task should be blocked
       const blockedTask: ExecutionTask = {
@@ -241,7 +240,7 @@ describe('Resilience Layer Integration with Engine Layer', () => {
       };
 
       const result = await executor.executeTask(blockedTask, policy);
-      assert.strictEqual(result.circuitBreakerTriggered, true);
+      expect(result.circuitBreakerTriggered).toBe(true);
     });
 
     it('should execute multiple tasks through engine', async () => {
@@ -270,9 +269,9 @@ describe('Resilience Layer Integration with Engine Layer', () => {
 
       const results = await executor.executeTasks(tasks);
 
-      assert.strictEqual(results.length, 2);
-      assert.strictEqual(mockEngine.getSubmittedTasks().length, 2);
-      assert.ok(results.every((r) => r.success));
+      expect(results.length).toBe(2);
+      expect(mockEngine.getSubmittedTasks().length).toBe(2);
+      expect(results.every((r) => r.success)).toBeTruthy();
     });
   });
 
@@ -298,15 +297,15 @@ describe('Resilience Layer Integration with Engine Layer', () => {
       await executor.executeTask(task);
 
       const submitted = mockEngine.getSubmittedTasks()[0];
-      assert.strictEqual(submitted.id, task.id);
-      assert.strictEqual(submitted.type, task.type);
-      assert.strictEqual(submitted.entityId, task.entityId);
-      assert.strictEqual(submitted.prompt, task.prompt);
-      assert.strictEqual(submitted.workDir, task.workDir);
-      assert.strictEqual(submitted.priority, task.priority);
-      assert.deepStrictEqual(submitted.dependencies, task.dependencies);
-      assert.deepStrictEqual(submitted.config, task.config);
-      assert.deepStrictEqual(submitted.metadata, task.metadata);
+      expect(submitted.id).toBe(task.id);
+      expect(submitted.type).toBe(task.type);
+      expect(submitted.entityId).toBe(task.entityId);
+      expect(submitted.prompt).toBe(task.prompt);
+      expect(submitted.workDir).toBe(task.workDir);
+      expect(submitted.priority).toBe(task.priority);
+      expect(submitted.dependencies).toEqual(task.dependencies);
+      expect(submitted.config).toEqual(task.config);
+      expect(submitted.metadata).toEqual(task.metadata);
     });
 
     it('should preserve engine result metadata in resilient result', async () => {
@@ -324,18 +323,18 @@ describe('Resilience Layer Integration with Engine Layer', () => {
       const result = await executor.executeTask(task);
 
       // Verify result structure includes both engine and resilience data
-      assert.ok(result.taskId);
-      assert.ok(result.executionId);
-      assert.ok(typeof result.success === 'boolean');
-      assert.ok(typeof result.exitCode === 'number');
-      assert.ok(result.startedAt instanceof Date);
-      assert.ok(result.completedAt instanceof Date);
-      assert.ok(typeof result.duration === 'number');
+      expect(result.taskId).toBeTruthy();
+      expect(result.executionId).toBeTruthy();
+      expect(typeof result.success === 'boolean').toBeTruthy();
+      expect(typeof result.exitCode === 'number').toBeTruthy();
+      expect(result.startedAt instanceof Date).toBeTruthy();
+      expect(result.completedAt instanceof Date).toBeTruthy();
+      expect(typeof result.duration === 'number').toBeTruthy();
 
       // Resilience-specific fields
-      assert.ok(Array.isArray(result.attempts));
-      assert.ok(typeof result.totalAttempts === 'number');
-      assert.ok(result.finalAttempt);
+      expect(Array.isArray(result.attempts)).toBeTruthy();
+      expect(typeof result.totalAttempts === 'number').toBeTruthy();
+      expect(result.finalAttempt).toBeTruthy();
     });
   });
 });

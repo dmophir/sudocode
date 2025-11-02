@@ -2,8 +2,7 @@
  * Tests for Specs API routes
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import request from "supertest";
 import express from "express";
 import type Database from "better-sqlite3";
@@ -21,7 +20,7 @@ describe("Specs API", () => {
   let testDir: string;
   let createdSpecId: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-specs-"));
     testDbPath = path.join(testDir, "cache.db");
@@ -53,7 +52,7 @@ describe("Specs API", () => {
     app.use("/api/specs", createSpecsRouter(db));
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up export debouncer first
     cleanupExport();
     // Clean up database
@@ -72,9 +71,9 @@ describe("Specs API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.strictEqual(response.body.data.length, 0);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length).toBe(0);
     });
 
     it("should support filtering by priority", async () => {
@@ -82,16 +81,16 @@ describe("Specs API", () => {
         .get("/api/specs?priority=1")
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
     });
 
     it("should support limit parameter", async () => {
       const response = await request(app).get("/api/specs?limit=5").expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.ok(response.body.data.length <= 5);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length <= 5).toBeTruthy();
     });
   });
 
@@ -109,12 +108,12 @@ describe("Specs API", () => {
         .expect(201)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.ok(response.body.data.id);
-      assert.strictEqual(response.body.data.title, newSpec.title);
-      assert.strictEqual(response.body.data.content, newSpec.content);
-      assert.strictEqual(response.body.data.priority, newSpec.priority);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBeTruthy();
+      expect(response.body.data.title).toBe(newSpec.title);
+      expect(response.body.data.content).toBe(newSpec.content);
+      expect(response.body.data.priority).toBe(newSpec.priority);
 
       // Save the ID for later tests
       createdSpecId = response.body.data.id;
@@ -130,8 +129,8 @@ describe("Specs API", () => {
         .send(invalidSpec)
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("Title"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("Title")).toBeTruthy();
     });
 
     it("should reject spec with title too long", async () => {
@@ -145,8 +144,8 @@ describe("Specs API", () => {
         .send(invalidSpec)
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("500 characters"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("500 characters")).toBeTruthy();
     });
 
     it("should create spec with default values", async () => {
@@ -159,10 +158,10 @@ describe("Specs API", () => {
         .send(minimalSpec)
         .expect(201);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.title, minimalSpec.title);
-      assert.strictEqual(response.body.data.content, "");
-      assert.strictEqual(response.body.data.priority, 2);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.title).toBe(minimalSpec.title);
+      expect(response.body.data.content).toBe("");
+      expect(response.body.data.priority).toBe(2);
     });
   });
 
@@ -173,10 +172,10 @@ describe("Specs API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.id, createdSpecId);
-      assert.strictEqual(response.body.data.title, "Test Spec");
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBe(createdSpecId);
+      expect(response.body.data.title).toBe("Test Spec");
     });
 
     it("should return 404 for non-existent spec", async () => {
@@ -184,8 +183,8 @@ describe("Specs API", () => {
         .get("/api/specs/SPEC-99999")
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
   });
 
@@ -202,12 +201,12 @@ describe("Specs API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.id, createdSpecId);
-      assert.strictEqual(response.body.data.content, updates.content);
-      assert.strictEqual(response.body.data.priority, updates.priority);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.id).toBe(createdSpecId);
+      expect(response.body.data.content).toBe(updates.content);
+      expect(response.body.data.priority).toBe(updates.priority);
       // Original title should remain
-      assert.strictEqual(response.body.data.title, "Test Spec");
+      expect(response.body.data.title).toBe("Test Spec");
     });
 
     it("should return 404 for non-existent spec", async () => {
@@ -216,8 +215,8 @@ describe("Specs API", () => {
         .send({ content: "Updated" })
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
 
     it("should reject empty update", async () => {
@@ -226,8 +225,8 @@ describe("Specs API", () => {
         .send({})
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("At least one field"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("At least one field")).toBeTruthy();
     });
 
     it("should reject title that is too long", async () => {
@@ -236,8 +235,8 @@ describe("Specs API", () => {
         .send({ title: "x".repeat(501) })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("500 characters"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("500 characters")).toBeTruthy();
     });
   });
 
@@ -245,7 +244,7 @@ describe("Specs API", () => {
     let specToDelete: string;
 
     // Create a spec to delete in tests
-    before(async () => {
+    beforeAll(async () => {
       const response = await request(app)
         .post("/api/specs")
         .send({ title: "Spec to Delete" });
@@ -257,10 +256,10 @@ describe("Specs API", () => {
         .delete(`/api/specs/${specToDelete}`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.id, specToDelete);
-      assert.strictEqual(response.body.data.deleted, true);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBe(specToDelete);
+      expect(response.body.data.deleted).toBe(true);
     });
 
     it("should return 404 when deleting non-existent spec", async () => {
@@ -268,8 +267,8 @@ describe("Specs API", () => {
         .delete("/api/specs/SPEC-99999")
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
 
     it("should not find deleted spec", async () => {
@@ -277,7 +276,7 @@ describe("Specs API", () => {
         .get(`/api/specs/${specToDelete}`)
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
+      expect(response.body.success).toBe(false);
     });
   });
 
@@ -285,17 +284,17 @@ describe("Specs API", () => {
     it("should list the created specs", async () => {
       const response = await request(app).get("/api/specs").expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
       // At least the specs we created should be there
-      assert.ok(response.body.data.length >= 2);
+      expect(response.body.data.length >= 2).toBeTruthy();
 
       // Find our created spec
       const foundSpec = response.body.data.find(
         (spec: any) => spec.id === createdSpecId
       );
-      assert.ok(foundSpec);
-      assert.strictEqual(foundSpec.priority, 3); // Updated in PUT test
+      expect(foundSpec).toBeTruthy();
+      expect(foundSpec.priority).toBe(3); // Updated in PUT test
     });
 
     it("should filter specs by priority", async () => {
@@ -303,12 +302,12 @@ describe("Specs API", () => {
         .get("/api/specs?priority=3")
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
 
       // All returned specs should have priority 3
       response.body.data.forEach((spec: any) => {
-        assert.strictEqual(spec.priority, 3);
+        expect(spec.priority).toBe(3);
       });
     });
   });

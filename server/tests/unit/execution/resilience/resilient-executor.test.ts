@@ -2,8 +2,7 @@
  * Tests for ResilientExecutor Implementation
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { ResilientExecutor } from '../../../../src/execution/resilience/resilient-executor.js';
 import type { IExecutionEngine } from '../../../../src/execution/engine/engine.js';
 import type {
@@ -144,11 +143,11 @@ describe('ResilientExecutor', () => {
 
       const result = await executor.executeTask(task);
 
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(result.totalAttempts, 1);
-      assert.strictEqual(result.attempts.length, 1);
-      assert.strictEqual(result.attempts[0].success, true);
-      assert.strictEqual(result.attempts[0].attemptNumber, 1);
+      expect(result.success).toBe(true);
+      expect(result.totalAttempts).toBe(1);
+      expect(result.attempts.length).toBe(1);
+      expect(result.attempts[0].success).toBe(true);
+      expect(result.attempts[0].attemptNumber).toBe(1);
     });
 
     it('should handle immediate task failure', async () => {
@@ -180,9 +179,9 @@ describe('ResilientExecutor', () => {
 
       const result = await executor.executeTask(task);
 
-      assert.strictEqual(result.success, false);
-      assert.strictEqual(result.totalAttempts, 1);
-      assert.strictEqual(result.exitCode, 127);
+      expect(result.success).toBe(false);
+      expect(result.totalAttempts).toBe(1);
+      expect(result.exitCode).toBe(127);
     });
   });
 
@@ -249,15 +248,15 @@ describe('ResilientExecutor', () => {
 
       const result = await executor.executeTask(task, policy);
 
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(result.totalAttempts, 3);
-      assert.strictEqual(result.attempts.length, 3);
-      assert.strictEqual(result.attempts[0].success, false);
-      assert.strictEqual(result.attempts[0].willRetry, true);
-      assert.strictEqual(result.attempts[1].success, false);
-      assert.strictEqual(result.attempts[1].willRetry, true);
-      assert.strictEqual(result.attempts[2].success, true);
-      assert.strictEqual(result.attempts[2].willRetry, false);
+      expect(result.success).toBe(true);
+      expect(result.totalAttempts).toBe(3);
+      expect(result.attempts.length).toBe(3);
+      expect(result.attempts[0].success).toBe(false);
+      expect(result.attempts[0].willRetry).toBe(true);
+      expect(result.attempts[1].success).toBe(false);
+      expect(result.attempts[1].willRetry).toBe(true);
+      expect(result.attempts[2].success).toBe(true);
+      expect(result.attempts[2].willRetry).toBe(false);
     });
 
     it('should exhaust retries and fail', async () => {
@@ -323,10 +322,10 @@ describe('ResilientExecutor', () => {
 
       const result = await executor.executeTask(task, policy);
 
-      assert.strictEqual(result.success, false);
-      assert.strictEqual(result.totalAttempts, 3);
-      assert.strictEqual(result.attempts.length, 3);
-      assert.strictEqual(result.attempts[2].willRetry, false);
+      expect(result.success).toBe(false);
+      expect(result.totalAttempts).toBe(3);
+      expect(result.attempts.length).toBe(3);
+      expect(result.attempts[2].willRetry).toBe(false);
     });
 
     it('should not retry on non-retryable error', async () => {
@@ -370,9 +369,9 @@ describe('ResilientExecutor', () => {
 
       const result = await executor.executeTask(task, policy);
 
-      assert.strictEqual(result.success, false);
-      assert.strictEqual(result.totalAttempts, 1); // No retries
-      assert.strictEqual(result.attempts[0].willRetry, false);
+      expect(result.success).toBe(false);
+      expect(result.totalAttempts).toBe(1); // No retries
+      expect(result.attempts[0].willRetry).toBe(false);
     });
   });
 
@@ -422,8 +421,8 @@ describe('ResilientExecutor', () => {
 
       // Check circuit breaker state
       const breaker = executor.getCircuitBreaker('issue');
-      assert.ok(breaker !== null);
-      assert.strictEqual(breaker.state, 'open');
+      expect(breaker !== null).toBeTruthy();
+      expect(breaker.state).toBe('open');
 
       // Next task should be blocked by circuit breaker
       const blockedTask: ExecutionTask = {
@@ -438,8 +437,8 @@ describe('ResilientExecutor', () => {
       };
 
       const result = await executor.executeTask(blockedTask, policy);
-      assert.strictEqual(result.circuitBreakerTriggered, true);
-      assert.strictEqual(result.success, false);
+      expect(result.circuitBreakerTriggered).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     it('should close circuit after successful executions', async () => {
@@ -487,18 +486,18 @@ describe('ResilientExecutor', () => {
 
       // Circuit should be open
       const openBreaker = executor.getCircuitBreaker('spec');
-      assert.ok(openBreaker !== null);
-      assert.strictEqual(openBreaker.state, 'open');
-      assert.strictEqual(openBreaker.metrics.failedRequests, 5);
+      expect(openBreaker !== null).toBeTruthy();
+      expect(openBreaker.state).toBe('open');
+      expect(openBreaker.metrics.failedRequests).toBe(5);
 
       // Reset the circuit breaker to simulate recovery
       executor.resetCircuitBreaker('spec');
 
       // Circuit should be closed after reset
       const resetBreaker = executor.getCircuitBreaker('spec');
-      assert.ok(resetBreaker !== null);
-      assert.strictEqual(resetBreaker.state, 'closed');
-      assert.strictEqual(resetBreaker.metrics.failedRequests, 0);
+      expect(resetBreaker !== null).toBeTruthy();
+      expect(resetBreaker.state).toBe('closed');
+      expect(resetBreaker.metrics.failedRequests).toBe(0);
     });
   });
 
@@ -561,10 +560,10 @@ describe('ResilientExecutor', () => {
       await executor.executeTask(task, policy);
 
       // Should have 1 retry event (for the first failure)
-      assert.strictEqual(retryEvents.length, 1);
-      assert.strictEqual(retryEvents[0].taskId, 'task-event');
-      assert.strictEqual(retryEvents[0].attempt.attemptNumber, 1);
-      assert.strictEqual(retryEvents[0].attempt.willRetry, true);
+      expect(retryEvents.length).toBe(1);
+      expect(retryEvents[0].taskId).toBe('task-event');
+      expect(retryEvents[0].attempt.attemptNumber).toBe(1);
+      expect(retryEvents[0].attempt.willRetry).toBe(true);
     });
 
     it('should call circuit open handler', async () => {
@@ -631,8 +630,8 @@ describe('ResilientExecutor', () => {
       await executor.executeTask(blockedTask, policy);
 
       // Should have circuit open event
-      assert.ok(circuitEvents.length > 0);
-      assert.strictEqual(circuitEvents[0].name, 'custom');
+      expect(circuitEvents.length > 0).toBeTruthy();
+      expect(circuitEvents[0].name).toBe('custom');
     });
   });
 
@@ -737,13 +736,13 @@ describe('ResilientExecutor', () => {
       const metrics = executor.getRetryMetrics();
 
       // Total retries: 1 (task1) + 2 (task2) = 3
-      assert.strictEqual(metrics.totalRetries, 3);
+      expect(metrics.totalRetries).toBe(3);
       // Successful retries: 1 (task1 succeeded after retry)
-      assert.strictEqual(metrics.successfulRetries, 1);
+      expect(metrics.successfulRetries).toBe(1);
       // Failed retries: 2 (task2 retried twice but failed)
-      assert.strictEqual(metrics.failedRetries, 2);
+      expect(metrics.failedRetries).toBe(2);
       // Average attempts to success: 2 (task1 took 2 attempts)
-      assert.strictEqual(metrics.averageAttemptsToSuccess, 2);
+      expect(metrics.averageAttemptsToSuccess).toBe(2);
     });
   });
 
@@ -784,8 +783,8 @@ describe('ResilientExecutor', () => {
 
       const results = await executor.executeTasks(tasks);
 
-      assert.strictEqual(results.length, 3);
-      assert.ok(results.every((r) => r.success));
+      expect(results.length).toBe(3);
+      expect(results.every((r) => r.success)).toBeTruthy();
     });
   });
 
@@ -805,8 +804,8 @@ describe('ResilientExecutor', () => {
       await executor.executeTask(task);
 
       const breaker = executor.getCircuitBreaker('spec');
-      assert.ok(breaker !== null);
-      assert.strictEqual(breaker.name, 'spec');
+      expect(breaker !== null).toBeTruthy();
+      expect(breaker.name).toBe('spec');
     });
 
     it('should reset circuit breaker', async () => {
@@ -853,17 +852,17 @@ describe('ResilientExecutor', () => {
 
       // Circuit should be open
       let breaker = executor.getCircuitBreaker('issue');
-      assert.ok(breaker !== null);
-      assert.strictEqual(breaker.state, 'open');
+      expect(breaker !== null).toBeTruthy();
+      expect(breaker.state).toBe('open');
 
       // Reset circuit breaker
       executor.resetCircuitBreaker('issue');
 
       // Circuit should be closed
       breaker = executor.getCircuitBreaker('issue');
-      assert.ok(breaker !== null);
-      assert.strictEqual(breaker.state, 'closed');
-      assert.strictEqual(breaker.metrics.failedRequests, 0);
+      expect(breaker !== null).toBeTruthy();
+      expect(breaker.state).toBe('closed');
+      expect(breaker.metrics.failedRequests).toBe(0);
     });
   });
 });

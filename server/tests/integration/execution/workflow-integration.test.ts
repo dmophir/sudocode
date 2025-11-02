@@ -8,8 +8,7 @@
  * spawn real Claude Code processes.
  */
 
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import type Database from 'better-sqlite3';
 import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from '@sudocode/types/schema';
@@ -160,7 +159,7 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
   let worktreeManager: WorktreeManager;
   let lifecycleService: ExecutionLifecycleService;
 
-  before(() => {
+  beforeAll(() => {
     // Create temporary directory for tests
     testDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'sudocode-workflow-integration-')
@@ -228,7 +227,7 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
     return issue.id;
   }
 
-  after(() => {
+  afterAll(() => {
     // Clean up database
     db.close();
 
@@ -255,10 +254,10 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
         'Print "Hello from workflow test" to console'
       );
 
-      assert.ok(execution.id);
-      assert.strictEqual(execution.issue_id, issueId);
+      expect(execution.id).toBeTruthy();
+      expect(execution.issue_id).toBe(issueId);
       // Status should be 'running' since startWorkflow() is called synchronously
-      assert.strictEqual(execution.status, 'running');
+      expect(execution.status).toBe('running');
 
       // Wait for execution to complete (with timeout)
       const maxWaitTime = 60000; // 60 seconds
@@ -275,16 +274,16 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       }
 
       // Verify execution completed
-      assert.ok(finalExecution);
-      assert.ok(
+      expect(finalExecution).toBeTruthy();
+      expect(
         finalExecution.status === 'completed' ||
           finalExecution.status === 'failed',
         `Expected completed or failed, got ${finalExecution.status}`
-      );
+      ).toBeTruthy();
 
       if (finalExecution.status === 'completed') {
-        assert.ok(finalExecution.completed_at);
-        assert.ok(finalExecution.completed_at > finalExecution.created_at);
+        expect(finalExecution.completed_at).toBeTruthy();
+        expect(finalExecution.completed_at > finalExecution.created_at).toBeTruthy();
       }
     });
   });
@@ -316,25 +315,25 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
 
       // Wait for workflow to start and emit events
       const runStartedEvent = await collector.waitForEvent(execution.id, 'RUN_STARTED', 30000);
-      assert.ok(runStartedEvent, 'Should receive RUN_STARTED event');
+      expect(runStartedEvent, 'Should receive RUN_STARTED event').toBeTruthy();
 
       // Wait for execution to finish
       await collector.waitForEvent(execution.id, 'RUN_FINISHED', 60000);
 
       // Check that we received events for this execution
       const executionEvents = collector.getEventsForExecution(execution.id);
-      assert.ok(executionEvents.length > 0, 'Should receive at least one event for this execution');
+      expect(executionEvents.length > 0, 'Should receive at least one event for this execution').toBeTruthy();
 
       // Verify event structure
       const hasRunStarted = executionEvents.some((e) => e.type === 'RUN_STARTED');
-      assert.ok(hasRunStarted, 'Should have RUN_STARTED event');
+      expect(hasRunStarted, 'Should have RUN_STARTED event').toBeTruthy();
 
       collector.disconnect();
     });
   });
 
   describe('Follow-up Execution', () => {
-    it('should create follow-up execution reusing worktree', async () => {
+    it('should create follow-up execution reusing worktree', { timeout: 90000 }, async () => {
       const issueId = createTestIssue(
         'Test Follow-up Execution',
         'Initial execution for follow-up test'
@@ -361,11 +360,8 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
         execution = getExecution(db, initialExecution.id);
       }
 
-      assert.ok(execution);
-      assert.ok(
-        execution.worktree_path,
-        'Initial execution should have worktree_path'
-      );
+      expect(execution).toBeTruthy();
+      expect(execution.worktree_path).toBeTruthy();
 
       // Create follow-up execution
       const followUpExecution = await executionService.createFollowUp(
@@ -373,17 +369,9 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
         'Create another file called followup.txt'
       );
 
-      assert.ok(followUpExecution.id);
-      assert.strictEqual(
-        followUpExecution.issue_id,
-        initialExecution.issue_id,
-        'Follow-up should have same issue_id'
-      );
-      assert.strictEqual(
-        followUpExecution.worktree_path,
-        execution.worktree_path,
-        'Follow-up should reuse parent worktree'
-      );
+      expect(followUpExecution.id).toBeTruthy();
+      expect(followUpExecution.issue_id).toBe(initialExecution.issue_id);
+      expect(followUpExecution.worktree_path).toBe(execution.worktree_path);
 
       // Wait for follow-up to complete
       let followUp = getExecution(db, followUpExecution.id);
@@ -398,11 +386,11 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
         followUp = getExecution(db, followUpExecution.id);
       }
 
-      assert.ok(followUp);
-      assert.ok(
+      expect(followUp).toBeTruthy();
+      expect(
         followUp.status === 'completed' || followUp.status === 'failed',
         `Expected completed or failed, got ${followUp.status}`
-      );
+      ).toBeTruthy();
     });
   });
 
@@ -428,13 +416,9 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
 
       // Verify execution was cancelled
       const cancelled = getExecution(db, execution.id);
-      assert.ok(cancelled);
-      assert.strictEqual(
-        cancelled.status,
-        'stopped',
-        'Execution should be stopped after cancellation'
-      );
-      assert.ok(cancelled.completed_at, 'Should have completed_at timestamp');
+      expect(cancelled).toBeTruthy();
+      expect(cancelled.status).toBe('stopped');
+      expect(cancelled.completed_at).toBeTruthy();
     });
 
     it('should throw error when cancelling non-running execution', async () => {
@@ -464,13 +448,9 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       }
 
       // Try to cancel completed execution
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await executionService.cancelExecution(execution.id);
-        },
-        /Cannot cancel execution/,
-        'Should throw error when cancelling non-running execution'
-      );
+        }).rejects.toThrow(/Cannot cancel execution/);
     });
   });
 
@@ -503,23 +483,23 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       }
 
       // Verify execution failed
-      assert.ok(failed);
+      expect(failed).toBeTruthy();
 
       // The execution might complete successfully even if the task itself fails
       // since Claude might handle the invalid command gracefully
-      assert.ok(
+      expect(
         failed.status === 'failed' || failed.status === 'completed',
         `Expected failed or completed, got ${failed.status}`
-      );
+      ).toBeTruthy();
 
       if (failed.status === 'failed') {
-        assert.ok(
+        expect(
           failed.error_message,
           'Failed execution should have error message'
-        );
+        ).toBeTruthy();
       }
 
-      assert.ok(failed.completed_at, 'Should have completed_at timestamp');
+      expect(failed.completed_at, 'Should have completed_at timestamp').toBeTruthy();
     });
   });
 });

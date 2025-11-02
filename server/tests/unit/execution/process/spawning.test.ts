@@ -5,8 +5,7 @@
  * process creation, configuration handling, and metrics tracking.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 
@@ -29,10 +28,10 @@ describe('Process Spawning', () => {
 
       const managedProcess = await manager.acquireProcess(config);
 
-      assert.ok(managedProcess);
-      assert.ok(managedProcess.id);
-      assert.ok(managedProcess.pid);
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess).toBeTruthy();
+      expect(managedProcess.id).toBeTruthy();
+      expect(managedProcess.pid).toBeTruthy();
+      expect(managedProcess.status).toBe('busy');
     });
 
     it('generates unique process ID', async () => {
@@ -45,9 +44,9 @@ describe('Process Spawning', () => {
       const process1 = await manager.acquireProcess(config);
       const process2 = await manager.acquireProcess(config);
 
-      assert.notStrictEqual(process1.id, process2.id);
-      assert.match(process1.id, /^process-[a-z0-9]+$/);
-      assert.match(process2.id, /^process-[a-z0-9]+$/);
+      expect(process1.id).not.toBe(process2.id);
+      expect(process1.id).toMatch(/^process-[a-z0-9]+$/);
+      expect(process2.id).toMatch(/^process-[a-z0-9]+$/);
     });
 
     it('sets correct initial status', async () => {
@@ -59,11 +58,11 @@ describe('Process Spawning', () => {
 
       const managedProcess = await manager.acquireProcess(config);
 
-      assert.strictEqual(managedProcess.status, 'busy');
-      assert.ok(managedProcess.spawnedAt instanceof Date);
-      assert.ok(managedProcess.lastActivity instanceof Date);
-      assert.strictEqual(managedProcess.exitCode, null);
-      assert.strictEqual(managedProcess.signal, null);
+      expect(managedProcess.status).toBe('busy');
+      expect(managedProcess.spawnedAt instanceof Date).toBeTruthy();
+      expect(managedProcess.lastActivity instanceof Date).toBeTruthy();
+      expect(managedProcess.exitCode).toBe(null);
+      expect(managedProcess.signal).toBe(null);
     });
 
     it('initializes process metrics', async () => {
@@ -75,9 +74,9 @@ describe('Process Spawning', () => {
 
       const managedProcess = await manager.acquireProcess(config);
 
-      assert.strictEqual(managedProcess.metrics.totalDuration, 0);
-      assert.strictEqual(managedProcess.metrics.tasksCompleted, 0);
-      assert.strictEqual(managedProcess.metrics.successRate, 1.0);
+      expect(managedProcess.metrics.totalDuration).toBe(0);
+      expect(managedProcess.metrics.tasksCompleted).toBe(0);
+      expect(managedProcess.metrics.successRate).toBe(1.0);
     });
 
     it('provides access to process streams', async () => {
@@ -89,10 +88,10 @@ describe('Process Spawning', () => {
 
       const managedProcess = await manager.acquireProcess(config);
 
-      assert.ok(managedProcess.streams.stdout);
-      assert.ok(managedProcess.streams.stderr);
-      assert.ok(managedProcess.streams.stdin);
-      assert.ok(managedProcess.process);
+      expect(managedProcess.streams.stdout).toBeTruthy();
+      expect(managedProcess.streams.stderr).toBeTruthy();
+      expect(managedProcess.streams.stdin).toBeTruthy();
+      expect(managedProcess.process).toBeTruthy();
     });
 
     it('tracks process in activeProcesses map', async () => {
@@ -105,9 +104,9 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
       const retrieved = manager.getProcess(managedProcess.id);
 
-      assert.ok(retrieved);
-      assert.strictEqual(retrieved.id, managedProcess.id);
-      assert.strictEqual(retrieved.pid, managedProcess.pid);
+      expect(retrieved).toBeTruthy();
+      expect(retrieved.id).toBe(managedProcess.id);
+      expect(retrieved.pid).toBe(managedProcess.pid);
     });
 
     it('updates global metrics on spawn', async () => {
@@ -124,8 +123,8 @@ describe('Process Spawning', () => {
       await manager.acquireProcess(config);
 
       const updatedMetrics = manager.getMetrics();
-      assert.strictEqual(updatedMetrics.totalSpawned, initialSpawned + 1);
-      assert.strictEqual(updatedMetrics.currentlyActive, initialActive + 1);
+      expect(updatedMetrics.totalSpawned).toBe(initialSpawned + 1);
+      expect(updatedMetrics.currentlyActive).toBe(initialActive + 1);
     });
 
     it('uses correct working directory', async () => {
@@ -149,7 +148,7 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.strictEqual(output, testDir);
+      expect(output).toBe(testDir);
     });
 
     it('passes environment variables', async () => {
@@ -175,7 +174,7 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.strictEqual(output, 'test_value');
+      expect(output).toBe('test_value');
     });
 
     it('merges with default config', async () => {
@@ -191,7 +190,7 @@ describe('Process Spawning', () => {
       };
 
       const managedProcess = await managerWithDefaults.acquireProcess(config);
-      assert.ok(managedProcess);
+      expect(managedProcess).toBeTruthy();
     });
 
     it('handles multiple concurrent processes', async () => {
@@ -207,13 +206,13 @@ describe('Process Spawning', () => {
         manager.acquireProcess(config),
       ]);
 
-      assert.strictEqual(processes.length, 3);
-      assert.strictEqual(manager.getMetrics().currentlyActive, 3);
+      expect(processes.length).toBe(3);
+      expect(manager.getMetrics().currentlyActive).toBe(3);
 
       // All should have unique IDs
       const ids = processes.map(p => p.id);
       const uniqueIds = new Set(ids);
-      assert.strictEqual(uniqueIds.size, 3);
+      expect(uniqueIds.size).toBe(3);
     });
   });
 
@@ -238,7 +237,7 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.strictEqual(output, 'hello world');
+      expect(output).toBe('hello world');
     });
 
     it('spawns process with empty args', async () => {
@@ -249,7 +248,7 @@ describe('Process Spawning', () => {
       };
 
       const managedProcess = await manager.acquireProcess(config);
-      assert.ok(managedProcess);
+      expect(managedProcess).toBeTruthy();
     });
 
     it('spawns process with multiple args', async () => {
@@ -272,7 +271,7 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.strictEqual(output, 'arg1 arg2 arg3 arg4');
+      expect(output).toBe('arg1 arg2 arg3 arg4');
     });
 
     it('configures stdio as pipes', async () => {
@@ -285,18 +284,18 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Verify all streams are available (piped)
-      assert.ok(managedProcess.streams.stdin, 'stdin should be piped');
-      assert.ok(managedProcess.streams.stdout, 'stdout should be piped');
-      assert.ok(managedProcess.streams.stderr, 'stderr should be piped');
-      assert.ok(managedProcess.streams.stdin.writable, 'stdin should be writable');
-      assert.ok(managedProcess.streams.stdout.readable, 'stdout should be readable');
-      assert.ok(managedProcess.streams.stderr.readable, 'stderr should be readable');
+      expect(managedProcess.streams.stdin, 'stdin should be piped').toBeTruthy();
+      expect(managedProcess.streams.stdout, 'stdout should be piped').toBeTruthy();
+      expect(managedProcess.streams.stderr, 'stderr should be piped').toBeTruthy();
+      expect(managedProcess.streams.stdin.writable, 'stdin should be writable').toBeTruthy();
+      expect(managedProcess.streams.stdout.readable, 'stdout should be readable').toBeTruthy();
+      expect(managedProcess.streams.stderr.readable, 'stderr should be readable').toBeTruthy();
     });
 
     it('inherits parent environment variables', async () => {
       // Set a parent env var
       const originalPath = process.env.PATH;
-      assert.ok(originalPath, 'PATH should exist in parent environment');
+      expect(originalPath, 'PATH should exist in parent environment').toBeTruthy();
 
       const config: ProcessConfig = {
         executablePath: 'sh',
@@ -317,7 +316,7 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.strictEqual(output, originalPath);
+      expect(output).toBe(originalPath);
     });
 
     it('merges custom env with parent env', async () => {
@@ -343,8 +342,8 @@ describe('Process Spawning', () => {
         });
       });
 
-      assert.ok(output.includes(process.env.PATH!), 'Should include parent PATH');
-      assert.ok(output.includes('custom_value'), 'Should include custom env var');
+      expect(output.includes(process.env.PATH!)).toBeTruthy();
+      expect(output.includes('custom_value')).toBeTruthy();
     });
   });
 
@@ -357,8 +356,7 @@ describe('Process Spawning', () => {
       };
 
       // When spawn fails to get a PID, acquireProcess should throw
-      await assert.rejects(
-        manager.acquireProcess(config),
+      await expect(manager.acquireProcess(config)).rejects.toThrow(
         /Failed to spawn process: no PID assigned/
       );
     });
@@ -375,24 +373,24 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Verify all required fields exist
-      assert.ok(managedProcess.id, 'Should have id');
-      assert.ok(managedProcess.pid, 'Should have pid');
-      assert.ok(managedProcess.status, 'Should have status');
-      assert.ok(managedProcess.spawnedAt, 'Should have spawnedAt');
-      assert.ok(managedProcess.lastActivity, 'Should have lastActivity');
-      assert.ok(managedProcess.process, 'Should have process');
-      assert.ok(managedProcess.streams, 'Should have streams');
-      assert.ok(managedProcess.metrics, 'Should have metrics');
+      expect(managedProcess.id, 'Should have id').toBeTruthy();
+      expect(managedProcess.pid, 'Should have pid').toBeTruthy();
+      expect(managedProcess.status, 'Should have status').toBeTruthy();
+      expect(managedProcess.spawnedAt, 'Should have spawnedAt').toBeTruthy();
+      expect(managedProcess.lastActivity, 'Should have lastActivity').toBeTruthy();
+      expect(managedProcess.process, 'Should have process').toBeTruthy();
+      expect(managedProcess.streams, 'Should have streams').toBeTruthy();
+      expect(managedProcess.metrics, 'Should have metrics').toBeTruthy();
 
       // Verify field types
-      assert.strictEqual(typeof managedProcess.id, 'string');
-      assert.strictEqual(typeof managedProcess.pid, 'number');
-      assert.strictEqual(typeof managedProcess.status, 'string');
-      assert.ok(managedProcess.spawnedAt instanceof Date);
-      assert.ok(managedProcess.lastActivity instanceof Date);
-      assert.strictEqual(typeof managedProcess.process, 'object');
-      assert.strictEqual(typeof managedProcess.streams, 'object');
-      assert.strictEqual(typeof managedProcess.metrics, 'object');
+      expect(typeof managedProcess.id).toBe('string');
+      expect(typeof managedProcess.pid).toBe('number');
+      expect(typeof managedProcess.status).toBe('string');
+      expect(managedProcess.spawnedAt instanceof Date).toBeTruthy();
+      expect(managedProcess.lastActivity instanceof Date).toBeTruthy();
+      expect(typeof managedProcess.process).toBe('object');
+      expect(typeof managedProcess.streams).toBe('object');
+      expect(typeof managedProcess.metrics).toBe('object');
     });
 
     it('initializes exit fields correctly', async () => {
@@ -405,8 +403,8 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Exit fields should be null initially
-      assert.strictEqual(managedProcess.exitCode, null);
-      assert.strictEqual(managedProcess.signal, null);
+      expect(managedProcess.exitCode).toBe(null);
+      expect(managedProcess.signal).toBe(null);
     });
 
     it('initializes timestamps correctly', async () => {
@@ -421,10 +419,10 @@ describe('Process Spawning', () => {
       const after = new Date();
 
       // Timestamps should be between before and after
-      assert.ok(managedProcess.spawnedAt >= before);
-      assert.ok(managedProcess.spawnedAt <= after);
-      assert.ok(managedProcess.lastActivity >= before);
-      assert.ok(managedProcess.lastActivity <= after);
+      expect(managedProcess.spawnedAt >= before).toBeTruthy();
+      expect(managedProcess.spawnedAt <= after).toBeTruthy();
+      expect(managedProcess.lastActivity >= before).toBeTruthy();
+      expect(managedProcess.lastActivity <= after).toBeTruthy();
     });
 
     it('initializes metrics with correct defaults', async () => {
@@ -437,9 +435,9 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Verify metrics structure and defaults
-      assert.strictEqual(managedProcess.metrics.totalDuration, 0);
-      assert.strictEqual(managedProcess.metrics.tasksCompleted, 0);
-      assert.strictEqual(managedProcess.metrics.successRate, 1.0);
+      expect(managedProcess.metrics.totalDuration).toBe(0);
+      expect(managedProcess.metrics.tasksCompleted).toBe(0);
+      expect(managedProcess.metrics.successRate).toBe(1.0);
     });
 
     it('provides access to underlying ChildProcess', async () => {
@@ -452,12 +450,12 @@ describe('Process Spawning', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Verify ChildProcess methods are available
-      assert.ok(typeof managedProcess.process.kill === 'function');
-      assert.ok(typeof managedProcess.process.on === 'function');
-      assert.ok(typeof managedProcess.process.once === 'function');
-      assert.ok(managedProcess.process.stdin);
-      assert.ok(managedProcess.process.stdout);
-      assert.ok(managedProcess.process.stderr);
+      expect(typeof managedProcess.process.kill === 'function').toBeTruthy();
+      expect(typeof managedProcess.process.on === 'function').toBeTruthy();
+      expect(typeof managedProcess.process.once === 'function').toBeTruthy();
+      expect(managedProcess.process.stdin).toBeTruthy();
+      expect(managedProcess.process.stdout).toBeTruthy();
+      expect(managedProcess.process.stderr).toBeTruthy();
     });
   });
 });

@@ -6,9 +6,9 @@
  * @module execution/transport/tests/transport-manager
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 import assert from 'node:assert/strict';
-import { mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest'
 import { TransportManager, type AgUiEvent } from '../../../../src/execution/transport/transport-manager.js';
 import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';
@@ -26,12 +26,12 @@ describe('TransportManager', () => {
 
   describe('constructor', () => {
     it('should create manager with SSE transport', () => {
-      assert.ok(manager);
-      assert.ok(manager.getSseTransport());
+      expect(manager).toBeTruthy();
+      expect(manager.getSseTransport()).toBeTruthy();
     });
 
     it('should start with no connected adapters', () => {
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
     });
   });
 
@@ -41,7 +41,7 @@ describe('TransportManager', () => {
       const transport = manager.getSseTransport();
 
       // Spy on broadcast method
-      const broadcastSpy = mock.method(transport, 'broadcast');
+      const broadcastSpy = vi.spyOn(transport, 'broadcast');
 
       // Connect adapter
       manager.connectAdapter(adapter);
@@ -50,7 +50,7 @@ describe('TransportManager', () => {
       adapter.emitRunStarted();
 
       // Verify event was broadcast
-      assert.strictEqual(broadcastSpy.mock.callCount(), 2); // RUN_STARTED + STATE_SNAPSHOT
+      expect(broadcastSpy.mock.calls.length).toBe(2); // RUN_STARTED + STATE_SNAPSHOT
     });
 
     it('should use broadcastToRun when runId is provided', () => {
@@ -58,7 +58,7 @@ describe('TransportManager', () => {
       const transport = manager.getSseTransport();
 
       // Spy on broadcastToRun method
-      const broadcastToRunSpy = mock.method(transport, 'broadcastToRun');
+      const broadcastToRunSpy = vi.spyOn(transport, 'broadcastToRun');
 
       // Connect adapter with runId
       manager.connectAdapter(adapter, 'run-123');
@@ -67,8 +67,8 @@ describe('TransportManager', () => {
       adapter.emitRunStarted();
 
       // Verify event was broadcast to run
-      assert.strictEqual(broadcastToRunSpy.mock.callCount(), 2); // RUN_STARTED + STATE_SNAPSHOT
-      assert.strictEqual(broadcastToRunSpy.mock.calls[0].arguments[0], 'run-123');
+      expect(broadcastToRunSpy.mock.calls.length).toBe(2); // RUN_STARTED + STATE_SNAPSHOT
+      expect(broadcastToRunSpy.mock.calls[0][0]).toBe('run-123');
     });
 
     it('should support multiple adapters', () => {
@@ -76,26 +76,26 @@ describe('TransportManager', () => {
       const adapter2 = new AgUiEventAdapter('run-2');
       const transport = manager.getSseTransport();
 
-      const broadcastSpy = mock.method(transport, 'broadcast');
+      const broadcastSpy = vi.spyOn(transport, 'broadcast');
 
       manager.connectAdapter(adapter1);
       manager.connectAdapter(adapter2);
 
-      assert.strictEqual(manager.getAdapterCount(), 2);
+      expect(manager.getAdapterCount()).toBe(2);
 
       // Emit from both adapters
       adapter1.emitRunStarted();
       adapter2.emitRunStarted();
 
-      assert.strictEqual(broadcastSpy.mock.callCount(), 4); // 2 adapters * 2 events each
+      expect(broadcastSpy.mock.calls.length).toBe(4); // 2 adapters * 2 events each
     });
 
     it('should increment adapter count', () => {
       const adapter = new AgUiEventAdapter('run-123');
 
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
       manager.connectAdapter(adapter);
-      assert.strictEqual(manager.getAdapterCount(), 1);
+      expect(manager.getAdapterCount()).toBe(1);
     });
   });
 
@@ -104,43 +104,43 @@ describe('TransportManager', () => {
       const adapter = new AgUiEventAdapter('run-123');
       const transport = manager.getSseTransport();
 
-      const broadcastSpy = mock.method(transport, 'broadcast');
+      const broadcastSpy = vi.spyOn(transport, 'broadcast');
 
       manager.connectAdapter(adapter);
       const disconnected = manager.disconnectAdapter(adapter);
 
-      assert.strictEqual(disconnected, true);
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(disconnected).toBe(true);
+      expect(manager.getAdapterCount()).toBe(0);
 
       // Emit event after disconnect
       adapter.emitRunStarted();
 
       // Verify event was NOT broadcast (still 0 because we disconnected before emitting)
-      assert.strictEqual(broadcastSpy.mock.callCount(), 0);
+      expect(broadcastSpy.mock.calls.length).toBe(0);
     });
 
     it('should return false for non-existent adapter', () => {
       const adapter = new AgUiEventAdapter('run-123');
       const disconnected = manager.disconnectAdapter(adapter);
 
-      assert.strictEqual(disconnected, false);
+      expect(disconnected).toBe(false);
     });
 
     it('should decrement adapter count', () => {
       const adapter = new AgUiEventAdapter('run-123');
 
       manager.connectAdapter(adapter);
-      assert.strictEqual(manager.getAdapterCount(), 1);
+      expect(manager.getAdapterCount()).toBe(1);
 
       manager.disconnectAdapter(adapter);
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
     });
   });
 
   describe('broadcast', () => {
     it('should broadcast event to all clients', () => {
       const transport = manager.getSseTransport();
-      const broadcastSpy = mock.method(transport, 'broadcast', () => 2);
+      const broadcastSpy = vi.spyOn(transport, 'broadcast').mockImplementation(() => 2);
 
       const event: AgUiEvent = {
         type: EventType.RUN_STARTED,
@@ -151,20 +151,20 @@ describe('TransportManager', () => {
 
       const count = manager.broadcast(event);
 
-      assert.strictEqual(count, 2);
-      assert.strictEqual(broadcastSpy.mock.callCount(), 1);
+      expect(count).toBe(2);
+      expect(broadcastSpy.mock.calls.length).toBe(1);
       // Verify SSE event format
-      const sseEvent = broadcastSpy.mock.calls[0].arguments[0];
-      assert.ok(sseEvent);
-      assert.strictEqual(sseEvent.event, EventType.RUN_STARTED);
-      assert.deepStrictEqual(sseEvent.data, event);
+      const sseEvent = broadcastSpy.mock.calls[0][0];
+      expect(sseEvent).toBeTruthy();
+      expect(sseEvent.event).toBe(EventType.RUN_STARTED);
+      expect(sseEvent.data).toEqual(event);
     });
   });
 
   describe('broadcastToRun', () => {
     it('should broadcast event to specific run', () => {
       const transport = manager.getSseTransport();
-      const broadcastToRunSpy = mock.method(transport, 'broadcastToRun', () => 1);
+      const broadcastToRunSpy = vi.spyOn(transport, 'broadcastToRun').mockImplementation(() => 1);
 
       const event: AgUiEvent = {
         type: EventType.TOOL_CALL_START,
@@ -175,14 +175,14 @@ describe('TransportManager', () => {
 
       const count = manager.broadcastToRun('run-123', event);
 
-      assert.strictEqual(count, 1);
-      assert.strictEqual(broadcastToRunSpy.mock.callCount(), 1);
-      assert.strictEqual(broadcastToRunSpy.mock.calls[0].arguments[0], 'run-123');
+      expect(count).toBe(1);
+      expect(broadcastToRunSpy.mock.calls.length).toBe(1);
+      expect(broadcastToRunSpy.mock.calls[0][0]).toBe('run-123');
       // Verify SSE event format
-      const sseEvent = broadcastToRunSpy.mock.calls[0].arguments[1];
-      assert.ok(sseEvent);
-      assert.strictEqual(sseEvent.event, EventType.TOOL_CALL_START);
-      assert.deepStrictEqual(sseEvent.data, event);
+      const sseEvent = broadcastToRunSpy.mock.calls[0][1];
+      expect(sseEvent).toBeTruthy();
+      expect(sseEvent.event).toBe(EventType.TOOL_CALL_START);
+      expect(sseEvent.data).toEqual(event);
     });
   });
 
@@ -190,37 +190,37 @@ describe('TransportManager', () => {
     it('should return SSE transport instance', () => {
       const transport = manager.getSseTransport();
 
-      assert.ok(transport);
-      assert.strictEqual(typeof transport.handleConnection, 'function');
-      assert.strictEqual(typeof transport.broadcast, 'function');
-      assert.strictEqual(typeof transport.broadcastToRun, 'function');
+      expect(transport).toBeTruthy();
+      expect(typeof transport.handleConnection).toBe('function');
+      expect(typeof transport.broadcast).toBe('function');
+      expect(typeof transport.broadcastToRun).toBe('function');
     });
 
     it('should return same transport instance', () => {
       const transport1 = manager.getSseTransport();
       const transport2 = manager.getSseTransport();
 
-      assert.strictEqual(transport1, transport2);
+      expect(transport1).toBe(transport2);
     });
   });
 
   describe('getAdapterCount', () => {
     it('should return correct count', () => {
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
 
       const adapter1 = new AgUiEventAdapter('run-1');
       manager.connectAdapter(adapter1);
-      assert.strictEqual(manager.getAdapterCount(), 1);
+      expect(manager.getAdapterCount()).toBe(1);
 
       const adapter2 = new AgUiEventAdapter('run-2');
       manager.connectAdapter(adapter2);
-      assert.strictEqual(manager.getAdapterCount(), 2);
+      expect(manager.getAdapterCount()).toBe(2);
 
       manager.disconnectAdapter(adapter1);
-      assert.strictEqual(manager.getAdapterCount(), 1);
+      expect(manager.getAdapterCount()).toBe(1);
 
       manager.disconnectAdapter(adapter2);
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
     });
   });
 
@@ -232,20 +232,20 @@ describe('TransportManager', () => {
       manager.connectAdapter(adapter1);
       manager.connectAdapter(adapter2);
 
-      assert.strictEqual(manager.getAdapterCount(), 2);
+      expect(manager.getAdapterCount()).toBe(2);
 
       manager.shutdown();
 
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
     });
 
     it('should shutdown SSE transport', () => {
       const transport = manager.getSseTransport();
-      const shutdownSpy = mock.method(transport, 'shutdown');
+      const shutdownSpy = vi.spyOn(transport, 'shutdown');
 
       manager.shutdown();
 
-      assert.strictEqual(shutdownSpy.mock.callCount(), 1);
+      expect(shutdownSpy.mock.calls.length).toBe(1);
     });
 
     it('should be idempotent', () => {
@@ -255,14 +255,14 @@ describe('TransportManager', () => {
       manager.shutdown();
       manager.shutdown(); // Should not throw
 
-      assert.strictEqual(manager.getAdapterCount(), 0);
+      expect(manager.getAdapterCount()).toBe(0);
     });
 
     it('should stop forwarding events after shutdown', () => {
       const adapter = new AgUiEventAdapter('run-123');
       const transport = manager.getSseTransport();
 
-      const broadcastSpy = mock.method(transport, 'broadcast');
+      const broadcastSpy = vi.spyOn(transport, 'broadcast');
 
       manager.connectAdapter(adapter);
       manager.shutdown();
@@ -271,7 +271,7 @@ describe('TransportManager', () => {
       adapter.emitRunStarted();
 
       // Verify event was NOT broadcast (adapter was disconnected)
-      assert.strictEqual(broadcastSpy.mock.callCount(), 0);
+      expect(broadcastSpy.mock.calls.length).toBe(0);
     });
   });
 
@@ -280,7 +280,7 @@ describe('TransportManager', () => {
       const adapter = new AgUiEventAdapter('run-123');
       const transport = manager.getSseTransport();
 
-      const broadcastToRunSpy = mock.method(transport, 'broadcastToRun', () => 1);
+      const broadcastToRunSpy = vi.spyOn(transport, 'broadcastToRun').mockImplementation(() => 1);
 
       // Connect
       manager.connectAdapter(adapter, 'run-123');
@@ -295,19 +295,19 @@ describe('TransportManager', () => {
       // emitStateSnapshot = 1 event
       // emitRunFinished = 1 event
       // Total: 4 events
-      assert.strictEqual(broadcastToRunSpy.mock.callCount(), 4);
+      expect(broadcastToRunSpy.mock.calls.length).toBe(4);
 
       // Disconnect
       manager.disconnectAdapter(adapter);
 
       // Reset the spy count for next check
-      broadcastToRunSpy.mock.resetCalls();
+      broadcastToRunSpy.mockClear();
 
       // Emit after disconnect
       adapter.emitRunStarted();
 
       // Should be 0 (no new broadcast)
-      assert.strictEqual(broadcastToRunSpy.mock.callCount(), 0);
+      expect(broadcastToRunSpy.mock.calls.length).toBe(0);
     });
 
     it('should support run-specific and global broadcasts simultaneously', () => {
@@ -315,8 +315,8 @@ describe('TransportManager', () => {
       const runAdapter = new AgUiEventAdapter('run-123');
       const transport = manager.getSseTransport();
 
-      const broadcastSpy = mock.method(transport, 'broadcast', () => 5);
-      const broadcastToRunSpy = mock.method(transport, 'broadcastToRun', () => 1);
+      const broadcastSpy = vi.spyOn(transport, 'broadcast').mockImplementation(() => 5);
+      const broadcastToRunSpy = vi.spyOn(transport, 'broadcastToRun').mockImplementation(() => 1);
 
       // Connect one globally, one to specific run
       manager.connectAdapter(globalAdapter);
@@ -327,16 +327,16 @@ describe('TransportManager', () => {
       runAdapter.emitRunStarted();
 
       // Global adapter emits 2 events via broadcast
-      assert.strictEqual(broadcastSpy.mock.callCount(), 2);
+      expect(broadcastSpy.mock.calls.length).toBe(2);
       // Run adapter emits 2 events via broadcastToRun
-      assert.strictEqual(broadcastToRunSpy.mock.callCount(), 2);
+      expect(broadcastToRunSpy.mock.calls.length).toBe(2);
     });
 
     it('should handle rapid event emissions', () => {
       const adapter = new AgUiEventAdapter('run-123');
       const transport = manager.getSseTransport();
 
-      const broadcastSpy = mock.method(transport, 'broadcast', () => 1);
+      const broadcastSpy = vi.spyOn(transport, 'broadcast').mockImplementation(() => 1);
 
       manager.connectAdapter(adapter);
 
@@ -345,7 +345,7 @@ describe('TransportManager', () => {
         adapter.emitStateSnapshot();
       }
 
-      assert.strictEqual(broadcastSpy.mock.callCount(), 10);
+      expect(broadcastSpy.mock.calls.length).toBe(10);
     });
   });
 });

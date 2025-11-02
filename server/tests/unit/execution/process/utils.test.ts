@@ -5,8 +5,7 @@
  * and validation helpers.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import {
   generateId,
   formatDuration,
@@ -17,7 +16,7 @@ import {
 describe('generateId', () => {
   it('generates an ID with the specified prefix', () => {
     const id = generateId('process');
-    assert.match(id, /^process-[a-z0-9]+$/);
+    expect(id).toMatch(/^process-[a-z0-9]+$/);
   });
 
   it('generates unique IDs', () => {
@@ -29,7 +28,7 @@ describe('generateId', () => {
     }
 
     // All IDs should be unique
-    assert.strictEqual(ids.size, count);
+    expect(ids.size).toBe(count);
   });
 
   it('generates IDs of consistent length', () => {
@@ -37,8 +36,8 @@ describe('generateId', () => {
     const id2 = generateId('process');
 
     // Both should have prefix + separator + 10 character nanoid
-    assert.strictEqual(id1.length, id2.length);
-    assert.strictEqual(id1.length, 'process-'.length + 10);
+    expect(id1.length).toBe(id2.length);
+    expect(id1.length).toBe('process-'.length + 10);
   });
 
   it('generates URL-safe IDs (alphanumeric lowercase)', () => {
@@ -47,7 +46,7 @@ describe('generateId', () => {
       const suffix = id.split('-')[1];
 
       // Should only contain lowercase alphanumeric
-      assert.match(suffix, /^[a-z0-9]+$/);
+      expect(suffix).toMatch(/^[a-z0-9]+$/);
     }
   });
 
@@ -56,118 +55,118 @@ describe('generateId', () => {
     const taskId = generateId('task');
     const executionId = generateId('execution');
 
-    assert.match(processId, /^process-/);
-    assert.match(taskId, /^task-/);
-    assert.match(executionId, /^execution-/);
+    expect(processId).toMatch(/^process-/);
+    expect(taskId).toMatch(/^task-/);
+    expect(executionId).toMatch(/^execution-/);
   });
 });
 
 describe('formatDuration', () => {
   it('formats milliseconds under 1 second', () => {
-    assert.strictEqual(formatDuration(0), '0ms');
-    assert.strictEqual(formatDuration(500), '500ms');
-    assert.strictEqual(formatDuration(999), '999ms');
+    expect(formatDuration(0)).toBe('0ms');
+    expect(formatDuration(500)).toBe('500ms');
+    expect(formatDuration(999)).toBe('999ms');
   });
 
   it('formats seconds', () => {
-    assert.strictEqual(formatDuration(1000), '1s');
-    assert.strictEqual(formatDuration(5000), '5s');
-    assert.strictEqual(formatDuration(30000), '30s');
-    assert.strictEqual(formatDuration(59000), '59s');
+    expect(formatDuration(1000)).toBe('1s');
+    expect(formatDuration(5000)).toBe('5s');
+    expect(formatDuration(30000)).toBe('30s');
+    expect(formatDuration(59000)).toBe('59s');
   });
 
   it('formats minutes and seconds', () => {
-    assert.strictEqual(formatDuration(60000), '1m');
-    assert.strictEqual(formatDuration(65000), '1m 5s');
-    assert.strictEqual(formatDuration(125000), '2m 5s');
-    assert.strictEqual(formatDuration(3599000), '59m 59s');
+    expect(formatDuration(60000)).toBe('1m');
+    expect(formatDuration(65000)).toBe('1m 5s');
+    expect(formatDuration(125000)).toBe('2m 5s');
+    expect(formatDuration(3599000)).toBe('59m 59s');
   });
 
   it('formats hours and minutes', () => {
-    assert.strictEqual(formatDuration(3600000), '1h');
-    assert.strictEqual(formatDuration(3660000), '1h 1m');
-    assert.strictEqual(formatDuration(7200000), '2h');
-    assert.strictEqual(formatDuration(7320000), '2h 2m');
+    expect(formatDuration(3600000)).toBe('1h');
+    expect(formatDuration(3660000)).toBe('1h 1m');
+    expect(formatDuration(7200000)).toBe('2h');
+    expect(formatDuration(7320000)).toBe('2h 2m');
   });
 
   it('omits zero values in compound formats', () => {
     // 1 minute exactly (no seconds)
-    assert.strictEqual(formatDuration(60000), '1m');
+    expect(formatDuration(60000)).toBe('1m');
 
     // 1 hour exactly (no minutes)
-    assert.strictEqual(formatDuration(3600000), '1h');
+    expect(formatDuration(3600000)).toBe('1h');
   });
 
   it('handles large durations', () => {
     // 24 hours
-    assert.strictEqual(formatDuration(86400000), '24h');
+    expect(formatDuration(86400000)).toBe('24h');
 
     // 24 hours 30 minutes
-    assert.strictEqual(formatDuration(88200000), '24h 30m');
+    expect(formatDuration(88200000)).toBe('24h 30m');
   });
 });
 
 describe('isValidSignal', () => {
   it('validates common Unix signals', () => {
-    assert.strictEqual(isValidSignal('SIGTERM'), true);
-    assert.strictEqual(isValidSignal('SIGKILL'), true);
-    assert.strictEqual(isValidSignal('SIGINT'), true);
-    assert.strictEqual(isValidSignal('SIGHUP'), true);
-    assert.strictEqual(isValidSignal('SIGQUIT'), true);
-    assert.strictEqual(isValidSignal('SIGABRT'), true);
+    expect(isValidSignal('SIGTERM')).toBe(true);
+    expect(isValidSignal('SIGKILL')).toBe(true);
+    expect(isValidSignal('SIGINT')).toBe(true);
+    expect(isValidSignal('SIGHUP')).toBe(true);
+    expect(isValidSignal('SIGQUIT')).toBe(true);
+    expect(isValidSignal('SIGABRT')).toBe(true);
   });
 
   it('rejects invalid signals', () => {
-    assert.strictEqual(isValidSignal('INVALID'), false);
-    assert.strictEqual(isValidSignal('SIGFOO'), false);
-    assert.strictEqual(isValidSignal('sigterm'), false); // lowercase
-    assert.strictEqual(isValidSignal(''), false);
-    assert.strictEqual(isValidSignal('SIG'), false);
+    expect(isValidSignal('INVALID')).toBe(false);
+    expect(isValidSignal('SIGFOO')).toBe(false);
+    expect(isValidSignal('sigterm')).toBe(false); // lowercase
+    expect(isValidSignal('')).toBe(false);
+    expect(isValidSignal('SIG')).toBe(false);
   });
 
   it('is case sensitive', () => {
-    assert.strictEqual(isValidSignal('SIGTERM'), true);
-    assert.strictEqual(isValidSignal('sigterm'), false);
-    assert.strictEqual(isValidSignal('SigTerm'), false);
+    expect(isValidSignal('SIGTERM')).toBe(true);
+    expect(isValidSignal('sigterm')).toBe(false);
+    expect(isValidSignal('SigTerm')).toBe(false);
   });
 });
 
 describe('formatProcessError', () => {
   it('formats signal termination', () => {
     const error = formatProcessError(null, 'SIGTERM');
-    assert.strictEqual(error, 'Process terminated by signal: SIGTERM');
+    expect(error).toBe('Process terminated by signal: SIGTERM');
   });
 
   it('formats exit code errors', () => {
     const error = formatProcessError(1, null);
-    assert.strictEqual(error, 'Process exited with code: 1');
+    expect(error).toBe('Process exited with code: 1');
   });
 
   it('prioritizes signal over exit code', () => {
     // If both are present, signal takes precedence
     const error = formatProcessError(1, 'SIGKILL');
-    assert.strictEqual(error, 'Process terminated by signal: SIGKILL');
+    expect(error).toBe('Process terminated by signal: SIGKILL');
   });
 
   it('handles successful exit (code 0)', () => {
     const error = formatProcessError(0, null);
-    assert.strictEqual(error, 'Process exited unexpectedly');
+    expect(error).toBe('Process exited unexpectedly');
   });
 
   it('handles unknown failures', () => {
     const error = formatProcessError(null, null);
-    assert.strictEqual(error, 'Process exited unexpectedly');
+    expect(error).toBe('Process exited unexpectedly');
   });
 
   it('formats different exit codes', () => {
-    assert.match(formatProcessError(1, null), /code: 1/);
-    assert.match(formatProcessError(137, null), /code: 137/);
-    assert.match(formatProcessError(255, null), /code: 255/);
+    expect(formatProcessError(1, null)).toMatch(/code: 1/);
+    expect(formatProcessError(137, null)).toMatch(/code: 137/);
+    expect(formatProcessError(255, null)).toMatch(/code: 255/);
   });
 
   it('formats different signals', () => {
-    assert.match(formatProcessError(null, 'SIGKILL'), /SIGKILL/);
-    assert.match(formatProcessError(null, 'SIGINT'), /SIGINT/);
-    assert.match(formatProcessError(null, 'SIGHUP'), /SIGHUP/);
+    expect(formatProcessError(null, 'SIGKILL')).toMatch(/SIGKILL/);
+    expect(formatProcessError(null, 'SIGINT')).toMatch(/SIGINT/);
+    expect(formatProcessError(null, 'SIGHUP')).toMatch(/SIGHUP/);
   });
 });

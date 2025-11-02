@@ -2,8 +2,7 @@
  * Tests for Relationships API routes
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import request from "supertest";
 import express from "express";
 import type Database from "better-sqlite3";
@@ -24,7 +23,7 @@ describe("Relationships API", () => {
   let testIssueId: string;
   let testSpecId: string;
 
-  before(async () => {
+  beforeAll(async () => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-relationships-"));
     testDbPath = path.join(testDir, "cache.db");
@@ -69,7 +68,7 @@ describe("Relationships API", () => {
     testSpecId = specResponse.body.data.id;
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up export debouncer first
     cleanupExport();
     // Clean up database
@@ -97,11 +96,11 @@ describe("Relationships API", () => {
         .expect(201)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.from_id, testIssueId);
-      assert.strictEqual(response.body.data.to_id, testSpecId);
-      assert.strictEqual(response.body.data.relationship_type, "implements");
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.from_id).toBe(testIssueId);
+      expect(response.body.data.to_id).toBe(testSpecId);
+      expect(response.body.data.relationship_type).toBe("implements");
     });
 
     it("should return existing relationship when adding duplicate (idempotent)", async () => {
@@ -119,11 +118,11 @@ describe("Relationships API", () => {
         .expect(201)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.from_id, testIssueId);
-      assert.strictEqual(response.body.data.to_id, testSpecId);
-      assert.strictEqual(response.body.data.relationship_type, "implements");
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.from_id).toBe(testIssueId);
+      expect(response.body.data.to_id).toBe(testSpecId);
+      expect(response.body.data.relationship_type).toBe("implements");
     });
 
     it("should reject relationship without from_id", async () => {
@@ -137,8 +136,8 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("from_id"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("from_id")).toBeTruthy();
     });
 
     it("should reject relationship with invalid from_type", async () => {
@@ -153,8 +152,8 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("from_type"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("from_type")).toBeTruthy();
     });
 
     it("should reject relationship without to_id", async () => {
@@ -168,8 +167,8 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("to_id"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("to_id")).toBeTruthy();
     });
 
     it("should reject relationship with invalid relationship_type", async () => {
@@ -184,8 +183,8 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("Invalid relationship_type"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("Invalid relationship_type")).toBeTruthy();
     });
 
     it("should reject relationship with non-existent from_id", async () => {
@@ -200,8 +199,8 @@ describe("Relationships API", () => {
         })
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
   });
 
@@ -212,12 +211,12 @@ describe("Relationships API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.ok(Array.isArray(response.body.data.outgoing));
-      assert.ok(Array.isArray(response.body.data.incoming));
-      assert.strictEqual(response.body.data.outgoing.length, 1);
-      assert.strictEqual(response.body.data.outgoing[0].to_id, testSpecId);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(Array.isArray(response.body.data.outgoing)).toBeTruthy();
+      expect(Array.isArray(response.body.data.incoming)).toBeTruthy();
+      expect(response.body.data.outgoing.length).toBe(1);
+      expect(response.body.data.outgoing[0].to_id).toBe(testSpecId);
     });
 
     it("should get all relationships for a spec", async () => {
@@ -226,12 +225,12 @@ describe("Relationships API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.ok(Array.isArray(response.body.data.outgoing));
-      assert.ok(Array.isArray(response.body.data.incoming));
-      assert.strictEqual(response.body.data.incoming.length, 1);
-      assert.strictEqual(response.body.data.incoming[0].from_id, testIssueId);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(Array.isArray(response.body.data.outgoing)).toBeTruthy();
+      expect(Array.isArray(response.body.data.incoming)).toBeTruthy();
+      expect(response.body.data.incoming.length).toBe(1);
+      expect(response.body.data.incoming[0].from_id).toBe(testIssueId);
     });
 
     it("should return empty arrays for entity with no relationships", async () => {
@@ -244,9 +243,9 @@ describe("Relationships API", () => {
         .get(`/api/relationships/issue/${issueResponse.body.data.id}`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.outgoing.length, 0);
-      assert.strictEqual(response.body.data.incoming.length, 0);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.outgoing.length).toBe(0);
+      expect(response.body.data.incoming.length).toBe(0);
     });
 
     it("should reject invalid entity_type", async () => {
@@ -254,8 +253,8 @@ describe("Relationships API", () => {
         .get(`/api/relationships/invalid/${testIssueId}`)
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("Invalid entity_type"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("Invalid entity_type")).toBeTruthy();
     });
   });
 
@@ -266,11 +265,11 @@ describe("Relationships API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.strictEqual(response.body.data.length, 1);
-      assert.strictEqual(response.body.data[0].from_id, testIssueId);
-      assert.strictEqual(response.body.data[0].to_id, testSpecId);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0].from_id).toBe(testIssueId);
+      expect(response.body.data[0].to_id).toBe(testSpecId);
     });
 
     it("should filter by relationship_type", async () => {
@@ -278,10 +277,10 @@ describe("Relationships API", () => {
         .get(`/api/relationships/issue/${testIssueId}/outgoing?relationship_type=implements`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
       response.body.data.forEach((rel: any) => {
-        assert.strictEqual(rel.relationship_type, "implements");
+        expect(rel.relationship_type).toBe("implements");
       });
     });
 
@@ -290,8 +289,8 @@ describe("Relationships API", () => {
         .get(`/api/relationships/issue/${testIssueId}/outgoing?relationship_type=blocks`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.length, 0);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.length).toBe(0);
     });
   });
 
@@ -302,11 +301,11 @@ describe("Relationships API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.strictEqual(response.body.data.length, 1);
-      assert.strictEqual(response.body.data[0].from_id, testIssueId);
-      assert.strictEqual(response.body.data[0].to_id, testSpecId);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0].from_id).toBe(testIssueId);
+      expect(response.body.data[0].to_id).toBe(testSpecId);
     });
 
     it("should filter by relationship_type", async () => {
@@ -314,10 +313,10 @@ describe("Relationships API", () => {
         .get(`/api/relationships/spec/${testSpecId}/incoming?relationship_type=implements`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
       response.body.data.forEach((rel: any) => {
-        assert.strictEqual(rel.relationship_type, "implements");
+        expect(rel.relationship_type).toBe("implements");
       });
     });
   });
@@ -337,10 +336,10 @@ describe("Relationships API", () => {
         .send(relationship)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.deleted, true);
-      assert.strictEqual(response.body.data.from_id, testIssueId);
-      assert.strictEqual(response.body.data.to_id, testSpecId);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.deleted).toBe(true);
+      expect(response.body.data.from_id).toBe(testIssueId);
+      expect(response.body.data.to_id).toBe(testSpecId);
     });
 
     it("should trigger JSONL export after deleting relationship", async () => {
@@ -387,7 +386,7 @@ describe("Relationships API", () => {
 
       // Check that JSONL files exist and relationship is removed
       const issuesJsonlPath = path.join(testDir, "issues.jsonl");
-      assert.ok(fs.existsSync(issuesJsonlPath), "issues.jsonl should exist");
+      expect(fs.existsSync(issuesJsonlPath)).toBeTruthy();
 
       const issuesContent = fs.readFileSync(issuesJsonlPath, "utf-8");
       const issueLines = issuesContent.trim().split("\n");
@@ -395,16 +394,9 @@ describe("Relationships API", () => {
         .map((line) => JSON.parse(line))
         .find((issue) => issue.id === issueId);
 
-      assert.ok(exportedIssue, "Issue should be in JSONL");
-      assert.ok(
-        Array.isArray(exportedIssue.relationships),
-        "Issue should have relationships array"
-      );
-      assert.strictEqual(
-        exportedIssue.relationships.length,
-        0,
-        "Issue should have no relationships after deletion"
-      );
+      expect(exportedIssue).toBeTruthy();
+      expect(Array.isArray(exportedIssue.relationships)).toBeTruthy();
+      expect(exportedIssue.relationships.length).toBe(0);
     });
 
     it("should return 404 when deleting non-existent relationship", async () => {
@@ -421,8 +413,8 @@ describe("Relationships API", () => {
         .send(relationship)
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
 
     it("should reject delete without from_id", async () => {
@@ -436,8 +428,8 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("from_id"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("from_id")).toBeTruthy();
     });
 
     it("should reject delete with invalid from_type", async () => {
@@ -452,14 +444,14 @@ describe("Relationships API", () => {
         })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("from_type"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("from_type")).toBeTruthy();
     });
   });
 
   describe("Integration tests", () => {
-    before(() => {
-      // Config already exists in testDir from main before() hook
+    beforeAll(() => {
+      // Config already exists in testDir from main beforeAll() hook
       // No additional setup needed
     });
 
@@ -498,14 +490,14 @@ describe("Relationships API", () => {
         .get(`/api/relationships/issue/${testIssueId}`)
         .expect(200);
 
-      assert.strictEqual(response.body.data.outgoing.length, 1);
+      expect(response.body.data.outgoing.length).toBe(1);
 
       // Get all relationships for spec2
       const spec2RelationshipsResponse = await request(app)
         .get(`/api/relationships/spec/${spec2Id}`)
         .expect(200);
 
-      assert.strictEqual(spec2RelationshipsResponse.body.data.incoming.length, 2);
+      expect(spec2RelationshipsResponse.body.data.incoming.length).toBe(2);
     });
 
     it("should handle bidirectional relationships correctly", async () => {
@@ -548,14 +540,14 @@ describe("Relationships API", () => {
       const issueRels = await request(app).get(
         `/api/relationships/issue/${issueId}`
       );
-      assert.strictEqual(issueRels.body.data.outgoing.length, 1);
-      assert.strictEqual(issueRels.body.data.incoming.length, 1);
+      expect(issueRels.body.data.outgoing.length).toBe(1);
+      expect(issueRels.body.data.incoming.length).toBe(1);
 
       const specRels = await request(app).get(
         `/api/relationships/spec/${specId}`
       );
-      assert.strictEqual(specRels.body.data.outgoing.length, 1);
-      assert.strictEqual(specRels.body.data.incoming.length, 1);
+      expect(specRels.body.data.outgoing.length).toBe(1);
+      expect(specRels.body.data.incoming.length).toBe(1);
     });
   });
 });

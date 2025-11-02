@@ -6,8 +6,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import { InMemoryWorkflowStorage } from "../../../../src/execution/workflow/memory-storage.js";
 import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
@@ -118,13 +117,13 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 3);
-      assert.ok(execution.stepResults.every((r) => r.success));
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(3);
+      expect(execution.stepResults.every((r) => r.success)).toBeTruthy();
 
       // Verify all tasks were executed
       const tasks = mockExecutor.getExecutedTasks();
-      assert.strictEqual(tasks.length, 3);
+      expect(tasks.length).toBe(3);
     });
 
     it("should execute single-step workflow", async () => {
@@ -137,9 +136,9 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 1);
-      assert.strictEqual(execution.stepResults[0].success, true);
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(1);
+      expect(execution.stepResults[0].success).toBe(true);
     });
 
     it("should track execution timing", async () => {
@@ -155,9 +154,9 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.ok(execution.startedAt instanceof Date);
-      assert.ok(execution.completedAt instanceof Date);
-      assert.ok(execution.completedAt >= execution.startedAt);
+      expect(execution.startedAt instanceof Date).toBeTruthy();
+      expect(execution.completedAt instanceof Date).toBeTruthy();
+      expect((execution?.completedAt || 0) >= execution.startedAt).toBeTruthy();
     });
   });
 
@@ -180,13 +179,13 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.waitForWorkflow(executionId);
 
       const checkpoints = await storage.listCheckpoints("checkpoint-workflow");
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
 
       const checkpoint = checkpoints[0];
-      assert.strictEqual(checkpoint.workflowId, "checkpoint-workflow");
-      assert.ok(checkpoint.state);
-      assert.ok(checkpoint.state.context);
-      assert.ok(Array.isArray(checkpoint.state.stepResults));
+      expect(checkpoint.workflowId).toBe("checkpoint-workflow");
+      expect(checkpoint.state).toBeTruthy();
+      expect(checkpoint.state.context).toBeTruthy();
+      expect(Array.isArray(checkpoint.state.stepResults)).toBeTruthy();
     });
 
     it("should resume workflow from checkpoint", async () => {
@@ -219,19 +218,19 @@ describe("Workflow Layer Integration Tests", () => {
 
       // Verify checkpoint was created
       const checkpoints = await storage.listCheckpoints("resume-workflow");
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
 
       // Resume execution
       await orchestrator.resumeWorkflow(executionId);
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 4);
-      assert.ok(execution.resumedAt instanceof Date);
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(4);
+      expect(execution.resumedAt instanceof Date).toBeTruthy();
 
       // Verify we didn't re-execute completed steps
       const totalTasksExecuted = mockExecutor.getExecutedTasks().length;
-      assert.strictEqual(totalTasksExecuted, 4);
+      expect(totalTasksExecuted).toBe(4);
     });
 
     it("should preserve context across resumption", async () => {
@@ -267,8 +266,8 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.resumeWorkflow(executionId);
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.context.testVar, "test-value");
-      assert.deepStrictEqual(execution.context.testVar, contextBefore?.testVar);
+      expect(execution.context.testVar).toBe("test-value");
+      expect(execution.context.testVar).toEqual(contextBefore?.testVar);
     });
 
     it("should continue from correct step index after resume", async () => {
@@ -304,12 +303,12 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.resumeWorkflow(executionId);
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 3);
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(3);
 
       // Verify tasks weren't re-executed
       const tasks = mockExecutor.getExecutedTasks();
-      assert.strictEqual(tasks.length, 3);
+      expect(tasks.length).toBe(3);
     });
   });
 
@@ -330,11 +329,11 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "failed");
-      assert.ok(execution.error);
-      assert.strictEqual(execution.stepResults.length, 2); // step1 and failed step2
-      assert.strictEqual(execution.stepResults[0].success, true);
-      assert.strictEqual(execution.stepResults[1].success, false);
+      expect(execution.status).toBe("failed");
+      expect(execution.error).toBeTruthy();
+      expect(execution.stepResults.length).toBe(2); // step1 and failed step2
+      expect(execution.stepResults[0].success).toBe(true);
+      expect(execution.stepResults[1].success).toBe(false);
     });
 
     it("should continue on step failure when configured", async () => {
@@ -354,11 +353,11 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 3);
-      assert.strictEqual(execution.stepResults[0].success, true);
-      assert.strictEqual(execution.stepResults[1].success, false);
-      assert.strictEqual(execution.stepResults[2].success, true);
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(3);
+      expect(execution.stepResults[0].success).toBe(true);
+      expect(execution.stepResults[1].success).toBe(false);
+      expect(execution.stepResults[2].success).toBe(true);
     });
 
     it("should create checkpoint when pausing after failure", async () => {
@@ -381,12 +380,12 @@ describe("Workflow Layer Integration Tests", () => {
       });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "failed");
+      expect(execution.status).toBe("failed");
 
       const checkpoints = await storage.listCheckpoints(
         "failure-checkpoint-workflow"
       );
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
     });
   });
 
@@ -411,14 +410,14 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.pauseWorkflow(executionId);
 
       let execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "paused");
-      assert.ok(execution?.pausedAt instanceof Date);
+      expect(execution?.status).toBe("paused");
+      expect(execution?.pausedAt instanceof Date).toBeTruthy();
 
       await orchestrator.resumeWorkflow(executionId);
       execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.ok(execution.resumedAt instanceof Date);
+      expect(execution.status).toBe("completed");
+      expect(execution.resumedAt instanceof Date).toBeTruthy();
     });
 
     it("should cancel running workflow", async () => {
@@ -441,11 +440,11 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.cancelWorkflow(executionId);
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "cancelled");
-      assert.ok(execution?.completedAt instanceof Date);
+      expect(execution?.status).toBe("cancelled");
+      expect(execution?.completedAt instanceof Date).toBeTruthy();
 
       // Should not have executed all steps
-      assert.ok(execution.stepResults.length < 3);
+      expect(execution?.stepResults.length || 0 < 3).toBeTruthy();
     });
 
     it("should create checkpoint when cancelling", async () => {
@@ -470,13 +469,13 @@ describe("Workflow Layer Integration Tests", () => {
       const checkpoints = await storage.listCheckpoints(
         "cancel-checkpoint-workflow"
       );
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
 
       const checkpoint = checkpoints.find(
         (cp) => cp.executionId === executionId
       );
-      assert.ok(checkpoint);
-      assert.strictEqual(checkpoint.state.status, "cancelled");
+      expect(checkpoint).toBeTruthy();
+      expect(checkpoint?.state.status).toBe("cancelled");
     });
   });
 
@@ -501,12 +500,12 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       await orchestrator.waitForWorkflow(executionId);
 
-      assert.ok(events.includes("start"));
-      assert.ok(events.includes("complete"));
-      assert.ok(events.includes("step-start"));
-      assert.ok(events.includes("step-complete"));
-      assert.strictEqual(events.filter((e) => e === "step-start").length, 2);
-      assert.strictEqual(events.filter((e) => e === "step-complete").length, 2);
+      expect(events.includes("start")).toBeTruthy();
+      expect(events.includes("complete")).toBeTruthy();
+      expect(events.includes("step-start")).toBeTruthy();
+      expect(events.includes("step-complete")).toBeTruthy();
+      expect(events.filter((e) => e === "step-start").length).toBe(2);
+      expect(events.filter((e) => e === "step-complete").length).toBe(2);
     });
 
     it("should emit checkpoint events", async () => {
@@ -531,7 +530,7 @@ describe("Workflow Layer Integration Tests", () => {
       });
       await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(checkpointEmitted, true);
+      expect(checkpointEmitted).toBe(true);
     });
 
     it("should emit failed event on error", async () => {
@@ -557,8 +556,8 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(failedEventEmitted, true);
-      assert.strictEqual(failedExecutionId, executionId);
+      expect(failedEventEmitted).toBe(true);
+      expect(failedExecutionId).toBe(executionId);
     });
 
     it("should emit pause and resume events", async () => {
@@ -590,11 +589,11 @@ describe("Workflow Layer Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await orchestrator.pauseWorkflow(executionId);
 
-      assert.strictEqual(pauseEmitted, true);
+      expect(pauseEmitted).toBe(true);
 
       await orchestrator.resumeWorkflow(executionId);
 
-      assert.strictEqual(resumeEmitted, true);
+      expect(resumeEmitted).toBe(true);
     });
 
     it("should emit cancel event", async () => {
@@ -621,7 +620,7 @@ describe("Workflow Layer Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await orchestrator.cancelWorkflow(executionId);
 
-      assert.strictEqual(cancelEmitted, true);
+      expect(cancelEmitted).toBe(true);
     });
   });
 
@@ -637,12 +636,12 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.waitForWorkflow(executionId);
 
       const executedTasks = mockExecutor.getExecutedTasks();
-      assert.strictEqual(executedTasks.length, 1);
+      expect(executedTasks.length).toBe(1);
 
       const taskExecution = executedTasks[0];
-      assert.ok(taskExecution.task);
-      assert.strictEqual(taskExecution.task.prompt, "Test step");
-      assert.strictEqual(taskExecution.task.type, "issue");
+      expect(taskExecution.task).toBeTruthy();
+      expect(taskExecution.task.prompt).toBe("Test step");
+      expect(taskExecution.task.type).toBe("issue");
     });
 
     it("should pass retry policy to executor", async () => {
@@ -673,11 +672,11 @@ describe("Workflow Layer Integration Tests", () => {
       await orchestrator.waitForWorkflow(executionId);
 
       const executedTasks = mockExecutor.getExecutedTasks();
-      assert.strictEqual(executedTasks.length, 1);
+      expect(executedTasks.length).toBe(1);
 
       const taskExecution = executedTasks[0];
-      assert.ok(taskExecution.retryPolicy);
-      assert.strictEqual(taskExecution.retryPolicy.maxAttempts, 5);
+      expect(taskExecution.retryPolicy).toBeTruthy();
+      expect(taskExecution.retryPolicy.maxAttempts).toBe(5);
       // Note: backoff structure verification removed as it's stored by mock executor
       // and the exact structure isn't critical for this integration test
     });
@@ -713,9 +712,9 @@ describe("Workflow Layer Integration Tests", () => {
         orchestrator.waitForWorkflow(executionId2),
       ]);
 
-      assert.strictEqual(execution1.status, "completed");
-      assert.strictEqual(execution2.status, "completed");
-      assert.notStrictEqual(executionId1, executionId2);
+      expect(execution1.status).toBe("completed");
+      expect(execution2.status).toBe("completed");
+      expect(executionId1).not.toBe(executionId2);
     });
   });
 
@@ -738,13 +737,13 @@ describe("Workflow Layer Integration Tests", () => {
       const step2Status = orchestrator.getStepStatus(executionId, "step2");
       const step3Status = orchestrator.getStepStatus(executionId, "step3");
 
-      assert.ok(step1Status);
-      assert.ok(step2Status);
-      assert.ok(step3Status);
+      expect(step1Status).toBeTruthy();
+      expect(step2Status).toBeTruthy();
+      expect(step3Status).toBeTruthy();
 
-      assert.strictEqual(step1Status.status, "completed");
-      assert.strictEqual(step2Status.status, "completed");
-      assert.strictEqual(step3Status.status, "completed");
+      expect(step1Status?.status).toBe("completed");
+      expect(step2Status?.status).toBe("completed");
+      expect(step3Status?.status).toBe("completed");
     });
 
     it("should list checkpoints for specific workflow", async () => {
@@ -776,16 +775,16 @@ describe("Workflow Layer Integration Tests", () => {
         "checkpoint-list-workflow-2"
       );
 
-      assert.ok(
+      expect(
         checkpoints1.every(
           (cp) => cp.workflowId === "checkpoint-list-workflow-1"
         )
-      );
-      assert.ok(
+      ).toBeTruthy();
+      expect(
         checkpoints2.every(
           (cp) => cp.workflowId === "checkpoint-list-workflow-2"
         )
-      );
+      ).toBeTruthy();
     });
   });
 });

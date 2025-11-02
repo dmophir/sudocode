@@ -3,8 +3,7 @@
  * Verifies that database updates trigger exports to JSONL files
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import request from "supertest";
 import express from "express";
 import type Database from "better-sqlite3";
@@ -40,7 +39,7 @@ describe("JSONL Export Integration", () => {
   let issuesJsonlPath: string;
   let specsJsonlPath: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-export-"));
     testDbPath = path.join(testDir, "cache.db");
@@ -77,7 +76,7 @@ describe("JSONL Export Integration", () => {
     app.use("/api/specs", createSpecsRouter(db));
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up export debouncer first
     cleanupExport();
     // Clean up database
@@ -103,37 +102,34 @@ describe("JSONL Export Integration", () => {
         .send(newIssue)
         .expect(201);
 
-      assert.strictEqual(response.body.success, true);
+      expect(response.body.success).toBe(true);
       const issueId = response.body.data.id;
 
       // Wait for debounced export to complete
       await waitForExport();
 
       // Verify JSONL file exists and contains the issue
-      assert.ok(fs.existsSync(issuesJsonlPath), "issues.jsonl should exist");
+      expect(fs.existsSync(issuesJsonlPath)).toBeTruthy();
 
       const issues = readJSONL(issuesJsonlPath);
-      assert.ok(issues.length > 0, "issues.jsonl should not be empty");
+      expect(issues.length > 0, "issues.jsonl should not be empty").toBeTruthy();
 
       const exportedIssue = issues.find((i) => i.id === issueId);
-      assert.ok(exportedIssue, "Created issue should be in JSONL file");
-      assert.strictEqual(exportedIssue.title, newIssue.title);
-      assert.strictEqual(exportedIssue.status, newIssue.status);
-      assert.strictEqual(exportedIssue.priority, newIssue.priority);
+      expect(exportedIssue, "Created issue should be in JSONL file").toBeTruthy();
+      expect(exportedIssue.title).toBe(newIssue.title);
+      expect(exportedIssue.status).toBe(newIssue.status);
+      expect(exportedIssue.priority).toBe(newIssue.priority);
 
       // Verify markdown file was created
       const issueMdPath = path.join(testDir, "issues", `${issueId}.md`);
-      assert.ok(
-        fs.existsSync(issueMdPath),
-        "Issue markdown file should be created"
-      );
+      expect(fs.existsSync(issueMdPath)).toBeTruthy();
 
       // Verify markdown file content
       const parsed = parseMarkdownFile(issueMdPath, db, testDir);
-      assert.strictEqual(parsed.data.id, issueId);
-      assert.strictEqual(parsed.data.title, newIssue.title);
-      assert.strictEqual(parsed.data.status, newIssue.status);
-      assert.strictEqual(parsed.data.priority, newIssue.priority);
+      expect(parsed.data.id).toBe(issueId);
+      expect(parsed.data.title).toBe(newIssue.title);
+      expect(parsed.data.status).toBe(newIssue.status);
+      expect(parsed.data.priority).toBe(newIssue.priority);
     });
 
     it("should update JSONL and Markdown after issue update", async () => {
@@ -168,17 +164,17 @@ describe("JSONL Export Integration", () => {
       const issues = readJSONL(issuesJsonlPath);
       const updatedIssue = issues.find((i) => i.id === issueId);
 
-      assert.ok(updatedIssue, "Updated issue should be in JSONL file");
-      assert.strictEqual(updatedIssue.status, updates.status);
-      assert.strictEqual(updatedIssue.priority, updates.priority);
-      assert.strictEqual(updatedIssue.title, "Issue to Update"); // Original title preserved
+      expect(updatedIssue, "Updated issue should be in JSONL file").toBeTruthy();
+      expect(updatedIssue.status).toBe(updates.status);
+      expect(updatedIssue.priority).toBe(updates.priority);
+      expect(updatedIssue.title).toBe("Issue to Update"); // Original title preserved
 
       // Verify markdown file was updated
       const issueMdPath = path.join(testDir, "issues", `${issueId}.md`);
       const parsed = parseMarkdownFile(issueMdPath, db, testDir);
-      assert.strictEqual(parsed.data.status, updates.status);
-      assert.strictEqual(parsed.data.priority, updates.priority);
-      assert.strictEqual(parsed.data.title, "Issue to Update");
+      expect(parsed.data.status).toBe(updates.status);
+      expect(parsed.data.priority).toBe(updates.priority);
+      expect(parsed.data.title).toBe("Issue to Update");
     });
 
     it("should remove issue from JSONL after deletion", async () => {
@@ -193,10 +189,7 @@ describe("JSONL Export Integration", () => {
 
       // Verify it's in the JSONL file
       let issues = readJSONL(issuesJsonlPath);
-      assert.ok(
-        issues.find((i) => i.id === issueId),
-        "Issue should be in JSONL before deletion"
-      );
+      expect(issues.find((i) => i.id === issueId)).toBeTruthy();
 
       // Delete the issue
       await request(app).delete(`/api/issues/${issueId}`).expect(200);
@@ -206,10 +199,7 @@ describe("JSONL Export Integration", () => {
 
       // Verify it's removed from JSONL file
       issues = readJSONL(issuesJsonlPath);
-      assert.ok(
-        !issues.find((i) => i.id === issueId),
-        "Issue should be removed from JSONL after deletion"
-      );
+      expect(!issues.find((i) => i.id === issueId)).toBeTruthy();
     });
 
     it("should handle multiple rapid updates with debouncing", async () => {
@@ -247,11 +237,10 @@ describe("JSONL Export Integration", () => {
       const issues = readJSONL(issuesJsonlPath);
       const finalIssue = issues.find((i) => i.id === issueId);
 
-      assert.ok(finalIssue, "Issue should be in JSONL");
-      assert.strictEqual(finalIssue.priority, 2, "Should have final priority");
-      assert.strictEqual(
-        finalIssue.status,
-        "in_progress",
+      expect(finalIssue, "Issue should be in JSONL").toBeTruthy();
+      expect(finalIssue.priority).toBe(2, "Should have final priority");
+      expect(
+        finalIssue.status).toBe("in_progress",
         "Should have final status"
       );
     });
@@ -315,17 +304,17 @@ describe("JSONL Export Integration", () => {
       const updatedIssue2 = issues.find((i) => i.id === issue2Id);
       const updatedIssue3 = issues.find((i) => i.id === issue3Id);
 
-      assert.ok(updatedIssue1, "Issue 1 should be in JSONL");
-      assert.strictEqual(updatedIssue1.priority, 1, "Issue 1 should have priority 1");
-      assert.strictEqual(updatedIssue1.status, "in_progress", "Issue 1 should be in_progress");
+      expect(updatedIssue1, "Issue 1 should be in JSONL").toBeTruthy();
+      expect(updatedIssue1.priority).toBe(1, "Issue 1 should have priority 1");
+      expect(updatedIssue1.status).toBe("in_progress", "Issue 1 should be in_progress");
 
-      assert.ok(updatedIssue2, "Issue 2 should be in JSONL");
-      assert.strictEqual(updatedIssue2.priority, 2, "Issue 2 should have priority 2");
-      assert.strictEqual(updatedIssue2.status, "blocked", "Issue 2 should be blocked");
+      expect(updatedIssue2, "Issue 2 should be in JSONL").toBeTruthy();
+      expect(updatedIssue2.priority).toBe(2, "Issue 2 should have priority 2");
+      expect(updatedIssue2.status).toBe("blocked", "Issue 2 should be blocked");
 
-      assert.ok(updatedIssue3, "Issue 3 should be in JSONL");
-      assert.strictEqual(updatedIssue3.priority, 3, "Issue 3 should have priority 3");
-      assert.strictEqual(updatedIssue3.status, "closed", "Issue 3 should be closed");
+      expect(updatedIssue3, "Issue 3 should be in JSONL").toBeTruthy();
+      expect(updatedIssue3.priority).toBe(3, "Issue 3 should have priority 3");
+      expect(updatedIssue3.status).toBe("closed", "Issue 3 should be closed");
     });
   });
 
@@ -343,23 +332,23 @@ describe("JSONL Export Integration", () => {
         .send(newSpec)
         .expect(201);
 
-      assert.strictEqual(response.body.success, true);
+      expect(response.body.success).toBe(true);
       const specId = response.body.data.id;
 
       // Wait for debounced export to complete
       await waitForExport();
 
       // Verify JSONL file exists and contains the spec
-      assert.ok(fs.existsSync(specsJsonlPath), "specs.jsonl should exist");
+      expect(fs.existsSync(specsJsonlPath)).toBeTruthy();
 
       const specs = readJSONL(specsJsonlPath);
-      assert.ok(specs.length > 0, "specs.jsonl should not be empty");
+      expect(specs.length > 0, "specs.jsonl should not be empty").toBeTruthy();
 
       const exportedSpec = specs.find((s) => s.id === specId);
-      assert.ok(exportedSpec, "Created spec should be in JSONL file");
-      assert.strictEqual(exportedSpec.title, newSpec.title);
-      assert.strictEqual(exportedSpec.content, newSpec.content);
-      assert.strictEqual(exportedSpec.priority, newSpec.priority);
+      expect(exportedSpec, "Created spec should be in JSONL file").toBeTruthy();
+      expect(exportedSpec.title).toBe(newSpec.title);
+      expect(exportedSpec.content).toBe(newSpec.content);
+      expect(exportedSpec.priority).toBe(newSpec.priority);
     });
 
     it("should update JSONL file after spec update", async () => {
@@ -391,10 +380,10 @@ describe("JSONL Export Integration", () => {
       const specs = readJSONL(specsJsonlPath);
       const updatedSpec = specs.find((s) => s.id === specId);
 
-      assert.ok(updatedSpec, "Updated spec should be in JSONL file");
-      assert.strictEqual(updatedSpec.content, updates.content);
-      assert.strictEqual(updatedSpec.priority, updates.priority);
-      assert.strictEqual(updatedSpec.title, "Spec to Update"); // Original title preserved
+      expect(updatedSpec, "Updated spec should be in JSONL file").toBeTruthy();
+      expect(updatedSpec.content).toBe(updates.content);
+      expect(updatedSpec.priority).toBe(updates.priority);
+      expect(updatedSpec.title).toBe("Spec to Update"); // Original title preserved
     });
 
     it("should remove spec from JSONL after deletion", async () => {
@@ -409,10 +398,7 @@ describe("JSONL Export Integration", () => {
 
       // Verify it's in the JSONL file
       let specs = readJSONL(specsJsonlPath);
-      assert.ok(
-        specs.find((s) => s.id === specId),
-        "Spec should be in JSONL before deletion"
-      );
+      expect(specs.find((s) => s.id === specId)).toBeTruthy();
 
       // Delete the spec
       await request(app).delete(`/api/specs/${specId}`).expect(200);
@@ -422,10 +408,7 @@ describe("JSONL Export Integration", () => {
 
       // Verify it's removed from JSONL file
       specs = readJSONL(specsJsonlPath);
-      assert.ok(
-        !specs.find((s) => s.id === specId),
-        "Spec should be removed from JSONL after deletion"
-      );
+      expect(!specs.find((s) => s.id === specId)).toBeTruthy();
     });
   });
 
@@ -453,15 +436,15 @@ describe("JSONL Export Integration", () => {
       const issues = readJSONL(issuesJsonlPath);
       for (const id of issueIds) {
         const found = issues.find((i) => i.id === id);
-        assert.ok(found, `Issue ${id} should be in JSONL file`);
+        expect(found, `Issue ${id} should be in JSONL file`).toBeTruthy();
       }
 
       // File should have been modified (new mtime)
       const finalMtime = fs.statSync(issuesJsonlPath).mtimeMs;
-      assert.ok(
+      expect(
         finalMtime > initialMtime,
         "JSONL file should have been updated"
-      );
+      ).toBeTruthy();
     });
   });
 });

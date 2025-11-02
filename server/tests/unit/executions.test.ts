@@ -2,8 +2,7 @@
  * Tests for Executions database operations
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from "@sudocode/types/schema";
@@ -27,7 +26,7 @@ describe("Executions Service", () => {
   let testDir: string;
   let testIssueId: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "sudocode-test-executions-")
@@ -66,7 +65,7 @@ describe("Executions Service", () => {
     testIssueId = issue.id;
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up database
     db.close();
     if (fs.existsSync(testDir)) {
@@ -85,14 +84,14 @@ describe("Executions Service", () => {
         branch_name: "main",
       });
 
-      assert.ok(execution);
-      assert.ok(execution.id);
-      assert.strictEqual(execution.issue_id, testIssueId);
-      assert.strictEqual(execution.agent_type, "claude-code");
-      assert.strictEqual(execution.status, "running");
-      assert.ok(execution.started_at);
-      assert.ok(execution.created_at);
-      assert.ok(execution.updated_at);
+      expect(execution).toBeTruthy();
+      expect(execution.id).toBeTruthy();
+      expect(execution.issue_id).toBe(testIssueId);
+      expect(execution.agent_type).toBe("claude-code");
+      expect(execution.status).toBe("running");
+      expect(execution.started_at).toBeTruthy();
+      expect(execution.created_at).toBeTruthy();
+      expect(execution.updated_at).toBeTruthy();
     });
 
     it("should create execution with minimal fields", () => {
@@ -103,13 +102,13 @@ describe("Executions Service", () => {
         branch_name: "main",
       });
 
-      assert.ok(execution);
-      assert.strictEqual(execution.agent_type, "codex");
-      assert.strictEqual(execution.status, "running");
-      assert.strictEqual(execution.before_commit, null);
-      assert.strictEqual(execution.target_branch, "main");
-      assert.strictEqual(execution.branch_name, "main");
-      assert.strictEqual(execution.worktree_path, null);
+      expect(execution).toBeTruthy();
+      expect(execution.agent_type).toBe("codex");
+      expect(execution.status).toBe("running");
+      expect(execution.before_commit).toBe(null);
+      expect(execution.target_branch).toBe("main");
+      expect(execution.branch_name).toBe("main");
+      expect(execution.worktree_path).toBe(null);
     });
 
     it("should create execution with optional fields", () => {
@@ -122,18 +121,18 @@ describe("Executions Service", () => {
         worktree_path: "/tmp/worktree",
       });
 
-      assert.ok(execution);
-      assert.strictEqual(execution.before_commit, "abc123def456");
-      assert.strictEqual(execution.target_branch, "main");
-      assert.strictEqual(execution.branch_name, "main");
-      assert.strictEqual(execution.worktree_path, "/tmp/worktree");
+      expect(execution).toBeTruthy();
+      expect(execution.before_commit).toBe("abc123def456");
+      expect(execution.target_branch).toBe("main");
+      expect(execution.branch_name).toBe("main");
+      expect(execution.worktree_path).toBe("/tmp/worktree");
     });
   });
 
   describe("getExecution", () => {
     let executionId: string;
 
-    before(() => {
+    beforeAll(() => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
@@ -146,19 +145,19 @@ describe("Executions Service", () => {
     it("should get an execution by ID", () => {
       const execution = getExecution(db, executionId);
 
-      assert.ok(execution);
-      assert.strictEqual(execution.id, executionId);
-      assert.strictEqual(execution.issue_id, testIssueId);
+      expect(execution).toBeTruthy();
+      expect(execution.id).toBe(executionId);
+      expect(execution.issue_id).toBe(testIssueId);
     });
 
     it("should return null for non-existent execution", () => {
       const execution = getExecution(db, "non-existent-id");
-      assert.strictEqual(execution, null);
+      expect(execution).toBe(null);
     });
   });
 
   describe("getExecutionsByIssueId", () => {
-    before(() => {
+    beforeAll(() => {
       // Create multiple executions for the same issue
       createExecution(db, {
         issue_id: testIssueId,
@@ -177,26 +176,26 @@ describe("Executions Service", () => {
     it("should get all executions for an issue", () => {
       const executions = getExecutionsByIssueId(db, testIssueId);
 
-      assert.ok(Array.isArray(executions));
-      assert.ok(executions.length >= 2);
+      expect(Array.isArray(executions)).toBeTruthy();
+      expect(executions.length >= 2).toBeTruthy();
 
       // Check that all executions belong to the same issue
       executions.forEach((exec) => {
-        assert.strictEqual(exec.issue_id, testIssueId);
+        expect(exec.issue_id).toBe(testIssueId);
       });
     });
 
     it("should return empty array for issue with no executions", () => {
       const executions = getExecutionsByIssueId(db, "non-existent-issue");
-      assert.ok(Array.isArray(executions));
-      assert.strictEqual(executions.length, 0);
+      expect(Array.isArray(executions)).toBeTruthy();
+      expect(executions.length).toBe(0);
     });
   });
 
   describe("updateExecution", () => {
     let executionId: string;
 
-    before(() => {
+    beforeAll(() => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
@@ -211,9 +210,9 @@ describe("Executions Service", () => {
         status: "completed",
       });
 
-      assert.ok(updated);
-      assert.strictEqual(updated.status, "completed");
-      assert.strictEqual(updated.id, executionId);
+      expect(updated).toBeTruthy();
+      expect(updated.status).toBe("completed");
+      expect(updated.id).toBe(executionId);
     });
 
     it("should update multiple fields", () => {
@@ -228,14 +227,14 @@ describe("Executions Service", () => {
         summary: "Fixed the bug successfully",
       });
 
-      assert.ok(updated);
-      assert.strictEqual(updated.status, "completed");
-      assert.strictEqual(Number(updated.completed_at), now);
-      assert.strictEqual(updated.exit_code, 0);
-      assert.strictEqual(updated.after_commit, "def456abc123");
-      assert.strictEqual(updated.target_branch, "feature-branch");
-      assert.strictEqual(updated.worktree_path, "/tmp/execution-worktree");
-      assert.strictEqual(updated.summary, "Fixed the bug successfully");
+      expect(updated).toBeTruthy();
+      expect(updated.status).toBe("completed");
+      expect(Number(updated.completed_at)).toBe(now);
+      expect(updated.exit_code).toBe(0);
+      expect(updated.after_commit).toBe("def456abc123");
+      expect(updated.target_branch).toBe("feature-branch");
+      expect(updated.worktree_path).toBe("/tmp/execution-worktree");
+      expect(updated.summary).toBe("Fixed the bug successfully");
     });
 
     it("should update session_id", () => {
@@ -243,8 +242,8 @@ describe("Executions Service", () => {
         session_id: "claude-session-abc123",
       });
 
-      assert.ok(updated);
-      assert.strictEqual(updated.session_id, "claude-session-abc123");
+      expect(updated).toBeTruthy();
+      expect(updated.session_id).toBe("claude-session-abc123");
     });
 
     it("should update error_message", () => {
@@ -252,21 +251,21 @@ describe("Executions Service", () => {
         error_message: "Failed to compile TypeScript",
       });
 
-      assert.ok(updated);
-      assert.strictEqual(updated.error_message, "Failed to compile TypeScript");
+      expect(updated).toBeTruthy();
+      expect(updated.error_message).toBe("Failed to compile TypeScript");
     });
 
     it("should throw error for non-existent execution", () => {
-      assert.throws(() => {
+      expect(() => {
         updateExecution(db, "non-existent-id", {
           status: "completed",
-        });
+        }).toThrow();
       });
     });
   });
 
   describe("getAllExecutions", () => {
-    before(() => {
+    beforeAll(() => {
       // Create executions with different statuses
       const exec1 = createExecution(db, {
         issue_id: testIssueId,
@@ -288,26 +287,26 @@ describe("Executions Service", () => {
     it("should get all executions", () => {
       const executions = getAllExecutions(db);
 
-      assert.ok(Array.isArray(executions));
-      assert.ok(executions.length > 0);
+      expect(Array.isArray(executions)).toBeTruthy();
+      expect(executions.length > 0).toBeTruthy();
     });
 
     it("should filter executions by status", () => {
       const completed = getAllExecutions(db, "completed");
 
-      assert.ok(Array.isArray(completed));
-      assert.ok(completed.length > 0);
+      expect(Array.isArray(completed)).toBeTruthy();
+      expect(completed.length > 0).toBeTruthy();
 
       // All should have completed status
       completed.forEach((exec) => {
-        assert.strictEqual(exec.status, "completed");
+        expect(exec.status).toBe("completed");
       });
     });
 
     it("should return empty array for status with no executions", () => {
       const stopped = getAllExecutions(db, "stopped");
 
-      assert.ok(Array.isArray(stopped));
+      expect(Array.isArray(stopped)).toBeTruthy();
       // May or may not be empty depending on previous tests
     });
   });
@@ -315,7 +314,7 @@ describe("Executions Service", () => {
   describe("deleteExecution", () => {
     let executionId: string;
 
-    before(() => {
+    beforeAll(() => {
       const execution = createExecution(db, {
         issue_id: testIssueId,
         agent_type: "claude-code",
@@ -328,16 +327,16 @@ describe("Executions Service", () => {
     it("should delete an execution", () => {
       const result = deleteExecution(db, executionId);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
 
       // Verify it's actually deleted
       const execution = getExecution(db, executionId);
-      assert.strictEqual(execution, null);
+      expect(execution).toBe(null);
     });
 
     it("should return false for non-existent execution", () => {
       const result = deleteExecution(db, "non-existent-id");
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
   });
 
@@ -352,14 +351,14 @@ describe("Executions Service", () => {
         before_commit: "abc123",
       });
 
-      assert.ok(execution);
-      assert.strictEqual(execution.status, "running");
+      expect(execution).toBeTruthy();
+      expect(execution.status).toBe("running");
 
       // Update with session ID (agent started)
       const withSession = updateExecution(db, execution.id, {
         session_id: "session-xyz",
       });
-      assert.strictEqual(withSession.session_id, "session-xyz");
+      expect(withSession.session_id).toBe("session-xyz");
 
       // Complete the execution
       const completed = updateExecution(db, execution.id, {
@@ -370,15 +369,15 @@ describe("Executions Service", () => {
         summary: "Successfully implemented the feature",
       });
 
-      assert.strictEqual(completed.status, "completed");
-      assert.strictEqual(completed.exit_code, 0);
-      assert.strictEqual(completed.after_commit, "def456");
-      assert.ok(completed.completed_at);
+      expect(completed.status).toBe("completed");
+      expect(completed.exit_code).toBe(0);
+      expect(completed.after_commit).toBe("def456");
+      expect(completed.completed_at).toBeTruthy();
 
       // Verify it's in the completed list
       const completedExecutions = getAllExecutions(db, "completed");
       const found = completedExecutions.find((e) => e.id === execution.id);
-      assert.ok(found);
+      expect(found).toBeTruthy();
     });
 
     it("should handle failed execution", () => {
@@ -396,8 +395,8 @@ describe("Executions Service", () => {
         exit_code: 1,
       });
 
-      assert.strictEqual(failed.status, "failed");
-      assert.strictEqual(failed.exit_code, 1);
+      expect(failed.status).toBe("failed");
+      expect(failed.exit_code).toBe(1);
     });
   });
 });

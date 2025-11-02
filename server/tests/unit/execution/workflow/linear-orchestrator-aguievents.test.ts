@@ -8,8 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import { AgUiEventAdapter } from "../../../../src/execution/output/ag-ui-adapter.js";
 import { EventType } from "@ag-ui/core";
@@ -93,8 +92,8 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const runStartedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_STARTED
     );
-    assert.ok(runStartedEvent, "RUN_STARTED event should be emitted");
-    assert.strictEqual(runStartedEvent.runId, "test-run-id");
+    expect(runStartedEvent, "RUN_STARTED event should be emitted").toBeTruthy();
+    expect(runStartedEvent.runId).toBe("test-run-id");
   });
 
   it("should emit STEP_STARTED for each workflow step", async () => {
@@ -128,13 +127,9 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const stepStartedEvents = capturedEvents.filter(
       (e) => e.type === EventType.STEP_STARTED
     );
-    assert.strictEqual(
-      stepStartedEvents.length,
-      2,
-      "Should emit STEP_STARTED for each step"
-    );
-    assert.strictEqual(stepStartedEvents[0].stepName, "issue");
-    assert.strictEqual(stepStartedEvents[1].stepName, "spec");
+    expect(stepStartedEvents.length).toBe(2);
+    expect(stepStartedEvents[0].stepName).toBe("issue");
+    expect(stepStartedEvents[1].stepName).toBe("spec");
   });
 
   it("should emit STEP_FINISHED for each completed step", async () => {
@@ -163,9 +158,12 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const stepFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.STEP_FINISHED
     );
-    assert.ok(stepFinishedEvent, "STEP_FINISHED event should be emitted");
-    assert.strictEqual(stepFinishedEvent.stepName, "step-1");
-    assert.strictEqual(stepFinishedEvent.rawEvent?.status, "success");
+    expect(
+      stepFinishedEvent,
+      "STEP_FINISHED event should be emitted"
+    ).toBeTruthy();
+    expect(stepFinishedEvent.stepName).toBe("step-1");
+    expect(stepFinishedEvent.rawEvent?.status).toBe("success");
   });
 
   it("should emit RUN_FINISHED when workflow completes", async () => {
@@ -194,8 +192,11 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const runFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_FINISHED
     );
-    assert.ok(runFinishedEvent, "RUN_FINISHED event should be emitted");
-    assert.strictEqual(runFinishedEvent.runId, "test-run-id");
+    expect(
+      runFinishedEvent,
+      "RUN_FINISHED event should be emitted"
+    ).toBeTruthy();
+    expect(runFinishedEvent.runId).toBe("test-run-id");
   });
 
   it("should emit RUN_ERROR when workflow fails", async () => {
@@ -240,14 +241,14 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const execution = await orchestrator.waitForWorkflow(executionId);
 
     // Verify workflow failed
-    assert.strictEqual(execution.status, "failed");
+    expect(execution.status).toBe("failed");
 
     // Find RUN_ERROR event
     const runErrorEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_ERROR
     );
-    assert.ok(runErrorEvent, "RUN_ERROR event should be emitted");
-    assert.strictEqual(runErrorEvent.message, "Execution failed");
+    expect(runErrorEvent, "RUN_ERROR event should be emitted").toBeTruthy();
+    expect(runErrorEvent.message).toBe("Execution failed");
   });
 
   it("should emit STEP_FINISHED with error status when step fails", async () => {
@@ -318,10 +319,10 @@ describe("LinearOrchestrator AG-UI Events", () => {
       (e) =>
         e.type === EventType.STEP_FINISHED && e.rawEvent?.status === "error"
     );
-    assert.ok(
+    expect(
       stepFinishedEvent,
       "STEP_FINISHED event with error status should be emitted"
-    );
+    ).toBeTruthy();
   });
 
   it("should emit events in correct order", async () => {
@@ -357,10 +358,10 @@ describe("LinearOrchestrator AG-UI Events", () => {
     );
 
     // Verify order
-    assert.ok(
+    expect(
       lifecycleEvents.length >= 4,
       "Should have at least 4 lifecycle events"
-    );
+    ).toBeTruthy();
 
     // Find positions of each event type
     const runStartedIndex = lifecycleEvents.findIndex(
@@ -376,18 +377,18 @@ describe("LinearOrchestrator AG-UI Events", () => {
       (e) => e.type === EventType.RUN_FINISHED
     );
 
-    assert.ok(
+    expect(
       runStartedIndex < stepStartedIndex,
       "RUN_STARTED should come before STEP_STARTED"
-    );
-    assert.ok(
+    ).toBeTruthy();
+    expect(
       stepStartedIndex < stepFinishedIndex,
       "STEP_STARTED should come before STEP_FINISHED"
-    );
-    assert.ok(
+    ).toBeTruthy();
+    expect(
       stepFinishedIndex < runFinishedIndex,
       "STEP_FINISHED should come before RUN_FINISHED"
-    );
+    ).toBeTruthy();
   });
 
   it("should work without adapter (backward compatibility)", async () => {
@@ -435,12 +436,9 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const runStartedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_STARTED
     );
-    assert.ok(runStartedEvent);
-    assert.ok(runStartedEvent.rawEvent);
-    assert.strictEqual(
-      runStartedEvent.rawEvent.workflowId,
-      "test-workflow-123"
-    );
+    expect(runStartedEvent).toBeTruthy();
+    expect(runStartedEvent.rawEvent).toBeTruthy();
+    expect(runStartedEvent.rawEvent.workflowId).toBe("test-workflow-123");
   });
 
   it("should include step output in STEP_FINISHED rawEvent", async () => {
@@ -504,8 +502,8 @@ describe("LinearOrchestrator AG-UI Events", () => {
     const stepFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.STEP_FINISHED
     );
-    assert.ok(stepFinishedEvent);
-    assert.ok(stepFinishedEvent.rawEvent);
-    assert.deepStrictEqual(stepFinishedEvent.rawEvent.output, outputData);
+    expect(stepFinishedEvent).toBeTruthy();
+    expect(stepFinishedEvent.rawEvent).toBeTruthy();
+    expect(stepFinishedEvent.rawEvent.output).toEqual(outputData);
   });
 });

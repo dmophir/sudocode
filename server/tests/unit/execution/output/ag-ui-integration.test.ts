@@ -5,8 +5,7 @@
  * output processors with AG-UI adapters.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import {
   createAgUiSystem,
   wireManually,
@@ -22,10 +21,10 @@ describe('AG-UI Integration Helpers', () => {
     it('should create processor and adapter', () => {
       const { processor, adapter } = createAgUiSystem('run-123');
 
-      assert.ok(processor);
-      assert.ok(adapter);
-      assert.ok(processor instanceof ClaudeCodeOutputProcessor);
-      assert.ok(adapter instanceof AgUiEventAdapter);
+      expect(processor).toBeTruthy();
+      expect(adapter).toBeTruthy();
+      expect(processor instanceof ClaudeCodeOutputProcessor).toBeTruthy();
+      expect(adapter instanceof AgUiEventAdapter).toBeTruthy();
     });
 
     it('should wire processor to adapter', async () => {
@@ -55,15 +54,15 @@ describe('AG-UI Integration Helpers', () => {
       );
 
       // Should have received TOOL_CALL_START and TOOL_CALL_ARGS events
-      assert.ok(events.length >= 2);
-      assert.strictEqual(events[0].type, EventType.TOOL_CALL_START);
-      assert.strictEqual(events[1].type, EventType.TOOL_CALL_ARGS);
+      expect(events.length >= 2).toBeTruthy();
+      expect(events[0].type).toBe(EventType.TOOL_CALL_START);
+      expect(events[1].type).toBe(EventType.TOOL_CALL_ARGS);
     });
 
     it('should use provided runId', () => {
       const { adapter } = createAgUiSystem('test-run-456');
 
-      assert.strictEqual(adapter.getRunId(), 'test-run-456');
+      expect(adapter.getRunId()).toBe('test-run-456');
     });
 
     it('should use provided threadId', () => {
@@ -77,8 +76,8 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      assert.strictEqual(events[0].runId, 'run-123');
-      assert.strictEqual(events[0].threadId, 'thread-456');
+      expect(events[0].runId).toBe('run-123');
+      expect(events[0].threadId).toBe('thread-456');
     });
 
     it('should default threadId to runId', () => {
@@ -92,8 +91,8 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      assert.strictEqual(events[0].runId, 'run-123');
-      assert.strictEqual(events[0].threadId, 'run-123');
+      expect(events[0].runId).toBe('run-123');
+      expect(events[0].threadId).toBe('run-123');
     });
   });
 
@@ -129,8 +128,8 @@ describe('AG-UI Integration Helpers', () => {
       );
 
       // Should have received events
-      assert.ok(events.length >= 2);
-      assert.strictEqual(events[0].type, EventType.TOOL_CALL_START);
+      expect(events.length >= 2).toBeTruthy();
+      expect(events[0].type).toBe(EventType.TOOL_CALL_START);
     });
 
     it('should work with already configured processor', () => {
@@ -147,8 +146,8 @@ describe('AG-UI Integration Helpers', () => {
       wireManually(processor, adapter);
 
       // Both processor and adapter handlers should work
-      assert.ok(processor);
-      assert.ok(adapter);
+      expect(processor).toBeTruthy();
+      expect(adapter).toBeTruthy();
     });
   });
 
@@ -184,8 +183,8 @@ describe('AG-UI Integration Helpers', () => {
         'run-123'
       );
 
-      assert.strictEqual(processor, mockProcessor);
-      assert.ok(adapter instanceof AgUiEventAdapter);
+      expect(processor).toBe(mockProcessor);
+      expect(adapter instanceof AgUiEventAdapter).toBeTruthy();
     });
 
     it('should respect provided threadId', () => {
@@ -227,7 +226,7 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      assert.strictEqual(events[0].threadId, 'thread-789');
+      expect(events[0].threadId).toBe('thread-789');
     });
   });
 
@@ -273,11 +272,11 @@ describe('AG-UI Integration Helpers', () => {
       const eventTypes = events.map((e) => e.type);
 
       // Verify basic tool call events are emitted
-      assert.ok(eventTypes.includes(EventType.TOOL_CALL_START));
-      assert.ok(eventTypes.includes(EventType.TOOL_CALL_ARGS));
+      expect(eventTypes.includes(EventType.TOOL_CALL_START)).toBeTruthy();
+      expect(eventTypes.includes(EventType.TOOL_CALL_ARGS)).toBeTruthy();
       // State deltas are emitted instead of specific result/end events
-      assert.ok(eventTypes.includes(EventType.STATE_DELTA));
-      assert.ok(events.length > 0);
+      expect(eventTypes.includes(EventType.STATE_DELTA)).toBeTruthy();
+      expect(events.length > 0).toBeTruthy();
     });
 
     it('should track metrics through processor', async () => {
@@ -312,8 +311,8 @@ describe('AG-UI Integration Helpers', () => {
 
       // Check metrics
       const metrics = processor.getMetrics();
-      assert.ok(metrics.totalMessages > 0);
-      assert.ok(metrics.toolCalls.length > 0);
+      expect(metrics.totalMessages > 0).toBeTruthy();
+      expect(metrics.toolCalls.length > 0).toBeTruthy();
     });
 
     it('should maintain state across multiple events', async () => {
@@ -354,7 +353,7 @@ describe('AG-UI Integration Helpers', () => {
 
       // Check adapter state
       const state = adapter.getState();
-      assert.strictEqual(state.toolCallCount, 2);
+      expect(state.toolCallCount).toBe(2);
     });
   });
 });

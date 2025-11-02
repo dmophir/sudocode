@@ -5,8 +5,7 @@
  * with graceful shutdown and SIGKILL fallback.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 
@@ -35,9 +34,9 @@ describe('Process Termination', () => {
       await manager.terminateProcess(processId);
 
       // Process should be terminated
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
       // Status will be 'crashed' after process exits during grace period
-      assert.strictEqual(managedProcess.status, 'crashed');
+      expect(managedProcess.status).toBe('crashed');
     });
 
     it('sets status to terminating then crashed', async () => {
@@ -54,12 +53,12 @@ describe('Process Termination', () => {
 
       // Capture status before termination starts
       const beforeStatus = managedProcess.status;
-      assert.strictEqual(beforeStatus, 'busy');
+      expect(beforeStatus).toBe('busy');
 
       await manager.terminateProcess(managedProcess.id);
 
       // After termination completes, process has exited so status is crashed
-      assert.strictEqual(managedProcess.status, 'crashed');
+      expect(managedProcess.status).toBe('crashed');
     });
 
     it('waits up to 2 seconds for graceful shutdown', async () => {
@@ -86,7 +85,7 @@ describe('Process Termination', () => {
 
       // Process should exit faster than the 2-second grace period
       // (includes Node.js startup overhead and signal handling)
-      assert.ok(duration < 1800); // Much less than 2 seconds
+      expect(duration < 1800).toBeTruthy(); // Much less than 2 seconds
     });
 
     it('sends SIGKILL if process does not exit gracefully', async () => {
@@ -108,7 +107,7 @@ describe('Process Termination', () => {
       await manager.terminateProcess(managedProcess.id);
 
       // Process should eventually be killed
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('accepts custom signal parameter', async () => {
@@ -126,7 +125,7 @@ describe('Process Termination', () => {
       // Use SIGINT instead of SIGTERM
       await manager.terminateProcess(managedProcess.id, 'SIGINT');
 
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('is idempotent - safe to call multiple times', async () => {
@@ -147,7 +146,7 @@ describe('Process Termination', () => {
       await manager.terminateProcess(managedProcess.id); // Already terminated - returns immediately
 
       // Should not throw errors
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('returns immediately for non-existent process', async () => {
@@ -176,7 +175,7 @@ describe('Process Termination', () => {
       const duration = Date.now() - start;
 
       // Should return immediately without waiting 2 seconds
-      assert.ok(duration < 500);
+      expect(duration < 500).toBeTruthy();
     });
   });
 
@@ -195,7 +194,7 @@ describe('Process Termination', () => {
 
       await manager.releaseProcess(managedProcess.id);
 
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('is equivalent to terminateProcess with default signal', async () => {
@@ -213,8 +212,8 @@ describe('Process Termination', () => {
       await manager.releaseProcess(managedProcess.id);
 
       // After completion, process has exited so status is crashed
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('does not throw for non-existent process', async () => {
@@ -243,9 +242,9 @@ describe('Process Termination', () => {
       await manager.shutdown();
 
       // All processes should be killed
-      assert.strictEqual(process1.process.killed, true);
-      assert.strictEqual(process2.process.killed, true);
-      assert.strictEqual(process3.process.killed, true);
+      expect(process1.process.killed).toBe(true);
+      expect(process2.process.killed).toBe(true);
+      expect(process3.process.killed).toBe(true);
     });
 
     it('terminates processes in parallel', async () => {
@@ -275,7 +274,7 @@ describe('Process Termination', () => {
 
       // If sequential, would take 3 * ~1000ms = 3000ms
       // If parallel, should take ~1000ms (much less than sequential)
-      assert.ok(duration < 2000); // Much less than sequential (3000ms)
+      expect(duration < 2000).toBeTruthy(); // Much less than sequential (3000ms)
     });
 
     it('handles empty process list', async () => {
@@ -331,7 +330,7 @@ describe('Process Termination', () => {
       // Shutdown should handle both
       await manager.shutdown();
 
-      assert.strictEqual(running.process.killed, true);
+      expect(running.process.killed).toBe(true);
     });
   });
 
@@ -361,11 +360,11 @@ describe('Process Termination', () => {
 
       // Should wait at least close to 2 seconds before SIGKILL
       // The actual duration may vary due to process scheduling and Node.js overhead
-      assert.ok(duration >= 1000, `Duration ${duration}ms should be >= 1000ms`);
-      assert.ok(duration <= 3500, `Duration ${duration}ms should be <= 3500ms`);
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(duration >= 1000, `Duration ${duration}ms should be >= 1000ms`).toBeTruthy();
+      expect(duration <= 3500, `Duration ${duration}ms should be <= 3500ms`).toBeTruthy();
+      expect(managedProcess.process.killed).toBe(true);
       // Verify process was killed (not exited gracefully)
-      assert.ok(managedProcess.signal, 'Process should have been killed by signal');
+      expect(managedProcess.signal, 'Process should have been killed by signal').toBeTruthy();
     });
 
     it('captures terminating status during termination', async () => {
@@ -385,7 +384,7 @@ describe('Process Termination', () => {
 
       const managedProcess = await manager.acquireProcess(config);
 
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Start termination in background
       const terminationPromise = manager.terminateProcess(managedProcess.id);
@@ -397,10 +396,10 @@ describe('Process Termination', () => {
       await terminationPromise;
 
       // Should have been 'terminating' at some point, or already 'crashed' if fast
-      assert.ok(
+      expect(
         duringTerminationStatus === 'terminating' || duringTerminationStatus === 'crashed',
         `Expected terminating or crashed, got ${duringTerminationStatus}`
-      );
+      ).toBeTruthy();
     });
 
     it('shutdown uses SIGTERM signal', async () => {
@@ -436,7 +435,7 @@ describe('Process Termination', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // If shutdown used SIGTERM, process should have printed message
-      assert.ok(output.includes('SIGTERM received'));
+      expect(output.includes('SIGTERM received')).toBeTruthy();
     });
   });
 
@@ -475,7 +474,7 @@ describe('Process Termination', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Process should have had time to clean up
-      assert.ok(output.includes('cleaned'));
+      expect(output.includes('cleaned')).toBeTruthy();
     });
 
     it('force kills process that ignores SIGTERM', async () => {
@@ -511,8 +510,8 @@ describe('Process Termination', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Process should be killed despite ignoring SIGTERM
-      assert.strictEqual(managedProcess.process.killed, true);
-      assert.ok(output.includes('ignored'));
+      expect(managedProcess.process.killed).toBe(true);
+      expect(output.includes('ignored')).toBeTruthy();
     });
   });
 });

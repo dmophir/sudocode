@@ -4,8 +4,7 @@
  * Tests promise-based waiting for task completion and failure.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from '../../../../src/execution/engine/simple-engine.js';
 import { MockProcessManager } from './mock-process-manager.js';
 import type { ExecutionTask } from '../../../../src/execution/engine/types.js';
@@ -37,9 +36,9 @@ describe('Promise Resolution', () => {
       // Wait for task to complete
       const result = await engine.waitForTask('task-1');
 
-      assert.strictEqual(result.taskId, 'task-1');
-      assert.strictEqual(result.success, true);
-      assert.ok(result.output);
+      expect(result.taskId).toBe('task-1');
+      expect(result.success).toBe(true);
+      expect(result.output).toBeTruthy();
     });
 
     it('resolves immediately if task already completed', async () => {
@@ -62,8 +61,8 @@ describe('Promise Resolution', () => {
       // Now wait for already-completed task
       const result = await engine.waitForTask('task-1');
 
-      assert.strictEqual(result.taskId, 'task-1');
-      assert.strictEqual(result.success, true);
+      expect(result.taskId).toBe('task-1');
+      expect(result.success).toBe(true);
     });
 
     it('handles multiple waiters for same task', async () => {
@@ -88,12 +87,12 @@ describe('Promise Resolution', () => {
       ]);
 
       // All should get the same result
-      assert.strictEqual(result1.taskId, 'task-1');
-      assert.strictEqual(result2.taskId, 'task-1');
-      assert.strictEqual(result3.taskId, 'task-1');
-      assert.strictEqual(result1.success, true);
-      assert.strictEqual(result2.success, true);
-      assert.strictEqual(result3.success, true);
+      expect(result1.taskId).toBe('task-1');
+      expect(result2.taskId).toBe('task-1');
+      expect(result3.taskId).toBe('task-1');
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+      expect(result3.success).toBe(true);
     });
   });
 
@@ -115,9 +114,9 @@ describe('Promise Resolution', () => {
       await engine.submitTask(task);
 
       // Wait for task - should reject
-      await assert.rejects(async () => {
+      await expect(async () => {
         await engine.waitForTask('task-1');
-      });
+      }).rejects.toThrow();
     });
 
     it('rejects all waiters when task fails', async () => {
@@ -143,9 +142,9 @@ describe('Promise Resolution', () => {
         engine.waitForTask('task-1'),
       ]);
 
-      assert.strictEqual(results[0].status, 'rejected');
-      assert.strictEqual(results[1].status, 'rejected');
-      assert.strictEqual(results[2].status, 'rejected');
+      expect(results[0].status).toBe('rejected');
+      expect(results[1].status).toBe('rejected');
+      expect(results[2].status).toBe('rejected');
     });
   });
 
@@ -189,11 +188,11 @@ describe('Promise Resolution', () => {
       // Wait for all tasks
       const results = await engine.waitForTasks(['task-1', 'task-2', 'task-3']);
 
-      assert.strictEqual(results.length, 3);
-      assert.strictEqual(results[0].taskId, 'task-1');
-      assert.strictEqual(results[1].taskId, 'task-2');
-      assert.strictEqual(results[2].taskId, 'task-3');
-      assert.ok(results.every((r) => r.success));
+      expect(results.length).toBe(3);
+      expect(results[0].taskId).toBe('task-1');
+      expect(results[1].taskId).toBe('task-2');
+      expect(results[2].taskId).toBe('task-3');
+      expect(results.every((r) => r.success)).toBeTruthy();
     });
 
     it('waits for mix of completed and pending tasks', async () => {
@@ -230,10 +229,10 @@ describe('Promise Resolution', () => {
       // Wait for both
       const results = await engine.waitForTasks(['task-1', 'task-2']);
 
-      assert.strictEqual(results.length, 2);
-      assert.strictEqual(results[0].taskId, 'task-1');
-      assert.strictEqual(results[1].taskId, 'task-2');
-      assert.ok(results.every((r) => r.success));
+      expect(results.length).toBe(2);
+      expect(results[0].taskId).toBe('task-1');
+      expect(results[1].taskId).toBe('task-2');
+      expect(results.every((r) => r.success)).toBeTruthy();
     });
 
     it('rejects if any task fails', async () => {
@@ -270,14 +269,14 @@ describe('Promise Resolution', () => {
       await engine.submitTasks(tasks);
 
       // Should reject because task-2 fails
-      await assert.rejects(async () => {
+      await expect(async () => {
         await engine.waitForTasks(['task-1', 'task-2']);
-      });
+      }).rejects.toThrow();
     });
 
     it('handles empty task list', async () => {
       const results = await engine.waitForTasks([]);
-      assert.deepStrictEqual(results, []);
+      expect(results).toEqual([]);
     });
   });
 
@@ -311,14 +310,14 @@ describe('Promise Resolution', () => {
       // Wait for both - child should wait for parent
       const results = await engine.waitForTasks(['task-1', 'task-2']);
 
-      assert.strictEqual(results.length, 2);
-      assert.ok(results.every((r) => r.success));
+      expect(results.length).toBe(2);
+      expect(results.every((r) => r.success)).toBeTruthy();
 
       // Verify completion times - task-2 should complete after task-1
-      assert.ok(
+      expect(
         results[0].completedAt! <= results[1].completedAt!,
         'Parent should complete before or at same time as child'
-      );
+      ).toBeTruthy();
     });
   });
 
@@ -349,8 +348,8 @@ describe('Promise Resolution', () => {
       // Wait for task - should eventually succeed after retry
       const result = await engine.waitForTask('task-1');
 
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(attemptCount, 2); // Original + 1 retry
+      expect(result.success).toBe(true);
+      expect(attemptCount).toBe(2); // Original + 1 retry
     });
 
     it('rejects after all retries exhausted', async () => {
@@ -372,9 +371,9 @@ describe('Promise Resolution', () => {
       await engine.submitTask(task);
 
       // Should reject after all retries
-      await assert.rejects(async () => {
+      await expect(async () => {
         await engine.waitForTask('task-1');
-      });
+      }).rejects.toThrow();
     });
   });
 
@@ -413,10 +412,10 @@ describe('Promise Resolution', () => {
           ),
         ]);
         // If we get here, task somehow completed despite cancellation (shouldn't happen)
-        assert.ok(true);
+        expect(true).toBeTruthy();
       } catch (error: any) {
         // Either rejects with process error or times out - both are acceptable
-        assert.ok(error !== null);
+        expect(error !== null).toBeTruthy();
       }
     });
   });
@@ -442,7 +441,7 @@ describe('Promise Resolution', () => {
 
       // All tasks should complete
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.completedTasks, 10);
+      expect(metrics.completedTasks).toBe(10);
     });
 
     it('handles waiting for same task multiple times sequentially', async () => {
@@ -464,9 +463,9 @@ describe('Promise Resolution', () => {
       const result2 = await engine.waitForTask('task-1');
       const result3 = await engine.waitForTask('task-1');
 
-      assert.strictEqual(result1.taskId, 'task-1');
-      assert.strictEqual(result2.taskId, 'task-1');
-      assert.strictEqual(result3.taskId, 'task-1');
+      expect(result1.taskId).toBe('task-1');
+      expect(result2.taskId).toBe('task-1');
+      expect(result3.taskId).toBe('task-1');
     });
   });
 });

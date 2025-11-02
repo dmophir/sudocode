@@ -2,8 +2,7 @@
  * Tests for ExecutionLifecycleService
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll, vi } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from "@sudocode/types/schema";
@@ -34,7 +33,7 @@ describe("ExecutionLifecycleService", () => {
   let testIssueId: string;
   let testIssueTitle: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "sudocode-test-lifecycle-")
@@ -71,7 +70,7 @@ describe("ExecutionLifecycleService", () => {
     testIssueTitle = issue.title;
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up database
     db.close();
     if (fs.existsSync(testDir)) {
@@ -101,25 +100,25 @@ describe("ExecutionLifecycleService", () => {
       });
 
       // Verify execution was created
-      assert.ok(result.execution);
-      assert.strictEqual(result.execution.issue_id, testIssueId);
-      assert.strictEqual(result.execution.agent_type, "claude-code");
-      assert.strictEqual(result.execution.target_branch, "main");
-      assert.strictEqual(result.execution.status, "running");
+      expect(result.execution).toBeTruthy();
+      expect(result.execution.issue_id).toBe(testIssueId);
+      expect(result.execution.agent_type).toBe("claude-code");
+      expect(result.execution.target_branch).toBe("main");
+      expect(result.execution.status).toBe("running");
 
       // Verify branch name format
-      assert.ok(result.branchName.startsWith("sudocode/"));
-      assert.ok(result.branchName.includes("test-issue-for-lifecycle"));
+      expect(result.branchName.startsWith("sudocode/")).toBeTruthy();
+      expect(result.branchName.includes("test-issue-for-lifecycle")).toBeTruthy();
 
       // Verify worktree path format
-      assert.ok(result.worktreePath.includes(".sudocode/worktrees"));
+      expect(result.worktreePath.includes(".sudocode/worktrees")).toBeTruthy();
 
       // Verify worktree manager was called
-      assert.strictEqual(mockWorktreeManager.createWorktreeCalls.length, 1);
+      expect(mockWorktreeManager.createWorktreeCalls.length).toBe(1);
       const createCall = mockWorktreeManager.createWorktreeCalls[0];
-      assert.strictEqual(createCall.repoPath, testDir);
-      assert.strictEqual(createCall.baseBranch, "main");
-      assert.strictEqual(createCall.createBranch, true);
+      expect(createCall.repoPath).toBe(testDir);
+      expect(createCall.baseBranch).toBe("main");
+      expect(createCall.createBranch).toBe(true);
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {
@@ -146,13 +145,13 @@ describe("ExecutionLifecycleService", () => {
           targetBranch: "main",
           repoPath: testDir,
         });
-        assert.fail("Should have thrown error");
+        expect.fail("Should have thrown error");
       } catch (error) {
         // Expected error
       }
 
       // Verify worktree cleanup was called
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(1);
     });
 
     it("should generate sanitized branch names", async () => {
@@ -173,21 +172,15 @@ describe("ExecutionLifecycleService", () => {
       });
 
       // Branch name should be sanitized
-      assert.ok(result.branchName.includes("fix-bug-auth-login-issues"));
-      assert.ok(!result.branchName.includes(":"));
-      assert.ok(!result.branchName.includes("!"));
+      expect(result.branchName.includes("fix-bug-auth-login-issues")).toBeTruthy();
+      expect(!result.branchName.includes(":")).toBeTruthy();
+      expect(!result.branchName.includes("!")).toBeTruthy();
 
       // Check that the title portion (after last slash) is sanitized
       const titlePortion = result.branchName.split("/").pop();
-      assert.ok(titlePortion);
-      assert.ok(
-        !titlePortion.includes(":"),
-        "sanitized portion should not contain colon"
-      );
-      assert.ok(
-        !titlePortion.includes("!"),
-        "sanitized portion should not contain exclamation"
-      );
+      expect(titlePortion).toBeTruthy();
+      expect(!titlePortion.includes(":")).toBeTruthy();
+      expect(!titlePortion.includes("!")).toBeTruthy();
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {
@@ -219,15 +212,14 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree cleanup was called
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
-      assert.strictEqual(
-        mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath,
-        result.worktreePath
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(1);
+      expect(
+        mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath).toBe(result.worktreePath
       );
 
       // Verify execution worktree_path is still set (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, result.worktreePath);
+      expect(execution?.worktree_path).toBe(result.worktreePath);
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {
@@ -248,7 +240,7 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupExecution("non-existent-id");
 
       // Verify worktree cleanup was not called
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(0);
     });
 
     it("should handle execution without worktree", async () => {
@@ -278,7 +270,7 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree cleanup was not called
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(0);
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {
@@ -310,12 +302,11 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was called for orphaned worktree
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
-      assert.ok(
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(1);
+      expect(
         mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath.includes(
           "orphaned-exec-id"
-        )
-      );
+        )).toBeTruthy();
     });
 
     it("should cleanup worktrees for completed executions", async () => {
@@ -356,10 +347,9 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was called
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 1);
-      assert.strictEqual(
-        mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath,
-        result.worktreePath
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(1);
+      expect(
+        mockWorktreeManager.cleanupWorktreeCalls[0].worktreePath).toBe(result.worktreePath
       );
     });
 
@@ -396,7 +386,7 @@ describe("ExecutionLifecycleService", () => {
       await service.cleanupOrphanedWorktrees();
 
       // Verify cleanup was NOT called (execution still running)
-      assert.strictEqual(mockWorktreeManager.cleanupWorktreeCalls.length, 0);
+      expect(mockWorktreeManager.cleanupWorktreeCalls.length).toBe(0);
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {
@@ -407,50 +397,47 @@ describe("ExecutionLifecycleService", () => {
 
   describe("sanitizeForBranchName", () => {
     it("should convert to lowercase", () => {
-      assert.strictEqual(
-        sanitizeForBranchName("UPPERCASE Text"),
-        "uppercase-text"
+      expect(
+        sanitizeForBranchName("UPPERCASE Text")).toBe("uppercase-text"
       );
     });
 
     it("should replace spaces with hyphens", () => {
-      assert.strictEqual(sanitizeForBranchName("fix auth bug"), "fix-auth-bug");
+      expect(sanitizeForBranchName("fix auth bug")).toBe("fix-auth-bug");
     });
 
     it("should replace slashes with hyphens", () => {
-      assert.strictEqual(
-        sanitizeForBranchName("feature/auth/login"),
-        "feature-auth-login"
+      expect(
+        sanitizeForBranchName("feature/auth/login")).toBe("feature-auth-login"
       );
     });
 
     it("should remove special characters", () => {
-      assert.strictEqual(sanitizeForBranchName("fix: bug! @#$%"), "fix-bug");
+      expect(sanitizeForBranchName("fix: bug! @#$%")).toBe("fix-bug");
     });
 
     it("should remove consecutive hyphens", () => {
-      assert.strictEqual(
-        sanitizeForBranchName("fix   bug---here"),
-        "fix-bug-here"
+      expect(
+        sanitizeForBranchName("fix   bug---here")).toBe("fix-bug-here"
       );
     });
 
     it("should remove leading/trailing hyphens", () => {
-      assert.strictEqual(sanitizeForBranchName("  -fix bug-  "), "fix-bug");
+      expect(sanitizeForBranchName("  -fix bug-  ")).toBe("fix-bug");
     });
 
     it("should limit length to 50 characters", () => {
       const longString = "a".repeat(100);
       const result = sanitizeForBranchName(longString);
-      assert.strictEqual(result.length, 50);
+      expect(result.length).toBe(50);
     });
 
     it("should handle empty string", () => {
-      assert.strictEqual(sanitizeForBranchName(""), "");
+      expect(sanitizeForBranchName("")).toBe("");
     });
 
     it("should handle string with only special characters", () => {
-      assert.strictEqual(sanitizeForBranchName("@#$%^&*()"), "");
+      expect(sanitizeForBranchName("@#$%^&*()")).toBe("");
     });
   });
 });

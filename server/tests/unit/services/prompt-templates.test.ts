@@ -2,8 +2,7 @@
  * Tests for prompt templates service
  */
 
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import Database from 'better-sqlite3';
 import {
   PROMPT_TEMPLATES_TABLE,
@@ -22,14 +21,14 @@ import {
 describe('Prompt Templates Service', () => {
   let db: Database.Database;
 
-  before(() => {
+  beforeAll(() => {
     // Create in-memory database for testing
     db = new Database(':memory:');
     db.exec(PROMPT_TEMPLATES_TABLE);
     db.exec(PROMPT_TEMPLATES_INDEXES);
   });
 
-  after(() => {
+  afterAll(() => {
     db.close();
   });
 
@@ -38,12 +37,12 @@ describe('Prompt Templates Service', () => {
       initializeDefaultTemplates(db);
 
       const template = getDefaultTemplate(db, 'issue');
-      assert.ok(template, 'Template should exist');
-      assert.strictEqual(template.type, 'issue');
-      assert.strictEqual(template.is_default, 1);
-      assert.strictEqual(template.name, 'Default Issue Template');
-      assert.ok(template.template.includes('Fix issue {{issueId}}'));
-      assert.ok(template.template.includes('{{#if relatedSpecs}}'));
+      expect(template, 'Template should exist').toBeTruthy();
+      expect(template.type).toBe('issue');
+      expect(template.is_default).toBe(1);
+      expect(template.name).toBe('Default Issue Template');
+      expect(template.template.includes('Fix issue {{issueId}}')).toBeTruthy();
+      expect(template.template.includes('{{#if relatedSpecs}}')).toBeTruthy();
     });
 
     it('should be idempotent - not insert duplicate templates', () => {
@@ -55,33 +54,33 @@ describe('Prompt Templates Service', () => {
 
       const templates = listTemplates(db, 'issue');
       const defaultTemplates = templates.filter((t) => t.is_default === 1);
-      assert.strictEqual(defaultTemplates.length, 1);
+      expect(defaultTemplates.length).toBe(1);
     });
 
     it('should validate template syntax before inserting', () => {
       // This test verifies that initializeDefaultTemplates validates the template
       // If the default template had invalid syntax, it would throw an error
       db.exec('DELETE FROM prompt_templates');
-      assert.doesNotThrow(() => initializeDefaultTemplates(db));
+      expect(() => initializeDefaultTemplates(db).not.toThrow());
     });
   });
 
   describe('getDefaultTemplate', () => {
-    before(() => {
+    beforeAll(() => {
       db.exec('DELETE FROM prompt_templates');
       initializeDefaultTemplates(db);
     });
 
     it('should return default template for issue type', () => {
       const template = getDefaultTemplate(db, 'issue');
-      assert.ok(template);
-      assert.strictEqual(template.type, 'issue');
-      assert.strictEqual(template.is_default, 1);
+      expect(template).toBeTruthy();
+      expect(template.type).toBe('issue');
+      expect(template.is_default).toBe(1);
     });
 
     it('should return null if no default template exists for type', () => {
       const template = getDefaultTemplate(db, 'spec');
-      assert.strictEqual(template, null);
+      expect(template).toBe(null);
     });
   });
 
@@ -89,24 +88,24 @@ describe('Prompt Templates Service', () => {
     it('should return template by ID', () => {
       const defaultTemplate = getDefaultTemplate(db, 'issue')!;
       const template = getTemplateById(db, defaultTemplate.id);
-      assert.deepStrictEqual(template, defaultTemplate);
+      expect(template).toEqual(defaultTemplate);
     });
 
     it('should return null if template not found', () => {
       const template = getTemplateById(db, 'non-existent-id');
-      assert.strictEqual(template, null);
+      expect(template).toBe(null);
     });
   });
 
   describe('listTemplates', () => {
-    before(() => {
+    beforeAll(() => {
       db.exec('DELETE FROM prompt_templates');
       initializeDefaultTemplates(db);
     });
 
     it('should list all templates', () => {
       const templates = listTemplates(db);
-      assert.ok(templates.length > 0);
+      expect(templates.length > 0).toBeTruthy();
     });
 
     it('should filter templates by type', () => {
@@ -119,11 +118,11 @@ describe('Prompt Templates Service', () => {
       });
 
       const issueTemplates = listTemplates(db, 'issue');
-      assert.strictEqual(issueTemplates.length, 2);
-      assert.ok(issueTemplates.every((t) => t.type === 'issue'));
+      expect(issueTemplates.length).toBe(2);
+      expect(issueTemplates.every((t) => t.type === 'issue')).toBeTruthy();
 
       const specTemplates = listTemplates(db, 'spec');
-      assert.strictEqual(specTemplates.length, 0);
+      expect(specTemplates.length).toBe(0);
     });
 
     it('should order templates with default first', () => {
@@ -138,13 +137,13 @@ describe('Prompt Templates Service', () => {
       });
 
       const templates = listTemplates(db, 'issue');
-      assert.strictEqual(templates[0].is_default, 1);
-      assert.strictEqual(templates[0].name, 'Default Issue Template');
+      expect(templates[0].is_default).toBe(1);
+      expect(templates[0].name).toBe('Default Issue Template');
     });
   });
 
   describe('createTemplate', () => {
-    before(() => {
+    beforeAll(() => {
       db.exec('DELETE FROM prompt_templates');
     });
 
@@ -157,16 +156,16 @@ describe('Prompt Templates Service', () => {
         variables: ['name'],
       });
 
-      assert.ok(template.id);
-      assert.strictEqual(template.name, 'Test Template');
-      assert.strictEqual(template.description, 'A test template');
-      assert.strictEqual(template.type, 'custom');
-      assert.strictEqual(template.template, 'Hello {{name}}!');
-      assert.strictEqual(template.is_default, 0);
+      expect(template.id).toBeTruthy();
+      expect(template.name).toBe('Test Template');
+      expect(template.description).toBe('A test template');
+      expect(template.type).toBe('custom');
+      expect(template.template).toBe('Hello {{name}}!');
+      expect(template.is_default).toBe(0);
 
       // Verify variables are stored as JSON
       const variables = JSON.parse(template.variables);
-      assert.deepStrictEqual(variables, ['name']);
+      expect(variables).toEqual(['name']);
     });
 
     it('should create a default template', () => {
@@ -178,20 +177,18 @@ describe('Prompt Templates Service', () => {
         isDefault: true,
       });
 
-      assert.strictEqual(template.is_default, 1);
+      expect(template.is_default).toBe(1);
     });
 
     it('should validate template syntax', () => {
-      assert.throws(
-        () =>
-          createTemplate(db, {
-            name: 'Invalid Template',
-            type: 'custom',
-            template: '{{#if x}}content',
-            variables: ['x'],
-          }),
-        /Invalid template syntax/
-      );
+      expect(() =>
+        createTemplate(db, {
+          name: 'Invalid Template',
+          type: 'custom',
+          template: '{{#if x}}content',
+          variables: ['x'],
+        })
+      ).toThrow(/Invalid template syntax/);
     });
 
     it('should set timestamps', () => {
@@ -202,16 +199,16 @@ describe('Prompt Templates Service', () => {
         variables: [],
       });
 
-      assert.ok(template.created_at);
-      assert.ok(template.updated_at);
-      assert.strictEqual(template.created_at, template.updated_at);
+      expect(template.created_at).toBeTruthy();
+      expect(template.updated_at).toBeTruthy();
+      expect(template.created_at).toBe(template.updated_at);
     });
   });
 
   describe('updateTemplate', () => {
     let templateId: string;
 
-    before(() => {
+    beforeAll(() => {
       db.exec('DELETE FROM prompt_templates');
       const template = createTemplate(db, {
         name: 'Original Name',
@@ -228,8 +225,8 @@ describe('Prompt Templates Service', () => {
         name: 'Updated Name',
       });
 
-      assert.strictEqual(updated?.name, 'Updated Name');
-      assert.strictEqual(updated?.template, 'Original: {{value}}');
+      expect(updated?.name).toBe('Updated Name');
+      expect(updated?.template).toBe('Original: {{value}}');
     });
 
     it('should update template content', () => {
@@ -238,9 +235,9 @@ describe('Prompt Templates Service', () => {
         variables: ['newValue'],
       });
 
-      assert.strictEqual(updated?.template, 'Updated: {{newValue}}');
+      expect(updated?.template).toBe('Updated: {{newValue}}');
       const variables = JSON.parse(updated!.variables);
-      assert.deepStrictEqual(variables, ['newValue']);
+      expect(variables).toEqual(['newValue']);
     });
 
     it('should update is_default flag', () => {
@@ -248,17 +245,15 @@ describe('Prompt Templates Service', () => {
         isDefault: true,
       });
 
-      assert.strictEqual(updated?.is_default, 1);
+      expect(updated?.is_default).toBe(1);
     });
 
     it('should validate template syntax on update', () => {
-      assert.throws(
-        () =>
-          updateTemplate(db, templateId, {
-            template: '{{#if x}}incomplete',
-          }),
-        /Invalid template syntax/
-      );
+      expect(() =>
+        updateTemplate(db, templateId, {
+          template: '{{#if x}}incomplete',
+        })
+      ).toThrow(/Invalid template syntax/);
     });
 
     it('should return null if template not found', () => {
@@ -266,14 +261,14 @@ describe('Prompt Templates Service', () => {
         name: 'New Name',
       });
 
-      assert.strictEqual(updated, null);
+      expect(updated).toBe(null);
     });
 
     it('should handle empty updates', () => {
       const original = getTemplateById(db, templateId)!;
       const updated = updateTemplate(db, templateId, {});
 
-      assert.deepStrictEqual(updated, original);
+      expect(updated).toEqual(original);
     });
   });
 
@@ -287,15 +282,15 @@ describe('Prompt Templates Service', () => {
       });
 
       const deleted = deleteTemplate(db, template.id);
-      assert.strictEqual(deleted, true);
+      expect(deleted).toBe(true);
 
       const retrieved = getTemplateById(db, template.id);
-      assert.strictEqual(retrieved, null);
+      expect(retrieved).toBe(null);
     });
 
     it('should return false if template not found', () => {
       const deleted = deleteTemplate(db, 'non-existent-id');
-      assert.strictEqual(deleted, false);
+      expect(deleted).toBe(false);
     });
   });
 
@@ -307,20 +302,20 @@ describe('Prompt Templates Service', () => {
 
       // Get default template
       const template = getDefaultTemplate(db, 'issue');
-      assert.ok(template);
+      expect(template).toBeTruthy();
 
       // Template should have all required fields
-      assert.ok(template.name);
-      assert.strictEqual(template.type, 'issue');
-      assert.ok(template.template);
-      assert.strictEqual(template.is_default, 1);
+      expect(template.name).toBeTruthy();
+      expect(template.type).toBe('issue');
+      expect(template.template).toBeTruthy();
+      expect(template.is_default).toBe(1);
 
       // Variables should be valid JSON
       const variables = JSON.parse(template.variables);
-      assert.ok(Array.isArray(variables));
-      assert.ok(variables.includes('issueId'));
-      assert.ok(variables.includes('title'));
-      assert.ok(variables.includes('description'));
+      expect(Array.isArray(variables)).toBeTruthy();
+      expect(variables.includes('issueId')).toBeTruthy();
+      expect(variables.includes('title')).toBeTruthy();
+      expect(variables.includes('description')).toBeTruthy();
     });
 
     it('should support custom templates alongside defaults', () => {
@@ -340,14 +335,14 @@ describe('Prompt Templates Service', () => {
       const defaultTemplate = getDefaultTemplate(db, 'issue');
       const customTemplate = getTemplateById(db, custom.id);
 
-      assert.ok(defaultTemplate);
-      assert.ok(customTemplate);
-      assert.notStrictEqual(defaultTemplate.id, customTemplate.id);
+      expect(defaultTemplate).toBeTruthy();
+      expect(customTemplate).toBeTruthy();
+      expect(defaultTemplate.id).not.toBe(customTemplate.id);
 
       // List should show both
       const allTemplates = listTemplates(db, 'issue');
-      assert.strictEqual(allTemplates.length, 2);
-      assert.strictEqual(allTemplates[0].is_default, 1); // Default first
+      expect(allTemplates.length).toBe(2);
+      expect(allTemplates[0].is_default).toBe(1); // Default first
     });
   });
 });

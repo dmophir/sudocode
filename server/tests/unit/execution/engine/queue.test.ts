@@ -4,8 +4,7 @@
  * Tests FIFO ordering, task submission, and basic metrics.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -34,7 +33,7 @@ describe("Task Queue", () => {
       };
 
       const taskId = await engine.submitTask(task);
-      assert.strictEqual(taskId, "task-1");
+      expect(taskId).toBe("task-1");
     });
 
     it("increments queuedTasks metric", async () => {
@@ -50,14 +49,14 @@ describe("Task Queue", () => {
       };
 
       const beforeMetrics = engine.getMetrics();
-      assert.strictEqual(beforeMetrics.queuedTasks, 0);
+      expect(beforeMetrics.queuedTasks).toBe(0);
 
       await engine.submitTask(task);
 
       const afterMetrics = engine.getMetrics();
       // Note: queuedTasks may be 0 if processQueue already dequeued it
       // So we check that it was incremented at some point
-      assert.ok(afterMetrics.queuedTasks >= 0);
+      expect(afterMetrics.queuedTasks >= 0).toBeTruthy();
     });
 
     it("triggers processQueue after submission", async () => {
@@ -81,7 +80,7 @@ describe("Task Queue", () => {
 
       // With maxConcurrent=0, task should remain queued
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 1);
+      expect(metrics.queuedTasks).toBe(1);
     });
   });
 
@@ -121,7 +120,7 @@ describe("Task Queue", () => {
       ];
 
       const taskIds = await engine.submitTasks(tasks);
-      assert.deepStrictEqual(taskIds, ["task-1", "task-2", "task-3"]);
+      expect(taskIds).toEqual(["task-1", "task-2", "task-3"]);
     });
 
     it("updates metrics for multiple tasks", async () => {
@@ -156,7 +155,7 @@ describe("Task Queue", () => {
       await blockedEngine.submitTasks(tasks);
 
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 2);
+      expect(metrics.queuedTasks).toBe(2);
     });
   });
 
@@ -164,17 +163,17 @@ describe("Task Queue", () => {
     it("returns initial metrics with default values", () => {
       const metrics = engine.getMetrics();
 
-      assert.strictEqual(metrics.maxConcurrent, 3);
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.availableSlots, 3);
-      assert.strictEqual(metrics.queuedTasks, 0);
-      assert.strictEqual(metrics.completedTasks, 0);
-      assert.strictEqual(metrics.failedTasks, 0);
-      assert.strictEqual(metrics.averageDuration, 0);
-      assert.strictEqual(metrics.successRate, 1.0);
-      assert.strictEqual(metrics.throughput, 0);
-      assert.strictEqual(metrics.totalProcessesSpawned, 0);
-      assert.strictEqual(metrics.activeProcesses, 0);
+      expect(metrics.maxConcurrent).toBe(3);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.availableSlots).toBe(3);
+      expect(metrics.queuedTasks).toBe(0);
+      expect(metrics.completedTasks).toBe(0);
+      expect(metrics.failedTasks).toBe(0);
+      expect(metrics.averageDuration).toBe(0);
+      expect(metrics.successRate).toBe(1.0);
+      expect(metrics.throughput).toBe(0);
+      expect(metrics.totalProcessesSpawned).toBe(0);
+      expect(metrics.activeProcesses).toBe(0);
     });
 
     it("respects custom maxConcurrent config", () => {
@@ -183,8 +182,8 @@ describe("Task Queue", () => {
       });
 
       const metrics = customEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 5);
-      assert.strictEqual(metrics.availableSlots, 5);
+      expect(metrics.maxConcurrent).toBe(5);
+      expect(metrics.availableSlots).toBe(5);
     });
 
     it("returns a defensive copy of metrics", () => {
@@ -193,14 +192,14 @@ describe("Task Queue", () => {
 
       // Modifying one should not affect the other
       metrics1.queuedTasks = 999;
-      assert.notStrictEqual(metrics2.queuedTasks, 999);
+      expect(metrics2.queuedTasks).not.toBe(999);
     });
   });
 
   describe("getTaskStatus", () => {
     it("returns null for non-existent task", () => {
       const status = engine.getTaskStatus("non-existent");
-      assert.strictEqual(status, null);
+      expect(status).toBe(null);
     });
 
     it("maintains FIFO queue order", async () => {
@@ -250,14 +249,14 @@ describe("Task Queue", () => {
       const status3 = blockedEngine.getTaskStatus("task-3");
 
       // All should be queued in FIFO order
-      assert.strictEqual(status1?.state, "queued");
-      assert.strictEqual(status2?.state, "queued");
-      assert.strictEqual(status3?.state, "queued");
+      expect(status1?.state).toBe("queued");
+      expect(status2?.state).toBe("queued");
+      expect(status3?.state).toBe("queued");
 
       // Verify positions reflect FIFO order
-      if (status1?.state === "queued") assert.strictEqual(status1.position, 0);
-      if (status2?.state === "queued") assert.strictEqual(status2.position, 1);
-      if (status3?.state === "queued") assert.strictEqual(status3.position, 2);
+      if (status1?.state === "queued") expect(status1.position).toBe(0);
+      if (status2?.state === "queued") expect(status2.position).toBe(1);
+      if (status3?.state === "queued") expect(status3.position).toBe(2);
     });
   });
 });

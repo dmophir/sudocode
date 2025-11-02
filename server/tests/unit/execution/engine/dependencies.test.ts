@@ -4,8 +4,7 @@
  * Tests dependency checking, ordering, and handling of failed dependencies.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -39,7 +38,7 @@ describe("Task Dependency Resolution", () => {
 
       const status = engine.getTaskStatus("task-1");
       // Should be running or completed (not queued)
-      assert.ok(status?.state === "running" || status?.state === "completed");
+      expect(status?.state === "running" || status?.state === "completed").toBeTruthy();
     });
 
     it("queues task with unmet dependencies", async () => {
@@ -61,7 +60,7 @@ describe("Task Dependency Resolution", () => {
 
       const status = engine.getTaskStatus("task-2");
       // Should remain queued because dependency not met
-      assert.strictEqual(status?.state, "queued");
+      expect(status?.state).toBe("queued");
     });
 
     it("executes task after dependencies complete", async () => {
@@ -98,11 +97,11 @@ describe("Task Dependency Resolution", () => {
       // Task 2 should now be able to execute
       const status2 = engine.getTaskStatus("task-2");
       // Should be running or completed (dependencies met)
-      assert.ok(
+      expect(
         status2?.state === "running" ||
           status2?.state === "completed" ||
           status2 === null
-      );
+      ).toBeTruthy();
     });
   });
 
@@ -156,10 +155,10 @@ describe("Task Dependency Resolution", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Verify execution order
-      assert.ok(completionOrder.length >= 3, "All tasks should complete");
-      assert.strictEqual(completionOrder[0], "task-1");
-      assert.strictEqual(completionOrder[1], "task-2");
-      assert.strictEqual(completionOrder[2], "task-3");
+      expect(completionOrder.length >= 3, "All tasks should complete").toBeTruthy();
+      expect(completionOrder[0]).toBe("task-1");
+      expect(completionOrder[1]).toBe("task-2");
+      expect(completionOrder[2]).toBe("task-3");
     });
 
     it("handles multiple independent tasks with dependencies", async () => {
@@ -211,10 +210,10 @@ describe("Task Dependency Resolution", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // task-1 must complete first
-      assert.strictEqual(completionOrder[0], "task-1");
+      expect(completionOrder[0]).toBe("task-1");
       // task-2 and task-3 can complete in any order after task-1
-      assert.ok(completionOrder.includes("task-2"));
-      assert.ok(completionOrder.includes("task-3"));
+      expect(completionOrder.includes("task-2")).toBeTruthy();
+      expect(completionOrder.includes("task-3")).toBeTruthy();
     });
   });
 
@@ -253,7 +252,7 @@ describe("Task Dependency Resolution", () => {
 
       // Task 2 should be failed (not queued or completed)
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 2); // Both task-1 and task-2 failed
+      expect(metrics.failedTasks).toBe(2); // Both task-1 and task-2 failed
     });
 
     it("does not execute task with failed dependency", async () => {
@@ -298,7 +297,7 @@ describe("Task Dependency Resolution", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Task 2 should not have executed successfully
-      assert.strictEqual(task2Executed, false);
+      expect(task2Executed).toBe(false);
     });
 
     it("propagates failure through dependency chain", async () => {
@@ -345,8 +344,8 @@ describe("Task Dependency Resolution", () => {
 
       // All three tasks should have failed
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 3);
-      assert.strictEqual(metrics.completedTasks, 0);
+      expect(metrics.failedTasks).toBe(3);
+      expect(metrics.completedTasks).toBe(0);
     });
   });
 
@@ -392,7 +391,7 @@ describe("Task Dependency Resolution", () => {
 
       const metrics = engine.getMetrics();
       // All tasks should complete
-      assert.strictEqual(metrics.completedTasks, 3);
+      expect(metrics.completedTasks).toBe(3);
     });
 
     it("prevents infinite loop with missing dependencies", async () => {
@@ -414,9 +413,9 @@ describe("Task Dependency Resolution", () => {
 
       // Task should remain queued (not crash or loop)
       const status = engine.getTaskStatus("task-1");
-      assert.strictEqual(status?.state, "queued");
+      expect(status?.state).toBe("queued");
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 1);
+      expect(metrics.queuedTasks).toBe(1);
     });
 
     it("handles mix of successful and failed dependencies", async () => {
@@ -474,8 +473,8 @@ describe("Task Dependency Resolution", () => {
 
       // task-1 should succeed, task-2 and task-3 should fail
       const metrics = testEngine.getMetrics();
-      assert.strictEqual(metrics.completedTasks, 1); // Only task-1
-      assert.strictEqual(metrics.failedTasks, 2); // task-2 and task-3
+      expect(metrics.completedTasks).toBe(1); // Only task-1
+      expect(metrics.failedTasks).toBe(2); // task-2 and task-3
     });
   });
 });

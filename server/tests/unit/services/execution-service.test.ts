@@ -5,8 +5,7 @@
  * template rendering, worktree management, and workflow execution.
  */
 
-import { describe, it, before, after, afterEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, afterEach, expect, beforeAll, afterAll } from "vitest";
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
 import {
@@ -50,7 +49,7 @@ describe("ExecutionService", () => {
   let testSpecId: string;
   let service: ExecutionService;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "sudocode-test-exec-service-")
@@ -121,7 +120,7 @@ describe("ExecutionService", () => {
     service = new ExecutionService(db, testDir, lifecycleService);
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up database
     db.close();
     if (fs.existsSync(testDir)) {
@@ -150,49 +149,37 @@ describe("ExecutionService", () => {
       const result = await service.prepareExecution(testIssueId);
 
       // Verify structure
-      assert.ok(result.renderedPrompt, "Should have rendered prompt");
-      assert.ok(result.issue, "Should have issue");
-      assert.ok(result.relatedSpecs, "Should have related specs");
-      assert.ok(result.defaultConfig, "Should have default config");
+      expect(result.renderedPrompt, "Should have rendered prompt").toBeTruthy();
+      expect(result.issue, "Should have issue").toBeTruthy();
+      expect(result.relatedSpecs, "Should have related specs").toBeTruthy();
+      expect(result.defaultConfig, "Should have default config").toBeTruthy();
 
       // Verify issue data
-      assert.strictEqual(result.issue.id, testIssueId);
-      assert.strictEqual(result.issue.title, "Implement user authentication");
-      assert.strictEqual(
-        result.issue.content,
+      expect(result.issue.id).toBe(testIssueId);
+      expect(result.issue.title).toBe("Implement user authentication");
+      expect(result.issue.content).toBe(
         "Add OAuth2 authentication with JWT tokens"
       );
 
       // Verify related specs
-      assert.strictEqual(result.relatedSpecs.length, 1);
-      assert.strictEqual(result.relatedSpecs[0].id, testSpecId);
-      assert.strictEqual(
-        result.relatedSpecs[0].title,
-        "Authentication System Design"
-      );
+      expect(result.relatedSpecs.length).toBe(1);
+      expect(result.relatedSpecs[0].id).toBe(testSpecId);
+      expect(result.relatedSpecs[0].title).toBe("Authentication System Design");
 
       // Verify rendered prompt contains issue info
-      assert.ok(
-        result.renderedPrompt.includes(testIssueId),
-        "Prompt should include issue ID"
-      );
-      assert.ok(
-        result.renderedPrompt.includes("Implement user authentication"),
-        "Prompt should include issue title"
-      );
-      assert.ok(
-        result.renderedPrompt.includes("OAuth2 authentication with JWT tokens"),
-        "Prompt should include issue content"
-      );
-      assert.ok(
-        result.renderedPrompt.includes(testSpecId),
-        "Prompt should include spec ID"
-      );
+      expect(result.renderedPrompt.includes(testIssueId)).toBeTruthy();
+      expect(
+        result.renderedPrompt.includes("Implement user authentication")
+      ).toBeTruthy();
+      expect(
+        result.renderedPrompt.includes("OAuth2 authentication with JWT tokens")
+      ).toBeTruthy();
+      expect(result.renderedPrompt.includes(testSpecId)).toBeTruthy();
 
       // Verify default config
-      assert.strictEqual(result.defaultConfig.mode, "worktree");
-      assert.strictEqual(result.defaultConfig.model, "claude-sonnet-4");
-      assert.strictEqual(result.defaultConfig.baseBranch, "main");
+      expect(result.defaultConfig.mode).toBe("worktree");
+      expect(result.defaultConfig.model).toBe("claude-sonnet-4");
+      expect(result.defaultConfig.baseBranch).toBe("main");
     });
 
     it("should handle issue without related specs", async () => {
@@ -206,19 +193,17 @@ describe("ExecutionService", () => {
 
       const result = await service.prepareExecution(isolatedIssueId);
 
-      assert.ok(result.renderedPrompt);
-      assert.strictEqual(result.relatedSpecs.length, 0);
+      expect(result.renderedPrompt).toBeTruthy();
+      expect(result.relatedSpecs.length).toBe(0);
 
       // Verify prompt doesn't include Related Specifications section
-      assert.ok(
-        !result.renderedPrompt.includes("Related Specifications"),
-        "Should not include Related Specifications section"
-      );
+      expect(
+        !result.renderedPrompt.includes("Related Specifications")
+      ).toBeTruthy();
     });
 
     it("should throw error for non-existent issue", async () => {
-      await assert.rejects(
-        () => service.prepareExecution("ISSUE-999"),
+      await expect(service.prepareExecution("ISSUE-999")).rejects.toThrow(
         /Issue ISSUE-999 not found/
       );
     });
@@ -235,10 +220,10 @@ describe("ExecutionService", () => {
       const result = await service.prepareExecution(emptyIssueId);
 
       // Template should still render with structure
-      assert.ok(result.renderedPrompt);
-      assert.ok(result.renderedPrompt.trim().length > 0);
+      expect(result.renderedPrompt).toBeTruthy();
+      expect(result.renderedPrompt.trim().length > 0).toBeTruthy();
       // Should include the template structure even if issue is empty
-      assert.ok(result.renderedPrompt.includes("## Description"));
+      expect(result.renderedPrompt.includes("## Description")).toBeTruthy();
     });
 
     it("should allow config overrides", async () => {
@@ -250,9 +235,9 @@ describe("ExecutionService", () => {
         },
       });
 
-      assert.strictEqual(result.defaultConfig.mode, "local");
-      assert.strictEqual(result.defaultConfig.model, "claude-opus-4");
-      assert.strictEqual(result.defaultConfig.baseBranch, "develop");
+      expect(result.defaultConfig.mode).toBe("local");
+      expect(result.defaultConfig.model).toBe("claude-opus-4");
+      expect(result.defaultConfig.baseBranch).toBe("develop");
     });
   });
 
@@ -269,22 +254,21 @@ describe("ExecutionService", () => {
         );
 
         // Verify execution was created
-        assert.ok(execution.id, "Should have execution ID");
-        assert.strictEqual(execution.issue_id, testIssueId);
-        assert.strictEqual(execution.agent_type, "claude-code");
-        assert.strictEqual(execution.status, "running");
-        assert.ok(execution.worktree_path, "Should have worktree path");
-        assert.ok(execution.branch_name, "Should have branch name");
+        expect(execution.id, "Should have execution ID").toBeTruthy();
+        expect(execution.issue_id).toBe(testIssueId);
+        expect(execution.agent_type).toBe("claude-code");
+        expect(execution.status).toBe("running");
+        expect(
+          execution.worktree_path,
+          "Should have worktree path"
+        ).toBeTruthy();
+        expect(execution.branch_name, "Should have branch name").toBeTruthy();
 
         // Verify branch name format (should be worktree/{uuid}/{sanitized-title})
-        assert.ok(
-          execution.branch_name.startsWith("worktree/"),
-          "Branch name should start with worktree/"
-        );
-        assert.ok(
-          execution.branch_name.includes("implement-user-authentication"),
-          "Branch name should include sanitized title"
-        );
+        expect(execution.branch_name.startsWith("worktree/")).toBeTruthy();
+        expect(
+          execution.branch_name.includes("implement-user-authentication")
+        ).toBeTruthy();
       }
     );
 
@@ -303,36 +287,32 @@ describe("ExecutionService", () => {
         );
 
         // Verify execution was created in local mode
-        assert.ok(execution.id);
-        assert.strictEqual(execution.issue_id, testIssueId);
-        assert.strictEqual(execution.status, "running");
+        expect(execution.id).toBeTruthy();
+        expect(execution.issue_id).toBe(testIssueId);
+        expect(execution.status).toBe("running");
         // In local mode, worktree_path should be null
-        assert.strictEqual(execution.worktree_path, null);
+        expect(execution.worktree_path).toBe(null);
       }
     );
 
     it("should throw error for empty prompt", async () => {
-      await assert.rejects(
-        () => service.createExecution(testIssueId, { mode: "worktree" }, ""),
-        /Prompt cannot be empty/
-      );
+      await expect(
+        service.createExecution(testIssueId, { mode: "worktree" }, "")
+      ).rejects.toThrow(/Prompt cannot be empty/);
 
-      await assert.rejects(
-        () => service.createExecution(testIssueId, { mode: "worktree" }, "   "),
-        /Prompt cannot be empty/
-      );
+      await expect(
+        service.createExecution(testIssueId, { mode: "worktree" }, "   ")
+      ).rejects.toThrow(/Prompt cannot be empty/);
     });
 
     it("should throw error for non-existent issue", async () => {
-      await assert.rejects(
-        () =>
-          service.createExecution(
-            "ISSUE-999",
-            { mode: "worktree" },
-            "Test prompt"
-          ),
-        /Issue ISSUE-999 not found/
-      );
+      await expect(
+        service.createExecution(
+          "ISSUE-999",
+          { mode: "worktree" },
+          "Test prompt"
+        )
+      ).rejects.toThrow(/Issue ISSUE-999 not found/);
     });
   });
 
@@ -356,35 +336,22 @@ describe("ExecutionService", () => {
         );
 
         // Verify follow-up execution
-        assert.ok(followUpExecution.id);
-        assert.notStrictEqual(
-          followUpExecution.id,
-          initialExecution.id,
-          "Follow-up should have different ID"
+        expect(followUpExecution.id).toBeTruthy();
+        expect(followUpExecution.id).not.toBe(initialExecution.id);
+        expect(followUpExecution.issue_id).toBe(initialExecution.issue_id);
+        expect(followUpExecution.worktree_path).toBe(
+          initialExecution.worktree_path
         );
-        assert.strictEqual(
-          followUpExecution.issue_id,
-          initialExecution.issue_id,
-          "Follow-up should have same issue ID"
-        );
-        assert.strictEqual(
-          followUpExecution.worktree_path,
-          initialExecution.worktree_path,
-          "Follow-up should reuse same worktree"
-        );
-        assert.strictEqual(
-          followUpExecution.branch_name,
-          initialExecution.branch_name,
-          "Follow-up should use same branch"
+        expect(followUpExecution.branch_name).toBe(
+          initialExecution.branch_name
         );
       }
     );
 
     it("should throw error for non-existent execution", async () => {
-      await assert.rejects(
-        () => service.createFollowUp("non-existent-id", "feedback"),
-        /Execution non-existent-id not found/
-      );
+      await expect(
+        service.createFollowUp("non-existent-id", "feedback")
+      ).rejects.toThrow(/Execution non-existent-id not found/);
     });
 
     it(
@@ -401,10 +368,9 @@ describe("ExecutionService", () => {
           prepareResult.renderedPrompt
         );
 
-        await assert.rejects(
-          () => service.createFollowUp(localExecution.id, "feedback"),
-          /has no worktree/
-        );
+        await expect(
+          service.createFollowUp(localExecution.id, "feedback")
+        ).rejects.toThrow(/has no worktree/);
       }
     );
   });
@@ -427,13 +393,15 @@ describe("ExecutionService", () => {
         "../../../src/services/executions.js"
       );
       const updated = getExecution(db, execution.id);
-      assert.strictEqual(updated?.status, "stopped");
-      assert.ok(updated?.completed_at, "Should have completion timestamp");
+      expect(updated?.status).toBe("stopped");
+      expect(
+        updated?.completed_at,
+        "Should have completion timestamp"
+      ).toBeTruthy();
     });
 
     it("should throw error for non-existent execution", async () => {
-      await assert.rejects(
-        () => service.cancelExecution("non-existent-id"),
+      await expect(service.cancelExecution("non-existent-id")).rejects.toThrow(
         /Execution non-existent-id not found/
       );
     });
@@ -453,8 +421,7 @@ describe("ExecutionService", () => {
         await service.cancelExecution(execution.id);
 
         // Try to cancel again
-        await assert.rejects(
-          () => service.cancelExecution(execution.id),
+        await expect(service.cancelExecution(execution.id)).rejects.toThrow(
           /Cannot cancel execution in stopped state/
         );
       }
@@ -474,23 +441,20 @@ describe("ExecutionService", () => {
       // Cleanup
       await service.cleanupExecution(execution.id);
 
-      // Verify worktree was removed from execution record
+      // Verify worktree path is kept in database for follow-up executions
+      // (the filesystem worktree is deleted, but the path remains)
       const { getExecution } = await import(
         "../../../src/services/executions.js"
       );
       const updated = getExecution(db, execution.id);
-      assert.strictEqual(
-        updated?.worktree_path,
-        null,
-        "Worktree path should be cleared"
-      );
+      expect(updated?.worktree_path).toBe(execution.worktree_path);
     });
 
     it("should not throw error for non-existent execution", async () => {
       // Should silently succeed for non-existent executions
-      await assert.doesNotReject(() =>
+      await expect(
         service.cleanupExecution("non-existent-id")
-      );
+      ).resolves.not.toThrow();
     });
   });
 
@@ -499,22 +463,21 @@ describe("ExecutionService", () => {
       const result = await service.prepareExecution(testIssueId);
 
       // Verify variable substitution worked
-      assert.ok(result.renderedPrompt.includes(testIssueId));
-      assert.ok(
+      expect(result.renderedPrompt.includes(testIssueId)).toBeTruthy();
+      expect(
         result.renderedPrompt.includes("Implement user authentication")
-      );
-      assert.ok(
+      ).toBeTruthy();
+      expect(
         result.renderedPrompt.includes("OAuth2 authentication with JWT tokens")
-      );
+      ).toBeTruthy();
     });
 
     it("should handle conditionals in template", async () => {
       // Issue with related specs should show Related Specifications section
       const withSpecs = await service.prepareExecution(testIssueId);
-      assert.ok(
-        withSpecs.renderedPrompt.includes("Related Specifications"),
-        "Should include Related Specifications section"
-      );
+      expect(
+        withSpecs.renderedPrompt.includes("Related Specifications")
+      ).toBeTruthy();
 
       // Issue without related specs should not show section
       const isolatedIssueId = generateIssueId(db, testDir);
@@ -525,10 +488,9 @@ describe("ExecutionService", () => {
       });
 
       const withoutSpecs = await service.prepareExecution(isolatedIssueId);
-      assert.ok(
-        !withoutSpecs.renderedPrompt.includes("Related Specifications"),
-        "Should not include Related Specifications section"
-      );
+      expect(
+        !withoutSpecs.renderedPrompt.includes("Related Specifications")
+      ).toBeTruthy();
     });
 
     it("should handle loops in template", async () => {
@@ -552,22 +514,12 @@ describe("ExecutionService", () => {
       const result = await service.prepareExecution(testIssueId);
 
       // Verify both specs are listed
-      assert.ok(
-        result.renderedPrompt.includes(testSpecId),
-        "Should include first spec"
-      );
-      assert.ok(
-        result.renderedPrompt.includes(spec2Id),
-        "Should include second spec"
-      );
-      assert.ok(
-        result.renderedPrompt.includes("Authentication System Design"),
-        "Should include first spec title"
-      );
-      assert.ok(
-        result.renderedPrompt.includes("Database Design"),
-        "Should include second spec title"
-      );
+      expect(result.renderedPrompt.includes(testSpecId)).toBeTruthy();
+      expect(result.renderedPrompt.includes(spec2Id)).toBeTruthy();
+      expect(
+        result.renderedPrompt.includes("Authentication System Design")
+      ).toBeTruthy();
+      expect(result.renderedPrompt.includes("Database Design")).toBeTruthy();
     });
   });
 });

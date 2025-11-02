@@ -4,8 +4,7 @@
  * Tests graceful shutdown, cleanup, and idempotent shutdown behavior.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -63,19 +62,19 @@ describe("Engine Shutdown", () => {
 
       // Verify tasks are queued
       const beforeMetrics = blockedEngine.getMetrics();
-      assert.strictEqual(beforeMetrics.queuedTasks, 3);
+      expect(beforeMetrics.queuedTasks).toBe(3);
 
       // Shutdown the engine
       await blockedEngine.shutdown();
 
       // Verify queue is cleared
       const afterMetrics = blockedEngine.getMetrics();
-      assert.strictEqual(afterMetrics.queuedTasks, 0);
+      expect(afterMetrics.queuedTasks).toBe(0);
 
       // Verify tasks are no longer accessible
-      assert.strictEqual(blockedEngine.getTaskStatus("task-1"), null);
-      assert.strictEqual(blockedEngine.getTaskStatus("task-2"), null);
-      assert.strictEqual(blockedEngine.getTaskStatus("task-3"), null);
+      expect(blockedEngine.getTaskStatus("task-1")).toBe(null);
+      expect(blockedEngine.getTaskStatus("task-2")).toBe(null);
+      expect(blockedEngine.getTaskStatus("task-3")).toBe(null);
     });
   });
 
@@ -114,17 +113,16 @@ describe("Engine Shutdown", () => {
 
       // Verify tasks are running
       const beforeMetrics = engine.getMetrics();
-      assert.ok(beforeMetrics.currentlyRunning > 0);
+      expect(beforeMetrics.currentlyRunning > 0).toBeTruthy();
 
       // Shutdown the engine
       await engine.shutdown();
 
       // Verify no tasks are running
       const afterMetrics = engine.getMetrics();
-      assert.strictEqual(afterMetrics.currentlyRunning, 0);
-      assert.strictEqual(
-        afterMetrics.availableSlots,
-        afterMetrics.maxConcurrent
+      expect(afterMetrics.currentlyRunning).toBe(0);
+      expect(
+        afterMetrics.availableSlots).toBe(afterMetrics.maxConcurrent
       );
     });
 
@@ -149,14 +147,14 @@ describe("Engine Shutdown", () => {
 
       // Verify process is running
       const beforeProcesses = processManager.getActiveProcesses();
-      assert.ok(beforeProcesses.length > 0);
+      expect(beforeProcesses.length > 0).toBeTruthy();
 
       // Shutdown
       await engine.shutdown();
 
       // Verify processes are terminated
       const afterProcesses = processManager.getActiveProcesses();
-      assert.strictEqual(afterProcesses.length, 0);
+      expect(afterProcesses.length).toBe(0);
     });
   });
 
@@ -209,16 +207,16 @@ describe("Engine Shutdown", () => {
 
       // Verify mixed state
       const beforeMetrics = limitedEngine.getMetrics();
-      assert.strictEqual(beforeMetrics.currentlyRunning, 1);
-      assert.ok(beforeMetrics.queuedTasks >= 2);
+      expect(beforeMetrics.currentlyRunning).toBe(1);
+      expect(beforeMetrics.queuedTasks >= 2).toBeTruthy();
 
       // Shutdown
       await limitedEngine.shutdown();
 
       // Verify all tasks cleared
       const afterMetrics = limitedEngine.getMetrics();
-      assert.strictEqual(afterMetrics.currentlyRunning, 0);
-      assert.strictEqual(afterMetrics.queuedTasks, 0);
+      expect(afterMetrics.currentlyRunning).toBe(0);
+      expect(afterMetrics.queuedTasks).toBe(0);
     });
   });
 
@@ -235,7 +233,7 @@ describe("Engine Shutdown", () => {
 
       await engine.shutdown();
 
-      assert.strictEqual(shutdownCalled, true);
+      expect(shutdownCalled).toBe(true);
     });
 
     it("waits for process manager shutdown to complete", async () => {
@@ -250,8 +248,8 @@ describe("Engine Shutdown", () => {
 
       await engine.shutdown();
 
-      assert.strictEqual(shutdownStarted, true);
-      assert.strictEqual(shutdownCompleted, true);
+      expect(shutdownStarted).toBe(true);
+      expect(shutdownCompleted).toBe(true);
     });
   });
 
@@ -275,14 +273,14 @@ describe("Engine Shutdown", () => {
 
       // Verify task result exists
       const beforeStatus = engine.getTaskStatus("task-1");
-      assert.ok(beforeStatus !== null);
+      expect(beforeStatus !== null).toBeTruthy();
 
       // Shutdown
       await engine.shutdown();
 
       // Verify all state cleared
       const afterStatus = engine.getTaskStatus("task-1");
-      assert.strictEqual(afterStatus, null);
+      expect(afterStatus).toBe(null);
     });
 
     it("resets metrics after shutdown", async () => {
@@ -323,9 +321,9 @@ describe("Engine Shutdown", () => {
 
       // Verify metrics reset
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.queuedTasks, 0);
-      assert.strictEqual(metrics.availableSlots, 2); // maxConcurrent
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.queuedTasks).toBe(0);
+      expect(metrics.availableSlots).toBe(2); // maxConcurrent
     });
   });
 
@@ -352,8 +350,8 @@ describe("Engine Shutdown", () => {
 
       // Verify state remains clean
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.queuedTasks, 0);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.queuedTasks).toBe(0);
     });
 
     it("handles shutdown with no tasks gracefully", async () => {
@@ -361,8 +359,8 @@ describe("Engine Shutdown", () => {
       await engine.shutdown();
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.queuedTasks, 0);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.queuedTasks).toBe(0);
     });
   });
 
@@ -392,10 +390,10 @@ describe("Engine Shutdown", () => {
 
       // Shutdown should complete quickly (not wait for tasks to finish naturally)
       // Allow reasonable buffer for termination operations
-      assert.ok(
+      expect(
         duration < 200,
         `Shutdown took ${duration}ms, expected < 200ms`
-      );
+      ).toBeTruthy();
     });
   });
 
@@ -430,7 +428,7 @@ describe("Engine Shutdown", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
 
       // Events should not fire after shutdown cleared handlers
-      assert.strictEqual(eventsFired, 0);
+      expect(eventsFired).toBe(0);
     });
   });
 });

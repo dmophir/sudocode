@@ -5,8 +5,7 @@
  * specific to Claude Code CLI.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import { buildClaudeConfig } from '../../../../../src/execution/process/builders/claude.js';
 
 describe('buildClaudeConfig', () => {
@@ -15,9 +14,9 @@ describe('buildClaudeConfig', () => {
       workDir: '/test/dir',
     });
 
-    assert.strictEqual(config.executablePath, 'claude');
-    assert.deepStrictEqual(config.args, []);
-    assert.strictEqual(config.workDir, '/test/dir');
+    expect(config.executablePath).toBe('claude');
+    expect(config.args).toEqual([]);
+    expect(config.workDir).toBe('/test/dir');
   });
 
   it('builds config with custom claudePath', () => {
@@ -26,7 +25,7 @@ describe('buildClaudeConfig', () => {
       workDir: '/test/dir',
     });
 
-    assert.strictEqual(config.executablePath, '/custom/path/to/claude');
+    expect(config.executablePath).toBe('/custom/path/to/claude');
   });
 
   it('includes --print flag when enabled', () => {
@@ -35,7 +34,7 @@ describe('buildClaudeConfig', () => {
       print: true,
     });
 
-    assert.ok(config.args.includes('--print'));
+    expect(config.args.includes('--print')).toBeTruthy();
   });
 
   it('includes --output-format flag', () => {
@@ -44,8 +43,8 @@ describe('buildClaudeConfig', () => {
       outputFormat: 'stream-json',
     });
 
-    assert.ok(config.args.includes('--output-format'));
-    assert.ok(config.args.includes('stream-json'));
+    expect(config.args.includes('--output-format')).toBeTruthy();
+    expect(config.args.includes('stream-json')).toBeTruthy();
   });
 
   it('includes --dangerously-skip-permissions flag when enabled', () => {
@@ -54,7 +53,7 @@ describe('buildClaudeConfig', () => {
       dangerouslySkipPermissions: true,
     });
 
-    assert.ok(config.args.includes('--dangerously-skip-permissions'));
+    expect(config.args.includes('--dangerously-skip-permissions')).toBeTruthy();
   });
 
   it('includes --permission-mode flag when provided', () => {
@@ -63,8 +62,8 @@ describe('buildClaudeConfig', () => {
       permissionMode: 'bypassPermissions',
     });
 
-    assert.ok(config.args.includes('--permission-mode'));
-    assert.ok(config.args.includes('bypassPermissions'));
+    expect(config.args.includes('--permission-mode')).toBeTruthy();
+    expect(config.args.includes('bypassPermissions')).toBeTruthy();
   });
 
   it('builds config with all flags together', () => {
@@ -76,12 +75,12 @@ describe('buildClaudeConfig', () => {
       permissionMode: 'bypassPermissions',
     });
 
-    assert.ok(config.args.includes('--print'));
-    assert.ok(config.args.includes('--output-format'));
-    assert.ok(config.args.includes('stream-json'));
-    assert.ok(config.args.includes('--dangerously-skip-permissions'));
-    assert.ok(config.args.includes('--permission-mode'));
-    assert.ok(config.args.includes('bypassPermissions'));
+    expect(config.args.includes('--print')).toBeTruthy();
+    expect(config.args.includes('--output-format')).toBeTruthy();
+    expect(config.args.includes('stream-json')).toBeTruthy();
+    expect(config.args.includes('--dangerously-skip-permissions')).toBeTruthy();
+    expect(config.args.includes('--permission-mode')).toBeTruthy();
+    expect(config.args.includes('bypassPermissions')).toBeTruthy();
   });
 
   it('passes through environment variables', () => {
@@ -92,7 +91,7 @@ describe('buildClaudeConfig', () => {
       },
     });
 
-    assert.deepStrictEqual(config.env, { TEST_VAR: 'test_value' });
+    expect(config.env).toEqual({ TEST_VAR: 'test_value' });
   });
 
   it('passes through timeout settings', () => {
@@ -102,8 +101,8 @@ describe('buildClaudeConfig', () => {
       idleTimeout: 1000,
     });
 
-    assert.strictEqual(config.timeout, 5000);
-    assert.strictEqual(config.idleTimeout, 1000);
+    expect(config.timeout).toBe(5000);
+    expect(config.idleTimeout).toBe(1000);
   });
 
   it('passes through retry configuration', () => {
@@ -115,7 +114,7 @@ describe('buildClaudeConfig', () => {
       },
     });
 
-    assert.deepStrictEqual(config.retry, {
+    expect(config.retry).toEqual({
       maxAttempts: 3,
       backoffMs: 1000,
     });
@@ -133,10 +132,10 @@ describe('buildClaudeConfig', () => {
     });
 
     // Verify structure matches ProcessConfig interface
-    assert.ok(config.executablePath);
-    assert.ok(Array.isArray(config.args));
-    assert.ok(config.workDir);
-    assert.strictEqual(typeof config.executablePath, 'string');
-    assert.strictEqual(typeof config.workDir, 'string');
+    expect(config.executablePath).toBeTruthy();
+    expect(Array.isArray(config.args)).toBeTruthy();
+    expect(config.workDir).toBeTruthy();
+    expect(typeof config.executablePath).toBe('string');
+    expect(typeof config.workDir).toBe('string');
   });
 });

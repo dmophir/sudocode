@@ -2,8 +2,7 @@
  * Tests for File Watcher Service
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { startServerWatcher } from "../../src/services/watcher.js";
@@ -16,7 +15,7 @@ describe("File Watcher Service", () => {
   let testDbPath: string;
   let testDir: string;
 
-  before(async () => {
+  beforeAll(async () => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-watcher-"));
     testDbPath = path.join(testDir, "cache.db");
@@ -45,7 +44,7 @@ describe("File Watcher Service", () => {
     db = initDatabase({ path: testDbPath });
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up
     db.close();
     if (fs.existsSync(testDir)) {
@@ -63,19 +62,19 @@ describe("File Watcher Service", () => {
         debounceDelay: 50, // Shorter delay for tests
       });
 
-      assert.ok(watcher, "Watcher should be created");
-      assert.ok(typeof watcher.stop === "function", "Watcher should have stop method");
-      assert.ok(typeof watcher.getStats === "function", "Watcher should have getStats method");
+      expect(watcher, "Watcher should be created").toBeTruthy();
+      expect(typeof watcher.stop === "function", "Watcher should have stop method").toBeTruthy();
+      expect(typeof watcher.getStats === "function", "Watcher should have getStats method").toBeTruthy();
 
       // Wait for watcher to initialize
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const stats = watcher.getStats();
-      assert.ok(stats, "Stats should be available");
-      assert.strictEqual(typeof stats.filesWatched, "number", "Stats should include filesWatched");
-      assert.strictEqual(typeof stats.changesPending, "number", "Stats should include changesPending");
-      assert.strictEqual(typeof stats.changesProcessed, "number", "Stats should include changesProcessed");
-      assert.strictEqual(typeof stats.errors, "number", "Stats should include errors");
+      expect(stats, "Stats should be available").toBeTruthy();
+      expect(typeof stats.filesWatched).toBe("number", "Stats should include filesWatched");
+      expect(typeof stats.changesPending).toBe("number", "Stats should include changesPending");
+      expect(typeof stats.changesProcessed).toBe("number", "Stats should include changesProcessed");
+      expect(typeof stats.errors).toBe("number", "Stats should include errors");
 
       await watcher.stop();
     });
@@ -93,7 +92,7 @@ describe("File Watcher Service", () => {
       const stats = watcher.getStats();
 
       // Verify watcher is watching files
-      assert.ok(stats.filesWatched >= 0, "Watcher should be tracking files");
+      expect(stats.filesWatched >= 0, "Watcher should be tracking files").toBeTruthy();
 
       await watcher.stop();
     });
@@ -108,7 +107,7 @@ describe("File Watcher Service", () => {
 
       // The debounce delay is internal to the CLI watcher,
       // but we can verify the watcher was created with our options
-      assert.ok(watcher, "Watcher should be created with custom debounce");
+      expect(watcher, "Watcher should be created with custom debounce").toBeTruthy();
 
       await watcher.stop();
     });
@@ -139,7 +138,7 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       // Verify that a change was detected
-      assert.ok(changes.length > 0, "Should have detected file change");
+      expect(changes.length > 0, "Should have detected file change").toBeTruthy();
 
       await watcher.stop();
 
@@ -174,7 +173,7 @@ describe("File Watcher Service", () => {
       // The callback may or may not be invoked depending on sync success
       // Just verify the watcher is still running without errors
       const stats = watcher.getStats();
-      assert.ok(stats.errors === 0, "Watcher should have no errors after JSONL change");
+      expect(stats.errors === 0, "Watcher should have no errors after JSONL change").toBeTruthy();
 
       await watcher.stop();
 
@@ -197,12 +196,7 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Stop should not throw
-      await assert.doesNotReject(
-        async () => {
-          await watcher.stop();
-        },
-        "Stopping watcher should not throw"
-      );
+      await expect(watcher.stop()).resolves.not.toThrow();
     });
 
     it("should provide accurate stats", async () => {
@@ -216,7 +210,7 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const initialStats = watcher.getStats();
-      assert.strictEqual(initialStats.changesPending, 0, "Should have no pending changes initially");
+      expect(initialStats.changesPending).toBe(0, "Should have no pending changes initially");
 
       await watcher.stop();
     });
@@ -249,7 +243,7 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       // Should have processed both files (debouncing prevents duplicate processing)
-      assert.ok(changes.length >= 0, "Should handle multiple rapid changes");
+      expect(changes.length >= 0, "Should handle multiple rapid changes").toBeTruthy();
 
       await watcher.stop();
 
@@ -286,14 +280,14 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       if (callbackInvoked && receivedInfo) {
-        assert.ok(receivedInfo, "Callback should receive info object");
+        expect(receivedInfo, "Callback should receive info object").toBeTruthy();
         // The callback might have entity info if sync was successful
-        assert.ok(
+        expect(
           receivedInfo.filePath !== undefined ||
           receivedInfo.entityType !== undefined ||
           receivedInfo.event !== undefined,
           "Info object should have relevant properties"
-        );
+        ).toBeTruthy();
       }
 
       await watcher.stop();

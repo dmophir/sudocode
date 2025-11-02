@@ -5,8 +5,7 @@
  * database integration, and configuration-driven behavior.
  */
 
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
 import type Database from 'better-sqlite3';
 import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from '@sudocode/types/schema';
@@ -27,7 +26,7 @@ describe('Worktree Integration Tests', () => {
   let testDir: string;
   let gitRepoPath: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create temporary directory for tests
     testDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'sudocode-worktree-integration-')
@@ -71,7 +70,7 @@ describe('Worktree Integration Tests', () => {
     return issue.id;
   }
 
-  after(() => {
+  afterAll(() => {
     // Clean up database
     db.close();
 
@@ -110,21 +109,21 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Verify execution was created
-      assert.ok(result.execution);
-      assert.strictEqual(result.execution.status, 'running');
-      assert.ok(result.worktreePath);
-      assert.ok(result.branchName);
+      expect(result.execution).toBeTruthy();
+      expect(result.execution.status).toBe('running');
+      expect(result.worktreePath).toBeTruthy();
+      expect(result.branchName).toBeTruthy();
 
       // Verify worktree exists on filesystem
-      assert.ok(fs.existsSync(result.worktreePath));
+      expect(fs.existsSync(result.worktreePath)).toBeTruthy();
 
       // Verify worktree is registered in git
       const isValid = await worktreeManager.isWorktreeValid(gitRepoPath, result.worktreePath);
-      assert.strictEqual(isValid, true);
+      expect(isValid).toBe(true);
 
       // Verify branch was created
       const branches = await worktreeManager.listBranches(gitRepoPath);
-      assert.ok(branches.includes(result.branchName));
+      expect(branches.includes(result.branchName)).toBeTruthy();
 
       // Mark execution as completed
       updateExecution(db, result.execution.id, { status: 'completed' });
@@ -133,11 +132,11 @@ describe('Worktree Integration Tests', () => {
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree was removed from filesystem
-      assert.ok(!fs.existsSync(result.worktreePath));
+      expect(!fs.existsSync(result.worktreePath)).toBeTruthy();
 
       // Verify execution record still has worktree_path (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, result.worktreePath);
+      expect(execution?.worktree_path).toBe(result.worktreePath);
     });
 
     it('should work with existing branch when autoCreateBranches is false', async () => {
@@ -169,7 +168,7 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Verify worktree was created
-      assert.ok(fs.existsSync(result.worktreePath));
+      expect(fs.existsSync(result.worktreePath)).toBeTruthy();
 
       // Cleanup
       await service.cleanupExecution(result.execution.id);
@@ -208,7 +207,7 @@ describe('Worktree Integration Tests', () => {
       const branchName = result.branchName;
 
       // Verify worktree exists
-      assert.ok(fs.existsSync(worktreePath));
+      expect(fs.existsSync(worktreePath)).toBeTruthy();
 
       // Mark execution as failed
       updateExecution(db, result.execution.id, { status: 'failed' });
@@ -217,15 +216,15 @@ describe('Worktree Integration Tests', () => {
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree was removed from filesystem
-      assert.ok(!fs.existsSync(worktreePath));
+      expect(!fs.existsSync(worktreePath)).toBeTruthy();
 
       // Verify branch was deleted (autoDeleteBranches is true)
       const branches = await worktreeManager.listBranches(gitRepoPath);
-      assert.ok(!branches.includes(branchName));
+      expect(!branches.includes(branchName)).toBeTruthy();
 
       // Verify execution record still has worktree_path (for follow-up executions)
       const execution = getExecution(db, result.execution.id);
-      assert.strictEqual(execution?.worktree_path, worktreePath);
+      expect(execution?.worktree_path).toBe(worktreePath);
     });
   });
 
@@ -258,7 +257,7 @@ describe('Worktree Integration Tests', () => {
       const branchName = result.branchName;
 
       // Verify worktree exists
-      assert.ok(fs.existsSync(worktreePath));
+      expect(fs.existsSync(worktreePath)).toBeTruthy();
 
       // Mark execution as stopped (cancelled)
       updateExecution(db, result.execution.id, { status: 'stopped' });
@@ -267,11 +266,11 @@ describe('Worktree Integration Tests', () => {
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree was removed
-      assert.ok(!fs.existsSync(worktreePath));
+      expect(!fs.existsSync(worktreePath)).toBeTruthy();
 
       // Verify branch still exists (autoDeleteBranches is false)
       const branches = await worktreeManager.listBranches(gitRepoPath);
-      assert.ok(branches.includes(branchName));
+      expect(branches.includes(branchName)).toBeTruthy();
 
       // Cleanup: delete the branch manually
       execSync(`git branch -D ${branchName}`, { cwd: gitRepoPath });
@@ -313,8 +312,8 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Verify worktrees exist
-      assert.ok(fs.existsSync(result1.worktreePath));
-      assert.ok(fs.existsSync(result2.worktreePath));
+      expect(fs.existsSync(result1.worktreePath)).toBeTruthy();
+      expect(fs.existsSync(result2.worktreePath)).toBeTruthy();
 
       // Mark executions as completed in DB without cleaning up worktrees
       updateExecution(db, result1.execution.id, { status: 'completed' });
@@ -324,14 +323,14 @@ describe('Worktree Integration Tests', () => {
       await service.cleanupOrphanedWorktrees();
 
       // Verify worktrees were cleaned up from filesystem
-      assert.ok(!fs.existsSync(result1.worktreePath));
-      assert.ok(!fs.existsSync(result2.worktreePath));
+      expect(!fs.existsSync(result1.worktreePath)).toBeTruthy();
+      expect(!fs.existsSync(result2.worktreePath)).toBeTruthy();
 
       // Verify execution records still have worktree_path (for follow-up executions)
       const exec1 = getExecution(db, result1.execution.id);
       const exec2 = getExecution(db, result2.execution.id);
-      assert.strictEqual(exec1?.worktree_path, result1.worktreePath);
-      assert.strictEqual(exec2?.worktree_path, result2.worktreePath);
+      expect(exec1?.worktree_path).toBe(result1.worktreePath);
+      expect(exec2?.worktree_path).toBe(result2.worktreePath);
     });
 
     it('should cleanup worktrees without execution records', async () => {
@@ -362,13 +361,13 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Verify worktree exists
-      assert.ok(fs.existsSync(orphanedPath));
+      expect(fs.existsSync(orphanedPath)).toBeTruthy();
 
       // Run orphaned cleanup
       await service.cleanupOrphanedWorktrees();
 
       // Verify orphaned worktree was cleaned up
-      assert.ok(!fs.existsSync(orphanedPath));
+      expect(!fs.existsSync(orphanedPath)).toBeTruthy();
     });
 
     it('should not cleanup worktrees for running executions', async () => {
@@ -396,13 +395,13 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Execution is still running
-      assert.strictEqual(result.execution.status, 'running');
+      expect(result.execution.status).toBe('running');
 
       // Run orphaned cleanup
       await service.cleanupOrphanedWorktrees();
 
       // Verify worktree still exists (not cleaned up)
-      assert.ok(fs.existsSync(result.worktreePath));
+      expect(fs.existsSync(result.worktreePath)).toBeTruthy();
 
       // Cleanup
       await service.cleanupExecution(result.execution.id);
@@ -440,7 +439,7 @@ describe('Worktree Integration Tests', () => {
 
       // Verify branch was created
       const branches = await worktreeManager.listBranches(gitRepoPath);
-      assert.ok(branches.includes(result.branchName));
+      expect(branches.includes(result.branchName)).toBeTruthy();
 
       // Cleanup
       await service.cleanupExecution(result.execution.id);
@@ -479,7 +478,7 @@ describe('Worktree Integration Tests', () => {
 
       // Verify branch was deleted
       const branches = await worktreeManager.listBranches(gitRepoPath);
-      assert.ok(!branches.includes(branchName));
+      expect(!branches.includes(branchName)).toBeTruthy();
     });
 
     it('should respect sparseCheckout config', async () => {
@@ -510,11 +509,11 @@ describe('Worktree Integration Tests', () => {
       // In a worktree, sparse-checkout is stored in: <main-repo>/.git/worktrees/<worktree-name>/info/sparse-checkout
       const worktreeName = path.basename(result.worktreePath);
       const sparseCheckoutFile = path.join(gitRepoPath, '.git', 'worktrees', worktreeName, 'info', 'sparse-checkout');
-      assert.ok(fs.existsSync(sparseCheckoutFile), `Sparse checkout file should exist at: ${sparseCheckoutFile}`);
+      expect(fs.existsSync(sparseCheckoutFile)).toBeTruthy();
 
       // Verify sparse checkout patterns
       const content = fs.readFileSync(sparseCheckoutFile, 'utf-8');
-      assert.ok(content.includes('src'));
+      expect(content.includes('src')).toBeTruthy();
 
       // Cleanup
       await service.cleanupExecution(result.execution.id);
@@ -548,18 +547,17 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Try to create second execution for same issue (should fail)
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await service.createExecutionWithWorktree({
             issueId: testIssueId,
             issueTitle: 'Test Issue',
             agentType: 'claude-code',
             targetBranch: 'main',
             repoPath: gitRepoPath,
-          });
+          }).rejects.toThrow();
         },
         (error: any) => {
-          assert.ok(error.message.includes('Active execution already exists'));
+          expect(error.message.includes('Active execution already exists')).toBeTruthy();
           return true;
         }
       );
@@ -611,12 +609,12 @@ describe('Worktree Integration Tests', () => {
       ]);
 
       // Verify both worktrees exist
-      assert.ok(fs.existsSync(result1.worktreePath));
-      assert.ok(fs.existsSync(result2.worktreePath));
+      expect(fs.existsSync(result1.worktreePath)).toBeTruthy();
+      expect(fs.existsSync(result2.worktreePath)).toBeTruthy();
 
       // Verify worktrees are different
-      assert.notStrictEqual(result1.worktreePath, result2.worktreePath);
-      assert.notStrictEqual(result1.branchName, result2.branchName);
+      expect(result1.worktreePath).not.toBe(result2.worktreePath);
+      expect(result1.branchName).not.toBe(result2.branchName);
 
       // Cleanup
       await Promise.all([
@@ -646,25 +644,24 @@ describe('Worktree Integration Tests', () => {
       // Try to create execution with invalid repo path
       const invalidRepoPath = path.join(testDir, 'non-existent-repo');
 
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await service.createExecutionWithWorktree({
             issueId: testIssueId,
             issueTitle: 'Test Issue',
             agentType: 'claude-code',
             targetBranch: 'main',
             repoPath: invalidRepoPath,
-          });
+          }).rejects.toThrow();
         },
         (error: any) => {
-          assert.ok(error.message.includes('Not a git repository'));
+          expect(error.message.includes('Not a git repository')).toBeTruthy();
           return true;
         }
       );
 
       // Verify no execution was created
       const executions = db.prepare('SELECT * FROM executions WHERE issue_id = ?').all(testIssueId);
-      assert.strictEqual(executions.length, 0);
+      expect(executions.length).toBe(0);
     });
 
     it('should not create execution if target branch does not exist', async () => {
@@ -683,18 +680,17 @@ describe('Worktree Integration Tests', () => {
 
       const testIssueId = createTestIssue('Non-Existent Branch Test');
 
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await service.createExecutionWithWorktree({
             issueId: testIssueId,
             issueTitle: 'Test Issue',
             agentType: 'claude-code',
             targetBranch: 'non-existent-branch',
             repoPath: gitRepoPath,
-          });
+          }).rejects.toThrow();
         },
         (error: any) => {
-          assert.ok(error.message.includes('Target branch does not exist'));
+          expect(error.message.includes('Target branch does not exist')).toBeTruthy();
           return true;
         }
       );
@@ -731,13 +727,13 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Verify worktree exists
-      assert.ok(fs.existsSync(result.worktreePath));
+      expect(fs.existsSync(result.worktreePath)).toBeTruthy();
 
       // Cleanup
       await service.cleanupExecution(result.execution.id);
 
       // Verify worktree was removed
-      assert.ok(!fs.existsSync(result.worktreePath));
+      expect(!fs.existsSync(result.worktreePath)).toBeTruthy();
     });
   });
 });

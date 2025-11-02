@@ -5,8 +5,7 @@
  * Verifies that cleanup is called appropriately on completion, failure, and cancellation.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import type { ExecutionLifecycleService } from "../../../../src/services/execution-lifecycle.js";
 import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
@@ -91,12 +90,8 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Wait a bit for async cleanup to complete
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    assert.strictEqual(cleanupCalls.length, 1, "Cleanup should be called once");
-    assert.strictEqual(
-      cleanupCalls[0],
-      "db-exec-123",
-      "Should cleanup the correct execution"
-    );
+    expect(cleanupCalls.length).toBe(1);
+    expect(cleanupCalls[0]).toBe("db-exec-123");
   });
 
   it("should call cleanup on workflow failure", async () => {
@@ -145,12 +140,8 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Wait for failure and cleanup
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    assert.strictEqual(cleanupCalls.length, 1, "Cleanup should be called once");
-    assert.strictEqual(
-      cleanupCalls[0],
-      "db-exec-456",
-      "Should cleanup the correct execution"
-    );
+    expect(cleanupCalls.length).toBe(1);
+    expect(cleanupCalls[0]).toBe("db-exec-456");
   });
 
   it("should call cleanup on workflow cancellation", async () => {
@@ -179,12 +170,8 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Cancel immediately
     await orchestrator.cancelWorkflow(executionId);
 
-    assert.strictEqual(cleanupCalls.length, 1, "Cleanup should be called once");
-    assert.strictEqual(
-      cleanupCalls[0],
-      "db-exec-789",
-      "Should cleanup the correct execution"
-    );
+    expect(cleanupCalls.length).toBe(1);
+    expect(cleanupCalls[0]).toBe("db-exec-789");
   });
 
   it("should not call cleanup when no lifecycle service provided (backward compatibility)", async () => {
@@ -210,11 +197,7 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Should complete successfully
-    assert.strictEqual(
-      cleanupCalls.length,
-      0,
-      "Cleanup should not be called without lifecycle service"
-    );
+    expect(cleanupCalls.length).toBe(0);
   });
 
   it("should handle cleanup errors gracefully on success", async () => {
@@ -252,11 +235,7 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Wait for cleanup attempt
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    assert.strictEqual(
-      cleanupCalls.length,
-      1,
-      "Cleanup should have been attempted"
-    );
+    expect(cleanupCalls.length).toBe(1);
   });
 
   it("should handle cleanup errors gracefully on failure", async () => {
@@ -313,11 +292,7 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Wait for cleanup attempt
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    assert.strictEqual(
-      cleanupCalls.length,
-      1,
-      "Cleanup should have been attempted"
-    );
+    expect(cleanupCalls.length).toBe(1);
   });
 
   it("should handle cleanup errors gracefully on cancellation", async () => {
@@ -354,10 +329,6 @@ describe("LinearOrchestrator Lifecycle Service Integration", () => {
     // Should not throw even if cleanup fails
     await orchestrator.cancelWorkflow(executionId);
 
-    assert.strictEqual(
-      cleanupCalls.length,
-      1,
-      "Cleanup should have been attempted"
-    );
+    expect(cleanupCalls.length).toBe(1);
   });
 });

@@ -4,8 +4,7 @@
  * Tests the transformation of SPEC-007 output processing events into AG-UI protocol events.
  */
 
-import { describe, it, mock } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, mock, expect, vi } from 'vitest'
 import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';
 import type {
@@ -23,88 +22,88 @@ describe('AgUiEventAdapter', () => {
   describe('constructor', () => {
     it('should create adapter with runId', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      assert.strictEqual(adapter.getRunId(), 'run-123');
+      expect(adapter.getRunId()).toBe('run-123');
     });
 
     it('should use runId as threadId when threadId not provided', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       adapter.emitRunStarted();
 
       const call = listener.mock.calls[0];
-      const event = call.arguments[0];
-      assert.strictEqual(event.runId, 'run-123');
-      assert.strictEqual(event.threadId, 'run-123');
+      const event = call[0];
+      expect(event.runId).toBe('run-123');
+      expect(event.threadId).toBe('run-123');
     });
 
     it('should use provided threadId when specified', () => {
       const adapter = new AgUiEventAdapter('run-123', 'thread-456');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       adapter.emitRunStarted();
 
       const call = listener.mock.calls[0];
-      const event = call.arguments[0];
-      assert.strictEqual(event.runId, 'run-123');
-      assert.strictEqual(event.threadId, 'thread-456');
+      const event = call[0];
+      expect(event.runId).toBe('run-123');
+      expect(event.threadId).toBe('thread-456');
     });
   });
 
   describe('event listener registration', () => {
     it('should register event listeners', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
 
       adapter.onEvent(listener);
       adapter.emitRunStarted();
 
-      assert.strictEqual(listener.mock.calls.length, 2); // RUN_STARTED + STATE_SNAPSHOT
+      expect(listener.mock.calls.length).toBe(2); // RUN_STARTED + STATE_SNAPSHOT
     });
 
     it('should support multiple listeners', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener1 = mock.fn();
-      const listener2 = mock.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       adapter.onEvent(listener1);
       adapter.onEvent(listener2);
       adapter.emitRunStarted();
 
-      assert.strictEqual(listener1.mock.calls.length, 2);
-      assert.strictEqual(listener2.mock.calls.length, 2);
+      expect(listener1.mock.calls.length).toBe(2);
+      expect(listener2.mock.calls.length).toBe(2);
     });
 
     it('should remove event listeners', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
 
       adapter.onEvent(listener);
       adapter.offEvent(listener);
       adapter.emitRunStarted();
 
-      assert.strictEqual(listener.mock.calls.length, 0);
+      expect(listener.mock.calls.length).toBe(0);
     });
 
     it('should handle listener errors gracefully', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const errorListener = mock.fn(() => {
+      const errorListener = vi.fn(() => {
         throw new Error('Listener error');
       });
-      const normalListener = mock.fn();
+      const normalListener = vi.fn();
 
       adapter.onEvent(errorListener);
       adapter.onEvent(normalListener);
 
       // Should not throw
-      assert.doesNotThrow(() => {
+      expect(() => {
         adapter.emitRunStarted();
-      });
+      }).not.toThrow();
 
       // Normal listener should still be called
-      assert.strictEqual(normalListener.mock.calls.length, 2);
+      expect(normalListener.mock.calls.length).toBe(2);
     });
   });
 
@@ -138,17 +137,17 @@ describe('AgUiEventAdapter', () => {
 
       adapter.connectToProcessor(mockProcessor);
 
-      assert.notStrictEqual(toolCallHandler, null);
-      assert.notStrictEqual(fileChangeHandler, null);
-      assert.notStrictEqual(progressHandler, null);
-      assert.notStrictEqual(errorHandler, null);
+      expect(toolCallHandler).not.toBe(null);
+      expect(fileChangeHandler).not.toBe(null);
+      expect(progressHandler).not.toBe(null);
+      expect(errorHandler).not.toBe(null);
     });
   });
 
   describe('tool call event transformation', () => {
     it('should emit TOOL_CALL_START and TOOL_CALL_ARGS for new tool call', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -167,22 +166,22 @@ describe('AgUiEventAdapter', () => {
       toolCallHandler(toolCall);
 
       // Should emit TOOL_CALL_START and TOOL_CALL_ARGS
-      assert.strictEqual(listener.mock.calls.length, 2);
+      expect(listener.mock.calls.length).toBe(2);
 
-      const startEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(startEvent.type, EventType.TOOL_CALL_START);
-      assert.strictEqual(startEvent.toolCallId, 'tool-1');
-      assert.strictEqual(startEvent.toolCallName, 'Read');
+      const startEvent = listener.mock.calls[0][0];
+      expect(startEvent.type).toBe(EventType.TOOL_CALL_START);
+      expect(startEvent.toolCallId).toBe('tool-1');
+      expect(startEvent.toolCallName).toBe('Read');
 
-      const argsEvent = listener.mock.calls[1].arguments[0];
-      assert.strictEqual(argsEvent.type, EventType.TOOL_CALL_ARGS);
-      assert.strictEqual(argsEvent.toolCallId, 'tool-1');
-      assert.strictEqual(argsEvent.delta, JSON.stringify({ file_path: '/test.ts' }));
+      const argsEvent = listener.mock.calls[1][0];
+      expect(argsEvent.type).toBe(EventType.TOOL_CALL_ARGS);
+      expect(argsEvent.toolCallId).toBe('tool-1');
+      expect(argsEvent.delta).toBe('{"file_path":"/test.ts"}');
     });
 
     it('should emit TOOL_CALL_END and TOOL_CALL_RESULT on success', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -200,7 +199,7 @@ describe('AgUiEventAdapter', () => {
       };
       toolCallHandler(pendingToolCall);
 
-      listener.mock.resetCalls();
+      listener.mockClear();
 
       // Second call - success
       const successToolCall: ToolCall = {
@@ -212,21 +211,21 @@ describe('AgUiEventAdapter', () => {
       toolCallHandler(successToolCall);
 
       // Should emit TOOL_CALL_END, TOOL_CALL_RESULT, and STATE_DELTA
-      assert.strictEqual(listener.mock.calls.length, 3);
+      expect(listener.mock.calls.length).toBe(3);
 
-      const endEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(endEvent.type, EventType.TOOL_CALL_END);
-      assert.strictEqual(endEvent.toolCallId, 'tool-1');
+      const endEvent = listener.mock.calls[0][0];
+      expect(endEvent.type).toBe(EventType.TOOL_CALL_END);
+      expect(endEvent.toolCallId).toBe('tool-1');
 
-      const resultEvent = listener.mock.calls[1].arguments[0];
-      assert.strictEqual(resultEvent.type, EventType.TOOL_CALL_RESULT);
-      assert.strictEqual(resultEvent.toolCallId, 'tool-1');
-      assert.strictEqual(resultEvent.content, 'file contents');
+      const resultEvent = listener.mock.calls[1][0];
+      expect(resultEvent.type).toBe(EventType.TOOL_CALL_RESULT);
+      expect(resultEvent.toolCallId).toBe('tool-1');
+      expect(resultEvent.content).toBe('file contents');
     });
 
     it('should emit TOOL_CALL_RESULT with error on failure', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -243,7 +242,7 @@ describe('AgUiEventAdapter', () => {
         timestamp: new Date(),
       });
 
-      listener.mock.resetCalls();
+      listener.mockClear();
 
       // Error call
       const errorToolCall: ToolCall = {
@@ -257,16 +256,16 @@ describe('AgUiEventAdapter', () => {
       };
       toolCallHandler(errorToolCall);
 
-      const resultEvent = listener.mock.calls[1].arguments[0];
-      assert.strictEqual(resultEvent.type, EventType.TOOL_CALL_RESULT);
-      assert.strictEqual(resultEvent.content, 'File not found');
+      const resultEvent = listener.mock.calls[1][0];
+      expect(resultEvent.type).toBe(EventType.TOOL_CALL_RESULT);
+      expect(resultEvent.content).toBe('File not found');
     });
   });
 
   describe('file change event transformation', () => {
     it('should emit CUSTOM event for file changes', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -287,12 +286,12 @@ describe('AgUiEventAdapter', () => {
       fileChangeHandler(fileChange);
 
       // Should emit CUSTOM event and STATE_DELTA
-      assert.strictEqual(listener.mock.calls.length, 2);
+      expect(listener.mock.calls.length).toBe(2);
 
-      const customEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(customEvent.type, EventType.CUSTOM);
-      assert.strictEqual(customEvent.name, 'file_change');
-      assert.deepStrictEqual(customEvent.value, {
+      const customEvent = listener.mock.calls[0][0];
+      expect(customEvent.type).toBe(EventType.CUSTOM);
+      expect(customEvent.name).toBe('file_change');
+      expect(customEvent.value).toEqual({
         path: '/src/test.ts',
         operation: 'write',
         toolCallId: 'tool-1',
@@ -307,7 +306,7 @@ describe('AgUiEventAdapter', () => {
   describe('progress event transformation', () => {
     it('should emit STATE_DELTA for progress updates', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -331,24 +330,24 @@ describe('AgUiEventAdapter', () => {
       const progressHandler = getMockHandler(mockProcessor, 'onProgress') as ProgressHandler;
       progressHandler(metrics);
 
-      assert.strictEqual(listener.mock.calls.length, 1);
+      expect(listener.mock.calls.length).toBe(1);
 
-      const deltaEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(deltaEvent.type, EventType.STATE_DELTA);
-      assert.ok(Array.isArray(deltaEvent.delta));
+      const deltaEvent = listener.mock.calls[0][0];
+      expect(deltaEvent.type).toBe(EventType.STATE_DELTA);
+      expect(Array.isArray(deltaEvent.delta)).toBeTruthy();
 
       // Check JSON Patch format
       const totalMessagesOp = deltaEvent.delta.find((op: any) => op.path === '/totalMessages');
-      assert.ok(totalMessagesOp);
-      assert.strictEqual(totalMessagesOp.op, 'replace');
-      assert.strictEqual(totalMessagesOp.value, 10);
+      expect(totalMessagesOp).toBeTruthy();
+      expect(totalMessagesOp.op).toBe('replace');
+      expect(totalMessagesOp.value).toBe(10);
     });
   });
 
   describe('error event transformation', () => {
     it('should emit RUN_ERROR for errors', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -364,55 +363,55 @@ describe('AgUiEventAdapter', () => {
       errorHandler(error);
 
       // Should emit RUN_ERROR and STATE_DELTA
-      assert.strictEqual(listener.mock.calls.length, 2);
+      expect(listener.mock.calls.length).toBe(2);
 
-      const errorEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(errorEvent.type, EventType.RUN_ERROR);
-      assert.strictEqual(errorEvent.message, 'Test error');
-      assert.ok(errorEvent.rawEvent);
-      assert.deepStrictEqual(errorEvent.rawEvent.details, { code: 'ERR_TEST' });
+      const errorEvent = listener.mock.calls[0][0];
+      expect(errorEvent.type).toBe(EventType.RUN_ERROR);
+      expect(errorEvent.message).toBe('Test error');
+      expect(errorEvent.rawEvent).toBeTruthy();
+      expect(errorEvent.rawEvent.details).toEqual({ code: 'ERR_TEST' });
     });
   });
 
   describe('lifecycle methods', () => {
     it('should emit RUN_STARTED and STATE_SNAPSHOT', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       adapter.emitRunStarted({ model: 'claude-sonnet-4' });
 
-      assert.strictEqual(listener.mock.calls.length, 2);
+      expect(listener.mock.calls.length).toBe(2);
 
-      const runStartedEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(runStartedEvent.type, EventType.RUN_STARTED);
-      assert.strictEqual(runStartedEvent.runId, 'run-123');
-      assert.ok(runStartedEvent.rawEvent);
+      const runStartedEvent = listener.mock.calls[0][0];
+      expect(runStartedEvent.type).toBe(EventType.RUN_STARTED);
+      expect(runStartedEvent.runId).toBe('run-123');
+      expect(runStartedEvent.rawEvent).toBeTruthy();
 
-      const snapshotEvent = listener.mock.calls[1].arguments[0];
-      assert.strictEqual(snapshotEvent.type, EventType.STATE_SNAPSHOT);
-      assert.ok(snapshotEvent.snapshot);
+      const snapshotEvent = listener.mock.calls[1][0];
+      expect(snapshotEvent.type).toBe(EventType.STATE_SNAPSHOT);
+      expect(snapshotEvent.snapshot).toBeTruthy();
     });
 
     it('should emit RUN_FINISHED with result', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const result = { success: true, summary: 'Task completed' };
       adapter.emitRunFinished(result);
 
-      assert.strictEqual(listener.mock.calls.length, 1);
+      expect(listener.mock.calls.length).toBe(1);
 
-      const runFinishedEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(runFinishedEvent.type, EventType.RUN_FINISHED);
-      assert.strictEqual(runFinishedEvent.runId, 'run-123');
-      assert.deepStrictEqual(runFinishedEvent.result, result);
+      const runFinishedEvent = listener.mock.calls[0][0];
+      expect(runFinishedEvent.type).toBe(EventType.RUN_FINISHED);
+      expect(runFinishedEvent.runId).toBe('run-123');
+      expect(runFinishedEvent.result).toEqual(result);
     });
 
     it('should emit STATE_SNAPSHOT with metrics', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -434,14 +433,14 @@ describe('AgUiEventAdapter', () => {
       adapter.connectToProcessor(mockProcessor);
       adapter.emitStateSnapshot();
 
-      assert.strictEqual(listener.mock.calls.length, 1);
+      expect(listener.mock.calls.length).toBe(1);
 
-      const snapshotEvent = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(snapshotEvent.type, EventType.STATE_SNAPSHOT);
-      assert.strictEqual(snapshotEvent.snapshot.totalMessages, 5);
-      assert.strictEqual(snapshotEvent.snapshot.toolCallCount, 2);
-      assert.strictEqual(snapshotEvent.snapshot.fileChangeCount, 1);
-      assert.deepStrictEqual(snapshotEvent.snapshot.usage, {
+      const snapshotEvent = listener.mock.calls[0][0];
+      expect(snapshotEvent.type).toBe(EventType.STATE_SNAPSHOT);
+      expect(snapshotEvent.snapshot.totalMessages).toBe(5);
+      expect(snapshotEvent.snapshot.toolCallCount).toBe(2);
+      expect(snapshotEvent.snapshot.fileChangeCount).toBe(1);
+      expect(snapshotEvent.snapshot.usage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
         totalTokens: 150,
@@ -452,7 +451,7 @@ describe('AgUiEventAdapter', () => {
   describe('state management', () => {
     it('should track state across events', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       const mockProcessor = createMockProcessor();
@@ -476,8 +475,8 @@ describe('AgUiEventAdapter', () => {
       });
 
       const state = adapter.getState();
-      assert.strictEqual(state.totalMessages, 5);
-      assert.strictEqual(state.toolCallCount, 0);
+      expect(state.totalMessages).toBe(5);
+      expect(state.toolCallCount).toBe(0);
     });
 
     it('should return copy of state', () => {
@@ -487,21 +486,21 @@ describe('AgUiEventAdapter', () => {
       state1.customField = 'modified';
 
       const state2 = adapter.getState();
-      assert.strictEqual(state2.customField, undefined);
+      expect(state2.customField).toBe(undefined);
     });
   });
 
   describe('event timestamps', () => {
     it('should use numeric timestamps', () => {
       const adapter = new AgUiEventAdapter('run-123');
-      const listener = mock.fn();
+      const listener = vi.fn();
       adapter.onEvent(listener);
 
       adapter.emitRunStarted();
 
-      const event = listener.mock.calls[0].arguments[0];
-      assert.strictEqual(typeof event.timestamp, 'number');
-      assert.ok(event.timestamp > 0);
+      const event = listener.mock.calls[0][0];
+      expect(typeof event.timestamp).toBe('number');
+      expect(event.timestamp > 0).toBeTruthy();
     });
   });
 });

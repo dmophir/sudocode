@@ -5,8 +5,7 @@
  * lifecycle of process management including spawning, I/O, and termination.
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach, afterEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 import { tmpdir } from 'node:os';
@@ -83,9 +82,9 @@ describe('End-to-End Process Execution', () => {
 
       // Spawn process
       const managedProcess = await manager.acquireProcess(config);
-      assert.ok(managedProcess.id);
-      assert.ok(managedProcess.pid);
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.id).toBeTruthy();
+      expect(managedProcess.pid).toBeTruthy();
+      expect(managedProcess.status).toBe('busy');
 
       const initialMetrics = manager.getMetrics();
 
@@ -106,8 +105,8 @@ describe('End-to-End Process Execution', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Verify output received
-      assert.ok(outputs.some((o) => o.includes('Echo: hello world')));
-      assert.ok(outputs.some((o) => o.includes('Echo: test message')));
+      expect(outputs.some((o) => o.includes('Echo: hello world'))).toBeTruthy();
+      expect(outputs.some((o) => o.includes('Echo: test message'))).toBeTruthy();
 
       // Terminate
       await manager.sendInput(managedProcess.id, 'quit\n');
@@ -121,9 +120,9 @@ describe('End-to-End Process Execution', () => {
 
       // Verify metrics updated
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalSpawned, initialMetrics.totalSpawned);
-      assert.strictEqual(finalMetrics.totalCompleted, initialMetrics.totalCompleted + 1);
-      assert.strictEqual(managedProcess.status, 'completed');
+      expect(finalMetrics.totalSpawned).toBe(initialMetrics.totalSpawned);
+      expect(finalMetrics.totalCompleted).toBe(initialMetrics.totalCompleted + 1);
+      expect(managedProcess.status).toBe('completed');
     });
 
     it('handles process that produces large output', async () => {
@@ -159,8 +158,8 @@ describe('End-to-End Process Execution', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'completed');
-      assert.ok(lineCount >= 100, `Expected at least 100 lines, got ${lineCount}`);
+      expect(managedProcess.status).toBe('completed');
+      expect(lineCount >= 100, `Expected at least 100 lines, got ${lineCount}`).toBeTruthy();
     });
 
     it.skip('verifies working directory is correctly set', async () => {
@@ -189,7 +188,7 @@ describe('End-to-End Process Execution', () => {
         });
       });
 
-      assert.strictEqual(output.trim(), tempDir);
+      expect(output.trim()).toBe(tempDir);
     });
   });
 
@@ -220,8 +219,8 @@ describe('End-to-End Process Execution', () => {
         configs.map((config) => manager.acquireProcess(config))
       );
 
-      assert.strictEqual(processes.length, 3);
-      assert.strictEqual(manager.getActiveProcesses().length, 3);
+      expect(processes.length).toBe(3);
+      expect(manager.getActiveProcesses().length).toBe(3);
 
       // Track outputs for each process
       const outputs = new Map<string, string[]>();
@@ -245,14 +244,14 @@ describe('End-to-End Process Execution', () => {
       );
 
       // Verify all processes completed successfully
-      assert.ok(outputs.get(processes[0].id)!.some((o) => o.includes('Process 1')));
-      assert.ok(outputs.get(processes[1].id)!.some((o) => o.includes('Process 2')));
-      assert.ok(outputs.get(processes[2].id)!.some((o) => o.includes('Process 3')));
+      expect(outputs.get(processes[0].id)!.some((o) => o.includes('Process 1'))).toBeTruthy();
+      expect(outputs.get(processes[1].id)!.some((o) => o.includes('Process 2'))).toBeTruthy();
+      expect(outputs.get(processes[2].id)!.some((o) => o.includes('Process 3'))).toBeTruthy();
 
       // Verify metrics
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalCompleted, initialMetrics.totalCompleted + 3);
-      assert.strictEqual(finalMetrics.totalFailed, initialMetrics.totalFailed);
+      expect(finalMetrics.totalCompleted).toBe(initialMetrics.totalCompleted + 3);
+      expect(finalMetrics.totalFailed).toBe(initialMetrics.totalFailed);
     });
 
     it('tracks metrics correctly for concurrent processes', async () => {
@@ -273,7 +272,7 @@ describe('End-to-End Process Execution', () => {
         manager.acquireProcess(config),
       ]);
 
-      assert.strictEqual(manager.getMetrics().currentlyActive, initialMetrics.currentlyActive + 5);
+      expect(manager.getMetrics().currentlyActive).toBe(initialMetrics.currentlyActive + 5);
 
       // Wait for all to complete
       await Promise.all(
@@ -286,8 +285,8 @@ describe('End-to-End Process Execution', () => {
       );
 
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalCompleted, initialMetrics.totalCompleted + 5);
-      assert.strictEqual(finalMetrics.currentlyActive, initialMetrics.currentlyActive);
+      expect(finalMetrics.totalCompleted).toBe(initialMetrics.totalCompleted + 5);
+      expect(finalMetrics.currentlyActive).toBe(initialMetrics.currentlyActive);
     });
 
     it('cleans up all processes properly', async () => {
@@ -304,7 +303,7 @@ describe('End-to-End Process Execution', () => {
         manager.acquireProcess(config),
       ]);
 
-      assert.strictEqual(manager.getActiveProcesses().length, 3);
+      expect(manager.getActiveProcesses().length).toBe(3);
 
       // Shutdown all with timeout
       await Promise.race([
@@ -314,7 +313,7 @@ describe('End-to-End Process Execution', () => {
 
       // All should be killed
       processes.forEach((proc) => {
-        assert.strictEqual(proc.process.killed, true);
+        expect(proc.process.killed).toBe(true);
       });
     });
   });
@@ -345,14 +344,14 @@ describe('End-to-End Process Execution', () => {
       });
 
       // Verify crash handling
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.strictEqual(managedProcess.exitCode, 1);
-      assert.ok(output.includes('Before crash'));
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.exitCode).toBe(1);
+      expect(output.includes('Before crash')).toBeTruthy();
 
       // Verify metrics
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalFailed, initialMetrics.totalFailed + 1);
-      assert.strictEqual(finalMetrics.totalCompleted, initialMetrics.totalCompleted);
+      expect(finalMetrics.totalFailed).toBe(initialMetrics.totalFailed + 1);
+      expect(finalMetrics.totalCompleted).toBe(initialMetrics.totalCompleted);
     });
 
     it('handles runtime errors and updates status', async () => {
@@ -371,8 +370,8 @@ describe('End-to-End Process Execution', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.notStrictEqual(managedProcess.exitCode, 0);
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.exitCode).not.toBe(0);
     });
 
     it('cleans up crashed processes automatically', async () => {
@@ -393,7 +392,7 @@ describe('End-to-End Process Execution', () => {
       });
 
       // Process should still be in activeProcesses initially
-      assert.ok(manager.getProcess(processId));
+      expect(manager.getProcess(processId)).toBeTruthy();
       // (Full cleanup test removed - takes 5+ seconds)
     });
   });
@@ -409,14 +408,13 @@ describe('End-to-End Process Execution', () => {
       const initialMetrics = manager.getMetrics();
 
       // Should throw error
-      await assert.rejects(
-        manager.acquireProcess(config),
+      await expect(manager.acquireProcess(config)).rejects.toThrow(
         /Failed to spawn process: no PID assigned/
       );
 
       // Metrics should not be incremented
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalSpawned, initialMetrics.totalSpawned);
+      expect(finalMetrics.totalSpawned).toBe(initialMetrics.totalSpawned);
     });
 
     it('handles timeout correctly', async () => {
@@ -440,8 +438,8 @@ describe('End-to-End Process Execution', () => {
       ]);
 
       // Should be crashed due to timeout
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.ok(managedProcess.signal); // Killed by signal
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.signal).toBeTruthy(); // Killed by signal
     });
 
     it('verifies SIGTERM then SIGKILL on timeout', async () => {
@@ -481,7 +479,7 @@ describe('End-to-End Process Execution', () => {
       ]);
 
       // Process should have been killed
-      assert.strictEqual(managedProcess.process.killed, true);
+      expect(managedProcess.process.killed).toBe(true);
     });
 
     it('handles process that exits during I/O operations', async () => {
@@ -504,10 +502,7 @@ describe('End-to-End Process Execution', () => {
       });
 
       // Try to send input after process has exited - should reject
-      await assert.rejects(
-        manager.sendInput(managedProcess.id, 'test2\n'),
-        /Error/
-      );
+      await expect(manager.sendInput(managedProcess.id, 'test2\n')).rejects.toThrow();
     });
   });
 
@@ -530,7 +525,7 @@ describe('End-to-End Process Execution', () => {
       }
 
       const finalMetrics = manager.getMetrics();
-      assert.strictEqual(finalMetrics.totalCompleted, initialMetrics.totalCompleted + 10);
+      expect(finalMetrics.totalCompleted).toBe(initialMetrics.totalCompleted + 10);
     });
 
     it('handles many concurrent processes', async () => {
@@ -545,7 +540,7 @@ describe('End-to-End Process Execution', () => {
         Array.from({ length: 5 }, () => manager.acquireProcess(config))
       );
 
-      assert.strictEqual(processes.length, 5);
+      expect(processes.length).toBe(5);
 
       // Wait for all to complete
       await Promise.all(
@@ -559,7 +554,7 @@ describe('End-to-End Process Execution', () => {
 
       // All should have completed
       processes.forEach((proc) => {
-        assert.strictEqual(proc.status, 'completed');
+        expect(proc.status).toBe('completed');
       });
     });
   });

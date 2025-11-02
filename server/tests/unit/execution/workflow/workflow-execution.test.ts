@@ -2,8 +2,7 @@
  * Tests for Workflow Execution Flow
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { randomUUID } from "crypto";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
@@ -126,16 +125,15 @@ describe("Workflow Execution Flow", () => {
       const executionId = randomUUID();
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
-      assert.ok(executionId);
-      assert.match(
-        executionId,
+      expect(executionId).toBeTruthy();
+      expect(executionId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       );
 
       // Execution should be stored
       const execution = orchestrator.getExecution(executionId);
-      assert.ok(execution);
-      assert.strictEqual(execution.workflowId, "test-workflow");
+      expect(execution).toBeTruthy();
+      expect(execution?.workflowId).toBe("test-workflow");
     });
 
     it("should initialize execution with initial context", async () => {
@@ -152,7 +150,7 @@ describe("Workflow Execution Flow", () => {
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.deepStrictEqual(execution?.context, initialContext);
+      expect(execution?.context).toEqual(initialContext);
     });
 
     it("should start workflow execution in background", async () => {
@@ -177,8 +175,8 @@ describe("Workflow Execution Flow", () => {
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "completed");
-      assert.strictEqual(mockExecutor.executedTasks.length, 1);
+      expect(execution?.status).toBe("completed");
+      expect(mockExecutor.executedTasks.length).toBe(1);
     });
   });
 
@@ -209,16 +207,10 @@ describe("Workflow Execution Flow", () => {
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.stepResults.length, 2);
-      assert.strictEqual(mockExecutor.executedTasks.length, 2);
-      assert.strictEqual(
-        mockExecutor.executedTasks[0].task.prompt,
-        "First step"
-      );
-      assert.strictEqual(
-        mockExecutor.executedTasks[1].task.prompt,
-        "Second step"
-      );
+      expect(execution?.stepResults.length).toBe(2);
+      expect(mockExecutor.executedTasks.length).toBe(2);
+      expect(mockExecutor.executedTasks[0].task.prompt).toBe("First step");
+      expect(mockExecutor.executedTasks[1].task.prompt).toBe("Second step");
     });
 
     it("should check dependencies before executing steps", async () => {
@@ -257,7 +249,7 @@ describe("Workflow Execution Flow", () => {
       });
 
       // Only first step should have executed
-      assert.strictEqual(mockExecutor.executedTasks.length, 1);
+      expect(mockExecutor.executedTasks.length).toBe(1);
     });
 
     it("should evaluate step conditions", async () => {
@@ -290,11 +282,8 @@ describe("Workflow Execution Flow", () => {
       });
 
       // Only second step should have executed
-      assert.strictEqual(mockExecutor.executedTasks.length, 1);
-      assert.strictEqual(
-        mockExecutor.executedTasks[0].task.prompt,
-        "Second step"
-      );
+      expect(mockExecutor.executedTasks.length).toBe(1);
+      expect(mockExecutor.executedTasks[0].task.prompt).toBe("Second step");
     });
 
     it("should fail workflow on step failure when continueOnStepFailure=false", async () => {
@@ -331,8 +320,8 @@ describe("Workflow Execution Flow", () => {
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "failed");
-      assert.strictEqual(mockExecutor.executedTasks.length, 1);
+      expect(execution?.status).toBe("failed");
+      expect(mockExecutor.executedTasks.length).toBe(1);
     });
 
     it("should continue on step failure when continueOnStepFailure=true", async () => {
@@ -370,8 +359,8 @@ describe("Workflow Execution Flow", () => {
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "completed");
-      assert.strictEqual(mockExecutor.executedTasks.length, 2);
+      expect(execution?.status).toBe("completed");
+      expect(mockExecutor.executedTasks.length).toBe(2);
     });
 
     it("should apply output mapping and pass context between steps", async () => {
@@ -410,11 +399,10 @@ describe("Workflow Execution Flow", () => {
 
       // Check that context was updated
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.context.result1, "Result from step 1");
+      expect(execution?.context.result1).toBe("Result from step 1");
 
       // Check that second step received the context
-      assert.strictEqual(
-        mockExecutor.executedTasks[1].task.prompt,
+      expect(mockExecutor.executedTasks[1].task.prompt).toBe(
         "Second step with Result from step 1"
       );
     });
@@ -447,8 +435,8 @@ describe("Workflow Execution Flow", () => {
 
       await waitFor(() => startEventEmitted);
 
-      assert.strictEqual(startEventEmitted, true);
-      assert.strictEqual(emittedWorkflowId, "test-workflow");
+      expect(startEventEmitted).toBe(true);
+      expect(emittedWorkflowId).toBe("test-workflow");
     });
 
     it("should emit step start and complete events", async () => {
@@ -481,7 +469,7 @@ describe("Workflow Execution Flow", () => {
         return execution?.status === "completed";
       });
 
-      assert.deepStrictEqual(stepEvents, ["start:step-1", "complete:step-1"]);
+      expect(stepEvents).toEqual(["start:step-1", "complete:step-1"]);
     });
 
     it("should emit workflow complete event", async () => {
@@ -510,8 +498,8 @@ describe("Workflow Execution Flow", () => {
 
       await waitFor(() => completeEventEmitted);
 
-      assert.strictEqual(completeEventEmitted, true);
-      assert.strictEqual(resultSuccess, true);
+      expect(completeEventEmitted).toBe(true);
+      expect(resultSuccess).toBe(true);
     });
 
     it("should emit workflow failed event on error", async () => {
@@ -546,7 +534,7 @@ describe("Workflow Execution Flow", () => {
 
       await waitFor(() => failedEventEmitted);
 
-      assert.strictEqual(failedEventEmitted, true);
+      expect(failedEventEmitted).toBe(true);
     });
   });
 
@@ -587,7 +575,7 @@ describe("Workflow Execution Flow", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "paused");
+      expect(execution?.status).toBe("paused");
     });
 
     it("should cancel workflow execution", async () => {
@@ -606,7 +594,7 @@ describe("Workflow Execution Flow", () => {
       await orchestrator.cancelWorkflow(executionId);
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "cancelled");
+      expect(execution?.status).toBe("cancelled");
     });
   });
 });

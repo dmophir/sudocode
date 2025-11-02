@@ -4,8 +4,7 @@
  * Tests sendInput, onOutput, and onError methods for process communication.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 
@@ -50,14 +49,11 @@ describe('Process I/O Communication', () => {
         });
       });
 
-      assert.ok(output.includes('Received: test input'));
+      expect(output.includes('Received: test input')).toBeTruthy();
     });
 
     it('throws error for non-existent process', async () => {
-      await assert.rejects(
-        manager.sendInput('non-existent-id', 'test'),
-        /Process non-existent-id not found/
-      );
+      await expect(manager.sendInput('non-existent-id', 'test')).rejects.toThrow(/Process non-existent-id not found/);
     });
 
     it('handles write errors gracefully', async () => {
@@ -77,13 +73,7 @@ describe('Process I/O Communication', () => {
       });
 
       // Try to write to closed stdin
-      await assert.rejects(
-        manager.sendInput(managedProcess.id, 'test'),
-        (_error: Error) => {
-          // Should throw an error when writing to closed stream
-          return true;
-        }
-      );
+      await expect(manager.sendInput(managedProcess.id, 'test')).rejects.toThrow();
     });
 
     it('supports multiple sendInput calls', async () => {
@@ -129,9 +119,9 @@ describe('Process I/O Communication', () => {
         new Promise<void>((resolve) => setTimeout(resolve, 6000)), // Safety timeout
       ]);
 
-      assert.ok(output.includes('Message 1: first'));
-      assert.ok(output.includes('Message 2: second'));
-      assert.ok(output.includes('Message 3: third'));
+      expect(output.includes('Message 1: first')).toBeTruthy();
+      expect(output.includes('Message 2: second')).toBeTruthy();
+      expect(output.includes('Message 3: third')).toBeTruthy();
     });
   });
 
@@ -155,8 +145,8 @@ describe('Process I/O Communication', () => {
       // Wait for output
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.ok(outputs.length > 0);
-      assert.ok(outputs.some((o) => o.type === 'stdout' && o.data.includes('test stdout')));
+      expect(outputs.length > 0).toBeTruthy();
+      expect(outputs.some((o) => o.type === 'stdout' && o.data.includes('test stdout'))).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -181,8 +171,8 @@ describe('Process I/O Communication', () => {
       // Wait for output
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.ok(outputs.length > 0);
-      assert.ok(outputs.some((o) => o.type === 'stderr' && o.data.includes('test stderr')));
+      expect(outputs.length > 0).toBeTruthy();
+      expect(outputs.some((o) => o.type === 'stderr' && o.data.includes('test stderr'))).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -209,18 +199,15 @@ describe('Process I/O Communication', () => {
       // Wait for output
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.ok(outputs.some((o) => o.type === 'stdout' && o.data.includes('stdout msg')));
-      assert.ok(outputs.some((o) => o.type === 'stderr' && o.data.includes('stderr msg')));
+      expect(outputs.some((o) => o.type === 'stdout' && o.data.includes('stdout msg'))).toBeTruthy();
+      expect(outputs.some((o) => o.type === 'stderr' && o.data.includes('stderr msg'))).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
     });
 
     it('throws error for non-existent process', () => {
-      assert.throws(
-        () => manager.onOutput('non-existent-id', () => {}),
-        /Process non-existent-id not found/
-      );
+      expect(() => manager.onOutput('non-existent-id', () => {})).toThrow(/Process non-existent-id not found/);
     });
 
     it('supports multiple output handlers', async () => {
@@ -246,8 +233,8 @@ describe('Process I/O Communication', () => {
       // Wait for output
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.strictEqual(handler1Called, true);
-      assert.strictEqual(handler2Called, true);
+      expect(handler1Called).toBe(true);
+      expect(handler2Called).toBe(true);
 
       // Cleanup
       managedProcess.process.kill();
@@ -284,10 +271,10 @@ describe('Process I/O Communication', () => {
       // Wait for all output
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      assert.strictEqual(lines.length, 3);
-      assert.ok(lines.includes('Line 1'));
-      assert.ok(lines.includes('Line 2'));
-      assert.ok(lines.includes('Line 3'));
+      expect(lines.length).toBe(3);
+      expect(lines.includes('Line 1')).toBeTruthy();
+      expect(lines.includes('Line 2')).toBeTruthy();
+      expect(lines.includes('Line 3')).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -318,14 +305,11 @@ describe('Process I/O Communication', () => {
       });
 
       // Runtime errors don't trigger error event, they cause non-zero exit
-      assert.strictEqual(managedProcess.exitCode !== 0, true);
+      expect(managedProcess.exitCode !== 0).toBe(true);
     });
 
     it('throws error for non-existent process', () => {
-      assert.throws(
-        () => manager.onError('non-existent-id', () => {}),
-        /Process non-existent-id not found/
-      );
+      expect(() => manager.onError('non-existent-id', () => {})).toThrow(/Process non-existent-id not found/);
     });
 
     it('supports multiple error handlers', async () => {
@@ -350,8 +334,8 @@ describe('Process I/O Communication', () => {
 
       // Both handlers should be registered (we can't easily trigger them,
       // but we verify they don't throw)
-      assert.strictEqual(handler1Registered, false); // Not triggered yet
-      assert.strictEqual(handler2Registered, false); // Not triggered yet
+      expect(handler1Registered).toBe(false); // Not triggered yet
+      expect(handler2Registered).toBe(false); // Not triggered yet
 
       // Cleanup
       managedProcess.process.kill();
@@ -372,7 +356,7 @@ describe('Process I/O Communication', () => {
       await manager.sendInput(managedProcess.id, '');
 
       // Should not crash
-      assert.ok(managedProcess);
+      expect(managedProcess).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -398,7 +382,7 @@ describe('Process I/O Communication', () => {
       // Wait for output
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      assert.ok(receivedData.includes(largeString));
+      expect(receivedData.includes(largeString)).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -447,7 +431,7 @@ describe('Process I/O Communication', () => {
       });
 
       // Should have received all 10 inputs
-      assert.ok(output.includes('Lines received: 10'), `Expected 10 lines, got: ${output}`);
+      expect(output.includes('Lines received: 10')).toBeTruthy();
     });
 
     it('onOutput handles data immediately after spawn', async () => {
@@ -470,7 +454,7 @@ describe('Process I/O Communication', () => {
       // Wait a bit
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      assert.strictEqual(capturedOutput, true);
+      expect(capturedOutput).toBe(true);
 
       // Cleanup
       managedProcess.process.kill();
@@ -490,7 +474,7 @@ describe('Process I/O Communication', () => {
       const duration = Date.now() - startTime;
 
       // Should resolve quickly (not wait for process to read)
-      assert.ok(duration < 100, `sendInput took ${duration}ms, expected < 100ms`);
+      expect(duration < 100, `sendInput took ${duration}ms, expected < 100ms`).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -531,9 +515,9 @@ describe('Process I/O Communication', () => {
         });
       });
 
-      assert.ok(receivedData.length > 0);
+      expect(receivedData.length > 0).toBeTruthy();
       const totalLength = receivedData.reduce((sum, buf) => sum + buf.length, 0);
-      assert.ok(totalLength > 0);
+      expect(totalLength > 0).toBeTruthy();
     });
   });
 
@@ -588,8 +572,8 @@ describe('Process I/O Communication', () => {
         });
       });
 
-      assert.ok(outputs.some((o) => o.includes('Echo: hello')));
-      assert.ok(outputs.some((o) => o.includes('Echo: world')));
+      expect(outputs.some((o) => o.includes('Echo: hello'))).toBeTruthy();
+      expect(outputs.some((o) => o.includes('Echo: world'))).toBeTruthy();
     });
   });
 });

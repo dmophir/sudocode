@@ -4,8 +4,7 @@
  * Tests variable substitution, conditionals, loops, nested paths, and validation.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import { PromptTemplateEngine } from '../../../src/services/prompt-template-engine.js';
 
 describe('PromptTemplateEngine', () => {
@@ -16,35 +15,35 @@ describe('PromptTemplateEngine', () => {
       const template = 'Hello {{name}}!';
       const context = { name: 'World' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Hello World!');
+      expect(result).toBe('Hello World!');
     });
 
     it('should replace multiple variables', () => {
       const template = '{{greeting}} {{name}}!';
       const context = { greeting: 'Hello', name: 'Alice' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Hello Alice!');
+      expect(result).toBe('Hello Alice!');
     });
 
     it('should handle missing variables gracefully', () => {
       const template = 'Hello {{name}}!';
       const context = {};
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Hello {{name}}!');
+      expect(result).toBe('Hello {{name}}!');
     });
 
     it('should convert non-string values to strings', () => {
       const template = 'Count: {{count}}';
       const context = { count: 42 };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Count: 42');
+      expect(result).toBe('Count: 42');
     });
 
     it('should handle boolean values', () => {
       const template = 'Active: {{active}}';
       const context = { active: true };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Active: true');
+      expect(result).toBe('Active: true');
     });
   });
 
@@ -53,7 +52,7 @@ describe('PromptTemplateEngine', () => {
       const template = '{{user.name}}';
       const context = { user: { name: 'Bob' } };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Bob');
+      expect(result).toBe('Bob');
     });
 
     it('should access deeply nested properties', () => {
@@ -64,21 +63,21 @@ describe('PromptTemplateEngine', () => {
         },
       };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Alice');
+      expect(result).toBe('Alice');
     });
 
     it('should handle missing nested properties', () => {
       const template = '{{user.email}}';
       const context = { user: {} };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '{{user.email}}');
+      expect(result).toBe('{{user.email}}');
     });
 
     it('should handle null values in path', () => {
       const template = '{{user.profile.bio}}';
       const context = { user: { profile: null } };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '{{user.profile.bio}}');
+      expect(result).toBe('{{user.profile.bio}}');
     });
   });
 
@@ -87,56 +86,56 @@ describe('PromptTemplateEngine', () => {
       const template = '{{#if show}}Visible{{/if}}';
       const context = { show: true };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Visible');
+      expect(result).toBe('Visible');
     });
 
     it('should hide content when condition is falsy', () => {
       const template = '{{#if show}}Hidden{{/if}}';
       const context = { show: false };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should treat undefined as falsy', () => {
       const template = '{{#if missing}}Hidden{{/if}}';
       const context = {};
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should treat empty string as falsy', () => {
       const template = '{{#if text}}Hidden{{/if}}';
       const context = { text: '' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should treat non-empty string as truthy', () => {
       const template = '{{#if text}}Visible{{/if}}';
       const context = { text: 'content' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Visible');
+      expect(result).toBe('Visible');
     });
 
     it('should work with nested paths in conditionals', () => {
       const template = '{{#if user.active}}Active User{{/if}}';
       const context = { user: { active: true } };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Active User');
+      expect(result).toBe('Active User');
     });
 
     it('should preserve whitespace inside conditionals', () => {
       const template = '{{#if show}}\n  Content\n{{/if}}';
       const context = { show: true };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '\n  Content\n');
+      expect(result).toBe('\n  Content\n');
     });
 
     it('should handle variables inside conditional content', () => {
       const template = '{{#if show}}Hello {{name}}{{/if}}';
       const context = { show: true, name: 'World' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'Hello World');
+      expect(result).toBe('Hello World');
     });
   });
 
@@ -147,28 +146,28 @@ describe('PromptTemplateEngine', () => {
         items: [{ name: 'A' }, { name: 'B' }, { name: 'C' }],
       };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'A B C ');
+      expect(result).toBe('A B C ');
     });
 
     it('should handle empty arrays', () => {
       const template = '{{#each items}}{{name}}{{/each}}';
       const context = { items: [] };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should handle non-array values gracefully', () => {
       const template = '{{#each items}}{{name}}{{/each}}';
       const context = { items: 'not an array' };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should handle missing array gracefully', () => {
       const template = '{{#each items}}{{name}}{{/each}}';
       const context = {};
       const result = engine.render(template, context);
-      assert.strictEqual(result, '');
+      expect(result).toBe('');
     });
 
     it('should access nested properties in loop items', () => {
@@ -180,9 +179,8 @@ describe('PromptTemplateEngine', () => {
         ],
       };
       const result = engine.render(template, context);
-      assert.strictEqual(
-        result,
-        '[[SPEC-001]]: Auth\n[[SPEC-002]]: Database\n'
+      expect(
+        result).toBe('[[SPEC-001]]: Auth\n[[SPEC-002]]: Database\n'
       );
     });
 
@@ -194,7 +192,7 @@ describe('PromptTemplateEngine', () => {
         items: [{ name: 'First' }, { name: 'Second' }],
       };
       const result = engine.render(template, context);
-      assert.strictEqual(result, '\n- First\n\n- Second\n');
+      expect(result).toBe('\n- First\n\n- Second\n');
     });
 
     it('should handle nested loops', () => {
@@ -206,7 +204,7 @@ describe('PromptTemplateEngine', () => {
         ],
       };
       const result = engine.render(template, context);
-      assert.strictEqual(result, 'A B C D ');
+      expect(result).toBe('A B C D ');
     });
   });
 
@@ -236,10 +234,10 @@ Related Specs:
       };
 
       const result = engine.render(template, context);
-      assert.ok(result.includes('Fix issue ISSUE-001: Auth Bug'));
-      assert.ok(result.includes('Description: Fix authentication'));
-      assert.ok(result.includes('[[SPEC-001]]: Auth System'));
-      assert.ok(result.includes('[[SPEC-002]]: User Management'));
+      expect(result.includes('Fix issue ISSUE-001: Auth Bug')).toBeTruthy();
+      expect(result.includes('Description: Fix authentication')).toBeTruthy();
+      expect(result.includes('[[SPEC-001]]: Auth System')).toBeTruthy();
+      expect(result.includes('[[SPEC-002]]: User Management')).toBeTruthy();
     });
 
     it('should handle real-world issue template', () => {
@@ -272,9 +270,9 @@ Related Specs:
       };
 
       const result = engine.render(template, context);
-      assert.ok(result.includes('Implement [[ISSUE-042]]: Add OAuth'));
-      assert.ok(result.includes('[[SPEC-015]]'));
-      assert.ok(result.includes('Consider token refresh'));
+      expect(result.includes('Implement [[ISSUE-042]]: Add OAuth')).toBeTruthy();
+      expect(result.includes('[[SPEC-015]]')).toBeTruthy();
+      expect(result.includes('Consider token refresh')).toBeTruthy();
     });
   });
 
@@ -282,54 +280,54 @@ Related Specs:
     it('should validate balanced {{#if}} tags', () => {
       const template = '{{#if x}}content{{/if}}';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, true);
-      assert.strictEqual(result.errors.length, 0);
+      expect(result.valid).toBe(true);
+      expect(result.errors.length).toBe(0);
     });
 
     it('should detect unbalanced {{#if}} tags (missing close)', () => {
       const template = '{{#if x}}content';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, false);
-      assert.strictEqual(result.errors.length, 1);
-      assert.ok(result.errors[0].includes('Unbalanced {{#if}}'));
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].includes('Unbalanced {{#if}}')).toBeTruthy();
     });
 
     it('should detect unbalanced {{#if}} tags (extra close)', () => {
       const template = '{{#if x}}content{{/if}}{{/if}}';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, false);
-      assert.strictEqual(result.errors.length, 1);
-      assert.ok(result.errors[0].includes('Unbalanced {{#if}}'));
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].includes('Unbalanced {{#if}}')).toBeTruthy();
     });
 
     it('should validate balanced {{#each}} tags', () => {
       const template = '{{#each items}}{{name}}{{/each}}';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, true);
-      assert.strictEqual(result.errors.length, 0);
+      expect(result.valid).toBe(true);
+      expect(result.errors.length).toBe(0);
     });
 
     it('should detect unbalanced {{#each}} tags (missing close)', () => {
       const template = '{{#each items}}{{name}}';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, false);
-      assert.strictEqual(result.errors.length, 1);
-      assert.ok(result.errors[0].includes('Unbalanced {{#each}}'));
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].includes('Unbalanced {{#each}}')).toBeTruthy();
     });
 
     it('should detect unbalanced {{#each}} tags (extra close)', () => {
       const template = '{{#each items}}{{name}}{{/each}}{{/each}}';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, false);
-      assert.strictEqual(result.errors.length, 1);
-      assert.ok(result.errors[0].includes('Unbalanced {{#each}}'));
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].includes('Unbalanced {{#each}}')).toBeTruthy();
     });
 
     it('should detect multiple validation errors', () => {
       const template = '{{#if x}}{{#each items}}content';
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, false);
-      assert.strictEqual(result.errors.length, 2);
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBe(2);
     });
 
     it('should validate complex nested template', () => {
@@ -341,8 +339,8 @@ Related Specs:
 {{/each}}
 {{/if}}`;
       const result = engine.validate(template);
-      assert.strictEqual(result.valid, true);
-      assert.strictEqual(result.errors.length, 0);
+      expect(result.valid).toBe(true);
+      expect(result.errors.length).toBe(0);
     });
   });
 });

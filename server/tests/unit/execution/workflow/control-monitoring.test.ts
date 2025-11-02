@@ -3,8 +3,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import { InMemoryWorkflowStorage } from "../../../../src/execution/workflow/memory-storage.js";
 import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
@@ -105,8 +104,8 @@ describe("Control and Monitoring Methods", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "completed");
-      assert.strictEqual(execution.stepResults.length, 2);
+      expect(execution.status).toBe("completed");
+      expect(execution.stepResults.length).toBe(2);
     });
 
     it("should return immediately if already completed", async () => {
@@ -129,19 +128,14 @@ describe("Control and Monitoring Methods", () => {
       const execution = await orchestrator.waitForWorkflow(executionId);
       const duration = Date.now() - startTime;
 
-      assert.strictEqual(execution.status, "completed");
-      assert.ok(duration < 100); // Should be nearly instant
+      expect(execution.status).toBe("completed");
+      expect(duration < 100).toBeTruthy(); // Should be nearly instant
     });
 
     it("should throw error if execution not found", async () => {
-      await assert.rejects(
-        async () => {
-          await orchestrator.waitForWorkflow("non-existent-id");
-        },
-        {
-          message: "Workflow execution non-existent-id not found",
-        }
-      );
+      await expect(async () => {
+        await orchestrator.waitForWorkflow("non-existent-id");
+      }).rejects.toThrow("Workflow execution non-existent-id not found");
     });
 
     it("should wait for failed workflow", async () => {
@@ -180,7 +174,7 @@ describe("Control and Monitoring Methods", () => {
       await orchestrator.startWorkflow(workflow, "/test", { executionId });
       const execution = await orchestrator.waitForWorkflow(executionId);
 
-      assert.strictEqual(execution.status, "failed");
+      expect(execution.status).toBe("failed");
     });
   });
 
@@ -209,13 +203,13 @@ describe("Control and Monitoring Methods", () => {
 
       // Verify checkpoint was created
       const checkpoints = await storage.listCheckpoints();
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
 
       const checkpoint = checkpoints.find(
         (cp) => cp.executionId === executionId
       );
-      assert.ok(checkpoint);
-      assert.strictEqual(checkpoint.state.status, "paused");
+      expect(checkpoint).toBeTruthy();
+      expect(checkpoint?.state.status).toBe("paused");
     });
 
     it("should emit pause event", async () => {
@@ -250,8 +244,8 @@ describe("Control and Monitoring Methods", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await orchestrator.pauseWorkflow(executionId);
 
-      assert.strictEqual(pauseEmitted, true);
-      assert.strictEqual(emittedExecutionId, executionId);
+      expect(pauseEmitted).toBe(true);
+      expect(emittedExecutionId).toBe(executionId);
     });
 
     it("should throw error when pausing non-running workflow", async () => {
@@ -270,14 +264,9 @@ describe("Control and Monitoring Methods", () => {
       });
 
       // Try to pause completed workflow
-      await assert.rejects(
-        async () => {
-          await orchestrator.pauseWorkflow(executionId);
-        },
-        {
-          message: "Cannot pause workflow in completed state",
-        }
-      );
+      await expect(async () => {
+        await orchestrator.pauseWorkflow(executionId);
+      }).rejects.toThrow("Cannot pause workflow in completed state");
     });
   });
 
@@ -306,13 +295,13 @@ describe("Control and Monitoring Methods", () => {
 
       // Verify checkpoint was created
       const checkpoints = await storage.listCheckpoints();
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
 
       const checkpoint = checkpoints.find(
         (cp) => cp.executionId === executionId
       );
-      assert.ok(checkpoint);
-      assert.strictEqual(checkpoint.state.status, "cancelled");
+      expect(checkpoint).toBeTruthy();
+      expect(checkpoint?.state.status).toBe("cancelled");
     });
 
     it("should emit cancel event", async () => {
@@ -341,8 +330,8 @@ describe("Control and Monitoring Methods", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await orchestrator.cancelWorkflow(executionId);
 
-      assert.strictEqual(cancelEmitted, true);
-      assert.strictEqual(emittedExecutionId, executionId);
+      expect(cancelEmitted).toBe(true);
+      expect(emittedExecutionId).toBe(executionId);
     });
 
     it("should stop workflow execution", async () => {
@@ -368,10 +357,10 @@ describe("Control and Monitoring Methods", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "cancelled");
+      expect(execution?.status).toBe("cancelled");
 
       // Should not have executed all steps
-      assert.ok(execution.stepResults.length < 3);
+      expect(execution?.stepResults.length || 0 < 3).toBeTruthy();
     });
   });
 
@@ -399,7 +388,7 @@ describe("Control and Monitoring Methods", () => {
       });
 
       const checkpoints = await orchestrator.listCheckpoints();
-      assert.ok(checkpoints.length > 0);
+      expect(checkpoints.length > 0).toBeTruthy();
     });
 
     it("should filter checkpoints by workflowId", async () => {
@@ -430,15 +419,19 @@ describe("Control and Monitoring Methods", () => {
       const checkpoints1 = await orchestrator.listCheckpoints("workflow-1");
       const checkpoints2 = await orchestrator.listCheckpoints("workflow-2");
 
-      assert.ok(checkpoints1.every((cp) => cp.workflowId === "workflow-1"));
-      assert.ok(checkpoints2.every((cp) => cp.workflowId === "workflow-2"));
+      expect(
+        checkpoints1.every((cp) => cp.workflowId === "workflow-1")
+      ).toBeTruthy();
+      expect(
+        checkpoints2.every((cp) => cp.workflowId === "workflow-2")
+      ).toBeTruthy();
     });
 
     it("should return empty array when no storage configured", async () => {
       const noStorageOrchestrator = new LinearOrchestrator(mockExecutor as any);
 
       const checkpoints = await noStorageOrchestrator.listCheckpoints();
-      assert.strictEqual(checkpoints.length, 0);
+      expect(checkpoints.length).toBe(0);
     });
   });
 
@@ -463,9 +456,9 @@ describe("Control and Monitoring Methods", () => {
       });
 
       const step1Status = orchestrator.getStepStatus(executionId, "step-1");
-      assert.ok(step1Status);
-      assert.strictEqual(step1Status.status, "completed");
-      assert.ok(step1Status.result);
+      expect(step1Status).toBeTruthy();
+      expect(step1Status?.status).toBe("completed");
+      expect(step1Status?.result).toBeTruthy();
     });
 
     it("should return correct status for pending step", async () => {
@@ -488,13 +481,13 @@ describe("Control and Monitoring Methods", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const step3Status = orchestrator.getStepStatus(executionId, "step-3");
-      assert.ok(step3Status);
-      assert.strictEqual(step3Status.status, "pending");
+      expect(step3Status).toBeTruthy();
+      expect(step3Status?.status).toBe("pending");
     });
 
     it("should return null for non-existent execution", () => {
       const status = orchestrator.getStepStatus("non-existent-id", "step-1");
-      assert.strictEqual(status, null);
+      expect(status).toBe(null);
     });
 
     it("should return null for non-existent step", async () => {
@@ -510,7 +503,7 @@ describe("Control and Monitoring Methods", () => {
         executionId,
         "non-existent-step"
       );
-      assert.strictEqual(status, null);
+      expect(status).toBe(null);
     });
   });
 });

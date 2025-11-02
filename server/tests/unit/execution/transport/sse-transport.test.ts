@@ -4,8 +4,7 @@
  * Tests the SSE transport layer for streaming events to clients.
  */
 
-import { describe, it, mock, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, mock, beforeEach, afterEach, expect, vi } from 'vitest'
 import { SseTransport } from '../../../../src/execution/transport/sse-transport.js';
 import type { Response } from 'express';
 
@@ -23,13 +22,13 @@ describe('SseTransport', () => {
   describe('constructor', () => {
     it('should create transport instance', () => {
       const t = new SseTransport();
-      assert.strictEqual(t.getClientCount(), 0);
+      expect(t.getClientCount()).toBe(0);
       t.shutdown();
     });
 
     it('should start with no clients', () => {
-      assert.strictEqual(transport.getClientCount(), 0);
-      assert.deepStrictEqual(transport.getClientIds(), []);
+      expect(transport.getClientCount()).toBe(0);
+      expect(transport.getClientIds()).toEqual([]);
     });
   });
 
@@ -37,7 +36,7 @@ describe('SseTransport', () => {
     it('should set proper SSE headers', () => {
       const res = createMockResponse();
       const setHeaderCalls: Array<[string, string]> = [];
-      res.setHeader = mock.fn((name: string, value: string) => {
+      res.setHeader = vi.fn((name: string, value: string) => {
         setHeaderCalls.push([name, value]);
       }) as any;
 
@@ -45,21 +44,21 @@ describe('SseTransport', () => {
 
       // Check all required headers were set
       const headers = new Map(setHeaderCalls);
-      assert.strictEqual(headers.get('Content-Type'), 'text/event-stream');
-      assert.strictEqual(headers.get('Cache-Control'), 'no-cache');
-      assert.strictEqual(headers.get('Connection'), 'keep-alive');
-      assert.strictEqual(headers.get('X-Accel-Buffering'), 'no');
-      assert.strictEqual(headers.get('Access-Control-Allow-Origin'), '*');
+      expect(headers.get('Content-Type')).toBe('text/event-stream');
+      expect(headers.get('Cache-Control')).toBe('no-cache');
+      expect(headers.get('Connection')).toBe('keep-alive');
+      expect(headers.get('X-Accel-Buffering')).toBe('no');
+      expect(headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
 
     it('should flush headers', () => {
       const res = createMockResponse();
-      const flushHeaders = mock.fn();
+      const flushHeaders = vi.fn();
       res.flushHeaders = flushHeaders as any;
 
       transport.handleConnection('client-1', res);
 
-      assert.strictEqual(flushHeaders.mock.calls.length, 1);
+      expect(flushHeaders.mock.calls.length).toBe(1);
     });
 
     it('should register client', () => {
@@ -67,23 +66,23 @@ describe('SseTransport', () => {
 
       transport.handleConnection('client-1', res);
 
-      assert.strictEqual(transport.getClientCount(), 1);
-      assert.deepStrictEqual(transport.getClientIds(), ['client-1']);
+      expect(transport.getClientCount()).toBe(1);
+      expect(transport.getClientIds()).toEqual(['client-1']);
     });
 
     it('should send connection acknowledgment', () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
 
       transport.handleConnection('client-1', res);
 
-      assert.ok(writtenData.includes('event: connected'));
-      assert.ok(writtenData.includes('data:'));
-      assert.ok(writtenData.includes('client-1'));
+      expect(writtenData.includes('event: connected')).toBeTruthy();
+      expect(writtenData.includes('data:')).toBeTruthy();
+      expect(writtenData.includes('client-1')).toBeTruthy();
     });
 
     it('should register client with runId', () => {
@@ -91,8 +90,8 @@ describe('SseTransport', () => {
 
       transport.handleConnection('client-1', res, 'run-123');
 
-      assert.strictEqual(transport.getClientCount(), 1);
-      assert.strictEqual(transport.getRunClientCount('run-123'), 1);
+      expect(transport.getClientCount()).toBe(1);
+      expect(transport.getRunClientCount('run-123')).toBe(1);
     });
 
     it('should handle multiple clients', () => {
@@ -102,14 +101,14 @@ describe('SseTransport', () => {
       transport.handleConnection('client-1', res1);
       transport.handleConnection('client-2', res2);
 
-      assert.strictEqual(transport.getClientCount(), 2);
-      assert.deepStrictEqual(transport.getClientIds().sort(), ['client-1', 'client-2']);
+      expect(transport.getClientCount()).toBe(2);
+      expect(transport.getClientIds().sort()).toEqual(['client-1', 'client-2']);
     });
 
     it('should register close handler', () => {
       const res = createMockResponse();
       let closeHandler: (() => void) | null = null;
-      res.on = mock.fn((event: string, handler: any) => {
+      res.on = vi.fn((event: string, handler: any) => {
         if (event === 'close') {
           closeHandler = handler;
         }
@@ -117,7 +116,7 @@ describe('SseTransport', () => {
 
       transport.handleConnection('client-1', res);
 
-      assert.notStrictEqual(closeHandler, null);
+      expect(closeHandler).not.toBe(null);
     });
   });
 
@@ -125,7 +124,7 @@ describe('SseTransport', () => {
     it('should send event to specific client', () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
@@ -137,9 +136,9 @@ describe('SseTransport', () => {
         data: { message: 'hello' },
       });
 
-      assert.strictEqual(result, true);
-      assert.ok(writtenData.includes('event: test-event'));
-      assert.ok(writtenData.includes('data: {"message":"hello"}'));
+      expect(result).toBe(true);
+      expect(writtenData.includes('event: test-event')).toBeTruthy();
+      expect(writtenData.includes('data: {"message":"hello"}')).toBeTruthy();
     });
 
     it('should return false for non-existent client', () => {
@@ -148,13 +147,13 @@ describe('SseTransport', () => {
         data: {},
       });
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
 
     it('should format SSE message correctly', () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
@@ -169,16 +168,16 @@ describe('SseTransport', () => {
       });
 
       // Check SSE format
-      assert.ok(writtenData.includes('event: my-event\n'));
-      assert.ok(writtenData.includes('id: event-123\n'));
-      assert.ok(writtenData.includes('data: {"foo":"bar"}\n'));
-      assert.ok(writtenData.endsWith('\n\n')); // Double newline at end
+      expect(writtenData.includes('event: my-event\n')).toBeTruthy();
+      expect(writtenData.includes('id: event-123\n')).toBeTruthy();
+      expect(writtenData.includes('data: {"foo":"bar"}\n')).toBeTruthy();
+      expect(writtenData.endsWith('\n\n')).toBeTruthy(); // Double newline at end
     });
 
     it('should handle string data', () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
@@ -190,13 +189,13 @@ describe('SseTransport', () => {
         data: 'plain string message',
       });
 
-      assert.ok(writtenData.includes('data: plain string message'));
+      expect(writtenData.includes('data: plain string message')).toBeTruthy();
     });
 
     it('should handle multiline data', () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
@@ -208,15 +207,15 @@ describe('SseTransport', () => {
         data: 'line1\nline2\nline3',
       });
 
-      assert.ok(writtenData.includes('data: line1\n'));
-      assert.ok(writtenData.includes('data: line2\n'));
-      assert.ok(writtenData.includes('data: line3\n'));
+      expect(writtenData.includes('data: line1\n')).toBeTruthy();
+      expect(writtenData.includes('data: line2\n')).toBeTruthy();
+      expect(writtenData.includes('data: line3\n')).toBeTruthy();
     });
 
     it('should remove client on write failure', () => {
       const res = createMockResponse();
       let callCount = 0;
-      res.write = mock.fn(() => {
+      res.write = vi.fn(() => {
         callCount++;
         if (callCount === 1) {
           // First write (connection ack) succeeds
@@ -227,11 +226,11 @@ describe('SseTransport', () => {
       }) as any;
 
       transport.handleConnection('client-1', res);
-      assert.strictEqual(transport.getClientCount(), 1);
+      expect(transport.getClientCount()).toBe(1);
 
       transport.sendToClient('client-1', { data: 'test' });
 
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(transport.getClientCount()).toBe(0);
     });
   });
 
@@ -245,9 +244,9 @@ describe('SseTransport', () => {
       let written2 = '';
       let written3 = '';
 
-      res1.write = mock.fn((data: string) => { written1 += data; return true; }) as any;
-      res2.write = mock.fn((data: string) => { written2 += data; return true; }) as any;
-      res3.write = mock.fn((data: string) => { written3 += data; return true; }) as any;
+      res1.write = vi.fn((data: string) => { written1 += data; return true; }) as any;
+      res2.write = vi.fn((data: string) => { written2 += data; return true; }) as any;
+      res3.write = vi.fn((data: string) => { written3 += data; return true; }) as any;
 
       transport.handleConnection('client-1', res1);
       transport.handleConnection('client-2', res2);
@@ -260,23 +259,23 @@ describe('SseTransport', () => {
         data: { message: 'hello all' },
       });
 
-      assert.strictEqual(sentCount, 3);
-      assert.ok(written1.includes('broadcast-event'));
-      assert.ok(written2.includes('broadcast-event'));
-      assert.ok(written3.includes('broadcast-event'));
+      expect(sentCount).toBe(3);
+      expect(written1.includes('broadcast-event')).toBeTruthy();
+      expect(written2.includes('broadcast-event')).toBeTruthy();
+      expect(written3.includes('broadcast-event')).toBeTruthy();
     });
 
     it('should return 0 when no clients connected', () => {
       const sentCount = transport.broadcast({ data: 'test' });
-      assert.strictEqual(sentCount, 0);
+      expect(sentCount).toBe(0);
     });
 
     it('should skip clients with failed writes', () => {
       const res1 = createMockResponse();
       const res2 = createMockResponse();
 
-      res1.write = mock.fn(() => true) as any;
-      res2.write = mock.fn(() => {
+      res1.write = vi.fn(() => true) as any;
+      res2.write = vi.fn(() => {
         throw new Error('Write failed');
       }) as any;
 
@@ -285,8 +284,8 @@ describe('SseTransport', () => {
 
       const sentCount = transport.broadcast({ data: 'test' });
 
-      assert.strictEqual(sentCount, 1);
-      assert.strictEqual(transport.getClientCount(), 1); // Failed client removed
+      expect(sentCount).toBe(1);
+      expect(transport.getClientCount()).toBe(1); // Failed client removed
     });
   });
 
@@ -300,9 +299,9 @@ describe('SseTransport', () => {
       let written2 = '';
       let written3 = '';
 
-      res1.write = mock.fn((data: string) => { written1 += data; return true; }) as any;
-      res2.write = mock.fn((data: string) => { written2 += data; return true; }) as any;
-      res3.write = mock.fn((data: string) => { written3 += data; return true; }) as any;
+      res1.write = vi.fn((data: string) => { written1 += data; return true; }) as any;
+      res2.write = vi.fn((data: string) => { written2 += data; return true; }) as any;
+      res3.write = vi.fn((data: string) => { written3 += data; return true; }) as any;
 
       transport.handleConnection('client-1', res1, 'run-123');
       transport.handleConnection('client-2', res2, 'run-123');
@@ -315,10 +314,10 @@ describe('SseTransport', () => {
         data: { runId: 'run-123' },
       });
 
-      assert.strictEqual(sentCount, 2);
-      assert.ok(written1.includes('run-event'));
-      assert.ok(written2.includes('run-event'));
-      assert.strictEqual(written3, ''); // Should not receive
+      expect(sentCount).toBe(2);
+      expect(written1.includes('run-event')).toBeTruthy();
+      expect(written2.includes('run-event')).toBeTruthy();
+      expect(written3).toBe(''); // Should not receive
     });
 
     it('should return 0 when no clients watching run', () => {
@@ -327,7 +326,7 @@ describe('SseTransport', () => {
 
       const sentCount = transport.broadcastToRun('run-456', { data: 'test' });
 
-      assert.strictEqual(sentCount, 0);
+      expect(sentCount).toBe(0);
     });
 
     it('should not send to clients without runId', () => {
@@ -337,8 +336,8 @@ describe('SseTransport', () => {
       let written1 = '';
       let written2 = '';
 
-      res1.write = mock.fn((data: string) => { written1 += data; return true; }) as any;
-      res2.write = mock.fn((data: string) => { written2 += data; return true; }) as any;
+      res1.write = vi.fn((data: string) => { written1 += data; return true; }) as any;
+      res2.write = vi.fn((data: string) => { written2 += data; return true; }) as any;
 
       transport.handleConnection('client-1', res1); // No runId
       transport.handleConnection('client-2', res2, 'run-123');
@@ -347,9 +346,9 @@ describe('SseTransport', () => {
 
       const sentCount = transport.broadcastToRun('run-123', { data: 'test' });
 
-      assert.strictEqual(sentCount, 1);
-      assert.strictEqual(written1, '');
-      assert.ok(written2.includes('test'));
+      expect(sentCount).toBe(1);
+      expect(written1).toBe('');
+      expect(written2.includes('test')).toBeTruthy();
     });
   });
 
@@ -358,45 +357,45 @@ describe('SseTransport', () => {
       const res = createMockResponse();
 
       transport.handleConnection('client-1', res);
-      assert.strictEqual(transport.getClientCount(), 1);
+      expect(transport.getClientCount()).toBe(1);
 
       const removed = transport.removeClient('client-1');
 
-      assert.strictEqual(removed, true);
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(removed).toBe(true);
+      expect(transport.getClientCount()).toBe(0);
     });
 
     it('should return false for non-existent client', () => {
       const removed = transport.removeClient('non-existent');
-      assert.strictEqual(removed, false);
+      expect(removed).toBe(false);
     });
 
     it('should close response', () => {
       const res = createMockResponse();
-      const end = mock.fn();
+      const end = vi.fn();
       res.end = end as any;
 
       transport.handleConnection('client-1', res);
       transport.removeClient('client-1');
 
-      assert.strictEqual(end.mock.calls.length, 1);
+      expect(end.mock.calls.length).toBe(1);
     });
 
     it('should handle already-closed responses gracefully', () => {
       const res = createMockResponse();
       Object.defineProperty(res, 'writableEnded', { value: true, writable: true });
-      res.end = mock.fn(() => {
+      res.end = vi.fn(() => {
         throw new Error('Already ended');
       }) as any;
 
       transport.handleConnection('client-1', res);
 
       // Should not throw
-      assert.doesNotThrow(() => {
+      expect(() => {
         transport.removeClient('client-1');
-      });
+      }).not.toThrow();
 
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(transport.getClientCount()).toBe(0);
     });
   });
 
@@ -405,16 +404,16 @@ describe('SseTransport', () => {
       const res1 = createMockResponse();
       const res2 = createMockResponse();
 
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(transport.getClientCount()).toBe(0);
 
       transport.handleConnection('client-1', res1);
-      assert.strictEqual(transport.getClientCount(), 1);
+      expect(transport.getClientCount()).toBe(1);
 
       transport.handleConnection('client-2', res2);
-      assert.strictEqual(transport.getClientCount(), 2);
+      expect(transport.getClientCount()).toBe(2);
 
       transport.removeClient('client-1');
-      assert.strictEqual(transport.getClientCount(), 1);
+      expect(transport.getClientCount()).toBe(1);
     });
 
     it('should track run-specific client count', () => {
@@ -426,9 +425,9 @@ describe('SseTransport', () => {
       transport.handleConnection('client-2', res2, 'run-123');
       transport.handleConnection('client-3', res3, 'run-456');
 
-      assert.strictEqual(transport.getRunClientCount('run-123'), 2);
-      assert.strictEqual(transport.getRunClientCount('run-456'), 1);
-      assert.strictEqual(transport.getRunClientCount('run-789'), 0);
+      expect(transport.getRunClientCount('run-123')).toBe(2);
+      expect(transport.getRunClientCount('run-456')).toBe(1);
+      expect(transport.getRunClientCount('run-789')).toBe(0);
     });
 
     it('should return all client IDs', () => {
@@ -439,9 +438,9 @@ describe('SseTransport', () => {
       transport.handleConnection('client-2', res2);
 
       const ids = transport.getClientIds();
-      assert.strictEqual(ids.length, 2);
-      assert.ok(ids.includes('client-1'));
-      assert.ok(ids.includes('client-2'));
+      expect(ids.length).toBe(2);
+      expect(ids.includes('client-1')).toBeTruthy();
+      expect(ids.includes('client-2')).toBeTruthy();
     });
   });
 
@@ -449,7 +448,7 @@ describe('SseTransport', () => {
     it('should send periodic ping events', async () => {
       const res = createMockResponse();
       let writtenData = '';
-      res.write = mock.fn((data: string) => {
+      res.write = vi.fn((data: string) => {
         writtenData += data;
         return true;
       }) as any;
@@ -465,7 +464,7 @@ describe('SseTransport', () => {
       transport.shutdown();
 
       // No assertion needed here since we're testing the shutdown stops it
-      assert.ok(true);
+      expect(true).toBeTruthy();
     });
   });
 
@@ -474,8 +473,8 @@ describe('SseTransport', () => {
       const res1 = createMockResponse();
       const res2 = createMockResponse();
 
-      const end1 = mock.fn();
-      const end2 = mock.fn();
+      const end1 = vi.fn();
+      const end2 = vi.fn();
 
       res1.end = end1 as any;
       res2.end = end2 as any;
@@ -483,13 +482,13 @@ describe('SseTransport', () => {
       transport.handleConnection('client-1', res1);
       transport.handleConnection('client-2', res2);
 
-      assert.strictEqual(transport.getClientCount(), 2);
+      expect(transport.getClientCount()).toBe(2);
 
       transport.shutdown();
 
-      assert.strictEqual(transport.getClientCount(), 0);
-      assert.strictEqual(end1.mock.calls.length, 1);
-      assert.strictEqual(end2.mock.calls.length, 1);
+      expect(transport.getClientCount()).toBe(0);
+      expect(end1.mock.calls.length).toBe(1);
+      expect(end2.mock.calls.length).toBe(1);
     });
 
     it('should be idempotent', () => {
@@ -497,18 +496,18 @@ describe('SseTransport', () => {
       transport.handleConnection('client-1', res);
 
       transport.shutdown();
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(transport.getClientCount()).toBe(0);
 
       // Should not throw
-      assert.doesNotThrow(() => {
+      expect(() => {
         transport.shutdown();
-      });
+      }).not.toThrow();
     });
 
     it('should handle shutdown with no clients', () => {
-      assert.doesNotThrow(() => {
+      expect(() => {
         transport.shutdown();
-      });
+      }).not.toThrow();
     });
   });
 
@@ -517,26 +516,26 @@ describe('SseTransport', () => {
       const res = createMockResponse();
       let closeHandler: (() => void) | null = null;
 
-      res.on = mock.fn((event: string, handler: any) => {
+      res.on = vi.fn((event: string, handler: any) => {
         if (event === 'close') {
           closeHandler = handler;
         }
       }) as any;
 
       transport.handleConnection('client-1', res);
-      assert.strictEqual(transport.getClientCount(), 1);
+      expect(transport.getClientCount()).toBe(1);
 
       // Simulate connection close
       closeHandler!();
 
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(transport.getClientCount()).toBe(0);
     });
   });
 
   describe('response state checks', () => {
     it('should not write to ended response', () => {
       const res = createMockResponse();
-      res.write = mock.fn(() => true) as any;
+      res.write = vi.fn(() => true) as any;
 
       transport.handleConnection('client-1', res);
 
@@ -545,13 +544,13 @@ describe('SseTransport', () => {
 
       const result = transport.sendToClient('client-1', { data: 'test' });
 
-      assert.strictEqual(result, false);
-      assert.strictEqual(transport.getClientCount(), 0); // Client removed
+      expect(result).toBe(false);
+      expect(transport.getClientCount()).toBe(0); // Client removed
     });
 
     it('should not write to non-writable response', () => {
       const res = createMockResponse();
-      res.write = mock.fn(() => true) as any;
+      res.write = vi.fn(() => true) as any;
 
       transport.handleConnection('client-1', res);
 
@@ -560,8 +559,8 @@ describe('SseTransport', () => {
 
       const result = transport.sendToClient('client-1', { data: 'test' });
 
-      assert.strictEqual(result, false);
-      assert.strictEqual(transport.getClientCount(), 0);
+      expect(result).toBe(false);
+      expect(transport.getClientCount()).toBe(0);
     });
   });
 });
@@ -569,11 +568,11 @@ describe('SseTransport', () => {
 // Helper function to create mock Express Response
 function createMockResponse(): Response {
   const mockRes: any = {
-    setHeader: mock.fn(),
-    flushHeaders: mock.fn(),
-    write: mock.fn(() => true),
-    end: mock.fn(),
-    on: mock.fn(),
+    setHeader: vi.fn(),
+    flushHeaders: vi.fn(),
+    write: vi.fn(() => true),
+    end: vi.fn(),
+    on: vi.fn(),
   };
 
   // Define writable and writableEnded as configurable properties

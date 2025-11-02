@@ -5,8 +5,7 @@
  * tracking tool calls, detecting file changes, and aggregating metrics.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import { ClaudeCodeOutputProcessor } from '../../../../src/execution/output/claude-code-output-processor.js';
 import type {
   ToolCall,
@@ -20,26 +19,26 @@ describe('ClaudeCodeOutputProcessor', () => {
       const processor = new ClaudeCodeOutputProcessor();
       const metrics = processor.getMetrics();
 
-      assert.strictEqual(metrics.totalMessages, 0);
-      assert.deepStrictEqual(metrics.toolCalls, []);
-      assert.deepStrictEqual(metrics.fileChanges, []);
-      assert.deepStrictEqual(metrics.errors, []);
-      assert.strictEqual(metrics.usage.inputTokens, 0);
-      assert.strictEqual(metrics.usage.outputTokens, 0);
-      assert.strictEqual(metrics.usage.cacheTokens, 0);
-      assert.strictEqual(metrics.usage.totalTokens, 0);
-      assert.strictEqual(metrics.usage.cost, 0);
-      assert.strictEqual(metrics.usage.provider, 'anthropic');
+      expect(metrics.totalMessages).toBe(0);
+      expect(metrics.toolCalls).toEqual([]);
+      expect(metrics.fileChanges).toEqual([]);
+      expect(metrics.errors).toEqual([]);
+      expect(metrics.usage.inputTokens).toBe(0);
+      expect(metrics.usage.outputTokens).toBe(0);
+      expect(metrics.usage.cacheTokens).toBe(0);
+      expect(metrics.usage.totalTokens).toBe(0);
+      expect(metrics.usage.cost).toBe(0);
+      expect(metrics.usage.provider).toBe('anthropic');
     });
 
     it('should initialize with empty tool calls', () => {
       const processor = new ClaudeCodeOutputProcessor();
-      assert.deepStrictEqual(processor.getToolCalls(), []);
+      expect(processor.getToolCalls()).toEqual([]);
     });
 
     it('should initialize with empty file changes', () => {
       const processor = new ClaudeCodeOutputProcessor();
-      assert.deepStrictEqual(processor.getFileChanges(), []);
+      expect(processor.getFileChanges()).toEqual([]);
     });
   });
 
@@ -51,7 +50,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine('\n');
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.totalMessages, 0);
+      expect(metrics.totalMessages).toBe(0);
     });
 
     it('should handle malformed JSON gracefully', async () => {
@@ -65,9 +64,9 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine('not valid json');
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.errors.length, 1);
-      assert.ok(metrics.errors[0].message.includes('Failed to parse'));
-      assert.strictEqual(errorCalls, 1);
+      expect(metrics.errors.length).toBe(1);
+      expect(metrics.errors[0].message.includes('Failed to parse')).toBeTruthy();
+      expect(errorCalls).toBe(1);
     });
 
     it('should parse valid JSON and increment message count', async () => {
@@ -75,7 +74,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine('{"type":"assistant","message":{"content":"Hello"}}');
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.totalMessages, 1);
+      expect(metrics.totalMessages).toBe(1);
     });
 
     it('should track line numbers for error reporting', async () => {
@@ -88,8 +87,8 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine('{}');
       await processor.processLine('invalid json');
 
-      assert.strictEqual(errorCalls.length, 1);
-      assert.ok(errorCalls[0].message.includes('line 2'));
+      expect(errorCalls.length).toBe(1);
+      expect(errorCalls[0].message.includes('line 2')).toBeTruthy();
     });
   });
 
@@ -106,7 +105,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(json);
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.totalMessages, 1);
+      expect(metrics.totalMessages).toBe(1);
     });
 
     it('should detect tool_use messages', async () => {
@@ -132,11 +131,11 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       await processor.processLine(json);
 
-      assert.strictEqual(toolCallArgs.length, 1);
+      expect(toolCallArgs.length).toBe(1);
       const toolCall = toolCallArgs[0] as ToolCall;
-      assert.strictEqual(toolCall.id, 'tool-123');
-      assert.strictEqual(toolCall.name, 'Read');
-      assert.strictEqual(toolCall.status, 'pending');
+      expect(toolCall.id).toBe('tool-123');
+      expect(toolCall.name).toBe('Read');
+      expect(toolCall.status).toBe('pending');
     });
 
     it('should detect usage messages', async () => {
@@ -153,9 +152,9 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(json);
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.usage.inputTokens, 100);
-      assert.strictEqual(metrics.usage.outputTokens, 50);
-      assert.strictEqual(metrics.usage.cacheTokens, 10);
+      expect(metrics.usage.inputTokens).toBe(100);
+      expect(metrics.usage.outputTokens).toBe(50);
+      expect(metrics.usage.cacheTokens).toBe(10);
     });
 
     it('should detect error messages', async () => {
@@ -174,8 +173,8 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       await processor.processLine(json);
 
-      assert.strictEqual(errorCalls.length, 1);
-      assert.strictEqual(errorCalls[0].message, 'Something went wrong');
+      expect(errorCalls.length).toBe(1);
+      expect(errorCalls[0].message).toBe('Something went wrong');
     });
   });
 
@@ -199,11 +198,11 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(json);
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 1);
-      assert.strictEqual(toolCalls[0].id, 'tool-456');
-      assert.strictEqual(toolCalls[0].name, 'Bash');
-      assert.strictEqual(toolCalls[0].status, 'pending');
-      assert.deepStrictEqual(toolCalls[0].input, { command: 'ls -la' });
+      expect(toolCalls.length).toBe(1);
+      expect(toolCalls[0].id).toBe('tool-456');
+      expect(toolCalls[0].name).toBe('Bash');
+      expect(toolCalls[0].status).toBe('pending');
+      expect(toolCalls[0].input).toEqual({ command: 'ls -la' });
     });
 
     it('should update tool call status on tool_result', async () => {
@@ -242,10 +241,10 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(toolResultJson);
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 1);
-      assert.strictEqual(toolCalls[0].status, 'success');
-      assert.strictEqual(toolCalls[0].result, 'file contents here');
-      assert.ok(toolCalls[0].completedAt !== undefined);
+      expect(toolCalls.length).toBe(1);
+      expect(toolCalls[0].status).toBe('success');
+      expect(toolCalls[0].result).toBe('file contents here');
+      expect(toolCalls[0].completedAt !== undefined).toBeTruthy();
     });
 
     it('should mark tool call as error on error result', async () => {
@@ -284,8 +283,8 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(toolResultJson);
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls[0].status, 'error');
-      assert.strictEqual(toolCalls[0].error, 'Command not found');
+      expect(toolCalls[0].status).toBe('error');
+      expect(toolCalls[0].error).toBe('Command not found');
     });
 
     it('should handle tool_result without matching tool_use gracefully', async () => {
@@ -308,7 +307,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       await processor.processLine(toolResultJson);
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 0);
+      expect(toolCalls.length).toBe(0);
     });
   });
 
@@ -354,11 +353,11 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(fileChangeCalls.length, 1);
+      expect(fileChangeCalls.length).toBe(1);
       const fileChange = fileChangeCalls[0] as FileChange;
-      assert.strictEqual(fileChange.path, '/path/to/file.ts');
-      assert.strictEqual(fileChange.operation, 'read');
-      assert.strictEqual(fileChange.toolCallId, 'read-1');
+      expect(fileChange.path).toBe('/path/to/file.ts');
+      expect(fileChange.operation).toBe('read');
+      expect(fileChange.toolCallId).toBe('read-1');
     });
 
     it('should detect file write from Write tool', async () => {
@@ -400,10 +399,10 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(fileChangeCalls.length, 1);
+      expect(fileChangeCalls.length).toBe(1);
       const fileChange = fileChangeCalls[0] as FileChange;
-      assert.strictEqual(fileChange.path, '/path/to/new.ts');
-      assert.strictEqual(fileChange.operation, 'write');
+      expect(fileChange.path).toBe('/path/to/new.ts');
+      expect(fileChange.operation).toBe('write');
     });
 
     it('should detect file edit from Edit tool', async () => {
@@ -449,10 +448,10 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(fileChangeCalls.length, 1);
+      expect(fileChangeCalls.length).toBe(1);
       const fileChange = fileChangeCalls[0] as FileChange;
-      assert.strictEqual(fileChange.path, '/path/to/edit.ts');
-      assert.strictEqual(fileChange.operation, 'edit');
+      expect(fileChange.path).toBe('/path/to/edit.ts');
+      expect(fileChange.operation).toBe('edit');
     });
 
     it('should not detect file changes for non-file-operation tools', async () => {
@@ -494,7 +493,7 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(fileChangeCallCount, 0);
+      expect(fileChangeCallCount).toBe(0);
     });
 
     it('should track file changes in metrics', async () => {
@@ -532,8 +531,8 @@ describe('ClaudeCodeOutputProcessor', () => {
       );
 
       const fileChanges = processor.getFileChanges();
-      assert.strictEqual(fileChanges.length, 1);
-      assert.strictEqual(fileChanges[0].path, 'test.ts');
+      expect(fileChanges.length).toBe(1);
+      expect(fileChanges[0].path).toBe('test.ts');
     });
   });
 
@@ -563,10 +562,10 @@ describe('ClaudeCodeOutputProcessor', () => {
       );
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.usage.inputTokens, 250);
-      assert.strictEqual(metrics.usage.outputTokens, 300);
-      assert.strictEqual(metrics.usage.cacheTokens, 75);
-      assert.strictEqual(metrics.usage.totalTokens, 550);
+      expect(metrics.usage.inputTokens).toBe(250);
+      expect(metrics.usage.outputTokens).toBe(300);
+      expect(metrics.usage.cacheTokens).toBe(75);
+      expect(metrics.usage.totalTokens).toBe(550);
     });
 
     it('should calculate cost correctly', async () => {
@@ -586,8 +585,8 @@ describe('ClaudeCodeOutputProcessor', () => {
       // Input: $3/M, Output: $15/M, Cache: $0.30/M
       // Cost = (1M * 3) + (1M * 15) + (1M * 0.30) = $18.30
       const expectedCost = 18.3;
-      assert.ok(metrics.usage.cost !== undefined);
-      assert.ok(Math.abs(metrics.usage.cost - expectedCost) < 0.01);
+      expect(metrics.usage.cost !== undefined).toBeTruthy();
+      expect(Math.abs(metrics.usage.cost - expectedCost) < 0.01).toBeTruthy();
     });
   });
 
@@ -615,7 +614,7 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(callCount, 1);
+      expect(callCount).toBe(1);
     });
 
     it('should emit onFileChange when file is modified', async () => {
@@ -657,7 +656,7 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(callCount, 1);
+      expect(callCount).toBe(1);
     });
 
     it('should emit onProgress periodically', async () => {
@@ -669,9 +668,9 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       await processor.processLine('{"type":"assistant","message":{"content":"test"}}');
 
-      assert.ok(progressCalls.length > 0);
+      expect(progressCalls.length > 0).toBeTruthy();
       const metrics = progressCalls[0] as ProcessingMetrics;
-      assert.strictEqual(metrics.totalMessages, 1);
+      expect(metrics.totalMessages).toBe(1);
     });
 
     it('should emit onError for errors', async () => {
@@ -688,7 +687,7 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(callCount, 1);
+      expect(callCount).toBe(1);
     });
 
     it('should support multiple event handlers', async () => {
@@ -719,8 +718,8 @@ describe('ClaudeCodeOutputProcessor', () => {
         })
       );
 
-      assert.strictEqual(handler1CallCount, 1);
-      assert.strictEqual(handler2CallCount, 1);
+      expect(handler1CallCount).toBe(1);
+      expect(handler2CallCount).toBe(1);
     });
 
     it('should handle errors in event handlers gracefully', async () => {
@@ -752,7 +751,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       );
 
       // Normal handler should still be called
-      assert.ok(normalHandlerCalled);
+      expect(normalHandlerCalled).toBeTruthy();
     });
   });
 
@@ -769,7 +768,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       });
 
       const metrics2 = processor.getMetrics();
-      assert.strictEqual(metrics2.toolCalls.length, 0);
+      expect(metrics2.toolCalls.length).toBe(0);
     });
 
     it('should keep tool calls in both Map and metrics array in sync', async () => {
@@ -793,9 +792,9 @@ describe('ClaudeCodeOutputProcessor', () => {
       const toolCallsFromMap = processor.getToolCalls();
       const toolCallsFromMetrics = processor.getMetrics().toolCalls;
 
-      assert.strictEqual(toolCallsFromMap.length, 1);
-      assert.strictEqual(toolCallsFromMetrics.length, 1);
-      assert.strictEqual(toolCallsFromMap[0].id, toolCallsFromMetrics[0].id);
+      expect(toolCallsFromMap.length).toBe(1);
+      expect(toolCallsFromMetrics.length).toBe(1);
+      expect(toolCallsFromMap[0].id).toBe(toolCallsFromMetrics[0].id);
     });
   });
 
@@ -840,10 +839,10 @@ describe('ClaudeCodeOutputProcessor', () => {
       const bashCalls = processor.getToolCallsByName('Bash');
       const readCalls = processor.getToolCallsByName('Read');
 
-      assert.strictEqual(bashCalls.length, 2);
-      assert.strictEqual(readCalls.length, 1);
-      assert.strictEqual(bashCalls[0].name, 'Bash');
-      assert.strictEqual(readCalls[0].name, 'Read');
+      expect(bashCalls.length).toBe(2);
+      expect(readCalls.length).toBe(1);
+      expect(bashCalls[0].name).toBe('Bash');
+      expect(readCalls[0].name).toBe('Read');
     });
 
     it('should filter file changes by path', async () => {
@@ -917,9 +916,9 @@ describe('ClaudeCodeOutputProcessor', () => {
       const indexChanges = processor.getFileChangesByPath('src/index.ts');
       const testChanges = processor.getFileChangesByPath('src/test.ts');
 
-      assert.strictEqual(indexChanges.length, 1);
-      assert.strictEqual(testChanges.length, 1);
-      assert.strictEqual(indexChanges[0].path, 'src/index.ts');
+      expect(indexChanges.length).toBe(1);
+      expect(testChanges.length).toBe(1);
+      expect(indexChanges[0].path).toBe('src/index.ts');
     });
 
     it('should filter file changes by operation', async () => {
@@ -971,9 +970,9 @@ describe('ClaudeCodeOutputProcessor', () => {
       const writes = processor.getFileChangesByOperation('write');
       const edits = processor.getFileChangesByOperation('edit');
 
-      assert.strictEqual(reads.length, 2);
-      assert.strictEqual(writes.length, 1);
-      assert.strictEqual(edits.length, 1);
+      expect(reads.length).toBe(2);
+      expect(writes.length).toBe(1);
+      expect(edits.length).toBe(1);
     });
 
     it('should get only failed tool calls', async () => {
@@ -1032,9 +1031,9 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       const failed = processor.getFailedToolCalls();
 
-      assert.strictEqual(failed.length, 1);
-      assert.strictEqual(failed[0].status, 'error');
-      assert.strictEqual(failed[0].id, 'fail-1');
+      expect(failed.length).toBe(1);
+      expect(failed[0].status).toBe('error');
+      expect(failed[0].id).toBe('fail-1');
     });
 
     it('should get only successful tool calls', async () => {
@@ -1093,9 +1092,9 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       const successful = processor.getSuccessfulToolCalls();
 
-      assert.strictEqual(successful.length, 1);
-      assert.strictEqual(successful[0].status, 'success');
-      assert.strictEqual(successful[0].id, 'success-1');
+      expect(successful.length).toBe(1);
+      expect(successful[0].status).toBe('success');
+      expect(successful[0].id).toBe('success-1');
     });
 
     it('should get total cost', async () => {
@@ -1118,14 +1117,14 @@ describe('ClaudeCodeOutputProcessor', () => {
       // Output: 500 * $15/1M = $0.0075
       // Cache: 100 * $0.30/1M = $0.00003
       // Total: ~$0.01053
-      assert.ok(cost > 0);
-      assert.ok(cost < 1); // Should be a small fraction of a dollar
+      expect(cost > 0).toBeTruthy();
+      expect(cost < 1).toBeTruthy(); // Should be a small fraction of a dollar
     });
 
     it('should return zero cost when no usage tracked', () => {
       const processor = new ClaudeCodeOutputProcessor();
       const cost = processor.getTotalCost();
-      assert.strictEqual(cost, 0);
+      expect(cost).toBe(0);
     });
   });
 
@@ -1199,16 +1198,16 @@ describe('ClaudeCodeOutputProcessor', () => {
 
       const summary = processor.getExecutionSummary();
 
-      assert.strictEqual(summary.totalMessages, 5);
-      assert.strictEqual(summary.toolCallsByType['Bash'], 1);
-      assert.strictEqual(summary.toolCallsByType['Read'], 1);
-      assert.strictEqual(summary.fileOperationsByType['read'], 1);
-      assert.strictEqual(summary.successRate, 100);
-      assert.strictEqual(summary.totalTokens.input, 1000);
-      assert.strictEqual(summary.totalTokens.output, 500);
-      assert.ok(summary.totalCost > 0);
-      assert.ok(summary.duration >= 0);
-      assert.ok(summary.startTime instanceof Date);
+      expect(summary.totalMessages).toBe(5);
+      expect(summary.toolCallsByType['Bash']).toBe(1);
+      expect(summary.toolCallsByType['Read']).toBe(1);
+      expect(summary.fileOperationsByType['read']).toBe(1);
+      expect(summary.successRate).toBe(100);
+      expect(summary.totalTokens.input).toBe(1000);
+      expect(summary.totalTokens.output).toBe(500);
+      expect(summary.totalCost > 0).toBeTruthy();
+      expect(summary.duration >= 0).toBeTruthy();
+      expect(summary.startTime instanceof Date).toBeTruthy();
     });
 
     it('should calculate success rate correctly', async () => {
@@ -1270,18 +1269,18 @@ describe('ClaudeCodeOutputProcessor', () => {
       const summary = processor.getExecutionSummary();
 
       // 2 successful out of 3 total = 66.67%
-      assert.ok(Math.abs(summary.successRate - 66.67) < 0.1);
+      expect(Math.abs(summary.successRate - 66.67) < 0.1).toBeTruthy();
     });
 
     it('should handle empty state gracefully', () => {
       const processor = new ClaudeCodeOutputProcessor();
       const summary = processor.getExecutionSummary();
 
-      assert.strictEqual(summary.totalMessages, 0);
-      assert.deepStrictEqual(summary.toolCallsByType, {});
-      assert.deepStrictEqual(summary.fileOperationsByType, {});
-      assert.strictEqual(summary.successRate, 0);
-      assert.strictEqual(summary.totalCost, 0);
+      expect(summary.totalMessages).toBe(0);
+      expect(summary.toolCallsByType).toEqual({});
+      expect(summary.fileOperationsByType).toEqual({});
+      expect(summary.successRate).toBe(0);
+      expect(summary.totalCost).toBe(0);
     });
   });
 });

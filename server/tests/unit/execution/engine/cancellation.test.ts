@@ -4,8 +4,7 @@
  * Tests task cancellation for queued and running tasks.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -41,18 +40,18 @@ describe("Task Cancellation", () => {
 
       // Verify task is queued
       const beforeStatus = blockedEngine.getTaskStatus("task-1");
-      assert.strictEqual(beforeStatus?.state, "queued");
+      expect(beforeStatus?.state).toBe("queued");
 
       // Cancel the queued task
       await blockedEngine.cancelTask("task-1");
 
       // Verify task removed from queue
       const afterStatus = blockedEngine.getTaskStatus("task-1");
-      assert.strictEqual(afterStatus, null);
+      expect(afterStatus).toBe(null);
 
       // Verify metrics updated
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 0);
+      expect(metrics.queuedTasks).toBe(0);
     });
 
     it("cancels correct task when multiple tasks queued", async () => {
@@ -99,18 +98,16 @@ describe("Task Cancellation", () => {
       await blockedEngine.cancelTask("task-2");
 
       // Verify task-2 removed, others remain
-      assert.strictEqual(
-        blockedEngine.getTaskStatus("task-1")?.state,
-        "queued"
+      expect(
+        blockedEngine.getTaskStatus("task-1")?.state).toBe("queued"
       );
-      assert.strictEqual(blockedEngine.getTaskStatus("task-2"), null);
-      assert.strictEqual(
-        blockedEngine.getTaskStatus("task-3")?.state,
-        "queued"
+      expect(blockedEngine.getTaskStatus("task-2")).toBe(null);
+      expect(
+        blockedEngine.getTaskStatus("task-3")?.state).toBe("queued"
       );
 
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 2);
+      expect(metrics.queuedTasks).toBe(2);
     });
   });
 
@@ -137,7 +134,7 @@ describe("Task Cancellation", () => {
 
       // Verify task is running
       const beforeStatus = engine.getTaskStatus("task-1");
-      assert.strictEqual(beforeStatus?.state, "running");
+      expect(beforeStatus?.state).toBe("running");
 
       const beforeMetrics = engine.getMetrics();
       const runningBefore = beforeMetrics.currentlyRunning;
@@ -150,11 +147,11 @@ describe("Task Cancellation", () => {
 
       // Verify task no longer running
       const afterStatus = engine.getTaskStatus("task-1");
-      assert.ok(afterStatus === null || afterStatus.state !== "running");
+      expect(afterStatus === null || afterStatus.state !== "running").toBeTruthy();
 
       // Verify metrics updated
       const afterMetrics = engine.getMetrics();
-      assert.ok(afterMetrics.currentlyRunning < runningBefore);
+      expect(afterMetrics.currentlyRunning < runningBefore).toBeTruthy();
     });
 
     it("releases capacity slot after cancelling running task", async () => {
@@ -187,7 +184,7 @@ describe("Task Cancellation", () => {
 
       // Verify capacity slot released
       const afterMetrics = engine.getMetrics();
-      assert.ok(afterMetrics.availableSlots > slotsBefore);
+      expect(afterMetrics.availableSlots > slotsBefore).toBeTruthy();
     });
   });
 
@@ -229,13 +226,11 @@ describe("Task Cancellation", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
 
       // Verify task-1 running, task-2 queued
-      assert.strictEqual(
-        limitedEngine.getTaskStatus("task-1")?.state,
-        "running"
+      expect(
+        limitedEngine.getTaskStatus("task-1")?.state).toBe("running"
       );
-      assert.strictEqual(
-        limitedEngine.getTaskStatus("task-2")?.state,
-        "queued"
+      expect(
+        limitedEngine.getTaskStatus("task-2")?.state).toBe("queued"
       );
 
       // Cancel task-1
@@ -246,9 +241,9 @@ describe("Task Cancellation", () => {
 
       // Verify task-2 now running (capacity freed)
       const task2Status = limitedEngine.getTaskStatus("task-2");
-      assert.ok(
+      expect(
         task2Status?.state === "running" || task2Status?.state === "completed"
-      );
+      ).toBeTruthy();
     });
   });
 
@@ -259,8 +254,8 @@ describe("Task Cancellation", () => {
 
       // Metrics should be unchanged
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 0);
-      assert.strictEqual(metrics.currentlyRunning, 0);
+      expect(metrics.queuedTasks).toBe(0);
+      expect(metrics.currentlyRunning).toBe(0);
     });
 
     it("does not error when cancelling same task twice", async () => {
@@ -289,7 +284,7 @@ describe("Task Cancellation", () => {
 
       // Verify metrics correct
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 0);
+      expect(metrics.queuedTasks).toBe(0);
     });
 
     it("does not error when cancelling completed task", async () => {
@@ -311,14 +306,14 @@ describe("Task Cancellation", () => {
 
       // Verify task completed
       const status = engine.getTaskStatus("task-1");
-      assert.strictEqual(status?.state, "completed");
+      expect(status?.state).toBe("completed");
 
       // Try to cancel completed task - should not error
       await engine.cancelTask("task-1");
 
       // Task should still be completed
       const afterStatus = engine.getTaskStatus("task-1");
-      assert.strictEqual(afterStatus?.state, "completed");
+      expect(afterStatus?.state).toBe("completed");
     });
   });
 
@@ -371,12 +366,12 @@ describe("Task Cancellation", () => {
       ]);
 
       // All tasks should be cancelled
-      assert.strictEqual(blockedEngine.getTaskStatus("task-1"), null);
-      assert.strictEqual(blockedEngine.getTaskStatus("task-2"), null);
-      assert.strictEqual(blockedEngine.getTaskStatus("task-3"), null);
+      expect(blockedEngine.getTaskStatus("task-1")).toBe(null);
+      expect(blockedEngine.getTaskStatus("task-2")).toBe(null);
+      expect(blockedEngine.getTaskStatus("task-3")).toBe(null);
 
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.queuedTasks, 0);
+      expect(metrics.queuedTasks).toBe(0);
     });
 
     it("cancels task with dependencies correctly", async () => {
@@ -413,12 +408,11 @@ describe("Task Cancellation", () => {
       await blockedEngine.cancelTask("task-1");
 
       // Parent task should be gone
-      assert.strictEqual(blockedEngine.getTaskStatus("task-1"), null);
+      expect(blockedEngine.getTaskStatus("task-1")).toBe(null);
 
       // Dependent task should still be queued (waiting for non-existent dependency)
-      assert.strictEqual(
-        blockedEngine.getTaskStatus("task-2")?.state,
-        "queued"
+      expect(
+        blockedEngine.getTaskStatus("task-2")?.state).toBe("queued"
       );
     });
   });

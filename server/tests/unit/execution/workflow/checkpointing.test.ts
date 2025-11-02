@@ -3,8 +3,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, expect } from "vitest";
 import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
 import { InMemoryWorkflowStorage } from "../../../../src/execution/workflow/memory-storage.js";
 import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
@@ -146,8 +145,8 @@ describe("Checkpointing and Resumption", () => {
       });
 
       const checkpoints = await storage.listCheckpoints();
-      assert.ok(checkpoints.length > 0);
-      assert.strictEqual(checkpoints[0].executionId, executionId);
+      expect(checkpoints.length > 0).toBeTruthy();
+      expect(checkpoints[0].executionId).toBe(executionId);
     });
 
     it("should include complete execution state in checkpoint", async () => {
@@ -177,13 +176,13 @@ describe("Checkpointing and Resumption", () => {
       });
 
       const checkpoint = await storage.loadCheckpoint(executionId);
-      assert.ok(checkpoint);
-      assert.strictEqual(checkpoint.workflowId, "test-workflow");
-      assert.strictEqual(checkpoint.executionId, executionId);
-      assert.ok(checkpoint.state.currentStepIndex >= 0);
-      assert.ok(checkpoint.state.stepResults.length > 0);
-      assert.ok(checkpoint.state.context);
-      assert.ok(checkpoint.createdAt);
+      expect(checkpoint).toBeTruthy();
+      expect(checkpoint?.workflowId).toBe("test-workflow");
+      expect(checkpoint?.executionId).toBe(executionId);
+      expect(checkpoint?.state?.currentStepIndex).toBeTruthy();
+      expect(checkpoint?.state?.stepResults?.length).toBeTruthy();
+      expect(checkpoint?.state.context).toBeTruthy();
+      expect(checkpoint?.createdAt).toBeTruthy();
     });
 
     it("should emit checkpoint event", async () => {
@@ -211,9 +210,9 @@ describe("Checkpointing and Resumption", () => {
 
       await waitFor(() => checkpointEmitted);
 
-      assert.strictEqual(checkpointEmitted, true);
-      assert.ok(emittedCheckpoint);
-      assert.strictEqual(emittedCheckpoint?.executionId, executionId);
+      expect(checkpointEmitted).toBe(true);
+      expect(emittedCheckpoint).toBeTruthy();
+      expect(emittedCheckpoint?.executionId).toBe(executionId);
     });
 
     it("should not create checkpoint when interval not reached", async () => {
@@ -239,7 +238,7 @@ describe("Checkpointing and Resumption", () => {
 
       const checkpoints = await storage.listCheckpoints();
       // Should not create checkpoint since we only have 2 steps and interval is 5
-      assert.strictEqual(checkpoints.length, 0);
+      expect(checkpoints.length).toBe(0);
     });
   });
 
@@ -283,8 +282,8 @@ describe("Checkpointing and Resumption", () => {
       }, 3000);
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, "completed");
-      assert.ok(execution?.stepResults.length === 3);
+      expect(execution?.status).toBe("completed");
+      expect(execution?.stepResults.length === 3).toBeTruthy();
     });
 
     it("should continue from correct step index after resume", async () => {
@@ -332,14 +331,14 @@ describe("Checkpointing and Resumption", () => {
       const execution = orchestrator.getExecution(executionId);
 
       // Verify all steps completed
-      assert.strictEqual(execution?.stepResults.length, 3);
+      expect(execution?.stepResults.length).toBe(3);
 
       // Verify we didn't re-execute completed steps
       const tasksAfterResume = mockExecutor.executedTasks.length;
       const newTasksExecuted = tasksAfterResume - tasksBeforeResume;
 
       // Should only execute remaining steps
-      assert.ok(newTasksExecuted <= 3 - resultsAtPause);
+      expect(newTasksExecuted <= 3 - resultsAtPause).toBeTruthy();
     });
 
     it("should preserve context across resume", async () => {
@@ -393,7 +392,7 @@ describe("Checkpointing and Resumption", () => {
       }, 3000);
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.context.result1, "Result from step 1");
+      expect(execution?.context.result1).toBe("Result from step 1");
     });
 
     it("should emit resume event", async () => {
@@ -434,32 +433,22 @@ describe("Checkpointing and Resumption", () => {
 
       await orchestrator.resumeWorkflow(executionId);
 
-      assert.strictEqual(resumeEmitted, true);
-      assert.strictEqual(emittedExecutionId, executionId);
+      expect(resumeEmitted).toBe(true);
+      expect(emittedExecutionId).toBe(executionId);
     });
 
     it("should throw error when resuming without storage", async () => {
       const noStorageOrchestrator = new LinearOrchestrator(mockExecutor as any);
 
-      await assert.rejects(
-        async () => {
-          await noStorageOrchestrator.resumeWorkflow("test-id");
-        },
-        {
-          message: "Cannot resume workflow: no storage configured",
-        }
-      );
+      await expect(async () => {
+        await noStorageOrchestrator.resumeWorkflow("test-id");
+      }).rejects.toThrow("Cannot resume workflow: no storage configured");
     });
 
     it("should throw error when checkpoint not found", async () => {
-      await assert.rejects(
-        async () => {
-          await orchestrator.resumeWorkflow("non-existent-id");
-        },
-        {
-          message: "No checkpoint found for execution non-existent-id",
-        }
-      );
+      await expect(async () => {
+        await orchestrator.resumeWorkflow("non-existent-id");
+      }).rejects.toThrow("No checkpoint found for execution non-existent-id");
     });
   });
 
@@ -485,9 +474,9 @@ describe("Checkpointing and Resumption", () => {
       await storage.saveCheckpoint(checkpoint);
 
       const retrieved = await storage.loadCheckpoint("exec-1");
-      assert.ok(retrieved);
-      assert.strictEqual(retrieved.executionId, "exec-1");
-      assert.strictEqual(retrieved.workflowId, "test-workflow");
+      expect(retrieved).toBeTruthy();
+      expect(retrieved?.executionId).toBe("exec-1");
+      expect(retrieved?.workflowId).toBe("test-workflow");
     });
 
     it("should list checkpoints", async () => {
@@ -523,11 +512,11 @@ describe("Checkpointing and Resumption", () => {
       await storage.saveCheckpoint(checkpoint2);
 
       const all = await storage.listCheckpoints();
-      assert.strictEqual(all.length, 2);
+      expect(all.length).toBe(2);
 
       const filtered = await storage.listCheckpoints("workflow-1");
-      assert.strictEqual(filtered.length, 1);
-      assert.strictEqual(filtered[0].workflowId, "workflow-1");
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].workflowId).toBe("workflow-1");
     });
 
     it("should delete checkpoints", async () => {
@@ -546,22 +535,22 @@ describe("Checkpointing and Resumption", () => {
       };
 
       await storage.saveCheckpoint(checkpoint);
-      assert.strictEqual(storage.size(), 1);
+      expect(storage.size()).toBe(1);
 
       await storage.deleteCheckpoint("exec-1");
-      assert.strictEqual(storage.size(), 0);
+      expect(storage.size()).toBe(0);
 
       const retrieved = await storage.loadCheckpoint("exec-1");
-      assert.strictEqual(retrieved, null);
+      expect(retrieved).toBe(null);
     });
 
     it("should clear all checkpoints", () => {
       storage._checkpoints.set("exec-1", {} as any);
       storage._checkpoints.set("exec-2", {} as any);
-      assert.strictEqual(storage.size(), 2);
+      expect(storage.size()).toBe(2);
 
       storage.clear();
-      assert.strictEqual(storage.size(), 0);
+      expect(storage.size()).toBe(0);
     });
   });
 });

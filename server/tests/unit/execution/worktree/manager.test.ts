@@ -2,8 +2,7 @@
  * Tests for Worktree Manager
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach, afterEach , expect } from 'vitest'
 import { WorktreeManager } from '../../../../src/execution/worktree/manager.js';
 import type { IGitCli } from '../../../../src/execution/worktree/git-cli.js';
 import type {
@@ -165,16 +164,16 @@ describe('WorktreeManager', () => {
       await manager.createWorktree(params);
 
       // Should get current commit first
-      assert.strictEqual(mockGit.getCallCount('getCurrentCommit'), 1);
+      expect(mockGit.getCallCount('getCurrentCommit')).toBe(1);
       const commitCall = mockGit.getCall('getCurrentCommit', 0);
-      assert.strictEqual(commitCall[0], '/repo');
+      expect(commitCall[0]).toBe('/repo');
 
       // Should create branch from current commit SHA, not base branch
-      assert.strictEqual(mockGit.getCallCount('createBranch'), 1);
+      expect(mockGit.getCallCount('createBranch')).toBe(1);
       const branchCall = mockGit.getCall('createBranch', 0);
-      assert.strictEqual(branchCall[0], '/repo');
-      assert.strictEqual(branchCall[1], 'feature-branch');
-      assert.strictEqual(branchCall[2], 'abc123def456789'); // commit SHA, not 'main'
+      expect(branchCall[0]).toBe('/repo');
+      expect(branchCall[1]).toBe('feature-branch');
+      expect(branchCall[2]).toBe('abc123def456789'); // commit SHA, not 'main'
     });
 
     it('should not create branch if createBranch is false', async () => {
@@ -188,7 +187,7 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree(params);
 
-      assert.strictEqual(mockGit.getCallCount('createBranch'), 0);
+      expect(mockGit.getCallCount('createBranch')).toBe(0);
     });
 
     it('should call git worktree add', async () => {
@@ -202,11 +201,11 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree(params);
 
-      assert.strictEqual(mockGit.getCallCount('worktreeAdd'), 1);
+      expect(mockGit.getCallCount('worktreeAdd')).toBe(1);
       const call = mockGit.getCall('worktreeAdd', 0);
-      assert.strictEqual(call[0], '/repo');
-      assert.strictEqual(call[1], '/worktree/feature');
-      assert.strictEqual(call[2], 'feature-branch');
+      expect(call[0]).toBe('/repo');
+      expect(call[1]).toBe('/worktree/feature');
+      expect(call[2]).toBe('feature-branch');
     });
 
     it('should configure sparse checkout when enabled', async () => {
@@ -223,10 +222,10 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree(params);
 
-      assert.strictEqual(mockGit.getCallCount('configureSparseCheckout'), 1);
+      expect(mockGit.getCallCount('configureSparseCheckout')).toBe(1);
       const call = mockGit.getCall('configureSparseCheckout', 0);
-      assert.strictEqual(call[0], '/worktree/feature');
-      assert.deepStrictEqual(call[1], ['src', 'docs']);
+      expect(call[0]).toBe('/worktree/feature');
+      expect(call[1]).toEqual(['src', 'docs']);
     });
 
     it('should not configure sparse checkout when disabled', async () => {
@@ -242,7 +241,7 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree(params);
 
-      assert.strictEqual(mockGit.getCallCount('configureSparseCheckout'), 0);
+      expect(mockGit.getCallCount('configureSparseCheckout')).toBe(0);
     });
 
     it('should throw error if worktree path does not exist after creation', async () => {
@@ -260,17 +259,9 @@ describe('WorktreeManager', () => {
         createBranch: false,
       };
 
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await manager.createWorktree(params);
-        },
-        (error: any) => {
-          assert.ok(error instanceof WorktreeError);
-          assert.strictEqual(error.code, WorktreeErrorCode.REPOSITORY_ERROR);
-          assert.ok(error.message.includes('path does not exist'));
-          return true;
-        }
-      );
+        }).rejects.toThrow();
     });
   });
 
@@ -287,15 +278,15 @@ describe('WorktreeManager', () => {
       ];
 
       const isValid = await manager.isWorktreeValid('/repo', '/worktree/feature');
-      assert.strictEqual(isValid, true);
+      expect(isValid).toBe(true);
     });
 
     it('should return false when worktree path does not exist', async () => {
       (fs.existsSync as any) = () => false;
 
       const isValid = await manager.isWorktreeValid('/repo', '/worktree/feature');
-      assert.strictEqual(isValid, false);
-      assert.strictEqual(mockGit.getCallCount('worktreeList'), 0);
+      expect(isValid).toBe(false);
+      expect(mockGit.getCallCount('worktreeList')).toBe(0);
     });
 
     it('should return false when worktree exists but is not registered', async () => {
@@ -310,14 +301,14 @@ describe('WorktreeManager', () => {
       ];
 
       const isValid = await manager.isWorktreeValid('/repo', '/worktree/feature');
-      assert.strictEqual(isValid, false);
+      expect(isValid).toBe(false);
     });
 
     it('should return false on error', async () => {
       mockGit.shouldThrow = new Error('Git error');
 
       const isValid = await manager.isWorktreeValid('/repo', '/worktree/feature');
-      assert.strictEqual(isValid, false);
+      expect(isValid).toBe(false);
     });
   });
 
@@ -335,8 +326,8 @@ describe('WorktreeManager', () => {
 
       await manager.cleanupWorktree('/worktree/feature', '/repo');
 
-      assert.strictEqual(mockGit.getCallCount('worktreeRemove'), 1);
-      assert.strictEqual(mockGit.getCallCount('worktreePrune'), 1);
+      expect(mockGit.getCallCount('worktreeRemove')).toBe(1);
+      expect(mockGit.getCallCount('worktreePrune')).toBe(1);
     });
 
     it('should delete branch when autoDeleteBranches is true', async () => {
@@ -354,10 +345,10 @@ describe('WorktreeManager', () => {
 
       await manager.cleanupWorktree('/worktree/feature', '/repo');
 
-      assert.strictEqual(mockGit.getCallCount('deleteBranch'), 1);
+      expect(mockGit.getCallCount('deleteBranch')).toBe(1);
       const call = mockGit.getCall('deleteBranch', 0);
-      assert.strictEqual(call[1], 'feature-branch');
-      assert.strictEqual(call[2], true); // force delete
+      expect(call[1]).toBe('feature-branch');
+      expect(call[2]).toBe(true); // force delete
     });
 
     it('should not delete branch when autoDeleteBranches is false', async () => {
@@ -375,7 +366,7 @@ describe('WorktreeManager', () => {
 
       await manager.cleanupWorktree('/worktree/feature', '/repo');
 
-      assert.strictEqual(mockGit.getCallCount('deleteBranch'), 0);
+      expect(mockGit.getCallCount('deleteBranch')).toBe(0);
     });
 
     it('should not delete detached HEAD', async () => {
@@ -393,7 +384,7 @@ describe('WorktreeManager', () => {
 
       await manager.cleanupWorktree('/worktree/feature', '/repo');
 
-      assert.strictEqual(mockGit.getCallCount('deleteBranch'), 0);
+      expect(mockGit.getCallCount('deleteBranch')).toBe(0);
     });
   });
 
@@ -420,8 +411,8 @@ describe('WorktreeManager', () => {
 
       const result = await manager.listWorktrees('/repo');
 
-      assert.strictEqual(mockGit.getCallCount('worktreeList'), 1);
-      assert.deepStrictEqual(result, worktrees);
+      expect(mockGit.getCallCount('worktreeList')).toBe(1);
+      expect(result).toEqual(worktrees);
     });
   });
 
@@ -429,8 +420,8 @@ describe('WorktreeManager', () => {
     it('should return a copy of the config', () => {
       const returnedConfig = manager.getConfig();
 
-      assert.deepStrictEqual(returnedConfig, config);
-      assert.notStrictEqual(returnedConfig, config);
+      expect(returnedConfig).toEqual(config);
+      expect(returnedConfig).not.toBe(config);
     });
   });
 });

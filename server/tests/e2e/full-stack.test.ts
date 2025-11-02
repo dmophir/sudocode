@@ -20,8 +20,7 @@
  *   RUN_E2E_TESTS=true npm test
  */
 
-import { describe, it, beforeEach, afterEach, before } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach, afterEach, before, expect, beforeAll } from 'vitest'
 import { spawn } from 'node:child_process';
 import { SimpleProcessManager } from '../../src/execution/process/simple-manager.js';
 import { ClaudeCodeOutputProcessor } from '../../src/execution/output/claude-code-output-processor.js';
@@ -55,7 +54,7 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
   let manager: SimpleProcessManager;
   let claudeAvailable = false;
 
-  before(async () => {
+  beforeAll(async () => {
     // Check if Claude is available before running any tests
     claudeAvailable = await checkClaudeAvailable();
 
@@ -87,8 +86,8 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
 
       // Spawn Claude Code process
       const managedProcess = await manager.acquireProcess(config);
-      assert.ok(managedProcess.id);
-      assert.ok(managedProcess.pid);
+      expect(managedProcess.id).toBeTruthy();
+      expect(managedProcess.pid).toBeTruthy();
 
       // Create output processor
       const processor = new ClaudeCodeOutputProcessor();
@@ -136,24 +135,24 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
       });
 
       // Verify we processed some output
-      assert.ok(outputLines.length > 0, 'Should have received output lines');
+      expect(outputLines.length > 0, 'Should have received output lines').toBeTruthy();
 
       // Verify processor tracked messages
       const metrics = processor.getMetrics();
-      assert.ok(metrics.totalMessages > 0, 'Should have processed messages');
+      expect(metrics.totalMessages > 0, 'Should have processed messages').toBeTruthy();
 
       // Verify at least one tool call (the Bash command)
-      assert.ok(toolCalls.length > 0, 'Should have tracked tool calls');
+      expect(toolCalls.length > 0, 'Should have tracked tool calls').toBeTruthy();
 
       // Verify we have a Bash tool call
       const bashCalls = processor.getToolCallsByName('Bash');
-      assert.ok(bashCalls.length > 0, 'Should have Bash tool call');
+      expect(bashCalls.length > 0, 'Should have Bash tool call').toBeTruthy();
 
       // Verify token usage was tracked
-      assert.ok(metrics.usage.totalTokens > 0, 'Should have tracked token usage');
+      expect(metrics.usage.totalTokens > 0, 'Should have tracked token usage').toBeTruthy();
 
       // Verify cost was calculated
-      assert.ok(metrics.usage.cost! > 0, 'Should have calculated cost');
+      expect(metrics.usage.cost! > 0, 'Should have calculated cost').toBeTruthy();
     });
 
     it('should track file operations through all layers', { skip: !claudeAvailable }, async () => {
@@ -207,13 +206,13 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
 
       // Verify file operations were tracked
       const allFileChanges = processor.getFileChanges();
-      assert.ok(allFileChanges.length > 0, 'Should have tracked file changes');
+      expect(allFileChanges.length > 0, 'Should have tracked file changes').toBeTruthy();
 
       // Verify we have both write and read operations
       const writes = processor.getFileChangesByOperation('write');
       const reads = processor.getFileChangesByOperation('read');
 
-      assert.ok(writes.length > 0 || reads.length > 0, 'Should have file operations');
+      expect(writes.length > 0 || reads.length > 0, 'Should have file operations').toBeTruthy();
     });
 
     it('should generate execution summary from real Claude output', { skip: !claudeAvailable }, async () => {
@@ -263,17 +262,17 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
       const summary = processor.getExecutionSummary();
 
       // Verify summary has expected fields
-      assert.ok(summary.totalMessages > 0, 'Should have message count');
-      assert.ok(summary.toolCallsByType, 'Should have tool calls by type');
-      assert.ok(summary.totalTokens.input > 0, 'Should have input tokens');
-      assert.ok(summary.totalTokens.output > 0, 'Should have output tokens');
-      assert.ok(summary.totalCost > 0, 'Should have calculated cost');
-      assert.ok(summary.duration >= 0, 'Should have duration');
-      assert.ok(summary.startTime instanceof Date, 'Should have start time');
+      expect(summary.totalMessages > 0, 'Should have message count').toBeTruthy();
+      expect(summary.toolCallsByType, 'Should have tool calls by type').toBeTruthy();
+      expect(summary.totalTokens.input > 0, 'Should have input tokens').toBeTruthy();
+      expect(summary.totalTokens.output > 0, 'Should have output tokens').toBeTruthy();
+      expect(summary.totalCost > 0, 'Should have calculated cost').toBeTruthy();
+      expect(summary.duration >= 0, 'Should have duration').toBeTruthy();
+      expect(summary.startTime instanceof Date, 'Should have start time').toBeTruthy();
 
       // Verify success rate is sensible
-      assert.ok(summary.successRate >= 0 && summary.successRate <= 100,
-        'Success rate should be between 0 and 100');
+      expect(summary.successRate >= 0 && summary.successRate <= 100,
+        'Success rate should be between 0 and 100').toBeTruthy();
     });
   });
 
@@ -332,12 +331,12 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
       // we might have errors tracked
       // At minimum, we should have processed some messages
       const metrics = processor.getMetrics();
-      assert.ok(metrics.totalMessages > 0, 'Should have processed messages');
+      expect(metrics.totalMessages > 0, 'Should have processed messages').toBeTruthy();
 
       // Optionally verify we have tool calls
       const toolCalls = processor.getToolCalls();
       // Even if the command fails, Claude should attempt to execute it
-      assert.ok(toolCalls.length >= 0, 'Should have tracked tool calls');
+      expect(toolCalls.length >= 0, 'Should have tracked tool calls').toBeTruthy();
     });
   });
 });

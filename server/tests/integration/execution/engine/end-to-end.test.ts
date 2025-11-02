@@ -5,8 +5,7 @@
  * These tests verify that the layers work together correctly without requiring Claude CLI.
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach, afterEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from '../../../../src/execution/engine/simple-engine.js';
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 
@@ -26,16 +25,16 @@ describe('Engine + Process Layer Integration', () => {
 
   describe('Initialization', () => {
     it('creates engine with real process manager', () => {
-      assert.ok(engine);
+      expect(engine).toBeTruthy();
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.completedTasks, 0);
-      assert.strictEqual(metrics.failedTasks, 0);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.completedTasks).toBe(0);
+      expect(metrics.failedTasks).toBe(0);
 
       const processMetrics = processManager.getMetrics();
-      assert.strictEqual(processMetrics.currentlyActive, 0);
-      assert.strictEqual(processMetrics.totalSpawned, 0);
+      expect(processMetrics.currentlyActive).toBe(0);
+      expect(processMetrics.totalSpawned).toBe(0);
     });
 
     it('respects custom maxConcurrent config', () => {
@@ -44,8 +43,8 @@ describe('Engine + Process Layer Integration', () => {
       });
 
       const metrics = customEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 5);
-      assert.strictEqual(metrics.availableSlots, 5);
+      expect(metrics.maxConcurrent).toBe(5);
+      expect(metrics.availableSlots).toBe(5);
 
       customEngine.shutdown();
     });
@@ -58,11 +57,11 @@ describe('Engine + Process Layer Integration', () => {
 
       // Verify both engine and process manager are shut down
       const engineMetrics = engine.getMetrics();
-      assert.strictEqual(engineMetrics.currentlyRunning, 0);
-      assert.strictEqual(engineMetrics.queuedTasks, 0);
+      expect(engineMetrics.currentlyRunning).toBe(0);
+      expect(engineMetrics.queuedTasks).toBe(0);
 
       const processMetrics = processManager.getMetrics();
-      assert.strictEqual(processMetrics.currentlyActive, 0);
+      expect(processMetrics.currentlyActive).toBe(0);
     });
 
     it('is idempotent - safe to shutdown multiple times', async () => {
@@ -70,7 +69,7 @@ describe('Engine + Process Layer Integration', () => {
       await engine.shutdown(); // Should not error
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
+      expect(metrics.currentlyRunning).toBe(0);
     });
   });
 
@@ -80,11 +79,11 @@ describe('Engine + Process Layer Integration', () => {
       const processMetrics = processManager.getMetrics();
 
       // Both should start at zero
-      assert.strictEqual(engineMetrics.currentlyRunning, 0);
-      assert.strictEqual(processMetrics.currentlyActive, 0);
+      expect(engineMetrics.currentlyRunning).toBe(0);
+      expect(processMetrics.currentlyActive).toBe(0);
 
       // Process metrics should track spawned processes
-      assert.strictEqual(processMetrics.totalSpawned, 0);
+      expect(processMetrics.totalSpawned).toBe(0);
     });
 
     it('provides access to process manager through engine', () => {
@@ -92,10 +91,10 @@ describe('Engine + Process Layer Integration', () => {
       const engineMetrics = engine.getMetrics();
 
       // Verify engine metrics structure
-      assert.ok('maxConcurrent' in engineMetrics);
-      assert.ok('currentlyRunning' in engineMetrics);
-      assert.ok('totalProcessesSpawned' in engineMetrics);
-      assert.ok('activeProcesses' in engineMetrics);
+      expect('maxConcurrent' in engineMetrics).toBeTruthy();
+      expect('currentlyRunning' in engineMetrics).toBeTruthy();
+      expect('totalProcessesSpawned' in engineMetrics).toBeTruthy();
+      expect('activeProcesses' in engineMetrics).toBeTruthy();
     });
   });
 
@@ -106,7 +105,7 @@ describe('Engine + Process Layer Integration', () => {
       });
 
       // Verify engine was created with custom config
-      assert.ok(customEngine);
+      expect(customEngine).toBeTruthy();
 
       customEngine.shutdown();
     });
@@ -115,7 +114,7 @@ describe('Engine + Process Layer Integration', () => {
       const defaultEngine = new SimpleExecutionEngine(processManager);
 
       const metrics = defaultEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 3); // default
+      expect(metrics.maxConcurrent).toBe(3); // default
 
       defaultEngine.shutdown();
     });
@@ -153,11 +152,11 @@ describe('Engine + Process Layer Integration', () => {
       await engine.shutdown();
 
       const engineMetrics = engine.getMetrics();
-      assert.strictEqual(engineMetrics.queuedTasks, 0);
-      assert.strictEqual(engineMetrics.currentlyRunning, 0);
+      expect(engineMetrics.queuedTasks).toBe(0);
+      expect(engineMetrics.currentlyRunning).toBe(0);
 
       const processMetrics = processManager.getMetrics();
-      assert.strictEqual(processMetrics.currentlyActive, 0);
+      expect(processMetrics.currentlyActive).toBe(0);
     });
   });
 
@@ -171,8 +170,8 @@ describe('Engine + Process Layer Integration', () => {
       const metrics1 = engine.getMetrics();
       const metrics2 = engine2.getMetrics();
 
-      assert.strictEqual(metrics1.maxConcurrent, 3);
-      assert.strictEqual(metrics2.maxConcurrent, 2);
+      expect(metrics1.maxConcurrent).toBe(3);
+      expect(metrics2.maxConcurrent).toBe(2);
 
       engine2.shutdown();
     });
@@ -185,8 +184,8 @@ describe('Engine + Process Layer Integration', () => {
       const metrics1 = engine.getMetrics();
       const metrics2 = engine2.getMetrics();
 
-      assert.strictEqual(metrics1.currentlyRunning, 0);
-      assert.strictEqual(metrics2.currentlyRunning, 0);
+      expect(metrics1.currentlyRunning).toBe(0);
+      expect(metrics2.currentlyRunning).toBe(0);
 
       engine2.shutdown();
       processManager2.shutdown();
@@ -200,7 +199,7 @@ describe('Engine + Process Layer Integration', () => {
       });
 
       // Handler registered (actual invocation requires task execution)
-      assert.ok(true);
+      expect(true).toBeTruthy();
     });
 
     it('registers failure handlers', () => {
@@ -209,7 +208,7 @@ describe('Engine + Process Layer Integration', () => {
       });
 
       // Handler registered (actual invocation requires task execution)
-      assert.ok(true);
+      expect(true).toBeTruthy();
     });
 
     it('clears handlers on shutdown', async () => {
@@ -222,14 +221,14 @@ describe('Engine + Process Layer Integration', () => {
       await engine.shutdown();
 
       // After shutdown, handlers should be cleared
-      assert.ok(true);
+      expect(true).toBeTruthy();
     });
   });
 
   describe('Status Queries', () => {
     it('getTaskStatus returns null for non-existent tasks', () => {
       const status = engine.getTaskStatus('non-existent-task');
-      assert.strictEqual(status, null);
+      expect(status).toBe(null);
     });
 
     it('getMetrics returns defensive copy', () => {
@@ -238,7 +237,7 @@ describe('Engine + Process Layer Integration', () => {
 
       // Modifying one should not affect the other
       metrics1.queuedTasks = 999;
-      assert.notStrictEqual(metrics2.queuedTasks, 999);
+      expect(metrics2.queuedTasks).not.toBe(999);
     });
   });
 });
