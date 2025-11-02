@@ -405,7 +405,7 @@ export class ExecutionService {
 
     // Check if worktree still exists on filesystem, recreate if needed
     if (this.lifecycleService) {
-      const fs = await import('fs');
+      const fs = await import("fs");
       const worktreeExists = fs.existsSync(prevExecution.worktree_path);
 
       if (!worktreeExists) {
@@ -587,6 +587,37 @@ Please continue working on this issue, taking into account the feedback above.`;
    */
   async cleanupExecution(executionId: string): Promise<void> {
     await this.lifecycleService.cleanupExecution(executionId);
+  }
+
+  /**
+   * Shutdown execution service - cancel all active executions
+   *
+   * This is called during server shutdown to gracefully terminate
+   * all running executions before the server exits.
+   */
+  async shutdown(): Promise<void> {
+    const cancelPromises: Promise<void>[] = [];
+
+    // Cancel all active orchestrators
+    for (const [
+      executionId,
+      orchestrator,
+    ] of this.activeOrchestrators.entries()) {
+      cancelPromises.push(
+        orchestrator.cancelWorkflow(executionId).catch((error) => {
+          console.error("[ExecutionService] Error canceling execution", {
+            executionId,
+            error: error.message,
+          });
+        })
+      );
+    }
+
+    // Wait for all cancellations to complete (with timeout)
+    await Promise.race([
+      Promise.all(cancelPromises),
+      new Promise((resolve) => setTimeout(resolve, 5000)), // 5 second timeout
+    ]);
   }
 
   /**

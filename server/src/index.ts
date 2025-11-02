@@ -12,6 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { initDatabase, getDatabaseInfo } from "./services/db.js";
 import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
+import { ExecutionService } from "./services/execution-service.js";
 import { WorktreeManager } from "./execution/worktree/manager.js";
 import { getWorktreeConfig } from "./execution/worktree/config.js";
 import { createIssuesRouter } from "./routes/issues.js";
@@ -55,6 +56,7 @@ const REPO_ROOT = path.dirname(SUDOCODE_DIR);
 let db!: Database.Database;
 let watcher: ServerWatcherControl | null = null;
 let transportManager!: TransportManager;
+let executionService: ExecutionService | null = null;
 
 // Async initialization function
 async function initialize() {
@@ -73,6 +75,15 @@ async function initialize() {
     // Initialize transport manager for SSE streaming
     transportManager = new TransportManager();
     console.log("Transport manager initialized");
+
+    // Initialize execution service globally for cleanup on shutdown
+    executionService = new ExecutionService(
+      db,
+      REPO_ROOT,
+      undefined,
+      transportManager
+    );
+    console.log("Execution service initialized");
 
     // Cleanup orphaned worktrees on startup (if configured)
     const worktreeConfig = getWorktreeConfig(REPO_ROOT);
@@ -163,7 +174,10 @@ app.use("/api/specs", createSpecsRouter(db));
 app.use("/api/relationships", createRelationshipsRouter(db));
 app.use("/api/feedback", createFeedbackRouter(db));
 // Mount execution routes (must be before stream routes to avoid conflicts)
-app.use("/api", createExecutionsRouter(db, REPO_ROOT, transportManager));
+app.use(
+  "/api",
+  createExecutionsRouter(db, REPO_ROOT, transportManager, executionService!)
+);
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
 // Health check endpoint
@@ -226,7 +240,7 @@ app.get("/ws/stats", (_req: Request, res: Response) => {
 });
 
 // Serve static frontend
-const frontendPath = path.join(__dirname, "../../../frontend/dist");
+const frontendPath = path.join(REPO_ROOT, "frontend/dist");
 console.log(`[server] Serving static frontend from: ${frontendPath}`);
 
 // Serve static files
@@ -342,6 +356,11 @@ console.log(
 process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
 
+  // Shutdown execution service (cancel active executions)
+  if (executionService) {
+    await executionService.shutdown();
+  }
+
   // Stop file watcher
   if (watcher) {
     await watcher.stop();
@@ -364,10 +383,21 @@ process.on("SIGINT", async () => {
     console.log("Server closed");
     process.exit(0);
   });
+
+  // Force exit after 10 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    console.error("Shutdown timeout - forcing exit");
+    process.exit(1);
+  }, 10000);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nShutting down server...");
+
+  // Shutdown execution service (cancel active executions)
+  if (executionService) {
+    await executionService.shutdown();
+  }
 
   // Stop file watcher
   if (watcher) {
