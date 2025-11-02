@@ -586,7 +586,7 @@ describe('ClaudeCodeOutputProcessor', () => {
       // Cost = (1M * 3) + (1M * 15) + (1M * 0.30) = $18.30
       const expectedCost = 18.3;
       expect(metrics.usage.cost !== undefined).toBeTruthy();
-      expect(Math.abs(metrics.usage.cost - expectedCost) < 0.01).toBeTruthy();
+      expect(Math.abs((metrics.usage.cost || 0) - expectedCost) < 0.01).toBeTruthy();
     });
   });
 

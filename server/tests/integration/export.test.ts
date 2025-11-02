@@ -3,7 +3,7 @@
  * Verifies that database updates trigger exports to JSONL files
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from "supertest";
 import express from "express";
 import type Database from "better-sqlite3";
@@ -238,10 +238,9 @@ describe("JSONL Export Integration", () => {
       const finalIssue = issues.find((i) => i.id === issueId);
 
       expect(finalIssue, "Issue should be in JSONL").toBeTruthy();
-      expect(finalIssue.priority).toBe(2, "Should have final priority");
+      expect(finalIssue.priority, "Should have final priority").toBe(2);
       expect(
-        finalIssue.status).toBe("in_progress",
-        "Should have final status"
+        finalIssue.status, "Should have final status").toBe("in_progress"
       );
     });
 
@@ -305,16 +304,16 @@ describe("JSONL Export Integration", () => {
       const updatedIssue3 = issues.find((i) => i.id === issue3Id);
 
       expect(updatedIssue1, "Issue 1 should be in JSONL").toBeTruthy();
-      expect(updatedIssue1.priority).toBe(1, "Issue 1 should have priority 1");
-      expect(updatedIssue1.status).toBe("in_progress", "Issue 1 should be in_progress");
+      expect(updatedIssue1.priority, "Issue 1 should have priority 1").toBe(1);
+      expect(updatedIssue1.status, "Issue 1 should be in_progress").toBe("in_progress");
 
       expect(updatedIssue2, "Issue 2 should be in JSONL").toBeTruthy();
-      expect(updatedIssue2.priority).toBe(2, "Issue 2 should have priority 2");
-      expect(updatedIssue2.status).toBe("blocked", "Issue 2 should be blocked");
+      expect(updatedIssue2.priority, "Issue 2 should have priority 2").toBe(2);
+      expect(updatedIssue2.status, "Issue 2 should be blocked").toBe("blocked");
 
       expect(updatedIssue3, "Issue 3 should be in JSONL").toBeTruthy();
-      expect(updatedIssue3.priority).toBe(3, "Issue 3 should have priority 3");
-      expect(updatedIssue3.status).toBe("closed", "Issue 3 should be closed");
+      expect(updatedIssue3.priority, "Issue 3 should have priority 3").toBe(3);
+      expect(updatedIssue3.status, "Issue 3 should be closed").toBe("closed");
     });
   });
 

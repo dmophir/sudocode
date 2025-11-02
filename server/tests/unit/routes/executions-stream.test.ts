@@ -7,8 +7,6 @@
  */
 
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
-import assert from 'node:assert/strict';
-import { describe, it, beforeEach, afterEach, vi } from 'vitest'
 import express, { type Express } from 'express';
 import request from 'supertest';
 import { createExecutionStreamRoutes } from '../../../src/routes/executions-stream.js';

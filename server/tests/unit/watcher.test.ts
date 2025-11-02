@@ -2,7 +2,7 @@
  * Tests for File Watcher Service
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase } from "@sudocode/cli/dist/db.js";
 import { startServerWatcher } from "../../src/services/watcher.js";
@@ -71,10 +71,10 @@ describe("File Watcher Service", () => {
 
       const stats = watcher.getStats();
       expect(stats, "Stats should be available").toBeTruthy();
-      expect(typeof stats.filesWatched).toBe("number", "Stats should include filesWatched");
-      expect(typeof stats.changesPending).toBe("number", "Stats should include changesPending");
-      expect(typeof stats.changesProcessed).toBe("number", "Stats should include changesProcessed");
-      expect(typeof stats.errors).toBe("number", "Stats should include errors");
+      expect(typeof stats.filesWatched, "Stats should include filesWatched").toBe("number");
+      expect(typeof stats.changesPending, "Stats should include changesPending").toBe("number");
+      expect(typeof stats.changesProcessed, "Stats should include changesProcessed").toBe("number");
+      expect(typeof stats.errors, "Stats should include errors").toBe("number");
 
       await watcher.stop();
     });
@@ -210,7 +210,7 @@ describe("File Watcher Service", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const initialStats = watcher.getStats();
-      expect(initialStats.changesPending).toBe(0, "Should have no pending changes initially");
+      expect(initialStats.changesPending, "Should have no pending changes initially").toBe(0);
 
       await watcher.stop();
     });

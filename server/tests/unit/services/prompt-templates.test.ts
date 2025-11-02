@@ -2,7 +2,7 @@
  * Tests for prompt templates service
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import Database from 'better-sqlite3';
 import {
   PROMPT_TEMPLATES_TABLE,
@@ -38,11 +38,11 @@ describe('Prompt Templates Service', () => {
 
       const template = getDefaultTemplate(db, 'issue');
       expect(template, 'Template should exist').toBeTruthy();
-      expect(template.type).toBe('issue');
-      expect(template.is_default).toBe(1);
-      expect(template.name).toBe('Default Issue Template');
-      expect(template.template.includes('Fix issue {{issueId}}')).toBeTruthy();
-      expect(template.template.includes('{{#if relatedSpecs}}')).toBeTruthy();
+      expect(template?.type).toBe('issue');
+      expect(template?.is_default).toBe(1);
+      expect(template?.name).toBe('Default Issue Template');
+      expect(template?.template.includes('Fix issue {{issueId}}')).toBeTruthy();
+      expect(template?.template.includes('{{#if relatedSpecs}}')).toBeTruthy();
     });
 
     it('should be idempotent - not insert duplicate templates', () => {
@@ -61,7 +61,7 @@ describe('Prompt Templates Service', () => {
       // This test verifies that initializeDefaultTemplates validates the template
       // If the default template had invalid syntax, it would throw an error
       db.exec('DELETE FROM prompt_templates');
-      expect(() => initializeDefaultTemplates(db).not.toThrow());
+      expect(() => initializeDefaultTemplates(db)).not.toThrow();
     });
   });
 
@@ -74,8 +74,8 @@ describe('Prompt Templates Service', () => {
     it('should return default template for issue type', () => {
       const template = getDefaultTemplate(db, 'issue');
       expect(template).toBeTruthy();
-      expect(template.type).toBe('issue');
-      expect(template.is_default).toBe(1);
+      expect(template?.type).toBe('issue');
+      expect(template?.is_default).toBe(1);
     });
 
     it('should return null if no default template exists for type', () => {
@@ -305,13 +305,13 @@ describe('Prompt Templates Service', () => {
       expect(template).toBeTruthy();
 
       // Template should have all required fields
-      expect(template.name).toBeTruthy();
-      expect(template.type).toBe('issue');
-      expect(template.template).toBeTruthy();
-      expect(template.is_default).toBe(1);
+      expect(template?.name).toBeTruthy();
+      expect(template?.type).toBe('issue');
+      expect(template?.template).toBeTruthy();
+      expect(template?.is_default).toBe(1);
 
       // Variables should be valid JSON
-      const variables = JSON.parse(template.variables);
+      const variables = JSON.parse(template?.variables || '[]');
       expect(Array.isArray(variables)).toBeTruthy();
       expect(variables.includes('issueId')).toBeTruthy();
       expect(variables.includes('title')).toBeTruthy();
@@ -337,7 +337,7 @@ describe('Prompt Templates Service', () => {
 
       expect(defaultTemplate).toBeTruthy();
       expect(customTemplate).toBeTruthy();
-      expect(defaultTemplate.id).not.toBe(customTemplate.id);
+      expect(defaultTemplate?.id).not.toBe(customTemplate?.id);
 
       // List should show both
       const allTemplates = listTemplates(db, 'issue');

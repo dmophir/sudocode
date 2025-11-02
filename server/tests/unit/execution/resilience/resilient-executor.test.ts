@@ -422,7 +422,7 @@ describe('ResilientExecutor', () => {
       // Check circuit breaker state
       const breaker = executor.getCircuitBreaker('issue');
       expect(breaker !== null).toBeTruthy();
-      expect(breaker.state).toBe('open');
+      expect(breaker?.state).toBe('open');
 
       // Next task should be blocked by circuit breaker
       const blockedTask: ExecutionTask = {
@@ -487,8 +487,8 @@ describe('ResilientExecutor', () => {
       // Circuit should be open
       const openBreaker = executor.getCircuitBreaker('spec');
       expect(openBreaker !== null).toBeTruthy();
-      expect(openBreaker.state).toBe('open');
-      expect(openBreaker.metrics.failedRequests).toBe(5);
+      expect(openBreaker?.state).toBe('open');
+      expect(openBreaker?.metrics.failedRequests).toBe(5);
 
       // Reset the circuit breaker to simulate recovery
       executor.resetCircuitBreaker('spec');
@@ -496,8 +496,8 @@ describe('ResilientExecutor', () => {
       // Circuit should be closed after reset
       const resetBreaker = executor.getCircuitBreaker('spec');
       expect(resetBreaker !== null).toBeTruthy();
-      expect(resetBreaker.state).toBe('closed');
-      expect(resetBreaker.metrics.failedRequests).toBe(0);
+      expect(resetBreaker?.state).toBe('closed');
+      expect(resetBreaker?.metrics.failedRequests).toBe(0);
     });
   });
 
@@ -805,7 +805,7 @@ describe('ResilientExecutor', () => {
 
       const breaker = executor.getCircuitBreaker('spec');
       expect(breaker !== null).toBeTruthy();
-      expect(breaker.name).toBe('spec');
+      expect(breaker?.name).toBe('spec');
     });
 
     it('should reset circuit breaker', async () => {
@@ -853,7 +853,7 @@ describe('ResilientExecutor', () => {
       // Circuit should be open
       let breaker = executor.getCircuitBreaker('issue');
       expect(breaker !== null).toBeTruthy();
-      expect(breaker.state).toBe('open');
+      expect(breaker?.state).toBe('open');
 
       // Reset circuit breaker
       executor.resetCircuitBreaker('issue');
@@ -861,8 +861,8 @@ describe('ResilientExecutor', () => {
       // Circuit should be closed
       breaker = executor.getCircuitBreaker('issue');
       expect(breaker !== null).toBeTruthy();
-      expect(breaker.state).toBe('closed');
-      expect(breaker.metrics.failedRequests).toBe(0);
+      expect(breaker?.state).toBe('closed');
+      expect(breaker?.metrics.failedRequests).toBe(0);
     });
   });
 });

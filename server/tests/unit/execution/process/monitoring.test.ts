@@ -35,9 +35,9 @@ describe('Process Monitoring and Metrics', () => {
       const retrieved = manager.getProcess(spawned.id);
 
       expect(retrieved, 'Process should be found').toBeTruthy();
-      expect(retrieved.id).toBe(spawned.id);
-      expect(retrieved.pid).toBe(spawned.pid);
-      expect(retrieved.status).toBe(spawned.status);
+      expect(retrieved?.id).toBe(spawned.id);
+      expect(retrieved?.pid).toBe(spawned.pid);
+      expect(retrieved?.status).toBe(spawned.status);
     });
 
     it('returns null when process does not exist', () => {
@@ -61,7 +61,7 @@ describe('Process Monitoring and Metrics', () => {
       const retrieved1 = manager.getProcess(spawned.id);
       const retrieved2 = manager.getProcess(spawned.id);
 
-      expect(retrieved1).toBe(retrieved2, 'Should return same object reference');
+      expect(retrieved1, 'Should return same object reference').toBe(retrieved2);
     });
 
     it('returns process that matches activeProcesses map', async () => {
@@ -133,8 +133,8 @@ describe('Process Monitoring and Metrics', () => {
       const processes1 = manager.getActiveProcesses();
       const processes2 = manager.getActiveProcesses();
 
-      expect(processes1).not.toBe(processes2, 'Should return new array instance');
-      expect(processes1).toEqual(processes2, 'But arrays should contain same elements');
+      expect(processes1, 'Should return new array instance').not.toBe(processes2);
+      expect(processes1, 'But arrays should contain same elements').toEqual(processes2);
     });
 
     it('returns array that can be safely modified', async () => {
@@ -187,9 +187,9 @@ describe('Process Monitoring and Metrics', () => {
 
       const processes = manager.getActiveProcesses();
       expect(
-        processes.filter(p => p.id === spawned.id).length).toBe(0,
+        processes.filter(p => p.id === spawned.id).length,
         'Process should be removed after cleanup delay'
-      );
+      ).toBe(0);
     });
   });
 
@@ -219,8 +219,8 @@ describe('Process Monitoring and Metrics', () => {
       const metrics1 = manager.getMetrics();
       const metrics2 = manager.getMetrics();
 
-      expect(metrics1).not.toBe(metrics2, 'Should return different object instances');
-      expect(metrics1).toEqual(metrics2, 'But values should be equal');
+      expect(metrics1, 'Should return different object instances').not.toBe(metrics2);
+      expect(metrics1, 'But values should be equal').toEqual(metrics2);
     });
 
     it('returned object cannot mutate internal metrics', async () => {

@@ -7,8 +7,6 @@
  */
 
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
-import assert from 'node:assert/strict';
-import { describe, it, beforeEach, afterEach, vi } from 'vitest'
 import { TransportManager, type AgUiEvent } from '../../../../src/execution/transport/transport-manager.js';
 import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';

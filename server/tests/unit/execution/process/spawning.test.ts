@@ -105,8 +105,8 @@ describe('Process Spawning', () => {
       const retrieved = manager.getProcess(managedProcess.id);
 
       expect(retrieved).toBeTruthy();
-      expect(retrieved.id).toBe(managedProcess.id);
-      expect(retrieved.pid).toBe(managedProcess.pid);
+      expect(retrieved?.id).toBe(managedProcess.id);
+      expect(retrieved?.pid).toBe(managedProcess.pid);
     });
 
     it('updates global metrics on spawn', async () => {

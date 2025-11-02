@@ -2,7 +2,7 @@
  * Tests for ExecutionLifecycleService
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from "@sudocode/types/schema";
@@ -179,8 +179,8 @@ describe("ExecutionLifecycleService", () => {
       // Check that the title portion (after last slash) is sanitized
       const titlePortion = result.branchName.split("/").pop();
       expect(titlePortion).toBeTruthy();
-      expect(!titlePortion.includes(":")).toBeTruthy();
-      expect(!titlePortion.includes("!")).toBeTruthy();
+      expect(!titlePortion?.includes(":")).toBeTruthy();
+      expect(!titlePortion?.includes("!")).toBeTruthy();
 
       // Cleanup: Mark execution as completed to allow subsequent tests
       updateExecution(db, result.execution.id, {

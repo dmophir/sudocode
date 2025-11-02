@@ -276,9 +276,9 @@ describe("Concurrency Control", () => {
       // Both tasks should have completed
       const metrics = customEngine.getMetrics();
       expect(
-        metrics.completedTasks).toBe(2,
+        metrics.completedTasks,
         "Both tasks should have completed"
-      );
+      ).toBe(2);
     });
   });
 

@@ -2,7 +2,7 @@
  * Tests for Executions database operations
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode/cli/dist/db.js";
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from "@sudocode/types/schema";
@@ -146,8 +146,8 @@ describe("Executions Service", () => {
       const execution = getExecution(db, executionId);
 
       expect(execution).toBeTruthy();
-      expect(execution.id).toBe(executionId);
-      expect(execution.issue_id).toBe(testIssueId);
+      expect(execution?.id).toBe(executionId);
+      expect(execution?.issue_id).toBe(testIssueId);
     });
 
     it("should return null for non-existent execution", () => {
@@ -259,8 +259,8 @@ describe("Executions Service", () => {
       expect(() => {
         updateExecution(db, "non-existent-id", {
           status: "completed",
-        }).toThrow();
-      });
+        });
+      }).toThrow();
     });
   });
 

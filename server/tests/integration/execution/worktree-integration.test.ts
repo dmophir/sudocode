@@ -5,7 +5,7 @@
  * database integration, and configuration-driven behavior.
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type Database from 'better-sqlite3';
 import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from '@sudocode/types/schema';
@@ -547,20 +547,15 @@ describe('Worktree Integration Tests', () => {
       });
 
       // Try to create second execution for same issue (should fail)
-      await expect(async () => {
-          await service.createExecutionWithWorktree({
-            issueId: testIssueId,
-            issueTitle: 'Test Issue',
-            agentType: 'claude-code',
-            targetBranch: 'main',
-            repoPath: gitRepoPath,
-          }).rejects.toThrow();
-        },
-        (error: any) => {
-          expect(error.message.includes('Active execution already exists')).toBeTruthy();
-          return true;
-        }
-      );
+      await expect(
+        service.createExecutionWithWorktree({
+          issueId: testIssueId,
+          issueTitle: 'Test Issue',
+          agentType: 'claude-code',
+          targetBranch: 'main',
+          repoPath: gitRepoPath,
+        })
+      ).rejects.toThrow('Active execution already exists');
 
       // Cleanup
       await service.cleanupExecution(result1.execution.id);
@@ -644,20 +639,15 @@ describe('Worktree Integration Tests', () => {
       // Try to create execution with invalid repo path
       const invalidRepoPath = path.join(testDir, 'non-existent-repo');
 
-      await expect(async () => {
-          await service.createExecutionWithWorktree({
-            issueId: testIssueId,
-            issueTitle: 'Test Issue',
-            agentType: 'claude-code',
-            targetBranch: 'main',
-            repoPath: invalidRepoPath,
-          }).rejects.toThrow();
-        },
-        (error: any) => {
-          expect(error.message.includes('Not a git repository')).toBeTruthy();
-          return true;
-        }
-      );
+      await expect(
+        service.createExecutionWithWorktree({
+          issueId: testIssueId,
+          issueTitle: 'Test Issue',
+          agentType: 'claude-code',
+          targetBranch: 'main',
+          repoPath: invalidRepoPath,
+        })
+      ).rejects.toThrow('Not a git repository');
 
       // Verify no execution was created
       const executions = db.prepare('SELECT * FROM executions WHERE issue_id = ?').all(testIssueId);
@@ -680,20 +670,15 @@ describe('Worktree Integration Tests', () => {
 
       const testIssueId = createTestIssue('Non-Existent Branch Test');
 
-      await expect(async () => {
-          await service.createExecutionWithWorktree({
-            issueId: testIssueId,
-            issueTitle: 'Test Issue',
-            agentType: 'claude-code',
-            targetBranch: 'non-existent-branch',
-            repoPath: gitRepoPath,
-          }).rejects.toThrow();
-        },
-        (error: any) => {
-          expect(error.message.includes('Target branch does not exist')).toBeTruthy();
-          return true;
-        }
-      );
+      await expect(
+        service.createExecutionWithWorktree({
+          issueId: testIssueId,
+          issueTitle: 'Test Issue',
+          agentType: 'claude-code',
+          targetBranch: 'non-existent-branch',
+          repoPath: gitRepoPath,
+        })
+      ).rejects.toThrow('Target branch does not exist');
     });
 
     it('should cleanup worktree if execution creation fails after worktree created', async () => {

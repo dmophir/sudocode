@@ -4,7 +4,7 @@
  * Tests the transformation of SPEC-007 output processing events into AG-UI protocol events.
  */
 
-import { describe, it, mock, expect, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
 import { EventType } from '@ag-ui/core';
 import type {

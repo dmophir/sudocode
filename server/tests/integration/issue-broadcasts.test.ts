@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocket } from 'ws';
+// @ts-ignore - node-fetch types not available
 import fetch from 'node-fetch';
 
 const WS_URL = process.env.WS_URL || 'ws://localhost:3002/ws';

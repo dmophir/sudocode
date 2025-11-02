@@ -561,7 +561,7 @@ describe("Workflow Layer Integration Tests", () => {
     });
 
     it("should emit pause and resume events", async () => {
-      mockExecutor = new MockResilientExecutor(50);
+      mockExecutor = new MockResilientExecutor(200);
       orchestrator = new LinearOrchestrator(mockExecutor as any, storage);
 
       let pauseEmitted = false;

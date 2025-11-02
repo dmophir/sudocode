@@ -20,7 +20,7 @@
  *   RUN_E2E_TESTS=true npm test
  */
 
-import { describe, it, beforeEach, afterEach, before, expect, beforeAll } from 'vitest'
+import { describe, it, beforeEach, afterEach, expect, beforeAll } from 'vitest'
 import { spawn } from 'node:child_process';
 import { SimpleProcessManager } from '../../src/execution/process/simple-manager.js';
 import { ClaudeCodeOutputProcessor } from '../../src/execution/output/claude-code-output-processor.js';

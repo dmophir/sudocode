@@ -225,7 +225,7 @@ describe('Resilience Layer Integration with Engine Layer', () => {
       // Circuit should be open
       const breaker = executor.getCircuitBreaker('spec');
       expect(breaker !== null).toBeTruthy();
-      expect(breaker.state).toBe('open');
+      expect(breaker?.state).toBe('open');
 
       // Next task should be blocked
       const blockedTask: ExecutionTask = {

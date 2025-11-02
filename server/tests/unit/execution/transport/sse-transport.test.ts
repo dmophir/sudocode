@@ -4,7 +4,7 @@
  * Tests the SSE transport layer for streaming events to clients.
  */
 
-import { describe, it, mock, beforeEach, afterEach, expect, vi } from 'vitest'
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 import { SseTransport } from '../../../../src/execution/transport/sse-transport.js';
 import type { Response } from 'express';
 

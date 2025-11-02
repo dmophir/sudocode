@@ -10,7 +10,6 @@ import type {
   WorktreeCreateParams,
   WorktreeInfo,
 } from '../../../../src/execution/worktree/types.js';
-import { WorktreeError, WorktreeErrorCode } from '../../../../src/execution/worktree/types.js';
 import fs from 'fs';
 
 /**

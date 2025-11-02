@@ -8,7 +8,7 @@
  * spawn real Claude Code processes.
  */
 
-import { describe, it, before, after, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type Database from 'better-sqlite3';
 import { initDatabase as initCliDatabase } from '@sudocode/cli/dist/db.js';
 import { EXECUTIONS_TABLE, EXECUTIONS_INDEXES } from '@sudocode/types/schema';
@@ -276,14 +276,14 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       // Verify execution completed
       expect(finalExecution).toBeTruthy();
       expect(
-        finalExecution.status === 'completed' ||
-          finalExecution.status === 'failed',
-        `Expected completed or failed, got ${finalExecution.status}`
+        finalExecution?.status === 'completed' ||
+          finalExecution?.status === 'failed',
+        `Expected completed or failed, got ${finalExecution?.status}`
       ).toBeTruthy();
 
-      if (finalExecution.status === 'completed') {
-        expect(finalExecution.completed_at).toBeTruthy();
-        expect(finalExecution.completed_at > finalExecution.created_at).toBeTruthy();
+      if (finalExecution?.status === 'completed') {
+        expect(finalExecution?.completed_at).toBeTruthy();
+        expect(finalExecution.completed_at && finalExecution.completed_at > finalExecution.created_at).toBeTruthy();
       }
     });
   });
@@ -361,7 +361,7 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       }
 
       expect(execution).toBeTruthy();
-      expect(execution.worktree_path).toBeTruthy();
+      expect(execution?.worktree_path).toBeTruthy();
 
       // Create follow-up execution
       const followUpExecution = await executionService.createFollowUp(
@@ -371,7 +371,7 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
 
       expect(followUpExecution.id).toBeTruthy();
       expect(followUpExecution.issue_id).toBe(initialExecution.issue_id);
-      expect(followUpExecution.worktree_path).toBe(execution.worktree_path);
+      expect(followUpExecution.worktree_path).toBe(execution?.worktree_path);
 
       // Wait for follow-up to complete
       let followUp = getExecution(db, followUpExecution.id);
@@ -388,8 +388,8 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
 
       expect(followUp).toBeTruthy();
       expect(
-        followUp.status === 'completed' || followUp.status === 'failed',
-        `Expected completed or failed, got ${followUp.status}`
+        followUp?.status === 'completed' || followUp?.status === 'failed',
+        `Expected completed or failed, got ${followUp?.status}`
       ).toBeTruthy();
     });
   });
@@ -417,8 +417,8 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       // Verify execution was cancelled
       const cancelled = getExecution(db, execution.id);
       expect(cancelled).toBeTruthy();
-      expect(cancelled.status).toBe('stopped');
-      expect(cancelled.completed_at).toBeTruthy();
+      expect(cancelled?.status).toBe('stopped');
+      expect(cancelled?.completed_at).toBeTruthy();
     });
 
     it('should throw error when cancelling non-running execution', async () => {
@@ -488,18 +488,18 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
       // The execution might complete successfully even if the task itself fails
       // since Claude might handle the invalid command gracefully
       expect(
-        failed.status === 'failed' || failed.status === 'completed',
-        `Expected failed or completed, got ${failed.status}`
+        failed?.status === 'failed' || failed?.status === 'completed',
+        `Expected failed or completed, got ${failed?.status}`
       ).toBeTruthy();
 
-      if (failed.status === 'failed') {
+      if (failed?.status === 'failed') {
         expect(
-          failed.error_message,
+          failed?.error_message,
           'Failed execution should have error message'
         ).toBeTruthy();
       }
 
-      expect(failed.completed_at, 'Should have completed_at timestamp').toBeTruthy();
+      expect(failed?.completed_at, 'Should have completed_at timestamp').toBeTruthy();
     });
   });
 });
