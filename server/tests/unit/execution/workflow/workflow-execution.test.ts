@@ -2,12 +2,13 @@
  * Tests for Workflow Execution Flow
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
-import { LinearOrchestrator } from '../../../../src/execution/workflow/linear-orchestrator.js';
-import type { IResilientExecutor } from '../../../../src/execution/resilience/executor.js';
-import type { ResilientExecutionResult } from '../../../../src/execution/resilience/types.js';
-import type { WorkflowDefinition } from '../../../../src/execution/workflow/types.js';
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert";
+import { randomUUID } from "crypto";
+import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
+import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
+import type { ResilientExecutionResult } from "../../../../src/execution/resilience/types.js";
+import type { WorkflowDefinition } from "../../../../src/execution/workflow/types.js";
 
 /**
  * Mock Resilient Executor for testing
@@ -51,11 +52,11 @@ class MockResilientExecutor implements Partial<IResilientExecutor> {
 
     // Default result
     return {
-      taskId: 'task-1',
-      executionId: 'exec-1',
+      taskId: "task-1",
+      executionId: "exec-1",
       success: true,
       exitCode: 0,
-      output: 'Test output',
+      output: "Test output",
       startedAt: new Date(),
       completedAt: new Date(),
       duration: 100,
@@ -94,13 +95,13 @@ async function waitFor(
   const start = Date.now();
   while (!predicate()) {
     if (Date.now() - start > timeout) {
-      throw new Error('Timeout waiting for condition');
+      throw new Error("Timeout waiting for condition");
     }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 
-describe('Workflow Execution Flow', () => {
+describe("Workflow Execution Flow", () => {
   let mockExecutor: MockResilientExecutor;
   let orchestrator: LinearOrchestrator;
 
@@ -109,96 +110,102 @@ describe('Workflow Execution Flow', () => {
     orchestrator = new LinearOrchestrator(mockExecutor as any);
   });
 
-  describe('startWorkflow', () => {
-    it('should create and return execution ID', async () => {
+  describe("startWorkflow", () => {
+    it("should create and return execution ID", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test step",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       assert.ok(executionId);
-      assert.ok(executionId.startsWith('execution-'));
+      assert.match(
+        executionId,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      );
 
       // Execution should be stored
       const execution = orchestrator.getExecution(executionId);
       assert.ok(execution);
-      assert.strictEqual(execution.workflowId, 'test-workflow');
+      assert.strictEqual(execution.workflowId, "test-workflow");
     });
 
-    it('should initialize execution with initial context', async () => {
+    it("should initialize execution with initial context", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [],
       };
 
-      const initialContext = { testKey: 'testValue' };
-      const executionId = await orchestrator.startWorkflow(
-        workflow,
-        '/test',
-        { initialContext }
-      );
+      const initialContext = { testKey: "testValue" };
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", {
+        executionId,
+        initialContext,
+      });
 
       const execution = orchestrator.getExecution(executionId);
       assert.deepStrictEqual(execution?.context, initialContext);
     });
 
-    it('should start workflow execution in background', async () => {
+    it("should start workflow execution in background", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test step",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       // Wait for workflow to complete
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, 'completed');
+      assert.strictEqual(execution?.status, "completed");
       assert.strictEqual(mockExecutor.executedTasks.length, 1);
     });
   });
 
-  describe('_executeWorkflow', () => {
-    it('should execute steps sequentially', async () => {
+  describe("_executeWorkflow", () => {
+    it("should execute steps sequentially", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step',
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       const execution = orchestrator.getExecution(executionId);
@@ -206,15 +213,15 @@ describe('Workflow Execution Flow', () => {
       assert.strictEqual(mockExecutor.executedTasks.length, 2);
       assert.strictEqual(
         mockExecutor.executedTasks[0].task.prompt,
-        'First step'
+        "First step"
       );
       assert.strictEqual(
         mockExecutor.executedTasks[1].task.prompt,
-        'Second step'
+        "Second step"
       );
     });
 
-    it('should check dependencies before executing steps', async () => {
+    it("should check dependencies before executing steps", async () => {
       mockExecutor = new MockResilientExecutor([
         { success: false, exitCode: 1 }, // step-1 fails
         { success: true }, // step-2 should not execute
@@ -222,18 +229,18 @@ describe('Workflow Execution Flow', () => {
       orchestrator = new LinearOrchestrator(mockExecutor as any);
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step',
-            dependencies: ['step-1'],
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step",
+            dependencies: ["step-1"],
           },
         ],
         config: {
@@ -241,72 +248,73 @@ describe('Workflow Execution Flow', () => {
         },
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       // Only first step should have executed
       assert.strictEqual(mockExecutor.executedTasks.length, 1);
     });
 
-    it('should evaluate step conditions', async () => {
+    it("should evaluate step conditions", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
-            condition: '{{shouldRun}}',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
+            condition: "{{shouldRun}}",
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step',
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(
-        workflow,
-        '/test',
-        { initialContext: { shouldRun: false } }
-      );
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", {
+        executionId,
+        initialContext: { shouldRun: false },
+      });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       // Only second step should have executed
       assert.strictEqual(mockExecutor.executedTasks.length, 1);
       assert.strictEqual(
         mockExecutor.executedTasks[0].task.prompt,
-        'Second step'
+        "Second step"
       );
     });
 
-    it('should fail workflow on step failure when continueOnStepFailure=false', async () => {
+    it("should fail workflow on step failure when continueOnStepFailure=false", async () => {
       mockExecutor = new MockResilientExecutor([
-        { success: false, exitCode: 1, output: 'Failed' },
+        { success: false, exitCode: 1, output: "Failed" },
       ]);
       orchestrator = new LinearOrchestrator(mockExecutor as any);
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step',
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step",
           },
         ],
         config: {
@@ -314,19 +322,20 @@ describe('Workflow Execution Flow', () => {
         },
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'failed';
+        return execution?.status === "failed";
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, 'failed');
+      assert.strictEqual(execution?.status, "failed");
       assert.strictEqual(mockExecutor.executedTasks.length, 1);
     });
 
-    it('should continue on step failure when continueOnStepFailure=true', async () => {
+    it("should continue on step failure when continueOnStepFailure=true", async () => {
       mockExecutor = new MockResilientExecutor([
         { success: false, exitCode: 1 },
         { success: true },
@@ -334,17 +343,17 @@ describe('Workflow Execution Flow', () => {
       orchestrator = new LinearOrchestrator(mockExecutor as any);
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step',
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step",
           },
         ],
         config: {
@@ -352,65 +361,67 @@ describe('Workflow Execution Flow', () => {
         },
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, 'completed');
+      assert.strictEqual(execution?.status, "completed");
       assert.strictEqual(mockExecutor.executedTasks.length, 2);
     });
 
-    it('should apply output mapping and pass context between steps', async () => {
+    it("should apply output mapping and pass context between steps", async () => {
       mockExecutor = new MockResilientExecutor([
-        { success: true, output: 'Result from step 1' },
+        { success: true, output: "Result from step 1" },
         { success: true },
       ]);
       orchestrator = new LinearOrchestrator(mockExecutor as any);
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'First step',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "First step",
             outputMapping: {
-              result1: 'output',
+              result1: "output",
             },
           },
           {
-            id: 'step-2',
-            taskType: 'issue',
-            prompt: 'Second step with {{result1}}',
+            id: "step-2",
+            taskType: "issue",
+            prompt: "Second step with {{result1}}",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
       // Check that context was updated
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.context.result1, 'Result from step 1');
+      assert.strictEqual(execution?.context.result1, "Result from step 1");
 
       // Check that second step received the context
       assert.strictEqual(
         mockExecutor.executedTasks[1].task.prompt,
-        'Second step with Result from step 1'
+        "Second step with Result from step 1"
       );
     });
   });
 
-  describe('event emission', () => {
-    it('should emit workflow start event', async () => {
+  describe("event emission", () => {
+    it("should emit workflow start event", async () => {
       let startEventEmitted = false;
       let emittedWorkflowId: string | undefined;
 
@@ -420,25 +431,27 @@ describe('Workflow Execution Flow', () => {
       });
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test",
           },
         ],
       };
 
-      await orchestrator.startWorkflow(workflow, '/test');
+      await orchestrator.startWorkflow(workflow, "/test", {
+        executionId: randomUUID(),
+      });
 
       await waitFor(() => startEventEmitted);
 
       assert.strictEqual(startEventEmitted, true);
-      assert.strictEqual(emittedWorkflowId, 'test-workflow');
+      assert.strictEqual(emittedWorkflowId, "test-workflow");
     });
 
-    it('should emit step start and complete events', async () => {
+    it("should emit step start and complete events", async () => {
       const stepEvents: string[] = [];
 
       orchestrator.onStepStart((_executionId, stepId) => {
@@ -450,27 +463,28 @@ describe('Workflow Execution Flow', () => {
       });
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test",
           },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       await waitFor(() => {
         const execution = orchestrator.getExecution(executionId);
-        return execution?.status === 'completed';
+        return execution?.status === "completed";
       });
 
-      assert.deepStrictEqual(stepEvents, ['start:step-1', 'complete:step-1']);
+      assert.deepStrictEqual(stepEvents, ["start:step-1", "complete:step-1"]);
     });
 
-    it('should emit workflow complete event', async () => {
+    it("should emit workflow complete event", async () => {
       let completeEventEmitted = false;
       let resultSuccess: boolean | undefined;
 
@@ -480,17 +494,19 @@ describe('Workflow Execution Flow', () => {
       });
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test",
           },
         ],
       };
 
-      await orchestrator.startWorkflow(workflow, '/test');
+      await orchestrator.startWorkflow(workflow, "/test", {
+        executionId: randomUUID(),
+      });
 
       await waitFor(() => completeEventEmitted);
 
@@ -498,7 +514,7 @@ describe('Workflow Execution Flow', () => {
       assert.strictEqual(resultSuccess, true);
     });
 
-    it('should emit workflow failed event on error', async () => {
+    it("should emit workflow failed event on error", async () => {
       mockExecutor = new MockResilientExecutor([
         { success: false, exitCode: 1 },
       ]);
@@ -511,12 +527,12 @@ describe('Workflow Execution Flow', () => {
       });
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
           {
-            id: 'step-1',
-            taskType: 'issue',
-            prompt: 'Test',
+            id: "step-1",
+            taskType: "issue",
+            prompt: "Test",
           },
         ],
         config: {
@@ -524,7 +540,9 @@ describe('Workflow Execution Flow', () => {
         },
       };
 
-      await orchestrator.startWorkflow(workflow, '/test');
+      await orchestrator.startWorkflow(workflow, "/test", {
+        executionId: randomUUID(),
+      });
 
       await waitFor(() => failedEventEmitted);
 
@@ -532,8 +550,8 @@ describe('Workflow Execution Flow', () => {
     });
   });
 
-  describe('pause and cancel', () => {
-    it('should pause workflow execution', async () => {
+  describe("pause and cancel", () => {
+    it("should pause workflow execution", async () => {
       // Use slower mock to allow time for pause
       let resolveExecution: any;
       const slowExecutor = {
@@ -549,14 +567,15 @@ describe('Workflow Execution Flow', () => {
       orchestrator = new LinearOrchestrator(slowExecutor as any);
 
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
-          { id: 'step-1', taskType: 'issue', prompt: 'Test' },
-          { id: 'step-2', taskType: 'issue', prompt: 'Test' },
+          { id: "step-1", taskType: "issue", prompt: "Test" },
+          { id: "step-2", taskType: "issue", prompt: "Test" },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       // Wait a bit then pause
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -568,25 +587,26 @@ describe('Workflow Execution Flow', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, 'paused');
+      assert.strictEqual(execution?.status, "paused");
     });
 
-    it('should cancel workflow execution', async () => {
+    it("should cancel workflow execution", async () => {
       const workflow: WorkflowDefinition = {
-        id: 'test-workflow',
+        id: "test-workflow",
         steps: [
-          { id: 'step-1', taskType: 'issue', prompt: 'Test' },
-          { id: 'step-2', taskType: 'issue', prompt: 'Test' },
+          { id: "step-1", taskType: "issue", prompt: "Test" },
+          { id: "step-2", taskType: "issue", prompt: "Test" },
         ],
       };
 
-      const executionId = await orchestrator.startWorkflow(workflow, '/test');
+      const executionId = randomUUID();
+      await orchestrator.startWorkflow(workflow, "/test", { executionId });
 
       // Cancel immediately
       await orchestrator.cancelWorkflow(executionId);
 
       const execution = orchestrator.getExecution(executionId);
-      assert.strictEqual(execution?.status, 'cancelled');
+      assert.strictEqual(execution?.status, "cancelled");
     });
   });
 });

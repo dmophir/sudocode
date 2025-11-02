@@ -7,16 +7,17 @@
  * through the AgUiEventAdapter.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
-import { LinearOrchestrator } from '../../../../src/execution/workflow/linear-orchestrator.js';
-import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
-import { EventType } from '@ag-ui/core';
-import type { IResilientExecutor } from '../../../../src/execution/resilience/executor.js';
-import type { ResilientExecutionResult } from '../../../../src/execution/resilience/types.js';
-import type { WorkflowDefinition } from '../../../../src/execution/workflow/types.js';
+import { randomUUID } from "crypto";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert";
+import { LinearOrchestrator } from "../../../../src/execution/workflow/linear-orchestrator.js";
+import { AgUiEventAdapter } from "../../../../src/execution/output/ag-ui-adapter.js";
+import { EventType } from "@ag-ui/core";
+import type { IResilientExecutor } from "../../../../src/execution/resilience/executor.js";
+import type { ResilientExecutionResult } from "../../../../src/execution/resilience/types.js";
+import type { WorkflowDefinition } from "../../../../src/execution/workflow/types.js";
 
-describe('LinearOrchestrator AG-UI Events', () => {
+describe("LinearOrchestrator AG-UI Events", () => {
   let mockExecutor: IResilientExecutor;
   let adapter: AgUiEventAdapter;
   let capturedEvents: any[];
@@ -26,11 +27,11 @@ describe('LinearOrchestrator AG-UI Events', () => {
     mockExecutor = {
       executeTask: async (): Promise<ResilientExecutionResult> => {
         return {
-          taskId: 'task-1',
-          executionId: 'exec-1',
+          taskId: "task-1",
+          executionId: "exec-1",
           success: true,
           exitCode: 0,
-          output: 'Step completed',
+          output: "Step completed",
           startedAt: new Date(),
           completedAt: new Date(),
           duration: 100,
@@ -59,14 +60,14 @@ describe('LinearOrchestrator AG-UI Events', () => {
     } as IResilientExecutor;
 
     // Create adapter and capture events
-    adapter = new AgUiEventAdapter('test-run-id');
+    adapter = new AgUiEventAdapter("test-run-id");
     capturedEvents = [];
     adapter.onEvent((event) => {
       capturedEvents.push(event);
     });
   });
 
-  it('should emit RUN_STARTED when workflow starts', async () => {
+  it("should emit RUN_STARTED when workflow starts", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -74,27 +75,29 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.startWorkflow(workflow, "/test", {
+      executionId: randomUUID(),
+    });
 
     // Find RUN_STARTED event
     const runStartedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_STARTED
     );
-    assert.ok(runStartedEvent, 'RUN_STARTED event should be emitted');
-    assert.strictEqual(runStartedEvent.runId, 'test-run-id');
+    assert.ok(runStartedEvent, "RUN_STARTED event should be emitted");
+    assert.strictEqual(runStartedEvent.runId, "test-run-id");
   });
 
-  it('should emit STEP_STARTED for each workflow step', async () => {
+  it("should emit STEP_STARTED for each workflow step", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -102,22 +105,23 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step 1',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step 1",
         },
         {
-          id: 'step-2',
-          taskType: 'spec',
-          prompt: 'Test step 2',
+          id: "step-2",
+          taskType: "spec",
+          prompt: "Test step 2",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     // Find all STEP_STARTED events
@@ -127,13 +131,13 @@ describe('LinearOrchestrator AG-UI Events', () => {
     assert.strictEqual(
       stepStartedEvents.length,
       2,
-      'Should emit STEP_STARTED for each step'
+      "Should emit STEP_STARTED for each step"
     );
-    assert.strictEqual(stepStartedEvents[0].stepName, 'issue');
-    assert.strictEqual(stepStartedEvents[1].stepName, 'spec');
+    assert.strictEqual(stepStartedEvents[0].stepName, "issue");
+    assert.strictEqual(stepStartedEvents[1].stepName, "spec");
   });
 
-  it('should emit STEP_FINISHED for each completed step', async () => {
+  it("should emit STEP_FINISHED for each completed step", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -141,29 +145,30 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     // Find STEP_FINISHED event
     const stepFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.STEP_FINISHED
     );
-    assert.ok(stepFinishedEvent, 'STEP_FINISHED event should be emitted');
-    assert.strictEqual(stepFinishedEvent.stepName, 'step-1');
-    assert.strictEqual(stepFinishedEvent.rawEvent?.status, 'success');
+    assert.ok(stepFinishedEvent, "STEP_FINISHED event should be emitted");
+    assert.strictEqual(stepFinishedEvent.stepName, "step-1");
+    assert.strictEqual(stepFinishedEvent.rawEvent?.status, "success");
   });
 
-  it('should emit RUN_FINISHED when workflow completes', async () => {
+  it("should emit RUN_FINISHED when workflow completes", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -171,32 +176,33 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     // Find RUN_FINISHED event
     const runFinishedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_FINISHED
     );
-    assert.ok(runFinishedEvent, 'RUN_FINISHED event should be emitted');
-    assert.strictEqual(runFinishedEvent.runId, 'test-run-id');
+    assert.ok(runFinishedEvent, "RUN_FINISHED event should be emitted");
+    assert.strictEqual(runFinishedEvent.runId, "test-run-id");
   });
 
-  it('should emit RUN_ERROR when workflow fails', async () => {
+  it("should emit RUN_ERROR when workflow fails", async () => {
     // Create failing executor
     const failingExecutor: IResilientExecutor = {
       executeTask: async (): Promise<ResilientExecutionResult> => {
-        throw new Error('Execution failed');
+        throw new Error("Execution failed");
       },
       executeTasks: async () => [],
       getCircuitBreaker: () => null,
@@ -219,45 +225,46 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     const execution = await orchestrator.waitForWorkflow(executionId);
 
     // Verify workflow failed
-    assert.strictEqual(execution.status, 'failed');
+    assert.strictEqual(execution.status, "failed");
 
     // Find RUN_ERROR event
     const runErrorEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_ERROR
     );
-    assert.ok(runErrorEvent, 'RUN_ERROR event should be emitted');
-    assert.strictEqual(runErrorEvent.message, 'Execution failed');
+    assert.ok(runErrorEvent, "RUN_ERROR event should be emitted");
+    assert.strictEqual(runErrorEvent.message, "Execution failed");
   });
 
-  it('should emit STEP_FINISHED with error status when step fails', async () => {
+  it("should emit STEP_FINISHED with error status when step fails", async () => {
     // Create executor that fails on first call
     let callCount = 0;
     const partiallyFailingExecutor: IResilientExecutor = {
       executeTask: async (): Promise<ResilientExecutionResult> => {
         callCount++;
         if (callCount === 1) {
-          throw new Error('Step failed');
+          throw new Error("Step failed");
         }
         return {
-          taskId: 'task-1',
-          executionId: 'exec-1',
+          taskId: "task-1",
+          executionId: "exec-1",
           success: true,
           exitCode: 0,
-          output: 'Success',
+          output: "Success",
           startedAt: new Date(),
           completedAt: new Date(),
           duration: 100,
@@ -292,32 +299,32 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     // Find STEP_FINISHED event with error status
     const stepFinishedEvent = capturedEvents.find(
       (e) =>
-        e.type === EventType.STEP_FINISHED &&
-        e.rawEvent?.status === 'error'
+        e.type === EventType.STEP_FINISHED && e.rawEvent?.status === "error"
     );
     assert.ok(
       stepFinishedEvent,
-      'STEP_FINISHED event with error status should be emitted'
+      "STEP_FINISHED event with error status should be emitted"
     );
   });
 
-  it('should emit events in correct order', async () => {
+  it("should emit events in correct order", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -325,17 +332,18 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     // Filter to lifecycle events only
@@ -349,7 +357,10 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     // Verify order
-    assert.ok(lifecycleEvents.length >= 4, 'Should have at least 4 lifecycle events');
+    assert.ok(
+      lifecycleEvents.length >= 4,
+      "Should have at least 4 lifecycle events"
+    );
 
     // Find positions of each event type
     const runStartedIndex = lifecycleEvents.findIndex(
@@ -367,37 +378,39 @@ describe('LinearOrchestrator AG-UI Events', () => {
 
     assert.ok(
       runStartedIndex < stepStartedIndex,
-      'RUN_STARTED should come before STEP_STARTED'
+      "RUN_STARTED should come before STEP_STARTED"
     );
     assert.ok(
       stepStartedIndex < stepFinishedIndex,
-      'STEP_STARTED should come before STEP_FINISHED'
+      "STEP_STARTED should come before STEP_FINISHED"
     );
     assert.ok(
       stepFinishedIndex < runFinishedIndex,
-      'STEP_FINISHED should come before RUN_FINISHED'
+      "STEP_FINISHED should come before RUN_FINISHED"
     );
   });
 
-  it('should work without adapter (backward compatibility)', async () => {
+  it("should work without adapter (backward compatibility)", async () => {
     const orchestrator = new LinearOrchestrator(mockExecutor);
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
     // Should not throw even without adapter
-    await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.startWorkflow(workflow, "/test", {
+      executionId: randomUUID(),
+    });
   });
 
-  it('should include workflow metadata in RUN_STARTED rawEvent', async () => {
+  it("should include workflow metadata in RUN_STARTED rawEvent", async () => {
     const orchestrator = new LinearOrchestrator(
       mockExecutor,
       undefined,
@@ -405,17 +418,19 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow-123',
+      id: "test-workflow-123",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    await orchestrator.startWorkflow(workflow, '/test');
+    await orchestrator.startWorkflow(workflow, "/test", {
+      executionId: randomUUID(),
+    });
 
     const runStartedEvent = capturedEvents.find(
       (e) => e.type === EventType.RUN_STARTED
@@ -424,17 +439,17 @@ describe('LinearOrchestrator AG-UI Events', () => {
     assert.ok(runStartedEvent.rawEvent);
     assert.strictEqual(
       runStartedEvent.rawEvent.workflowId,
-      'test-workflow-123'
+      "test-workflow-123"
     );
   });
 
-  it('should include step output in STEP_FINISHED rawEvent', async () => {
-    const outputData = 'test-output-string';
+  it("should include step output in STEP_FINISHED rawEvent", async () => {
+    const outputData = "test-output-string";
     const executorWithOutput: IResilientExecutor = {
       executeTask: async (): Promise<ResilientExecutionResult> => {
         return {
-          taskId: 'task-1',
-          executionId: 'exec-1',
+          taskId: "task-1",
+          executionId: "exec-1",
           success: true,
           exitCode: 0,
           output: outputData,
@@ -472,17 +487,18 @@ describe('LinearOrchestrator AG-UI Events', () => {
     );
 
     const workflow: WorkflowDefinition = {
-      id: 'test-workflow',
+      id: "test-workflow",
       steps: [
         {
-          id: 'step-1',
-          taskType: 'issue',
-          prompt: 'Test step',
+          id: "step-1",
+          taskType: "issue",
+          prompt: "Test step",
         },
       ],
     };
 
-    const executionId = await orchestrator.startWorkflow(workflow, '/test');
+    const executionId = randomUUID();
+    await orchestrator.startWorkflow(workflow, "/test", { executionId });
     await orchestrator.waitForWorkflow(executionId);
 
     const stepFinishedEvent = capturedEvents.find(

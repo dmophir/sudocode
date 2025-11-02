@@ -62,7 +62,7 @@ export interface WorkflowStep {
  * WorkflowExecution - Runtime state of a workflow execution
  */
 export interface WorkflowExecution {
-  /** Unique execution identifier */
+  /** Unique execution identifier (UUID from database or externally provided) */
   executionId: string;
   /** Workflow definition ID */
   workflowId: string;
@@ -88,8 +88,6 @@ export interface WorkflowExecution {
   error?: string;
   /** Additional metadata */
   metadata?: Record<string, any>;
-  /** Database execution record ID (for lifecycle management) */
-  dbExecutionId?: string;
 }
 
 /**

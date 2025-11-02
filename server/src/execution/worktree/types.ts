@@ -20,6 +20,8 @@ export interface WorktreeCreateParams {
   baseBranch: string;
   /** Whether to create the branch */
   createBranch: boolean;
+  /** Commit SHA to branch from */
+  commitSha?: string;
 }
 
 /**
@@ -71,27 +73,27 @@ export class WorktreeError extends Error {
     public cause?: Error
   ) {
     super(message);
-    this.name = 'WorktreeError';
+    this.name = "WorktreeError";
   }
 }
 
 export enum WorktreeErrorCode {
   /** Git operation failed */
-  GIT_ERROR = 'GIT_ERROR',
+  GIT_ERROR = "GIT_ERROR",
   /** Worktree path already exists */
-  PATH_EXISTS = 'PATH_EXISTS',
+  PATH_EXISTS = "PATH_EXISTS",
   /** Worktree path not found */
-  PATH_NOT_FOUND = 'PATH_NOT_FOUND',
+  PATH_NOT_FOUND = "PATH_NOT_FOUND",
   /** Invalid path */
-  INVALID_PATH = 'INVALID_PATH',
+  INVALID_PATH = "INVALID_PATH",
   /** Branch not found */
-  BRANCH_NOT_FOUND = 'BRANCH_NOT_FOUND',
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
   /** Repository error */
-  REPOSITORY_ERROR = 'REPOSITORY_ERROR',
+  REPOSITORY_ERROR = "REPOSITORY_ERROR",
   /** Configuration error */
-  CONFIG_ERROR = 'CONFIG_ERROR',
+  CONFIG_ERROR = "CONFIG_ERROR",
   /** Locking error */
-  LOCK_ERROR = 'LOCK_ERROR',
+  LOCK_ERROR = "LOCK_ERROR",
   /** Cleanup failed */
-  CLEANUP_FAILED = 'CLEANUP_FAILED',
+  CLEANUP_FAILED = "CLEANUP_FAILED",
 }
