@@ -56,7 +56,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         setExecution(data)
 
         // Check if worktree exists if execution has a worktree path
-        if (data.worktreePath) {
+        if (data.worktree_path) {
           try {
             const worktreeStatus = await executionsApi.worktreeExists(executionId)
             setWorktreeExists(worktreeStatus.exists)
@@ -82,7 +82,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
       setExecution(data)
 
       // Re-check worktree status
-      if (data.worktreePath) {
+      if (data.worktree_path) {
         try {
           const worktreeStatus = await executionsApi.worktreeExists(executionId)
           setWorktreeExists(worktreeStatus.exists)
@@ -130,11 +130,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
 
   // Handle delete worktree action
   const handleDeleteWorktree = async () => {
-    if (!execution || !execution.worktreePath) return
+    if (!execution || !execution.worktree_path) return
 
     const confirmed = window.confirm(
       'Are you sure you want to delete the worktree? This action cannot be undone.\n\n' +
-        `Worktree path: ${execution.worktreePath}`
+        `Worktree path: ${execution.worktree_path}`
     )
 
     if (!confirmed) return
@@ -255,7 +255,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
     execution.status === 'completed' ||
     execution.status === 'failed' ||
     execution.status === 'stopped'
-  const canDeleteWorktree = execution.worktreePath && worktreeExists
+  const canDeleteWorktree = execution.worktree_path && worktreeExists
 
   return (
     <div className="space-y-4">
@@ -277,7 +277,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
               </div>
               <div>
                 <span className="text-muted-foreground">Issue:</span>
-                <span className="ml-2 font-mono">{execution.issueId}</span>
+                <span className="ml-2 font-mono">{execution.issue_id}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Mode:</span>
@@ -287,16 +287,16 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                 <span className="text-muted-foreground">Model:</span>
                 <span className="ml-2">{execution.model}</span>
               </div>
-              {execution.baseBranch && (
+              {execution.target_branch && (
                 <div>
                   <span className="text-muted-foreground">Base Branch:</span>
-                  <span className="ml-2 font-mono">{execution.baseBranch}</span>
+                  <span className="ml-2 font-mono">{execution.target_branch}</span>
                 </div>
               )}
-              {execution.worktreePath && (
+              {execution.worktree_path && (
                 <div>
                   <span className="text-muted-foreground">Worktree:</span>
-                  <span className="ml-2 font-mono text-xs">{execution.worktreePath}</span>
+                  <span className="ml-2 font-mono text-xs">{execution.worktree_path}</span>
                   {worktreeExists ? (
                     <Badge variant="secondary" className="ml-2 text-xs">
                       exists
@@ -312,28 +312,28 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
 
             {/* Timestamps */}
             <div className="flex gap-4 text-xs text-muted-foreground">
-              {execution.createdAt && (
+              {execution.created_at && (
                 <div>
                   Created:{' '}
-                  {new Date(execution.createdAt).toLocaleString('en-US', {
+                  {new Date(execution.created_at).toLocaleString('en-US', {
                     dateStyle: 'short',
                     timeStyle: 'short',
                   })}
                 </div>
               )}
-              {execution.startedAt && (
+              {execution.started_at && (
                 <div>
                   Started:{' '}
-                  {new Date(execution.startedAt).toLocaleString('en-US', {
+                  {new Date(execution.started_at).toLocaleString('en-US', {
                     dateStyle: 'short',
                     timeStyle: 'short',
                   })}
                 </div>
               )}
-              {execution.completedAt && (
+              {execution.completed_at && (
                 <div>
                   Completed:{' '}
-                  {new Date(execution.completedAt).toLocaleString('en-US', {
+                  {new Date(execution.completed_at).toLocaleString('en-US', {
                     dateStyle: 'short',
                     timeStyle: 'short',
                   })}

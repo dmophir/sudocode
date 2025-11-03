@@ -39,21 +39,39 @@ describe('ExecutionView', () => {
 
   const mockExecution: Execution = {
     id: 'exec-123',
-    issueId: 'ISSUE-001',
+    issue_id: 'ISSUE-001',
+    issue_uuid: null,
     mode: 'worktree',
-    baseBranch: 'main',
-    worktreePath: '/tmp/worktree-123',
     prompt: 'Test prompt',
-    status: 'running',
-    workflowExecutionId: 'workflow-123',
-    model: 'claude-sonnet-4',
-    config: {
+    config: JSON.stringify({
       mode: 'worktree',
       baseBranch: 'main',
       cleanupMode: 'auto',
-    },
-    createdAt: '2025-01-15T10:00:00Z',
-    startedAt: '2025-01-15T10:01:00Z',
+    }),
+    agent_type: 'claude-code',
+    session_id: null,
+    workflow_execution_id: 'workflow-123',
+    target_branch: 'main',
+    branch_name: 'exec-123',
+    before_commit: null,
+    after_commit: null,
+    worktree_path: '/tmp/worktree-123',
+    status: 'running',
+    created_at: '2025-01-15T10:00:00Z',
+    updated_at: '2025-01-15T10:00:00Z',
+    started_at: '2025-01-15T10:01:00Z',
+    completed_at: null,
+    cancelled_at: null,
+    exit_code: null,
+    error_message: null,
+    error: null,
+    model: 'claude-sonnet-4',
+    summary: null,
+    files_changed: null,
+    parent_execution_id: null,
+    step_type: null,
+    step_index: null,
+    step_config: null,
   }
 
   beforeEach(() => {
@@ -117,7 +135,7 @@ describe('ExecutionView', () => {
     vi.mocked(executionsApi.getById).mockResolvedValue({
       ...mockExecution,
       status: 'completed',
-      completedAt: '2025-01-15T10:05:00Z',
+      completed_at: '2025-01-15T10:05:00Z',
     })
 
     renderWithProviders(
@@ -134,7 +152,7 @@ describe('ExecutionView', () => {
       ...mockExecution,
       status: 'failed',
       error: 'Test error message',
-      completedAt: '2025-01-15T10:05:00Z',
+      completed_at: '2025-01-15T10:05:00Z',
     })
 
     renderWithProviders(
@@ -322,7 +340,7 @@ describe('ExecutionView', () => {
     vi.mocked(executionsApi.getById).mockResolvedValue({
       ...mockExecution,
       status: 'completed',
-      completedAt: '2025-01-15T10:05:00Z',
+      completed_at: '2025-01-15T10:05:00Z',
     })
 
     renderWithProviders(

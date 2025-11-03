@@ -2,7 +2,6 @@
  * Executions API routes (mapped to /api)
  *
  * Provides REST API for managing issue executions.
- * Implements endpoints per SPEC-011.
  */
 
 import { Router, Request, Response } from "express";

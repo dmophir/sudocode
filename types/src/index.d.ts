@@ -233,34 +233,46 @@ export interface Execution {
   id: string;
   issue_id: string | null;
   issue_uuid: string | null;
+
+  mode: string | null;
+  prompt: string | null;
+  config: string | null;
+
+  // Process information
   agent_type: AgentType;
-  status: ExecutionStatus;
+  session_id: string | null;
+  workflow_execution_id: string | null;
 
-  // Execution mode and configuration
-  mode?: string | null;
-  prompt?: string | null;
-  config?: string | null; // JSON string of execution configuration
-
-  // Timestamps
-  started_at: string;
-  completed_at: string | null;
-
-  // Process info
-  exit_code: number | null;
-  error_message: string | null;
-
-  // Git context (captured before/after)
-  before_commit: string | null;
-  after_commit: string | null;
+  // Git/branch information
   target_branch: string;
   branch_name: string;
+  before_commit: string | null;
+  after_commit: string | null;
   worktree_path: string | null;
 
-  // Session tracking (for resume/fork)
-  session_id: string | null;
-  summary: string | null;
+  // Status
+  status: ExecutionStatus;
 
-  // Metadata
+  // Timing
   created_at: string;
   updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+
+  // Results and metadata
+  // TODO: Expand as a proper JSON object
+  exit_code: number | null;
+  error_message: string | null;
+  error: string | null;
+  model: string | null;
+  summary: string | null;
+  files_changed: string | null;
+
+  parent_execution_id: string | null;
+
+  // Multi-step workflow support (future extension)
+  step_type: string | null;
+  step_index: number | null;
+  step_config: string | null;
 }

@@ -106,8 +106,8 @@ Relationships are tracked in both directions:
 
 ```markdown
 ## Requirements
-1. Support OAuth 2.0 [[@ISSUE-001]]
-2. Multi-factor authentication [[@ISSUE-002]]
+1. Support OAuth 2.0 [[ISSUE-001]]
+2. Multi-factor authentication [[ISSUE-002]]
 
 See also [[SPEC-010]] for API design patterns.
 ```

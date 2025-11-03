@@ -369,7 +369,7 @@ export class ExecutionService {
       try {
         updateExecution(this.db, execution.id, {
           status: "completed",
-          completed_at: Math.floor(Date.now() / 1000),
+          completed_at: new Date().toISOString(),
         });
       } catch (error) {
         console.error(
@@ -394,7 +394,7 @@ export class ExecutionService {
       try {
         updateExecution(this.db, execution.id, {
           status: "failed",
-          completed_at: Math.floor(Date.now() / 1000),
+          completed_at: new Date().toISOString(),
           error_message: error.message,
         });
       } catch (updateError) {
@@ -582,7 +582,7 @@ Please continue working on this issue, taking into account the feedback above.`;
       try {
         updateExecution(this.db, newExecution.id, {
           status: "completed",
-          completed_at: Math.floor(Date.now() / 1000),
+          completed_at: new Date().toISOString(),
         });
       } catch (error) {
         console.error(
@@ -600,7 +600,7 @@ Please continue working on this issue, taking into account the feedback above.`;
       try {
         updateExecution(this.db, newExecution.id, {
           status: "failed",
-          completed_at: Math.floor(Date.now() / 1000),
+          completed_at: new Date().toISOString(),
           error_message: error.message,
         });
       } catch (updateError) {
@@ -660,7 +660,7 @@ Please continue working on this issue, taking into account the feedback above.`;
     // Update status in database (orchestrator.cancelWorkflow doesn't emit events for DB update)
     updateExecution(this.db, executionId, {
       status: "stopped",
-      completed_at: Math.floor(Date.now() / 1000),
+      completed_at: new Date().toISOString(),
     });
   }
 

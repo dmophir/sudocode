@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS executions (
     issue_id TEXT,
     issue_uuid TEXT,
 
-    -- Execution mode and configuration (SPEC-011 fields - nullable for legacy)
+    -- Execution mode and configuration
     mode TEXT CHECK(mode IN ('worktree', 'local')),
     prompt TEXT,
     config TEXT,
@@ -159,12 +159,12 @@ CREATE TABLE IF NOT EXISTS executions (
         'completed', 'failed', 'cancelled', 'stopped'
     )),
 
-    -- Timing (Unix timestamps)
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    started_at INTEGER,
-    completed_at INTEGER,
-    cancelled_at INTEGER,
+    -- Timing (consistent with other tables)
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    completed_at DATETIME,
+    cancelled_at DATETIME,
 
     -- Results and metadata
     exit_code INTEGER,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS executions (
     summary TEXT,
     files_changed TEXT,
 
-    -- Relationships (SPEC-011)
+    -- Relationships
     parent_execution_id TEXT,
 
     -- Multi-step workflow support (future extension)
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS executions (
 );
 `;
 
-// Prompt templates table (SPEC-011)
+// Prompt templates table
 export const PROMPT_TEMPLATES_TABLE = `
 CREATE TABLE IF NOT EXISTS prompt_templates (
     id TEXT PRIMARY KEY,
@@ -198,8 +198,8 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
     template TEXT NOT NULL,
     variables TEXT NOT NULL,
     is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `;
 
@@ -210,8 +210,8 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     execution_id TEXT PRIMARY KEY,
     logs TEXT NOT NULL DEFAULT '',
     byte_size INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
 );
 `;

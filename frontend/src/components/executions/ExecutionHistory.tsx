@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Clock,
-  PauseCircle,
-  StopCircle,
-} from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, Clock, PauseCircle, StopCircle } from 'lucide-react'
 import { executionsApi } from '@/lib/api'
 import type { Execution, ExecutionStatus } from '@/types/execution'
 import { Badge } from '@/components/ui/badge'
@@ -67,8 +60,10 @@ const STATUS_CONFIG: Record<
   },
 }
 
-function formatTimestamp(dateString: string | Date): string {
-  const date = new Date(dateString)
+function formatTimestamp(timestamp: string | Date | null | undefined): string {
+  if (!timestamp) return 'N/A'
+
+  const date = new Date(timestamp)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
@@ -100,7 +95,7 @@ export function ExecutionHistory({ issueId }: ExecutionHistoryProps) {
         const data = await executionsApi.list(issueId)
         // Sort by created date, newest first
         const sorted = data.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         setExecutions(sorted)
       } catch (err) {
@@ -166,7 +161,19 @@ export function ExecutionHistory({ issueId }: ExecutionHistoryProps) {
             variant: 'outline' as const,
             icon: <Clock className="h-3 w-3" />,
           }
-          const timestamp = execution.completedAt || execution.startedAt || execution.createdAt
+          const timestamp = execution.completed_at || execution.started_at || execution.created_at
+
+          let filesChanged: string[] = []
+          if (execution.files_changed) {
+            try {
+              filesChanged =
+                typeof execution.files_changed === 'string'
+                  ? JSON.parse(execution.files_changed)
+                  : execution.files_changed
+            } catch (e) {
+              console.error('Failed to parse files_changed:', e)
+            }
+          }
 
           return (
             <Card
@@ -200,9 +207,9 @@ export function ExecutionHistory({ issueId }: ExecutionHistoryProps) {
                     </div>
                   )}
 
-                  {execution.filesChanged && execution.filesChanged.length > 0 && (
+                  {filesChanged.length > 0 && (
                     <div className="text-xs text-muted-foreground">
-                      {execution.filesChanged.length} file(s) changed
+                      {filesChanged.length} file(s) changed
                     </div>
                   )}
                 </div>

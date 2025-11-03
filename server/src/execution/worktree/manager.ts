@@ -2,7 +2,6 @@
  * Worktree Manager
  *
  * Manages git worktrees for session isolation.
- * Based on design from SPEC-010 and vibe-kanban implementation.
  *
  * WORKTREE ISOLATION:
  * ===================

@@ -28,56 +28,107 @@ describe('ExecutionHistory', () => {
 
   // Use recent dates for relative timestamp formatting
   const now = new Date()
-  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
-  const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000)
-  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000)
+  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+  const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString()
+  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString()
 
   const mockExecution: Execution = {
     id: 'exec-123',
-    issueId: 'ISSUE-001',
+    issue_id: 'ISSUE-001',
+    issue_uuid: null,
     mode: 'worktree',
-    model: 'claude-sonnet-4',
-    status: 'completed',
-    workflowExecutionId: 'workflow-123',
-    config: { mode: 'worktree', baseBranch: 'main' },
-    createdAt: fifteenMinutesAgo,
-    startedAt: fifteenMinutesAgo,
-    completedAt: tenMinutesAgo,
-    filesChanged: ['file1.ts', 'file2.ts'],
-    worktreePath: '/path/to/worktree',
-    baseBranch: 'main',
     prompt: 'Test prompt',
+    config: JSON.stringify({ mode: 'worktree', baseBranch: 'main' }),
+    agent_type: 'claude-code',
+    session_id: null,
+    workflow_execution_id: 'workflow-123',
+    target_branch: 'main',
+    branch_name: 'exec-123',
+    before_commit: null,
+    after_commit: null,
+    worktree_path: '/path/to/worktree',
+    status: 'completed',
+    created_at: fifteenMinutesAgo,
+    updated_at: fifteenMinutesAgo,
+    started_at: fifteenMinutesAgo,
+    completed_at: tenMinutesAgo,
+    cancelled_at: null,
+    exit_code: 0,
+    error_message: null,
+    error: null,
+    model: 'claude-sonnet-4',
+    summary: null,
+    files_changed: JSON.stringify(['file1.ts', 'file2.ts']),
+    parent_execution_id: null,
+    step_type: null,
+    step_index: null,
+    step_config: null,
   }
 
   const mockExecutionRunning: Execution = {
     id: 'exec-456',
-    issueId: 'ISSUE-001',
+    issue_id: 'ISSUE-001',
+    issue_uuid: null,
     mode: 'local',
-    model: 'claude-opus-4',
-    status: 'running',
-    workflowExecutionId: 'workflow-456',
-    config: { mode: 'local' },
-    createdAt: fiveMinutesAgo,
-    startedAt: fiveMinutesAgo,
-    baseBranch: 'main',
     prompt: 'Test prompt',
+    config: JSON.stringify({ mode: 'local' }),
+    agent_type: 'claude-code',
+    session_id: null,
+    workflow_execution_id: 'workflow-456',
+    target_branch: 'main',
+    branch_name: 'main',
+    before_commit: null,
+    after_commit: null,
+    worktree_path: null,
+    status: 'running',
+    created_at: fiveMinutesAgo,
+    updated_at: fiveMinutesAgo,
+    started_at: fiveMinutesAgo,
+    completed_at: null,
+    cancelled_at: null,
+    exit_code: null,
+    error_message: null,
+    error: null,
+    model: 'claude-opus-4',
+    summary: null,
+    files_changed: null,
+    parent_execution_id: null,
+    step_type: null,
+    step_index: null,
+    step_config: null,
   }
 
   const mockExecutionFailed: Execution = {
     id: 'exec-789',
-    issueId: 'ISSUE-001',
+    issue_id: 'ISSUE-001',
+    issue_uuid: null,
     mode: 'worktree',
-    model: 'claude-sonnet-4',
-    status: 'failed',
-    workflowExecutionId: 'workflow-789',
-    config: { mode: 'worktree', baseBranch: 'main' },
-    createdAt: tenMinutesAgo,
-    startedAt: tenMinutesAgo,
-    completedAt: tenMinutesAgo,
-    error: 'Command execution failed',
-    worktreePath: '/path/to/worktree2',
-    baseBranch: 'main',
     prompt: 'Test prompt',
+    config: JSON.stringify({ mode: 'worktree', baseBranch: 'main' }),
+    agent_type: 'claude-code',
+    session_id: null,
+    workflow_execution_id: 'workflow-789',
+    target_branch: 'main',
+    branch_name: 'exec-789',
+    before_commit: null,
+    after_commit: null,
+    worktree_path: '/path/to/worktree2',
+    status: 'failed',
+    created_at: tenMinutesAgo,
+    updated_at: tenMinutesAgo,
+    started_at: tenMinutesAgo,
+    completed_at: tenMinutesAgo,
+    cancelled_at: null,
+    exit_code: 1,
+    error_message: 'Command execution failed',
+    error: 'Command execution failed',
+    model: 'claude-sonnet-4',
+    summary: null,
+    files_changed: null,
+    parent_execution_id: null,
+    step_type: null,
+    step_index: null,
+    step_config: null,
   }
 
   beforeEach(() => {
@@ -153,11 +204,11 @@ describe('ExecutionHistory', () => {
   })
 
   it('should sort executions by created date, newest first', async () => {
-    const twentyMinutesAgo = new Date(now.getTime() - 20 * 60 * 1000)
+    const twentyMinutesAgo = new Date(now.getTime() - 20 * 60 * 1000).toISOString()
     const executions = [
-      { ...mockExecutionFailed, createdAt: twentyMinutesAgo }, // Oldest
-      { ...mockExecution, createdAt: fifteenMinutesAgo }, // Middle
-      { ...mockExecutionRunning, createdAt: fiveMinutesAgo }, // Newest
+      { ...mockExecutionFailed, created_at: twentyMinutesAgo }, // Oldest
+      { ...mockExecution, created_at: fifteenMinutesAgo }, // Middle
+      { ...mockExecutionRunning, created_at: fiveMinutesAgo }, // Newest
     ]
 
     vi.mocked(executionsApi.list).mockResolvedValue(executions)
@@ -238,9 +289,9 @@ describe('ExecutionHistory', () => {
   it('should use completedAt timestamp if available', async () => {
     const execution = {
       ...mockExecution,
-      createdAt: fifteenMinutesAgo,
-      startedAt: fifteenMinutesAgo,
-      completedAt: tenMinutesAgo,
+      created_at: fifteenMinutesAgo,
+      started_at: fifteenMinutesAgo,
+      completed_at: tenMinutesAgo,
     }
 
     vi.mocked(executionsApi.list).mockResolvedValue([execution])
@@ -260,9 +311,9 @@ describe('ExecutionHistory', () => {
   it('should fallback to startedAt if completedAt is not available', async () => {
     const execution = {
       ...mockExecutionRunning,
-      createdAt: fifteenMinutesAgo,
-      startedAt: tenMinutesAgo,
-      completedAt: undefined,
+      created_at: fifteenMinutesAgo,
+      started_at: tenMinutesAgo,
+      completed_at: null,
     }
 
     vi.mocked(executionsApi.list).mockResolvedValue([execution])
@@ -280,9 +331,9 @@ describe('ExecutionHistory', () => {
   it('should fallback to createdAt if neither completedAt nor startedAt are available', async () => {
     const execution = {
       ...mockExecution,
-      createdAt: tenMinutesAgo,
-      startedAt: undefined,
-      completedAt: undefined,
+      created_at: tenMinutesAgo,
+      started_at: null,
+      completed_at: null,
     }
 
     vi.mocked(executionsApi.list).mockResolvedValue([execution])
@@ -300,7 +351,7 @@ describe('ExecutionHistory', () => {
   it('should not display files changed if none exist', async () => {
     const execution = {
       ...mockExecution,
-      filesChanged: undefined,
+      files_changed: null,
     }
 
     vi.mocked(executionsApi.list).mockResolvedValue([execution])
@@ -317,7 +368,7 @@ describe('ExecutionHistory', () => {
   it('should not display error if none exists', async () => {
     const execution = {
       ...mockExecution,
-      error: undefined,
+      error: null,
     }
 
     vi.mocked(executionsApi.list).mockResolvedValue([execution])

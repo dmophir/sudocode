@@ -121,8 +121,8 @@ export function initializeDefaultTemplates(db: Database.Database): void {
     DEFAULT_ISSUE_TEMPLATE,
     variables,
     1, // is_default
-    Math.floor(Date.now() / 1000),
-    Math.floor(Date.now() / 1000)
+    new Date().toISOString(),
+    new Date().toISOString()
   );
 }
 
@@ -227,7 +227,7 @@ export function createTemplate(
   }
 
   const templateId = randomUUID();
-  const now = Math.floor(Date.now() / 1000);
+  const now = new Date().toISOString();
 
   db.prepare(
     `
@@ -315,7 +315,7 @@ export function updateTemplate(
   }
 
   fields.push('updated_at = ?');
-  values.push(Math.floor(Date.now() / 1000));
+  values.push(new Date().toISOString());
   values.push(templateId);
 
   db.prepare(

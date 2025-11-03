@@ -2,12 +2,13 @@
  * Execution system types
  */
 
-import type { ExecutionStatus, AgentType } from '@sudocode/types'
+import type { ExecutionStatus, AgentType, Execution } from '@sudocode/types'
 
+// TODO: Remove this re-export and fully migrate to @sudocode/types
 /**
  * Re-export types from @sudocode/types
  */
-export type { ExecutionStatus, AgentType }
+export type { ExecutionStatus, AgentType, Execution }
 
 /**
  * Execution mode - where the agent runs
@@ -26,6 +27,8 @@ export type CleanupMode =
 
 /**
  * Execution configuration - user-configurable settings
+ * NOTE: This is frontend-specific configuration that gets serialized to JSON
+ * and stored in the execution.config field (from @sudocode/types)
  */
 export interface ExecutionConfig {
   // Agent settings
@@ -49,43 +52,6 @@ export interface ExecutionConfig {
   // Output settings
   captureFileChanges?: boolean
   captureToolCalls?: boolean
-}
-
-/**
- * Execution entity - persistent execution record
- */
-export interface Execution {
-  // Identity
-  id: string
-  issueId: string
-
-  // Configuration
-  mode: ExecutionMode
-  baseBranch: string
-  worktreePath?: string
-  prompt: string
-
-  // State
-  status: ExecutionStatus
-  workflowExecutionId: string
-
-  // Metadata
-  model: string
-  config: ExecutionConfig
-
-  // Lifecycle
-  createdAt: Date | string
-  startedAt?: Date | string
-  completedAt?: Date | string
-  cancelledAt?: Date | string
-
-  // Results
-  filesChanged?: string[]
-  error?: string
-
-  // Relationships
-  parentExecutionId?: string
-  followUpExecutionIds?: string[]
 }
 
 /**
