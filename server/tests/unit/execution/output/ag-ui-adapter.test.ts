@@ -445,20 +445,18 @@ describe("AgUiEventAdapter", () => {
       expect(listener.mock.calls.length).toBe(3);
 
       const startEvent = listener.mock.calls[0][0];
-      expect(startEvent.type).toBe(EventType.CUSTOM);
-      expect(startEvent.name).toBe("TEXT_MESSAGE_START");
-      expect(startEvent.value.messageId).toBeTruthy();
+      expect(startEvent.type).toBe(EventType.TEXT_MESSAGE_START);
+      expect(startEvent.messageId).toBeTruthy();
+      expect(startEvent.role).toBe("assistant");
 
       const contentEvent = listener.mock.calls[1][0];
-      expect(contentEvent.type).toBe(EventType.CUSTOM);
-      expect(contentEvent.name).toBe("TEXT_MESSAGE_CONTENT");
-      expect(contentEvent.value.content).toBe("Hello, this is Claude!");
-      expect(contentEvent.value.messageId).toBe(startEvent.value.messageId);
+      expect(contentEvent.type).toBe(EventType.TEXT_MESSAGE_CONTENT);
+      expect(contentEvent.delta).toBe("Hello, this is Claude!");
+      expect(contentEvent.messageId).toBe(startEvent.messageId);
 
       const endEvent = listener.mock.calls[2][0];
-      expect(endEvent.type).toBe(EventType.CUSTOM);
-      expect(endEvent.name).toBe("TEXT_MESSAGE_END");
-      expect(endEvent.value.messageId).toBe(startEvent.value.messageId);
+      expect(endEvent.type).toBe(EventType.TEXT_MESSAGE_END);
+      expect(endEvent.messageId).toBe(startEvent.messageId);
     });
 
     it("should ignore non-text messages", () => {
@@ -508,7 +506,7 @@ describe("AgUiEventAdapter", () => {
       };
       messageHandler(message1);
 
-      const firstMessageId = listener.mock.calls[0][0].value.messageId;
+      const firstMessageId = listener.mock.calls[0][0].messageId;
 
       listener.mockClear();
 
@@ -520,7 +518,7 @@ describe("AgUiEventAdapter", () => {
       };
       messageHandler(message2);
 
-      const secondMessageId = listener.mock.calls[0][0].value.messageId;
+      const secondMessageId = listener.mock.calls[0][0].messageId;
 
       // Message IDs should be different
       expect(firstMessageId).not.toBe(secondMessageId);

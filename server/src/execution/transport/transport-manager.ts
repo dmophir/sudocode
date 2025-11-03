@@ -18,6 +18,9 @@ import type {
   ToolCallArgsEvent,
   ToolCallEndEvent,
   ToolCallResultEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
   StateDeltaEvent,
   StateSnapshotEvent,
   CustomEvent,
@@ -38,6 +41,9 @@ export type AgUiEvent =
   | ToolCallArgsEvent
   | ToolCallEndEvent
   | ToolCallResultEvent
+  | TextMessageStartEvent
+  | TextMessageContentEvent
+  | TextMessageEndEvent
   | StateDeltaEvent
   | StateSnapshotEvent
   | CustomEvent;

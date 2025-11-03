@@ -342,13 +342,13 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_START, {
           type: EventType.TEXT_MESSAGE_START,
-          messageId: 'msg-1',
+          messageId: 'msg-1', timestamp: Date.now(),
           role: 'assistant',
         })
       })
 
       expect(result.current.messages.get('msg-1')).toEqual({
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '',
         complete: false,
@@ -358,7 +358,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_CONTENT, {
           type: EventType.TEXT_MESSAGE_CONTENT,
-          messageId: 'msg-1',
+          messageId: 'msg-1', timestamp: Date.now(),
           delta: 'Hello ',
         })
       })
@@ -368,7 +368,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_CONTENT, {
           type: EventType.TEXT_MESSAGE_CONTENT,
-          messageId: 'msg-1',
+          messageId: 'msg-1', timestamp: Date.now(),
           delta: 'world!',
         })
       })
@@ -380,7 +380,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_END, {
           type: EventType.TEXT_MESSAGE_END,
-          messageId: 'msg-1',
+          messageId: 'msg-1', timestamp: Date.now(),
         })
       })
 
@@ -450,7 +450,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TOOL_CALL_RESULT, {
           type: EventType.TOOL_CALL_RESULT,
-          messageId: 'msg-1',
+          messageId: 'msg-1', timestamp: Date.now(),
           toolCallId: 'tool-1',
           content: 'File contents here',
         })

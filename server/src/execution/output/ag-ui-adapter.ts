@@ -19,6 +19,9 @@ import {
   type ToolCallArgsEvent,
   type ToolCallEndEvent,
   type ToolCallResultEvent,
+  type TextMessageStartEvent,
+  type TextMessageContentEvent,
+  type TextMessageEndEvent,
   type StateDeltaEvent,
   type StateSnapshotEvent,
   type CustomEvent,
@@ -52,6 +55,9 @@ export type AgUiEventListener = (
     | ToolCallArgsEvent
     | ToolCallEndEvent
     | ToolCallResultEvent
+    | TextMessageStartEvent
+    | TextMessageContentEvent
+    | TextMessageEndEvent
     | StateDeltaEvent
     | StateSnapshotEvent
     | CustomEvent
@@ -355,32 +361,28 @@ export class AgUiEventAdapter {
     const timestamp = Date.now();
 
     // Emit TEXT_MESSAGE_START
-    const startEvent: CustomEvent = {
-      type: EventType.CUSTOM,
+    const startEvent: TextMessageStartEvent = {
+      type: EventType.TEXT_MESSAGE_START,
       timestamp,
-      name: "TEXT_MESSAGE_START",
-      value: { messageId },
+      messageId,
+      role: "assistant",
     };
     this.emit(startEvent);
 
     // Emit TEXT_MESSAGE_CONTENT with the full message
-    const contentEvent: CustomEvent = {
-      type: EventType.CUSTOM,
+    const contentEvent: TextMessageContentEvent = {
+      type: EventType.TEXT_MESSAGE_CONTENT,
       timestamp,
-      name: "TEXT_MESSAGE_CONTENT",
-      value: {
-        messageId,
-        content: message.content,
-      },
+      messageId,
+      delta: message.content,
     };
     this.emit(contentEvent);
 
     // Emit TEXT_MESSAGE_END
-    const endEvent: CustomEvent = {
-      type: EventType.CUSTOM,
+    const endEvent: TextMessageEndEvent = {
+      type: EventType.TEXT_MESSAGE_END,
       timestamp,
-      name: "TEXT_MESSAGE_END",
-      value: { messageId },
+      messageId,
     };
     this.emit(endEvent);
   };
@@ -462,6 +464,9 @@ export class AgUiEventAdapter {
       | ToolCallArgsEvent
       | ToolCallEndEvent
       | ToolCallResultEvent
+      | TextMessageStartEvent
+      | TextMessageContentEvent
+      | TextMessageEndEvent
       | StateDeltaEvent
       | StateSnapshotEvent
       | CustomEvent

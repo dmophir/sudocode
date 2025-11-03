@@ -24,7 +24,7 @@ describe('MessageStream', () => {
     it('should display complete message', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Hello, this is a test message!',
         complete: true,
@@ -40,7 +40,7 @@ describe('MessageStream', () => {
     it('should display incomplete message with spinner', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Streaming message...',
         complete: false,
@@ -57,19 +57,19 @@ describe('MessageStream', () => {
     it('should display multiple messages', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'user',
         content: 'First message',
         complete: true,
       })
       messages.set('msg-2', {
-        messageId: 'msg-2',
+        messageId: 'msg-2', timestamp: Date.now(),
         role: 'assistant',
         content: 'Second message',
         complete: true,
       })
       messages.set('msg-3', {
-        messageId: 'msg-3',
+        messageId: 'msg-3', timestamp: Date.now(),
         role: 'assistant',
         content: 'Third message',
         complete: false,
@@ -88,19 +88,19 @@ describe('MessageStream', () => {
     it('should display different message roles', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'user',
         content: 'User message',
         complete: true,
       })
       messages.set('msg-2', {
-        messageId: 'msg-2',
+        messageId: 'msg-2', timestamp: Date.now(),
         role: 'assistant',
         content: 'Assistant message',
         complete: true,
       })
       messages.set('msg-3', {
-        messageId: 'msg-3',
+        messageId: 'msg-3', timestamp: Date.now(),
         role: 'system',
         content: 'System message',
         complete: true,
@@ -118,7 +118,7 @@ describe('MessageStream', () => {
     it('should render markdown when renderMarkdown is true', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '**Bold text** and *italic text*',
         complete: true,
@@ -134,7 +134,7 @@ describe('MessageStream', () => {
     it('should render plain text when renderMarkdown is false', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '**Bold text** and *italic text*',
         complete: true,
@@ -152,7 +152,7 @@ describe('MessageStream', () => {
     it('should render markdown code blocks', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '```typescript\nconst x = 1;\n```',
         complete: true,
@@ -168,7 +168,7 @@ describe('MessageStream', () => {
     it('should render inline code', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Use the `useState` hook',
         complete: true,
@@ -184,7 +184,7 @@ describe('MessageStream', () => {
     it('should render markdown lists', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '- Item 1\n- Item 2\n- Item 3',
         complete: true,
@@ -202,7 +202,7 @@ describe('MessageStream', () => {
     it('should render markdown links', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: '[Click here](https://example.com)',
         complete: true,
@@ -223,7 +223,7 @@ describe('MessageStream', () => {
     it('should scroll to bottom when autoScroll is true', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Test message',
         complete: true,
@@ -241,7 +241,7 @@ describe('MessageStream', () => {
     it('should not scroll when autoScroll is false', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Test message',
         complete: true,
@@ -261,7 +261,7 @@ describe('MessageStream', () => {
     it('should apply custom class name', () => {
       const messages = new Map<string, MessageBuffer>()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Test message',
         complete: true,

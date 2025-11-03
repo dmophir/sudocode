@@ -9,6 +9,7 @@ import { useEffect } from 'react'
 import { useAgUiStream } from '@/hooks/useAgUiStream'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { AgentTrajectory } from './AgentTrajectory'
 import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 
 export interface ExecutionMonitorProps {
@@ -191,11 +192,11 @@ export function ExecutionMonitor({
         )}
       </div>
 
-      {/* Main: Messages and Tool Calls */}
-      <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+      {/* Main: Agent Trajectory */}
+      <div className="flex-1 overflow-auto px-6 py-4">
         {/* Error display */}
         {(error || execution.error) && (
-          <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4">
+          <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4 mb-4">
             <div className="flex items-start gap-2">
               <XCircle className="h-5 w-5 text-destructive mt-0.5" />
               <div className="flex-1">
@@ -208,96 +209,9 @@ export function ExecutionMonitor({
           </div>
         )}
 
-        {/* Messages */}
-        {messageCount > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Messages</h4>
-            {Array.from(messages.values()).map((message) => (
-              <div
-                key={message.messageId}
-                className="rounded-md bg-muted/50 p-3 text-sm"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="outline" className="text-xs">
-                    {message.role}
-                  </Badge>
-                  {!message.complete && (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <div className="text-foreground/90 whitespace-pre-wrap">
-                  {message.content}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Tool Calls */}
-        {toolCallCount > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Tool Calls</h4>
-            {Array.from(toolCalls.values()).map((toolCall) => (
-              <div
-                key={toolCall.toolCallId}
-                className="rounded-md border bg-card p-3 text-sm"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{toolCall.toolCallName}</span>
-                    <Badge
-                      variant={
-                        toolCall.status === 'completed'
-                          ? 'default'
-                          : toolCall.status === 'error'
-                          ? 'destructive'
-                          : 'secondary'
-                      }
-                      className="text-xs"
-                    >
-                      {toolCall.status}
-                    </Badge>
-                  </div>
-                  {toolCall.endTime && toolCall.startTime && (
-                    <span className="text-xs text-muted-foreground">
-                      {((toolCall.endTime - toolCall.startTime) / 1000).toFixed(2)}s
-                    </span>
-                  )}
-                </div>
-
-                {/* Tool args */}
-                {toolCall.args && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                      Arguments
-                    </summary>
-                    <pre className="mt-1 text-xs bg-muted/50 p-2 rounded overflow-x-auto">
-                      {toolCall.args}
-                    </pre>
-                  </details>
-                )}
-
-                {/* Tool result */}
-                {toolCall.result && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                      Result
-                    </summary>
-                    <pre className="mt-1 text-xs bg-muted/50 p-2 rounded overflow-x-auto max-h-40">
-                      {toolCall.result}
-                    </pre>
-                  </details>
-                )}
-
-                {/* Tool error */}
-                {toolCall.error && (
-                  <div className="mt-2 text-xs text-destructive bg-destructive/10 p-2 rounded">
-                    {toolCall.error}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+        {/* Agent Trajectory - unified messages and tool calls */}
+        {(messageCount > 0 || toolCallCount > 0) && (
+          <AgentTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
         )}
 
         {/* Empty state */}

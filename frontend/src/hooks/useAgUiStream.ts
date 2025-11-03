@@ -40,6 +40,7 @@ export interface MessageBuffer {
   role: string
   content: string
   complete: boolean
+  timestamp: number
 }
 
 /**
@@ -304,6 +305,7 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
         role: event.role || 'assistant',
         content: '',
         complete: false,
+        timestamp: event.timestamp || Date.now(),
       })
       return next
     })
