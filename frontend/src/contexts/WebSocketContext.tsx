@@ -19,6 +19,9 @@ interface WebSocketProviderProps {
   reconnectInterval?: number
 }
 
+/**
+ * WebSocket provider that manages a singleton WebSocket connection.
+ */
 export function WebSocketProvider({
   children,
   url = '',
@@ -116,14 +119,20 @@ export function WebSocketProvider({
   }, [url, reconnect, reconnectInterval])
 
   const disconnect = useCallback(() => {
+    // Clear any pending reconnection attempts
     if (reconnectTimeout.current) {
       clearTimeout(reconnectTimeout.current)
       reconnectTimeout.current = null
     }
+
+    // Close the WebSocket connection
     if (ws.current) {
+      // Remove onclose handler to prevent reconnection on intentional disconnect
+      ws.current.onclose = null
       ws.current.close()
       ws.current = null
     }
+
     setConnected(false)
     subscriptions.current.clear()
     pendingSubscriptions.current.clear()
@@ -175,9 +184,12 @@ export function WebSocketProvider({
     []
   )
 
-  const addMessageHandler = useCallback((id: string, handler: (message: WebSocketMessage) => void) => {
-    messageHandlers.current.set(id, handler)
-  }, [])
+  const addMessageHandler = useCallback(
+    (id: string, handler: (message: WebSocketMessage) => void) => {
+      messageHandlers.current.set(id, handler)
+    },
+    []
+  )
 
   const removeMessageHandler = useCallback((id: string) => {
     messageHandlers.current.delete(id)
