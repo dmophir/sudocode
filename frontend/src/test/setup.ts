@@ -32,13 +32,6 @@ beforeAll(() => {
     if (typeof args[0] === 'string' && args[0].includes('React Router Future Flag Warning')) {
       return
     }
-    // Filter out TipTap duplicate extension warnings
-    if (
-      typeof args[0] === 'string' &&
-      args[0].includes('[tiptap warn]: Duplicate extension names found')
-    ) {
-      return
-    }
     // Filter out DOM nesting warnings (common in markdown rendering)
     if (typeof args[0] === 'string' && args[0].includes('validateDOMNesting')) {
       return

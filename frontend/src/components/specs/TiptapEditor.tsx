@@ -283,6 +283,11 @@ export function TiptapEditor({
             class: 'border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4',
           },
         },
+        // Disable default list extensions to use ListKit instead
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        listKeymap: false,
       }),
       CodeBlockLowlight.configure({
         lowlight,
