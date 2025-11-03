@@ -1,8 +1,13 @@
 /**
  * Execution system types
- *
- * Types for the Issue-to-Execution system per SPEC-012
  */
+
+import type { ExecutionStatus, AgentType } from '@sudocode/types'
+
+/**
+ * Re-export types from @sudocode/types
+ */
+export type { ExecutionStatus, AgentType }
 
 /**
  * Execution mode - where the agent runs
@@ -11,14 +16,6 @@ export type ExecutionMode =
   | 'worktree' // Isolated git worktree
   | 'local' // Local working directory
 
-/**
- * Execution status - lifecycle state
- */
-export type ExecutionStatus =
-  | 'running' // Agent executing
-  | 'completed' // Successfully finished
-  | 'failed' // Execution failed
-  | 'stopped' // User stopped
 /**
  * Cleanup mode - when to cleanup worktree
  */

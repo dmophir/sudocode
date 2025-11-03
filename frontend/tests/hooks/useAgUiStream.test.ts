@@ -62,7 +62,7 @@ class MockEventSource {
       const event = new MessageEvent('message', {
         data: JSON.stringify(data),
       })
-      listeners.forEach(listener => listener(event))
+      listeners.forEach((listener) => listener(event))
     }
   }
 }
@@ -97,9 +97,7 @@ describe('useAgUiStream', () => {
     })
 
     it('should auto-connect by default', async () => {
-      const { result } = renderHook(() =>
-        useAgUiStream({ executionId: 'test-exec-1' })
-      )
+      const { result } = renderHook(() => useAgUiStream({ executionId: 'test-exec-1' }))
 
       expect(result.current.connectionStatus).toBe('connecting')
 
@@ -137,9 +135,7 @@ describe('useAgUiStream', () => {
     })
 
     it('should disconnect', async () => {
-      const { result } = renderHook(() =>
-        useAgUiStream({ executionId: 'test-exec-1' })
-      )
+      const { result } = renderHook(() => useAgUiStream({ executionId: 'test-exec-1' }))
 
       await waitFor(() => {
         expect(result.current.isConnected).toBe(true)
@@ -157,9 +153,7 @@ describe('useAgUiStream', () => {
     it('should use correct endpoint URL', () => {
       renderHook(() => useAgUiStream({ executionId: 'test-exec-123' }))
 
-      expect(global.EventSource).toHaveBeenCalledWith(
-        '/api/executions/test-exec-123/stream'
-      )
+      expect(global.EventSource).toHaveBeenCalledWith('/api/executions/test-exec-123/stream')
     })
 
     it('should use custom endpoint if provided', () => {
@@ -216,7 +210,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       // First send RUN_STARTED
       act(() => {
@@ -240,6 +236,10 @@ describe('useAgUiStream', () => {
       expect(result.current.execution.status).toBe('completed')
       expect(result.current.execution.endTime).toBe(2000)
       expect(onRunFinished).toHaveBeenCalledTimes(1)
+
+      // Verify connection is closed after completion
+      expect(result.current.connectionStatus).toBe('disconnected')
+      expect(mockEventSourceInstance?.readyState).toBe(2) // CLOSED
     })
 
     it('should handle RUN_ERROR event', async () => {
@@ -251,7 +251,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.RUN_ERROR, {
@@ -266,6 +268,10 @@ describe('useAgUiStream', () => {
       expect(result.current.error).toBeInstanceOf(Error)
       expect(result.current.error?.message).toBe('Test error')
       expect(onRunError).toHaveBeenCalledTimes(1)
+
+      // Verify connection is closed after error
+      expect(result.current.connectionStatus).toBe('disconnected')
+      expect(mockEventSourceInstance?.readyState).toBe(2) // CLOSED
     })
   })
 
@@ -279,7 +285,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.STEP_STARTED, {
@@ -301,7 +309,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.STEP_FINISHED, {
@@ -324,7 +334,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       // Start message
       act(() => {
@@ -388,7 +400,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       // Start tool call
       act(() => {
@@ -457,7 +471,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.STATE_SNAPSHOT, {
@@ -488,7 +504,9 @@ describe('useAgUiStream', () => {
         })
       )
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       // Set initial state
       act(() => {
@@ -502,9 +520,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.STATE_DELTA, {
           type: EventType.STATE_DELTA,
-          delta: [
-            { op: 'replace', path: '/progress', value: 75 },
-          ],
+          delta: [{ op: 'replace', path: '/progress', value: 75 }],
         })
       })
 
@@ -515,11 +531,11 @@ describe('useAgUiStream', () => {
 
   describe('Cleanup', () => {
     it('should cleanup on unmount', async () => {
-      const { result, unmount } = renderHook(() =>
-        useAgUiStream({ executionId: 'test-exec-1' })
-      )
+      const { result, unmount } = renderHook(() => useAgUiStream({ executionId: 'test-exec-1' }))
 
-      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), { timeout: 2000 })
+      await waitFor(() => expect(result.current.connectionStatus).toBe('connected'), {
+        timeout: 2000,
+      })
 
       expect(mockEventSourceInstance?.readyState).toBe(1) // OPEN
 

@@ -215,7 +215,15 @@ export type AgentType = "claude-code" | "codex";
 /**
  * Execution status
  */
-export type ExecutionStatus = "running" | "completed" | "failed" | "stopped";
+export type ExecutionStatus =
+  | "preparing" // Template being prepared
+  | "pending" // Created, not yet started
+  | "running" // Agent executing
+  | "paused" // Execution paused (awaiting follow-up)
+  | "completed" // Successfully finished
+  | "failed" // Execution failed
+  | "cancelled" // User cancelled
+  | "stopped"; // User stopped (legacy alias for cancelled)
 
 /**
  * Represents a single agent run on an issue

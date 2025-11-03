@@ -146,6 +146,9 @@ export const executionsApi = {
   // Cancel execution
   cancel: (executionId: string) => del(`/executions/${executionId}`),
 
+  // Check if worktree exists for execution
+  worktreeExists: (executionId: string) => get<{ exists: boolean }>(`/executions/${executionId}/worktree`),
+
   // Delete worktree for execution
   deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
 }

@@ -10,6 +10,10 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:verbose": "vitest --reporter=verbose --run",
+    "test:quiet": "vitest --reporter=dot --run --silent",
+    "test:summary": "vitest --reporter=basic --run --silent",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

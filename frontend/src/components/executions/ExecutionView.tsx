@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { executionsApi } from '@/lib/api'
 import { ExecutionMonitor } from './ExecutionMonitor'
 import { FollowUpDialog } from './FollowUpDialog'
@@ -14,6 +14,8 @@ import {
   MessageSquarePlus,
   X,
   Trash2,
+  Clock,
+  PauseCircle,
 } from 'lucide-react'
 
 export interface ExecutionViewProps {
@@ -41,8 +43,9 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const [showFollowUp, setShowFollowUp] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)
+  const [worktreeExists, setWorktreeExists] = useState(false)
 
-  // Load execution metadata
+  // Load execution metadata and check worktree status
   useEffect(() => {
     const loadExecution = async () => {
       setLoading(true)
@@ -51,6 +54,17 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
       try {
         const data = await executionsApi.getById(executionId)
         setExecution(data)
+
+        // Check if worktree exists if execution has a worktree path
+        if (data.worktreePath) {
+          try {
+            const worktreeStatus = await executionsApi.worktreeExists(executionId)
+            setWorktreeExists(worktreeStatus.exists)
+          } catch (err) {
+            console.error('Failed to check worktree status:', err)
+            setWorktreeExists(false)
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load execution')
       } finally {
@@ -62,14 +76,30 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }, [executionId])
 
   // Reload execution when monitor completes
-  const handleExecutionComplete = async () => {
+  const handleExecutionComplete = useCallback(async () => {
     try {
       const data = await executionsApi.getById(executionId)
       setExecution(data)
+
+      // Re-check worktree status
+      if (data.worktreePath) {
+        try {
+          const worktreeStatus = await executionsApi.worktreeExists(executionId)
+          setWorktreeExists(worktreeStatus.exists)
+        } catch (err) {
+          console.error('Failed to check worktree status:', err)
+          setWorktreeExists(false)
+        }
+      }
     } catch (err) {
       console.error('Failed to reload execution:', err)
     }
-  }
+  }, [executionId])
+
+  // Handle execution errors
+  const handleExecutionError = useCallback((err: Error) => {
+    setError(err.message)
+  }, [])
 
   // Handle cancel action
   const handleCancel = async () => {
@@ -112,6 +142,8 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
     setDeletingWorktree(true)
     try {
       await executionsApi.deleteWorktree(executionId)
+      // Update worktree exists state
+      setWorktreeExists(false)
       // Reload execution to reflect changes
       const data = await executionsApi.getById(executionId)
       setExecution(data)
@@ -125,11 +157,32 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   // Render status badge
   const renderStatusBadge = (status: Execution['status']) => {
     switch (status) {
+      case 'preparing':
+        return (
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Preparing
+          </Badge>
+        )
+      case 'pending':
+        return (
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Pending
+          </Badge>
+        )
       case 'running':
         return (
           <Badge variant="default" className="flex items-center gap-1">
             <Loader2 className="h-3 w-3 animate-spin" />
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+            Running
+          </Badge>
+        )
+      case 'paused':
+        return (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <PauseCircle className="h-3 w-3" />
+            Paused
           </Badge>
         )
       case 'completed':
@@ -146,9 +199,16 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
             Failed
           </Badge>
         )
+      case 'cancelled':
+        return (
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <X className="h-3 w-3" />
+            Cancelled
+          </Badge>
+        )
       case 'stopped':
         return (
-          <Badge variant="outline" className="flex items-center gap-1">
+          <Badge variant="secondary" className="flex items-center gap-1">
             <X className="h-3 w-3" />
             Stopped
           </Badge>
@@ -157,7 +217,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         return (
           <Badge variant="secondary" className="flex items-center gap-1">
             <AlertCircle className="h-3 w-3" />
-            {status}
+            {String(status).charAt(0).toUpperCase() + String(status).slice(1)}
           </Badge>
         )
     }
@@ -195,8 +255,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
     execution.status === 'completed' ||
     execution.status === 'failed' ||
     execution.status === 'stopped'
-  // TODO: Check if the worktree is still present before allowing deletion.
-  const canDeleteWorktree = execution.worktreePath && execution.status !== 'running'
+  const canDeleteWorktree = execution.worktreePath && worktreeExists
 
   return (
     <div className="space-y-4">
@@ -238,6 +297,15 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                 <div>
                   <span className="text-muted-foreground">Worktree:</span>
                   <span className="ml-2 font-mono text-xs">{execution.worktreePath}</span>
+                  {worktreeExists ? (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      exists
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="ml-2 text-xs text-muted-foreground">
+                      deleted
+                    </Badge>
+                  )}
                 </div>
               )}
             </div>
@@ -341,7 +409,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         <ExecutionMonitor
           executionId={executionId}
           onComplete={handleExecutionComplete}
-          onError={(err) => setError(err.message)}
+          onError={handleExecutionError}
         />
       )}
 

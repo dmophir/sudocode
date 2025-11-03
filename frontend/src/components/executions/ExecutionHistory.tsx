@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, XCircle, Loader2, Clock, StopCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock,
+  PauseCircle,
+  StopCircle,
+} from 'lucide-react'
 import { executionsApi } from '@/lib/api'
 import type { Execution, ExecutionStatus } from '@/types/execution'
 import { Badge } from '@/components/ui/badge'
@@ -18,10 +25,25 @@ const STATUS_CONFIG: Record<
     icon: React.ReactNode
   }
 > = {
+  preparing: {
+    label: 'Preparing',
+    variant: 'secondary',
+    icon: <Clock className="h-3 w-3" />,
+  },
+  pending: {
+    label: 'Pending',
+    variant: 'secondary',
+    icon: <Clock className="h-3 w-3" />,
+  },
   running: {
     label: 'Running',
     variant: 'default',
     icon: <Loader2 className="h-3 w-3 animate-spin" />,
+  },
+  paused: {
+    label: 'Paused',
+    variant: 'outline',
+    icon: <PauseCircle className="h-3 w-3" />,
   },
   completed: {
     label: 'Completed',
@@ -32,6 +54,11 @@ const STATUS_CONFIG: Record<
     label: 'Failed',
     variant: 'destructive',
     icon: <XCircle className="h-3 w-3" />,
+  },
+  cancelled: {
+    label: 'Cancelled',
+    variant: 'secondary',
+    icon: <StopCircle className="h-3 w-3" />,
   },
   stopped: {
     label: 'Stopped',

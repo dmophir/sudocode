@@ -677,6 +677,22 @@ Please continue working on this issue, taking into account the feedback above.`;
   }
 
   /**
+   * Check if worktree exists in filesystem for an execution
+   *
+   * @param executionId - ID of execution to check
+   * @returns true if worktree exists, false otherwise
+   */
+  async worktreeExists(executionId: string): Promise<boolean> {
+    const execution = getExecution(this.db, executionId);
+    if (!execution || !execution.worktree_path) {
+      return false;
+    }
+
+    const fs = await import("fs");
+    return fs.existsSync(execution.worktree_path);
+  }
+
+  /**
    * Delete worktree for an execution
    *
    * Manually deletes the worktree for a specific execution, regardless of
@@ -684,7 +700,7 @@ Please continue working on this issue, taking into account the feedback above.`;
    * when they're configured for manual cleanup.
    *
    * @param executionId - ID of execution whose worktree to delete
-   * @throws Error if execution not found or has no worktree
+   * @throws Error if execution not found, has no worktree, or worktree doesn't exist
    */
   async deleteWorktree(executionId: string): Promise<void> {
     const execution = getExecution(this.db, executionId);
@@ -696,13 +712,17 @@ Please continue working on this issue, taking into account the feedback above.`;
       throw new Error(`Execution ${executionId} has no worktree to delete`);
     }
 
-    // Check if execution is still running
-    // TODO: Cancel the execution regardless of status.
-    if (execution.status === "running") {
+    // Check if worktree exists in the filesystem
+    const fs = await import("fs");
+    const worktreeExists = fs.existsSync(execution.worktree_path);
+
+    if (!worktreeExists) {
       throw new Error(
-        `Cannot delete worktree for ${execution.status} execution. Cancel the execution first.`
+        `Worktree does not exist in filesystem: ${execution.worktree_path}`
       );
     }
+
+    // TODO: Cancel any running execution.
 
     // Get worktree manager from lifecycle service
     const worktreeManager = (this.lifecycleService as any).worktreeManager;

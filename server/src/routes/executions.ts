@@ -257,6 +257,36 @@ export function createExecutionsRouter(
   );
 
   /**
+   * GET /api/executions/:executionId/worktree
+   *
+   * Check if worktree exists for an execution
+   */
+  router.get(
+    "/executions/:executionId/worktree",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+
+        const exists = await service.worktreeExists(executionId);
+
+        res.json({
+          success: true,
+          data: { exists },
+        });
+      } catch (error) {
+        console.error("Error checking worktree:", error);
+
+        res.status(500).json({
+          success: false,
+          data: null,
+          error_data: error instanceof Error ? error.message : String(error),
+          message: "Failed to check worktree status",
+        });
+      }
+    }
+  );
+
+  /**
    * DELETE /api/executions/:executionId/worktree
    *
    * Delete the worktree for an execution
