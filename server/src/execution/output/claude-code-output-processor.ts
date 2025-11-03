@@ -21,6 +21,8 @@ import type {
   ProgressHandler,
   ErrorHandler,
   MessageType,
+  MessageHandler,
+  UsageHandler,
 } from "./types.js";
 
 /**
@@ -60,6 +62,8 @@ export class ClaudeCodeOutputProcessor implements IOutputProcessor {
   private _fileChangeHandlers: FileChangeHandler[] = [];
   private _progressHandlers: ProgressHandler[] = [];
   private _errorHandlers: ErrorHandler[] = [];
+  private _messageHandlers: MessageHandler[] = [];
+  private _usageHandlers: UsageHandler[] = [];
 
   // Processing state
   private _lineNumber = 0;
@@ -229,6 +233,24 @@ export class ClaudeCodeOutputProcessor implements IOutputProcessor {
    */
   onError(handler: ErrorHandler): void {
     this._errorHandlers.push(handler);
+  }
+
+  /**
+   * Register a callback for message events
+   *
+   * @param handler - Function to call when a text message is received
+   */
+  onMessage(handler: import("./types.js").MessageHandler): void {
+    this._messageHandlers.push(handler);
+  }
+
+  /**
+   * Register a callback for usage metric updates
+   *
+   * @param handler - Function to call when usage metrics are updated
+   */
+  onUsage(handler: import("./types.js").UsageHandler): void {
+    this._usageHandlers.push(handler);
   }
 
   // ============================================================================
@@ -493,20 +515,28 @@ export class ClaudeCodeOutputProcessor implements IOutputProcessor {
   /**
    * Handle text message from Claude Code
    *
-   * Text messages are already tracked in metrics, no special handling needed.
+   * Emits message events to registered handlers.
    *
    * @param message - Parsed text message
    */
   private _handleText(message: OutputMessage): void {
     if (message.type !== "text") return;
-    // Text messages are already counted in totalMessages
-    // No additional processing needed
+
+    // Emit message event to all registered handlers
+    for (const handler of this._messageHandlers) {
+      try {
+        handler(message);
+      } catch (error) {
+        console.error("Message handler error:", error);
+      }
+    }
   }
 
   /**
    * Handle usage message from Claude Code
    *
    * Updates usage metrics with token counts and calculates cost.
+   * Emits usage events to registered handlers.
    *
    * @param message - Parsed usage message
    */
@@ -526,6 +556,15 @@ export class ClaudeCodeOutputProcessor implements IOutputProcessor {
     const outputCost = (this._metrics.usage.outputTokens / 1_000_000) * 15.0;
     const cacheCost = (this._metrics.usage.cacheTokens / 1_000_000) * 0.3;
     this._metrics.usage.cost = inputCost + outputCost + cacheCost;
+
+    // Emit usage event to all registered handlers
+    for (const handler of this._usageHandlers) {
+      try {
+        handler(this._metrics.usage);
+      } catch (error) {
+        console.error("Usage handler error:", error);
+      }
+    }
   }
 
   /**

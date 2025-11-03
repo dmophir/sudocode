@@ -5,21 +5,21 @@
  * output processors with AG-UI adapters.
  */
 
-import { describe, it , expect } from 'vitest'
+import { describe, it, expect } from "vitest";
 import {
   createAgUiSystem,
   wireManually,
   createAgUiSystemWithProcessor,
-} from '../../../../src/execution/output/ag-ui-integration.js';
-import { ClaudeCodeOutputProcessor } from '../../../../src/execution/output/claude-code-output-processor.js';
-import { AgUiEventAdapter } from '../../../../src/execution/output/ag-ui-adapter.js';
-import { EventType } from '@ag-ui/core';
-import type { IOutputProcessor } from '../../../../src/execution/output/types.js';
+} from "../../../../src/execution/output/ag-ui-integration.js";
+import { ClaudeCodeOutputProcessor } from "../../../../src/execution/output/claude-code-output-processor.js";
+import { AgUiEventAdapter } from "../../../../src/execution/output/ag-ui-adapter.js";
+import { EventType } from "@ag-ui/core";
+import type { IOutputProcessor } from "../../../../src/execution/output/types.js";
 
-describe('AG-UI Integration Helpers', () => {
-  describe('createAgUiSystem', () => {
-    it('should create processor and adapter', () => {
-      const { processor, adapter } = createAgUiSystem('run-123');
+describe("AG-UI Integration Helpers", () => {
+  describe("createAgUiSystem", () => {
+    it("should create processor and adapter", () => {
+      const { processor, adapter } = createAgUiSystem("run-123");
 
       expect(processor).toBeTruthy();
       expect(adapter).toBeTruthy();
@@ -27,8 +27,8 @@ describe('AG-UI Integration Helpers', () => {
       expect(adapter instanceof AgUiEventAdapter).toBeTruthy();
     });
 
-    it('should wire processor to adapter', async () => {
-      const { processor, adapter } = createAgUiSystem('run-123');
+    it("should wire processor to adapter", async () => {
+      const { processor, adapter } = createAgUiSystem("run-123");
 
       // Listen for events from adapter
       const events: any[] = [];
@@ -39,14 +39,14 @@ describe('AG-UI Integration Helpers', () => {
       // Trigger a tool call through the processor
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-1',
-                name: 'Read',
-                input: { file_path: 'test.ts' },
+                type: "tool_use",
+                id: "tool-1",
+                name: "Read",
+                input: { file_path: "test.ts" },
               },
             ],
           },
@@ -59,14 +59,14 @@ describe('AG-UI Integration Helpers', () => {
       expect(events[1].type).toBe(EventType.TOOL_CALL_ARGS);
     });
 
-    it('should use provided runId', () => {
-      const { adapter } = createAgUiSystem('test-run-456');
+    it("should use provided runId", () => {
+      const { adapter } = createAgUiSystem("test-run-456");
 
-      expect(adapter.getRunId()).toBe('test-run-456');
+      expect(adapter.getRunId()).toBe("test-run-456");
     });
 
-    it('should use provided threadId', () => {
-      const { adapter } = createAgUiSystem('run-123', 'thread-456');
+    it("should use provided threadId", () => {
+      const { adapter } = createAgUiSystem("run-123", "thread-456");
 
       // Verify by emitting an event and checking the threadId
       const events: any[] = [];
@@ -76,12 +76,12 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      expect(events[0].runId).toBe('run-123');
-      expect(events[0].threadId).toBe('thread-456');
+      expect(events[0].runId).toBe("run-123");
+      expect(events[0].threadId).toBe("thread-456");
     });
 
-    it('should default threadId to runId', () => {
-      const { adapter } = createAgUiSystem('run-123');
+    it("should default threadId to runId", () => {
+      const { adapter } = createAgUiSystem("run-123");
 
       // Verify by emitting an event and checking the threadId defaults to runId
       const events: any[] = [];
@@ -91,15 +91,15 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      expect(events[0].runId).toBe('run-123');
-      expect(events[0].threadId).toBe('run-123');
+      expect(events[0].runId).toBe("run-123");
+      expect(events[0].threadId).toBe("run-123");
     });
   });
 
-  describe('wireManually', () => {
-    it('should wire existing processor to adapter', async () => {
+  describe("wireManually", () => {
+    it("should wire existing processor to adapter", async () => {
       const processor = new ClaudeCodeOutputProcessor();
-      const adapter = new AgUiEventAdapter('run-123');
+      const adapter = new AgUiEventAdapter("run-123");
 
       // Wire them together
       wireManually(processor, adapter);
@@ -113,14 +113,14 @@ describe('AG-UI Integration Helpers', () => {
       // Trigger a tool call through the processor
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-1',
-                name: 'Write',
-                input: { file_path: 'output.ts', content: 'test' },
+                type: "tool_use",
+                id: "tool-1",
+                name: "Write",
+                input: { file_path: "output.ts", content: "test" },
               },
             ],
           },
@@ -132,9 +132,9 @@ describe('AG-UI Integration Helpers', () => {
       expect(events[0].type).toBe(EventType.TOOL_CALL_START);
     });
 
-    it('should work with already configured processor', () => {
+    it("should work with already configured processor", () => {
       const processor = new ClaudeCodeOutputProcessor();
-      const adapter = new AgUiEventAdapter('run-123');
+      const adapter = new AgUiEventAdapter("run-123");
 
       // Configure processor first
       const toolCalls: any[] = [];
@@ -151,8 +151,8 @@ describe('AG-UI Integration Helpers', () => {
     });
   });
 
-  describe('createAgUiSystemWithProcessor', () => {
-    it('should work with custom processor', () => {
+  describe("createAgUiSystemWithProcessor", () => {
+    it("should work with custom processor", () => {
       // Create a mock processor
       const mockProcessor: IOutputProcessor = {
         processLine: async () => {},
@@ -176,18 +176,20 @@ describe('AG-UI Integration Helpers', () => {
         onFileChange: () => {},
         onProgress: () => {},
         onError: () => {},
+        onMessage: () => {},
+        onUsage: () => {},
       };
 
       const { processor, adapter } = createAgUiSystemWithProcessor(
         mockProcessor,
-        'run-123'
+        "run-123"
       );
 
       expect(processor).toBe(mockProcessor);
       expect(adapter instanceof AgUiEventAdapter).toBeTruthy();
     });
 
-    it('should respect provided threadId', () => {
+    it("should respect provided threadId", () => {
       const mockProcessor: IOutputProcessor = {
         processLine: async () => {},
         getMetrics: () => ({
@@ -210,12 +212,14 @@ describe('AG-UI Integration Helpers', () => {
         onFileChange: () => {},
         onProgress: () => {},
         onError: () => {},
+        onMessage: () => {},
+        onUsage: () => {},
       };
 
       const { adapter } = createAgUiSystemWithProcessor(
         mockProcessor,
-        'run-123',
-        'thread-789'
+        "run-123",
+        "thread-789"
       );
 
       // Verify by emitting an event and checking the threadId
@@ -226,13 +230,13 @@ describe('AG-UI Integration Helpers', () => {
 
       adapter.emitRunStarted();
 
-      expect(events[0].threadId).toBe('thread-789');
+      expect(events[0].threadId).toBe("thread-789");
     });
   });
 
-  describe('end-to-end event flow', () => {
-    it('should transform tool calls through the complete pipeline', async () => {
-      const { processor, adapter } = createAgUiSystem('run-e2e');
+  describe("end-to-end event flow", () => {
+    it("should transform tool calls through the complete pipeline", async () => {
+      const { processor, adapter } = createAgUiSystem("run-e2e");
 
       // Track all events
       const events: any[] = [];
@@ -243,14 +247,14 @@ describe('AG-UI Integration Helpers', () => {
       // Process tool use
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-e2e',
-                name: 'Bash',
-                input: { command: 'ls' },
+                type: "tool_use",
+                id: "tool-e2e",
+                name: "Bash",
+                input: { command: "ls" },
               },
             ],
           },
@@ -260,10 +264,10 @@ describe('AG-UI Integration Helpers', () => {
       // Process tool result
       await processor.processLine(
         JSON.stringify({
-          type: 'tool_result',
+          type: "tool_result",
           result: {
-            tool_use_id: 'tool-e2e',
-            content: [{ type: 'text', text: 'file1.txt\nfile2.txt' }],
+            tool_use_id: "tool-e2e",
+            content: [{ type: "text", text: "file1.txt\nfile2.txt" }],
           },
         })
       );
@@ -279,20 +283,20 @@ describe('AG-UI Integration Helpers', () => {
       expect(events.length > 0).toBeTruthy();
     });
 
-    it('should track metrics through processor', async () => {
-      const { processor } = createAgUiSystem('run-metrics');
+    it("should track metrics through processor", async () => {
+      const { processor } = createAgUiSystem("run-metrics");
 
       // Process some messages
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-1',
-                name: 'Read',
-                input: { file_path: 'test.ts' },
+                type: "tool_use",
+                id: "tool-1",
+                name: "Read",
+                input: { file_path: "test.ts" },
               },
             ],
           },
@@ -301,10 +305,10 @@ describe('AG-UI Integration Helpers', () => {
 
       await processor.processLine(
         JSON.stringify({
-          type: 'tool_result',
+          type: "tool_result",
           result: {
-            tool_use_id: 'tool-1',
-            content: [{ type: 'text', text: 'content' }],
+            tool_use_id: "tool-1",
+            content: [{ type: "text", text: "content" }],
           },
         })
       );
@@ -315,19 +319,19 @@ describe('AG-UI Integration Helpers', () => {
       expect(metrics.toolCalls.length > 0).toBeTruthy();
     });
 
-    it('should maintain state across multiple events', async () => {
-      const { processor, adapter } = createAgUiSystem('run-state');
+    it("should maintain state across multiple events", async () => {
+      const { processor, adapter } = createAgUiSystem("run-state");
 
       // Process multiple tool calls
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-1',
-                name: 'Read',
+                type: "tool_use",
+                id: "tool-1",
+                name: "Read",
                 input: {},
               },
             ],
@@ -337,13 +341,13 @@ describe('AG-UI Integration Helpers', () => {
 
       await processor.processLine(
         JSON.stringify({
-          type: 'assistant',
+          type: "assistant",
           message: {
             content: [
               {
-                type: 'tool_use',
-                id: 'tool-2',
-                name: 'Write',
+                type: "tool_use",
+                id: "tool-2",
+                name: "Write",
                 input: {},
               },
             ],

@@ -322,19 +322,55 @@ export class ExecutionService {
       ],
     });
 
-    const engine = new SimpleExecutionEngine(processManager, {
+    let engine = new SimpleExecutionEngine(processManager, {
       maxConcurrent: 1, // One task at a time for issue execution
     });
 
-    const executor = new ResilientExecutor(engine);
+    let executor = new ResilientExecutor(engine);
 
-    // 5. Create AG-UI adapter if transport manager is available
+    // 5. Create AG-UI system (processor + adapter) if transport manager is available
     let agUiAdapter: AgUiEventAdapter | undefined;
     if (this.transportManager) {
       const agUiSystem = createAgUiSystem(execution.id);
       agUiAdapter = agUiSystem.adapter;
+
       // Connect adapter to transport for SSE streaming
       this.transportManager.connectAdapter(agUiAdapter, execution.id);
+
+      // Connect processor to execution engine for real-time output parsing
+      // Buffer for incomplete lines (stream-json can split mid-line)
+      let lineBuffer = "";
+
+      engine = new SimpleExecutionEngine(processManager, {
+        maxConcurrent: 1,
+        // TODO: Factor out this logic for DRY principles.
+        onOutput: (data, type) => {
+          if (type === "stdout") {
+            // Append new data to buffer
+            lineBuffer += data.toString();
+
+            // Process complete lines (ending with \n)
+            let newlineIndex;
+            while ((newlineIndex = lineBuffer.indexOf("\n")) !== -1) {
+              const line = lineBuffer.slice(0, newlineIndex);
+              lineBuffer = lineBuffer.slice(newlineIndex + 1);
+
+              if (line.trim()) {
+                agUiSystem.processor.processLine(line).catch((err) => {
+                  console.error(
+                    "[ExecutionService] Error processing output line:",
+                    {
+                      error: err instanceof Error ? err.message : String(err),
+                      line: line.slice(0, 100), // Log first 100 chars for debugging
+                    }
+                  );
+                });
+              }
+            }
+          }
+        },
+      });
+      executor = new ResilientExecutor(engine);
     }
 
     // 6. Create LinearOrchestrator
@@ -541,18 +577,53 @@ Please continue working on this issue, taking into account the feedback above.`;
       ],
     });
 
-    const engine = new SimpleExecutionEngine(processManager, {
+    let engine = new SimpleExecutionEngine(processManager, {
       maxConcurrent: 1,
     });
 
-    const executor = new ResilientExecutor(engine);
+    let executor = new ResilientExecutor(engine);
 
-    // 7. Create AG-UI adapter if transport manager is available
+    // 7. Create AG-UI system (processor + adapter) if transport manager is available
     let agUiAdapter: AgUiEventAdapter | undefined;
     if (this.transportManager) {
       const agUiSystem = createAgUiSystem(newExecution.id);
       agUiAdapter = agUiSystem.adapter;
       this.transportManager.connectAdapter(agUiAdapter, newExecution.id);
+
+      // Connect processor to execution engine for real-time output parsing
+      // Buffer for incomplete lines (stream-json can split mid-line)
+      let lineBuffer = "";
+
+      engine = new SimpleExecutionEngine(processManager, {
+        maxConcurrent: 1,
+        // TODO: Factor out this logic for DRY principles.
+        onOutput: (data, type) => {
+          if (type === "stdout") {
+            // Append new data to buffer
+            lineBuffer += data.toString();
+
+            // Process complete lines (ending with \n)
+            let newlineIndex;
+            while ((newlineIndex = lineBuffer.indexOf("\n")) !== -1) {
+              const line = lineBuffer.slice(0, newlineIndex);
+              lineBuffer = lineBuffer.slice(newlineIndex + 1);
+
+              if (line.trim()) {
+                agUiSystem.processor.processLine(line).catch((err) => {
+                  console.error(
+                    "[ExecutionService] Error processing output line:",
+                    {
+                      error: err instanceof Error ? err.message : String(err),
+                      line: line.slice(0, 100), // Log first 100 chars for debugging
+                    }
+                  );
+                });
+              }
+            }
+          }
+        },
+      });
+      executor = new ResilientExecutor(engine);
     }
 
     // 8. Create LinearOrchestrator

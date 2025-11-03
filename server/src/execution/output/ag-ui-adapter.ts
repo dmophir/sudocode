@@ -113,6 +113,8 @@ export class AgUiEventAdapter {
     processor.onFileChange(this.handleFileChange.bind(this));
     processor.onProgress(this.handleProgress.bind(this));
     processor.onError(this.handleError.bind(this));
+    processor.onMessage(this.handleMessage.bind(this));
+    processor.onUsage(this.handleUsage.bind(this));
   }
 
   /**
@@ -335,6 +337,88 @@ export class AgUiEventAdapter {
     // Emit state delta with updated error count
     this.emitStateDelta({
       errorCount: this.processor?.getMetrics().errors.length || 0,
+    });
+  };
+
+  /**
+   * Handle message events
+   *
+   * Transforms text messages into TEXT_MESSAGE_* AG-UI events.
+   * For now, we emit the full message content in a single event.
+   */
+  private handleMessage: import("./types.js").MessageHandler = (
+    message: import("./types.js").OutputMessage
+  ) => {
+    if (message.type !== "text") return;
+
+    const messageId = `msg-${this.messageCounter++}`;
+    const timestamp = Date.now();
+
+    // Emit TEXT_MESSAGE_START
+    const startEvent: CustomEvent = {
+      type: EventType.CUSTOM,
+      timestamp,
+      name: "TEXT_MESSAGE_START",
+      value: { messageId },
+    };
+    this.emit(startEvent);
+
+    // Emit TEXT_MESSAGE_CONTENT with the full message
+    const contentEvent: CustomEvent = {
+      type: EventType.CUSTOM,
+      timestamp,
+      name: "TEXT_MESSAGE_CONTENT",
+      value: {
+        messageId,
+        content: message.content,
+      },
+    };
+    this.emit(contentEvent);
+
+    // Emit TEXT_MESSAGE_END
+    const endEvent: CustomEvent = {
+      type: EventType.CUSTOM,
+      timestamp,
+      name: "TEXT_MESSAGE_END",
+      value: { messageId },
+    };
+    this.emit(endEvent);
+  };
+
+  /**
+   * Handle usage metric updates
+   *
+   * Transforms usage metrics into CUSTOM usage events and updates state.
+   */
+  private handleUsage: import("./types.js").UsageHandler = (
+    usage: import("./types.js").UsageMetrics
+  ) => {
+    const timestamp = Date.now();
+
+    // Emit USAGE event as CUSTOM event
+    const usageEvent: CustomEvent = {
+      type: EventType.CUSTOM,
+      timestamp,
+      name: "USAGE_UPDATE",
+      value: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheTokens: usage.cacheTokens,
+        totalTokens: usage.totalTokens,
+        cost: usage.cost,
+        provider: usage.provider,
+        model: usage.model,
+      },
+    };
+    this.emit(usageEvent);
+
+    // Update state with latest usage
+    this.emitStateDelta({
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      },
     });
   };
 

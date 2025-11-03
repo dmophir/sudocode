@@ -23,6 +23,7 @@ import type {
   CustomEvent,
 } from "@ag-ui/core";
 import { SseTransport } from "./sse-transport.js";
+import { EventBuffer } from "./event-buffer.js";
 
 /**
  * Union type for all AG-UI events
@@ -60,16 +61,27 @@ export type AgUiEvent =
  */
 export class TransportManager {
   private sseTransport: SseTransport;
+  private eventBuffer: EventBuffer;
   private adapterListeners: Map<AgUiEventAdapter, (event: AgUiEvent) => void> =
     new Map();
+  private pruneInterval: NodeJS.Timeout | null = null;
 
   /**
    * Create a new transport manager
    *
-   * Initializes the SSE transport layer
+   * Initializes the SSE transport layer and event buffer
    */
   constructor() {
     this.sseTransport = new SseTransport();
+    this.eventBuffer = new EventBuffer();
+
+    // Start periodic pruning of stale buffers (every 15 minutes)
+    this.pruneInterval = setInterval(
+      () => {
+        this.eventBuffer.pruneStale();
+      },
+      15 * 60 * 1000
+    );
   }
 
   /**
@@ -91,7 +103,9 @@ export class TransportManager {
   connectAdapter(adapter: AgUiEventAdapter, runId?: string): void {
     // Create listener function
     const listener = (event: AgUiEvent) => {
+      // Buffer the event if runId is provided
       if (runId) {
+        this.eventBuffer.addEvent(runId, event);
         this.broadcastToRun(runId, event);
       } else {
         this.broadcast(event);
@@ -165,10 +179,11 @@ export class TransportManager {
    * ```
    */
   broadcastToRun(runId: string, event: AgUiEvent): number {
-    return this.sseTransport.broadcastToRun(runId, {
+    const clientCount = this.sseTransport.broadcastToRun(runId, {
       event: event.type,
       data: event,
     });
+    return clientCount;
   }
 
   /**
@@ -203,12 +218,59 @@ export class TransportManager {
   }
 
   /**
+   * Get buffered events for an execution
+   *
+   * Returns all events that have been buffered for the specified execution.
+   * Useful for replaying events to late-joining clients.
+   *
+   * @param runId - Target run ID
+   * @param fromSequence - Optional: only return events >= this sequence number
+   * @returns Array of buffered events
+   *
+   * @example
+   * ```typescript
+   * const events = manager.getBufferedEvents('run-123');
+   * for (const buffered of events) {
+   *   console.log(buffered.event.type, buffered.sequenceNumber);
+   * }
+   * ```
+   */
+  getBufferedEvents(runId: string, fromSequence?: number) {
+    return this.eventBuffer.getEvents(runId, fromSequence);
+  }
+
+  /**
+   * Check if events are buffered for an execution
+   *
+   * @param runId - Target run ID
+   * @returns true if events are buffered
+   */
+  hasBufferedEvents(runId: string): boolean {
+    return this.eventBuffer.hasBuffer(runId);
+  }
+
+  /**
+   * Get buffer statistics
+   *
+   * @returns Buffer statistics
+   */
+  getBufferStats() {
+    return this.eventBuffer.getStats();
+  }
+
+  /**
    * Shutdown transport manager
    *
    * Disconnects all adapters and shuts down SSE transport.
    * Closes all client connections and releases resources.
    */
   shutdown(): void {
+    // Stop pruning interval
+    if (this.pruneInterval) {
+      clearInterval(this.pruneInterval);
+      this.pruneInterval = null;
+    }
+
     // Disconnect all adapters
     for (const adapter of this.adapterListeners.keys()) {
       this.disconnectAdapter(adapter);
@@ -216,5 +278,8 @@ export class TransportManager {
 
     // Shutdown SSE transport
     this.sseTransport.shutdown();
+
+    // Clear event buffers
+    this.eventBuffer.clearAll();
   }
 }
