@@ -12,6 +12,8 @@ vi.mock('@/lib/api', () => ({
     getById: vi.fn(),
     cancel: vi.fn(),
     createFollowUp: vi.fn(),
+    deleteWorktree: vi.fn(),
+    worktreeExists: vi.fn(),
   },
 }))
 
@@ -30,6 +32,16 @@ vi.mock('@/components/executions/FollowUpDialog', () => ({
       <div data-testid="follow-up-dialog">
         <button onClick={() => onSubmit('Test feedback')}>Submit</button>
         <button onClick={onCancel}>Cancel</button>
+      </div>
+    ) : null,
+}))
+
+vi.mock('@/components/executions/DeleteWorktreeDialog', () => ({
+  DeleteWorktreeDialog: ({ isOpen, onConfirm, onClose }: any) =>
+    isOpen ? (
+      <div data-testid="delete-worktree-dialog">
+        <button onClick={onConfirm}>Delete</button>
+        <button onClick={onClose}>Cancel</button>
       </div>
     ) : null,
 }))
@@ -76,6 +88,8 @@ describe('ExecutionView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default mock: worktree doesn't exist
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: false })
   })
 
   it('should display loading state initially', () => {
@@ -389,6 +403,123 @@ describe('ExecutionView', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cancel failed')).toBeInTheDocument()
+    })
+  })
+
+  it('should show Delete Worktree button when worktree exists', async () => {
+    vi.mocked(executionsApi.getById).mockResolvedValue({
+      ...mockExecution,
+      status: 'completed',
+    })
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+
+    renderWithProviders(
+      <ExecutionView executionId="exec-123" onFollowUpCreated={mockOnFollowUpCreated} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete Worktree/ })).toBeInTheDocument()
+    })
+  })
+
+  it('should not show Delete Worktree button when worktree does not exist', async () => {
+    vi.mocked(executionsApi.getById).mockResolvedValue({
+      ...mockExecution,
+      status: 'completed',
+    })
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: false })
+
+    renderWithProviders(
+      <ExecutionView executionId="exec-123" onFollowUpCreated={mockOnFollowUpCreated} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Completed')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: /Delete Worktree/ })).not.toBeInTheDocument()
+  })
+
+  it('should open DeleteWorktreeDialog when Delete Worktree button clicked', async () => {
+    const user = userEvent.setup()
+    vi.mocked(executionsApi.getById).mockResolvedValue({
+      ...mockExecution,
+      status: 'completed',
+    })
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+
+    renderWithProviders(
+      <ExecutionView executionId="exec-123" onFollowUpCreated={mockOnFollowUpCreated} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete Worktree/ })).toBeInTheDocument()
+    })
+
+    const deleteButton = screen.getByRole('button', { name: /Delete Worktree/ })
+    await user.click(deleteButton)
+
+    expect(screen.getByTestId('delete-worktree-dialog')).toBeInTheDocument()
+  })
+
+  it('should delete worktree when dialog confirmed', async () => {
+    const user = userEvent.setup()
+    const updatedExecution = { ...mockExecution, status: 'completed' as const }
+
+    vi.mocked(executionsApi.getById)
+      .mockResolvedValueOnce({ ...mockExecution, status: 'completed' })
+      .mockResolvedValueOnce(updatedExecution)
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+    vi.mocked(executionsApi.deleteWorktree).mockResolvedValue(undefined as any)
+
+    renderWithProviders(
+      <ExecutionView executionId="exec-123" onFollowUpCreated={mockOnFollowUpCreated} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete Worktree/ })).toBeInTheDocument()
+    })
+
+    const deleteButton = screen.getByRole('button', { name: /Delete Worktree/ })
+    await user.click(deleteButton)
+
+    // Find the confirm button inside the dialog
+    const dialog = screen.getByTestId('delete-worktree-dialog')
+    const confirmButton = dialog.querySelector('button:first-child') as HTMLButtonElement
+    await user.click(confirmButton)
+
+    await waitFor(() => {
+      expect(executionsApi.deleteWorktree).toHaveBeenCalledWith('exec-123')
+    })
+  })
+
+  it('should handle delete worktree error gracefully', async () => {
+    const user = userEvent.setup()
+    vi.mocked(executionsApi.getById).mockResolvedValue({
+      ...mockExecution,
+      status: 'completed',
+    })
+    vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+    vi.mocked(executionsApi.deleteWorktree).mockRejectedValue(new Error('Delete failed'))
+
+    renderWithProviders(
+      <ExecutionView executionId="exec-123" onFollowUpCreated={mockOnFollowUpCreated} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete Worktree/ })).toBeInTheDocument()
+    })
+
+    const deleteButton = screen.getByRole('button', { name: /Delete Worktree/ })
+    await user.click(deleteButton)
+
+    // Find the confirm button inside the dialog
+    const dialog = screen.getByTestId('delete-worktree-dialog')
+    const confirmButton = dialog.querySelector('button:first-child') as HTMLButtonElement
+    await user.click(confirmButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete failed')).toBeInTheDocument()
     })
   })
 })

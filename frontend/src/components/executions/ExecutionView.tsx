@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { executionsApi } from '@/lib/api'
 import { ExecutionMonitor } from './ExecutionMonitor'
 import { FollowUpDialog } from './FollowUpDialog'
+import { DeleteWorktreeDialog } from './DeleteWorktreeDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -41,6 +42,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showFollowUp, setShowFollowUp] = useState(false)
+  const [showDeleteWorktree, setShowDeleteWorktree] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)
   const [worktreeExists, setWorktreeExists] = useState(false)
@@ -132,13 +134,6 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const handleDeleteWorktree = async () => {
     if (!execution || !execution.worktree_path) return
 
-    const confirmed = window.confirm(
-      'Are you sure you want to delete the worktree? This action cannot be undone.\n\n' +
-        `Worktree path: ${execution.worktree_path}`
-    )
-
-    if (!confirmed) return
-
     setDeletingWorktree(true)
     try {
       await executionsApi.deleteWorktree(executionId)
@@ -147,6 +142,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
       // Reload execution to reflect changes
       const data = await executionsApi.getById(executionId)
       setExecution(data)
+      setShowDeleteWorktree(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete worktree')
     } finally {
@@ -382,20 +378,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleDeleteWorktree}
+                onClick={() => setShowDeleteWorktree(true)}
                 disabled={deletingWorktree}
               >
-                {deletingWorktree ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Worktree
-                  </>
-                )}
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Worktree
               </Button>
             )}
           </div>
@@ -418,6 +405,15 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         open={showFollowUp}
         onSubmit={handleFollowUpSubmit}
         onCancel={() => setShowFollowUp(false)}
+      />
+
+      {/* Delete Worktree Dialog */}
+      <DeleteWorktreeDialog
+        worktreePath={execution.worktree_path}
+        isOpen={showDeleteWorktree}
+        onClose={() => setShowDeleteWorktree(false)}
+        onConfirm={handleDeleteWorktree}
+        isDeleting={deletingWorktree}
       />
     </div>
   )

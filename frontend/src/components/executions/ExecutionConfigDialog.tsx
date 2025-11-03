@@ -44,7 +44,7 @@ export function ExecutionConfigDialog({
   const [prompt, setPrompt] = useState('')
   const [config, setConfig] = useState<ExecutionConfig>({
     mode: 'worktree',
-    cleanupMode: 'auto',
+    cleanupMode: 'manual',
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
 
