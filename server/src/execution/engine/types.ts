@@ -116,6 +116,7 @@ export type TaskFailedHandler = (taskId: string, error: Error) => void;
 export interface EngineConfig {
   maxConcurrent?: number; // Maximum concurrent processes (default: 3)
   claudePath?: string; // Path to Claude executable (default: 'claude')
+  onOutput?: (data: Buffer, type: 'stdout' | 'stderr') => void; // Optional output handler for real-time processing
 }
 
 /**

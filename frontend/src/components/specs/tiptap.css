@@ -340,7 +340,7 @@
 }
 
 .tiptap-with-line-numbers .ProseMirror {
-  padding-left: 4rem !important;
+  padding-left: 5rem !important;
 }
 
 /* Make blocks positioned so ::before is positioned relative to them */
@@ -352,9 +352,9 @@
 .tiptap-with-line-numbers .ProseMirror > *::before {
   content: attr(data-line-number) !important;
   position: absolute !important;
-  left: -4rem !important;
+  left: -5rem !important;
   top: 0 !important;
-  width: 3rem !important;
+  width: 4rem !important;
   height: 100% !important;
   min-height: 1em !important;
   text-align: right !important;
@@ -393,4 +393,13 @@
 /* Don't add line numbers to nested blocks (like list items) */
 .tiptap-with-line-numbers .ProseMirror > * *::before {
   content: none;
+}
+
+/* Placeholder styles */
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: hsl(var(--muted-foreground));
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }

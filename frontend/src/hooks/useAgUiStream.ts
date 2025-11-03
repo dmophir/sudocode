@@ -40,6 +40,7 @@ export interface MessageBuffer {
   role: string
   content: string
   complete: boolean
+  timestamp: number
 }
 
 /**
@@ -186,13 +187,7 @@ export interface UseAgUiStreamReturn extends AgUiStreamState {
  * ```
  */
 export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamReturn {
-  const {
-    executionId,
-    autoConnect = true,
-    reconnectOnError = false,
-    endpoint,
-    onEvent,
-  } = options
+  const { executionId, autoConnect = true, reconnectOnError = false, endpoint, onEvent } = options
 
   // State
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle')
@@ -214,6 +209,7 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const onEventRef = useRef(onEvent)
+  const shouldStayDisconnected = useRef(false)
 
   // Update ref when onEvent changes
   useEffect(() => {
@@ -223,75 +219,80 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
   /**
    * Handle RUN_STARTED event
    */
-  const handleRunStarted = useCallback(
-    (event: RunStartedEvent) => {
-      setExecution((prev) => ({
-        ...prev,
-        runId: event.runId,
-        threadId: event.threadId,
-        status: 'running',
-        startTime: event.timestamp || Date.now(),
-      }))
-      onEventRef.current?.onRunStarted?.(event)
-    },
-    []
-  )
+  const handleRunStarted = useCallback((event: RunStartedEvent) => {
+    setExecution((prev) => ({
+      ...prev,
+      runId: event.runId,
+      threadId: event.threadId,
+      status: 'running',
+      startTime: event.timestamp || Date.now(),
+    }))
+    onEventRef.current?.onRunStarted?.(event)
+  }, [])
 
   /**
    * Handle RUN_FINISHED event
    */
-  const handleRunFinished = useCallback(
-    (event: RunFinishedEvent) => {
-      setExecution((prev) => ({
-        ...prev,
-        status: 'completed',
-        endTime: event.timestamp || Date.now(),
-      }))
-      onEventRef.current?.onRunFinished?.(event)
-    },
-    []
-  )
+  const handleRunFinished = useCallback((event: RunFinishedEvent) => {
+    setExecution((prev) => ({
+      ...prev,
+      status: 'completed',
+      endTime: event.timestamp || Date.now(),
+    }))
+    onEventRef.current?.onRunFinished?.(event)
+
+    // Mark that we should stay disconnected
+    shouldStayDisconnected.current = true
+
+    // Close SSE connection after run completes
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+      setConnectionStatus('disconnected')
+    }
+  }, [])
 
   /**
    * Handle RUN_ERROR event
    */
-  const handleRunError = useCallback(
-    (event: RunErrorEvent) => {
-      setExecution((prev) => ({
-        ...prev,
-        status: 'error',
-        error: event.message,
-        endTime: event.timestamp || Date.now(),
-      }))
-      setError(new Error(event.message))
-      onEventRef.current?.onRunError?.(event)
-    },
-    []
-  )
+  const handleRunError = useCallback((event: RunErrorEvent) => {
+    setExecution((prev) => ({
+      ...prev,
+      status: 'error',
+      error: event.message,
+      endTime: event.timestamp || Date.now(),
+    }))
+    setError(new Error(event.message))
+    onEventRef.current?.onRunError?.(event)
+
+    // Mark that we should stay disconnected
+    shouldStayDisconnected.current = true
+
+    // Close SSE connection after run errors
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+      setConnectionStatus('disconnected')
+    }
+  }, [])
 
   /**
    * Handle STEP_STARTED event
    */
-  const handleStepStarted = useCallback(
-    (event: StepStartedEvent) => {
-      setExecution((prev) => ({
-        ...prev,
-        currentStep: event.stepName,
-      }))
-      onEventRef.current?.onStepStarted?.(event)
-    },
-    []
-  )
+  const handleStepStarted = useCallback((event: StepStartedEvent) => {
+    setExecution((prev) => ({
+      ...prev,
+      currentStep: event.stepName,
+    }))
+    onEventRef.current?.onStepStarted?.(event)
+  }, [])
 
   /**
    * Handle STEP_FINISHED event
    */
-  const handleStepFinished = useCallback(
-    (event: StepFinishedEvent) => {
-      onEventRef.current?.onStepFinished?.(event)
-    },
-    []
-  )
+  const handleStepFinished = useCallback((event: StepFinishedEvent) => {
+    onEventRef.current?.onStepFinished?.(event)
+  }, [])
 
   /**
    * Handle TEXT_MESSAGE_START event
@@ -304,6 +305,7 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
         role: event.role || 'assistant',
         content: '',
         complete: false,
+        timestamp: event.timestamp || Date.now(),
       })
       return next
     })
@@ -312,64 +314,55 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
   /**
    * Handle TEXT_MESSAGE_CONTENT event
    */
-  const handleTextMessageContent = useCallback(
-    (event: TextMessageContentEvent) => {
-      setMessages((prev) => {
-        const next = new Map(prev)
-        const existing = next.get(event.messageId)
-        if (existing) {
-          const updated = {
-            ...existing,
-            content: existing.content + event.delta,
-          }
-          next.set(event.messageId, updated)
-          onEventRef.current?.onMessage?.(updated)
+  const handleTextMessageContent = useCallback((event: TextMessageContentEvent) => {
+    setMessages((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(event.messageId)
+      if (existing) {
+        const updated = {
+          ...existing,
+          content: existing.content + event.delta,
         }
-        return next
-      })
-    },
-    []
-  )
+        next.set(event.messageId, updated)
+        onEventRef.current?.onMessage?.(updated)
+      }
+      return next
+    })
+  }, [])
 
   /**
    * Handle TEXT_MESSAGE_END event
    */
-  const handleTextMessageEnd = useCallback(
-    (event: TextMessageEndEvent) => {
-      setMessages((prev) => {
-        const next = new Map(prev)
-        const existing = next.get(event.messageId)
-        if (existing) {
-          const completed = { ...existing, complete: true }
-          next.set(event.messageId, completed)
-          onEventRef.current?.onMessage?.(completed)
-        }
-        return next
-      })
-    },
-    []
-  )
+  const handleTextMessageEnd = useCallback((event: TextMessageEndEvent) => {
+    setMessages((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(event.messageId)
+      if (existing) {
+        const completed = { ...existing, complete: true }
+        next.set(event.messageId, completed)
+        onEventRef.current?.onMessage?.(completed)
+      }
+      return next
+    })
+  }, [])
 
   /**
    * Handle TOOL_CALL_START event
    */
-  const handleToolCallStart = useCallback(
-    (event: ToolCallStartEvent) => {
-      setToolCalls((prev) => {
-        const next = new Map(prev)
-        next.set(event.toolCallId, {
-          toolCallId: event.toolCallId,
-          toolCallName: event.toolCallName,
-          args: '',
-          status: 'started',
-          startTime: event.timestamp || Date.now(),
-        })
-        return next
+  const handleToolCallStart = useCallback((event: ToolCallStartEvent) => {
+    setToolCalls((prev) => {
+      const next = new Map(prev)
+      next.set(event.toolCallId, {
+        toolCallId: event.toolCallId,
+        toolCallName: event.toolCallName,
+        args: '',
+        status: 'started',
+        startTime: event.timestamp || Date.now(),
       })
-      onEventRef.current?.onToolCallStart?.(event)
-    },
-    []
-  )
+      return next
+    })
+    onEventRef.current?.onToolCallStart?.(event)
+  }, [])
 
   /**
    * Handle TOOL_CALL_ARGS event
@@ -392,23 +385,20 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
   /**
    * Handle TOOL_CALL_END event
    */
-  const handleToolCallEnd = useCallback(
-    (event: ToolCallEndEvent) => {
-      setToolCalls((prev) => {
-        const next = new Map(prev)
-        const existing = next.get(event.toolCallId)
-        if (existing) {
-          next.set(event.toolCallId, {
-            ...existing,
-            endTime: event.timestamp || Date.now(),
-          })
-        }
-        return next
-      })
-      onEventRef.current?.onToolCallEnd?.(event)
-    },
-    []
-  )
+  const handleToolCallEnd = useCallback((event: ToolCallEndEvent) => {
+    setToolCalls((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(event.toolCallId)
+      if (existing) {
+        next.set(event.toolCallId, {
+          ...existing,
+          endTime: event.timestamp || Date.now(),
+        })
+      }
+      return next
+    })
+    onEventRef.current?.onToolCallEnd?.(event)
+  }, [])
 
   /**
    * Handle TOOL_CALL_RESULT event
@@ -431,49 +421,54 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
   /**
    * Handle STATE_SNAPSHOT event
    */
-  const handleStateSnapshot = useCallback(
-    (event: StateSnapshotEvent) => {
-      setState(event.snapshot)
-      onEventRef.current?.onStateUpdate?.(event.snapshot)
-    },
-    []
-  )
+  const handleStateSnapshot = useCallback((event: StateSnapshotEvent) => {
+    setState(event.snapshot)
+    onEventRef.current?.onStateUpdate?.(event.snapshot)
+  }, [])
 
   /**
    * Handle STATE_DELTA event
    */
-  const handleStateDelta = useCallback(
-    (event: StateDeltaEvent) => {
-      setState((prevState: State) => {
-        // Apply JSON Patch operations
-        let newState = { ...prevState }
-        for (const op of event.delta) {
-          if (op.op === 'replace') {
-            const key = op.path.slice(1) // Remove leading '/'
-            newState = { ...newState, [key]: op.value }
-          } else if (op.op === 'add') {
-            const key = op.path.slice(1)
-            newState = { ...newState, [key]: op.value }
-          }
-          // Can extend to handle other operations (remove, move, copy, test)
+  const handleStateDelta = useCallback((event: StateDeltaEvent) => {
+    setState((prevState: State) => {
+      // Apply JSON Patch operations
+      let newState = { ...prevState }
+      for (const op of event.delta) {
+        if (op.op === 'replace') {
+          const key = op.path.slice(1) // Remove leading '/'
+          newState = { ...newState, [key]: op.value }
+        } else if (op.op === 'add') {
+          const key = op.path.slice(1)
+          newState = { ...newState, [key]: op.value }
         }
-        onEventRef.current?.onStateUpdate?.(newState)
-        return newState
-      })
-    },
-    []
-  )
+        // Can extend to handle other operations (remove, move, copy, test)
+      }
+      onEventRef.current?.onStateUpdate?.(newState)
+      return newState
+    })
+  }, [])
 
   /**
    * Connect to SSE stream
    */
   const connect = useCallback(() => {
+    // Don't reconnect if we've intentionally disconnected after completion
+    if (shouldStayDisconnected.current) {
+      console.debug('[SSE] Skipping connection - execution already completed')
+      return
+    }
+
     if (eventSourceRef.current) {
       console.warn('EventSource already connected')
       return
     }
 
     const url = endpoint || `/api/executions/${executionId}/stream`
+    console.debug('[SSE]. Connecting to SSE stream', {
+      executionId,
+      url,
+      timestamp: new Date().toISOString(),
+    })
     setConnectionStatus('connecting')
     setError(null)
 
@@ -483,16 +478,28 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
 
       // Connection established
       eventSource.onopen = () => {
+        console.debug('[SSE]. SSE connection established', {
+          executionId,
+          timestamp: new Date().toISOString(),
+        })
         setConnectionStatus('connected')
       }
 
       // Connection error
       eventSource.onerror = (err) => {
         console.error('EventSource error:', err)
+
+        // Don't reconnect if we've intentionally disconnected after completion
+        if (shouldStayDisconnected.current) {
+          disconnect()
+          return
+        }
+
         setConnectionStatus('error')
         setError(new Error('SSE connection error'))
 
         if (reconnectOnError && reconnectTimeoutRef.current === null) {
+          console.debug('[SSE] Reconnecting in 3 seconds...')
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null
             disconnect()
@@ -602,6 +609,8 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
    * Reconnect to SSE stream
    */
   const reconnect = useCallback(() => {
+    // Reset the stay disconnected flag when manually reconnecting
+    shouldStayDisconnected.current = false
     disconnect()
     connect()
   }, [disconnect, connect])
@@ -614,9 +623,19 @@ export function useAgUiStream(options: UseAgUiStreamOptions): UseAgUiStreamRetur
 
     // Cleanup on unmount
     return () => {
-      disconnect()
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+        setConnectionStatus('disconnected')
+      }
     }
-  }, [autoConnect, connect, disconnect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect, executionId])
 
   return {
     connectionStatus,

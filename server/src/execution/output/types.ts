@@ -17,12 +17,12 @@
  * Agent-specific adapters map their output to these standard types.
  */
 export type MessageType =
-  | 'text'
-  | 'tool_use'
-  | 'tool_result'
-  | 'usage'
-  | 'error'
-  | 'unknown';
+  | "text"
+  | "tool_use"
+  | "tool_result"
+  | "usage"
+  | "error"
+  | "unknown";
 
 /**
  * FileOperation - Type of file operation performed
@@ -34,12 +34,12 @@ export type MessageType =
  * - delete: File deletion
  * - create: Explicit file creation (vs overwrite)
  */
-export type FileOperation = 'read' | 'write' | 'edit' | 'delete' | 'create';
+export type FileOperation = "read" | "write" | "edit" | "delete" | "create";
 
 /**
  * ToolCallStatus - Status of a tool invocation
  */
-export type ToolCallStatus = 'pending' | 'success' | 'error';
+export type ToolCallStatus = "pending" | "success" | "error";
 
 /**
  * OutputMessage - Discriminated union for all message types
@@ -52,14 +52,14 @@ export type ToolCallStatus = 'pending' | 'success' | 'error';
  */
 export type OutputMessage =
   | {
-      type: 'text';
+      type: "text";
       content: string;
       timestamp: Date;
       /** Agent-specific metadata (e.g., formatting, styling) */
       metadata?: Record<string, any>;
     }
   | {
-      type: 'tool_use';
+      type: "tool_use";
       id: string;
       name: string;
       input: Record<string, any>;
@@ -68,7 +68,7 @@ export type OutputMessage =
       metadata?: Record<string, any>;
     }
   | {
-      type: 'tool_result';
+      type: "tool_result";
       toolUseId: string;
       result: any;
       isError: boolean;
@@ -77,7 +77,7 @@ export type OutputMessage =
       metadata?: Record<string, any>;
     }
   | {
-      type: 'usage';
+      type: "usage";
       tokens: {
         input: number;
         output: number;
@@ -88,7 +88,7 @@ export type OutputMessage =
       metadata?: Record<string, any>;
     }
   | {
-      type: 'error';
+      type: "error";
       message: string;
       details?: any;
       timestamp: Date;
@@ -96,7 +96,7 @@ export type OutputMessage =
       metadata?: Record<string, any>;
     }
   | {
-      type: 'unknown';
+      type: "unknown";
       raw: string;
       timestamp: Date;
       /** Agent-specific metadata (e.g., original format, parsing hints) */
@@ -357,6 +357,16 @@ export type ErrorHandler = (error: {
 }) => void;
 
 /**
+ * MessageHandler - Callback invoked when a text message is received
+ */
+export type MessageHandler = (message: OutputMessage) => void;
+
+/**
+ * UsageHandler - Callback invoked when usage metrics are updated
+ */
+export type UsageHandler = (usage: UsageMetrics) => void;
+
+/**
  * IOutputProcessor - Interface for output processing implementations
  *
  * Defines the contract for parsing coding agent output in real-time,
@@ -424,6 +434,20 @@ export interface IOutputProcessor {
    * @param handler - Function to call when an error occurs
    */
   onError(handler: ErrorHandler): void;
+
+  /**
+   * Register a callback for message events
+   *
+   * @param handler - Function to call when a text message is received
+   */
+  onMessage(handler: MessageHandler): void;
+
+  /**
+   * Register a callback for usage metric updates
+   *
+   * @param handler - Function to call when usage metrics are updated
+   */
+  onUsage(handler: UsageHandler): void;
 }
 
 // ============================================================================

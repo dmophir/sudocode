@@ -6,10 +6,13 @@
  * @module execution/workflow/linear-orchestrator
  */
 
-import type { IWorkflowOrchestrator, IWorkflowStorage } from './orchestrator.js';
-import type { IResilientExecutor } from '../resilience/executor.js';
-import type { ResilientExecutionResult } from '../resilience/types.js';
-import type { ExecutionTask } from '../engine/types.js';
+import type {
+  IWorkflowOrchestrator,
+  IWorkflowStorage,
+} from "./orchestrator.js";
+import type { IResilientExecutor } from "../resilience/executor.js";
+import type { ResilientExecutionResult } from "../resilience/types.js";
+import type { ExecutionTask } from "../engine/types.js";
 import type {
   WorkflowDefinition,
   WorkflowStep,
@@ -27,14 +30,15 @@ import type {
   WorkflowResumeHandler,
   WorkflowPauseHandler,
   WorkflowCancelHandler,
-} from './types.js';
+} from "./types.js";
 import {
   renderTemplate,
   generateId,
   extractValue,
   evaluateCondition,
-} from './utils.js';
-import type { AgUiEventAdapter } from '../output/ag-ui-adapter.js';
+} from "./utils.js";
+import type { AgUiEventAdapter } from "../output/ag-ui-adapter.js";
+import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 
 /**
  * LinearOrchestrator - Sequential workflow execution with state management
@@ -48,9 +52,11 @@ import type { AgUiEventAdapter } from '../output/ag-ui-adapter.js';
 export class LinearOrchestrator implements IWorkflowOrchestrator {
   // Internal state
   private _executions = new Map<string, WorkflowExecution>();
+  private _cleanedUpExecutions = new Set<string>(); // Track which executions have been cleaned up
   private _storage?: IWorkflowStorage;
   private _executor: IResilientExecutor;
   private _agUiAdapter?: AgUiEventAdapter;
+  private _lifecycleService?: ExecutionLifecycleService;
 
   // Event handlers
   private _workflowStartHandlers: WorkflowStartHandler[] = [];
@@ -70,15 +76,18 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
    * @param executor - Resilient executor for running tasks
    * @param storage - Optional storage for checkpoints
    * @param agUiAdapter - Optional AG-UI event adapter for real-time event streaming
+   * @param lifecycleService - Optional execution lifecycle service for worktree management
    */
   constructor(
     executor: IResilientExecutor,
     storage?: IWorkflowStorage,
-    agUiAdapter?: AgUiEventAdapter
+    agUiAdapter?: AgUiEventAdapter,
+    lifecycleService?: ExecutionLifecycleService
   ) {
     this._executor = executor;
     this._storage = storage;
     this._agUiAdapter = agUiAdapter;
+    this._lifecycleService = lifecycleService;
   }
 
   /**
@@ -86,23 +95,24 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
    *
    * @param workflow - Workflow definition to execute
    * @param workDir - Working directory for task execution
-   * @param options - Execution options
+   * @param options - Execution options (executionId is required)
    * @returns Promise resolving to execution ID
    */
   async startWorkflow(
     workflow: WorkflowDefinition,
     workDir: string,
-    options?: {
+    options: {
+      executionId: string;
       checkpointInterval?: number;
       initialContext?: Record<string, any>;
     }
   ): Promise<string> {
     // 1. Create execution
     const execution: WorkflowExecution = {
-      executionId: generateId('execution'),
+      executionId: options.executionId,
       workflowId: workflow.id,
       definition: workflow,
-      status: 'pending',
+      status: "pending",
       currentStepIndex: 0,
       context: options?.initialContext || workflow.initialContext || {},
       stepResults: [],
@@ -113,26 +123,31 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     this._executions.set(execution.executionId, execution);
 
     // 3. Start execution in background (non-blocking)
-    this._executeWorkflow(workflow, execution, workDir, options?.checkpointInterval).catch(
-      (error) => {
-        execution.status = 'failed';
-        execution.completedAt = new Date();
-        execution.error = error.message;
+    this._executeWorkflow(
+      workflow,
+      execution,
+      workDir,
+      options?.checkpointInterval
+    ).catch((error) => {
+      execution.status = "failed";
+      execution.completedAt = new Date();
+      execution.error = error.message;
 
-        // Emit workflow failed event
-        this._workflowFailedHandlers.forEach((handler) => {
-          handler(execution.executionId, error);
-        });
+      // Emit workflow failed event
+      this._workflowFailedHandlers.forEach((handler) => {
+        handler(execution.executionId, error);
+      });
 
-        // Emit AG-UI RUN_ERROR event
-        if (this._agUiAdapter) {
-          this._agUiAdapter.emitRunError(
-            error.message,
-            error.stack
-          );
-        }
+      // Emit AG-UI RUN_ERROR event
+      if (this._agUiAdapter) {
+        this._agUiAdapter.emitRunError(error.message, error.stack);
       }
-    );
+
+      // Cleanup execution resources (worktree)
+      this._cleanupExecution(execution).catch(() => {
+        // Error already logged in _cleanupExecution
+      });
+    });
 
     // 4. Return execution ID immediately
     return execution.executionId;
@@ -152,7 +167,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     }
   ): Promise<string> {
     if (!this._storage) {
-      throw new Error('Cannot resume workflow: no storage configured');
+      throw new Error("Cannot resume workflow: no storage configured");
     }
 
     // Load checkpoint
@@ -166,7 +181,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       workflowId: checkpoint.workflowId,
       executionId: checkpoint.executionId,
       definition: checkpoint.definition,
-      status: 'running',
+      status: "running",
       currentStepIndex: checkpoint.state.currentStepIndex,
       context: { ...checkpoint.state.context },
       stepResults: [...checkpoint.state.stepResults],
@@ -191,7 +206,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       workDir as string,
       options?.checkpointInterval
     ).catch((error) => {
-      execution.status = 'failed';
+      execution.status = "failed";
       execution.completedAt = new Date();
       execution.error = error.message;
 
@@ -202,11 +217,13 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
       // Emit AG-UI RUN_ERROR event
       if (this._agUiAdapter) {
-        this._agUiAdapter.emitRunError(
-          error.message,
-          error.stack
-        );
+        this._agUiAdapter.emitRunError(error.message, error.stack);
       }
+
+      // Cleanup execution resources (worktree)
+      this._cleanupExecution(execution).catch(() => {
+        // Error already logged in _cleanupExecution
+      });
     });
 
     return executionId;
@@ -223,19 +240,17 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       return; // Silently ignore non-existent executions
     }
 
-    if (execution.status !== 'running') {
-      throw new Error(
-        `Cannot pause workflow in ${execution.status} state`
-      );
+    if (execution.status !== "running") {
+      throw new Error(`Cannot pause workflow in ${execution.status} state`);
     }
 
-    execution.status = 'paused';
+    execution.status = "paused";
     execution.pausedAt = new Date();
 
     // Wait for any currently executing step to complete and update state
     // This prevents race condition where step is submitted to executor but result not yet saved
-    // 60ms is enough for typical step execution (MockResilientExecutor uses 50ms in tests)
-    await new Promise(resolve => setTimeout(resolve, 60));
+    // 250ms is enough for typical step execution (MockResilientExecutor uses 200ms in tests)
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     // Now save checkpoint with current state
     if (this._storage) {
@@ -259,11 +274,11 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       return; // Silently ignore non-existent executions
     }
 
-    if (['completed', 'cancelled'].includes(execution.status)) {
+    if (["completed", "cancelled"].includes(execution.status)) {
       return; // Already done
     }
 
-    execution.status = 'cancelled';
+    execution.status = "cancelled";
     execution.completedAt = new Date();
 
     // Create final checkpoint (currentStepIndex is already up-to-date)
@@ -275,6 +290,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     this._cancelHandlers.forEach((handler) => {
       handler(executionId);
     });
+
+    // Cleanup execution resources (worktree)
+    await this._cleanupExecution(execution);
   }
 
   /**
@@ -301,25 +319,27 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     }
 
     // Find step index
-    const stepIndex = execution.definition.steps.findIndex((s) => s.id === stepId);
+    const stepIndex = execution.definition.steps.findIndex(
+      (s) => s.id === stepId
+    );
     if (stepIndex === -1) {
       return null;
     }
 
     // Determine status based on execution state
-    let status: StepStatus['status'];
+    let status: StepStatus["status"];
     const result = execution.stepResults[stepIndex];
 
     // Check if result exists first (step has been executed)
     if (result !== undefined) {
       // Step has a result, so it's either completed or failed
-      status = result.success ? 'completed' : 'failed';
+      status = result.success ? "completed" : "failed";
     } else if (stepIndex === execution.currentStepIndex) {
       // Currently executing (no result yet)
-      status = 'running';
+      status = "running";
     } else {
       // Not yet executed
-      status = 'pending';
+      status = "pending";
     }
 
     return {
@@ -343,7 +363,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     }
 
     // If already completed/failed/cancelled, return immediately
-    if (['completed', 'failed', 'cancelled'].includes(execution.status)) {
+    if (["completed", "failed", "cancelled"].includes(execution.status)) {
       return execution;
     }
 
@@ -357,7 +377,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           return;
         }
 
-        if (['completed', 'failed', 'cancelled'].includes(current.status)) {
+        if (["completed", "failed", "cancelled"].includes(current.status)) {
           clearInterval(checkInterval);
           resolve(current);
         }
@@ -472,7 +492,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     checkpointInterval?: number
   ): Promise<void> {
     // 1. Set status to running
-    execution.status = 'running';
+    execution.status = "running";
 
     // Emit workflow start event
     this._workflowStartHandlers.forEach((handler) => {
@@ -493,7 +513,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
       // Check if paused or cancelled before starting each step
       // Note: Status can be changed externally via pauseWorkflow/cancelWorkflow
-      if (['paused', 'cancelled'].includes(execution.status)) {
+      if (["paused", "cancelled"].includes(execution.status)) {
         return;
       }
 
@@ -514,7 +534,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
         });
 
         if (!workflow.config?.continueOnStepFailure) {
-          execution.status = 'failed';
+          execution.status = "failed";
           execution.completedAt = new Date();
           execution.error = error.message;
 
@@ -522,6 +542,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           this._workflowFailedHandlers.forEach((handler) => {
             handler(execution.executionId, error);
           });
+
+          // Cleanup execution resources (worktree)
+          await this._cleanupExecution(execution);
           return;
         }
         // Update currentStepIndex to point to next step before continuing
@@ -567,7 +590,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
           });
 
           if (!workflow.config?.continueOnStepFailure) {
-            execution.status = 'failed';
+            execution.status = "failed";
             execution.completedAt = new Date();
             execution.error = error.message;
 
@@ -575,6 +598,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             this._workflowFailedHandlers.forEach((handler) => {
               handler(execution.executionId, error);
             });
+
+            // Cleanup execution resources (worktree)
+            await this._cleanupExecution(execution);
             return;
           }
           // Update currentStepIndex to point to next step before continuing
@@ -592,11 +618,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
         // Emit AG-UI STEP_FINISHED event (success)
         if (this._agUiAdapter) {
-          this._agUiAdapter.emitStepFinished(
-            step.id,
-            'success',
-            result.output
-          );
+          this._agUiAdapter.emitStepFinished(step.id, "success", result.output);
         }
 
         // Update currentStepIndex to point to next step after successful completion
@@ -618,14 +640,11 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
         // Emit AG-UI STEP_FINISHED event (error)
         if (this._agUiAdapter) {
-          this._agUiAdapter.emitStepFinished(
-            step.id,
-            'error'
-          );
+          this._agUiAdapter.emitStepFinished(step.id, "error");
         }
 
         if (!workflow.config?.continueOnStepFailure) {
-          execution.status = 'failed';
+          execution.status = "failed";
           execution.completedAt = new Date();
           execution.error = (error as Error).message;
 
@@ -642,6 +661,8 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
             );
           }
 
+          // Cleanup execution resources (worktree)
+          await this._cleanupExecution(execution);
           return;
         }
         // Update currentStepIndex when continuing after error (for checkpoint consistency)
@@ -650,7 +671,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     }
 
     // 3. Workflow completed
-    execution.status = 'completed';
+    execution.status = "completed";
     execution.completedAt = new Date();
 
     // 4. Emit workflow complete event
@@ -672,6 +693,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
     if (this._agUiAdapter) {
       this._agUiAdapter.emitRunFinished(result);
     }
+
+    // 5. Cleanup execution resources (worktree)
+    await this._cleanupExecution(execution);
   }
 
   /**
@@ -710,6 +734,38 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
   }
 
   /**
+   * Clean up execution resources (worktree)
+   * Ensures cleanup is called only once per execution
+   *
+   * @param execution - Workflow execution to cleanup
+   * @private
+   */
+  private async _cleanupExecution(execution: WorkflowExecution): Promise<void> {
+    // Skip if no lifecycle service or no execution ID
+    if (!this._lifecycleService || !execution.executionId) {
+      return;
+    }
+
+    // Skip if already cleaned up
+    if (this._cleanedUpExecutions.has(execution.executionId)) {
+      return;
+    }
+
+    // Mark as cleaned up before calling cleanup (to prevent race conditions)
+    this._cleanedUpExecutions.add(execution.executionId);
+
+    try {
+      await this._lifecycleService.cleanupExecution(execution.executionId);
+    } catch (error) {
+      // Log error but don't fail
+      console.error(
+        `Failed to cleanup execution ${execution.executionId}:`,
+        error
+      );
+    }
+  }
+
+  /**
    * Execute a single workflow step
    *
    * @param step - Workflow step to execute
@@ -728,7 +784,7 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
     // 2. Build execution task
     const task: ExecutionTask = {
-      id: generateId('task'),
+      id: generateId("task"),
       type: step.taskType,
       prompt,
       workDir,
@@ -786,7 +842,9 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
 
     // Check if all dependencies are in completed steps
     for (const depId of step.dependencies) {
-      const depIndex = execution.definition.steps.findIndex((s) => s.id === depId);
+      const depIndex = execution.definition.steps.findIndex(
+        (s) => s.id === depId
+      );
       if (depIndex === -1) {
         // Dependency not found in workflow
         return false;

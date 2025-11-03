@@ -6,9 +6,7 @@
  * @module routes/tests/executions-stream
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
-import { mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 import express, { type Express } from 'express';
 import request from 'supertest';
 import { createExecutionStreamRoutes } from '../../../src/routes/executions-stream.js';
@@ -34,10 +32,7 @@ describe('Execution Stream Routes', () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      const handleConnectionSpy = mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      const handleConnectionSpy = vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           // Set SSE headers
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
@@ -57,24 +52,21 @@ describe('Execution Stream Routes', () => {
         .expect('Connection', 'keep-alive');
 
       // Verify handleConnection was called
-      assert.strictEqual(handleConnectionSpy.mock.callCount(), 1);
+      expect(handleConnectionSpy.mock.calls.length).toBe(1);
 
       // Verify parameters
       const [clientId, res, executionId] =
-        handleConnectionSpy.mock.calls[0].arguments;
-      assert.ok(clientId); // Should be a UUID
-      assert.ok(res); // Should be response object
-      assert.strictEqual(executionId, 'test-exec-123');
+        handleConnectionSpy.mock.calls[0];
+      expect(clientId).toBeTruthy(); // Should be a UUID
+      expect(res).toBeTruthy(); // Should be response object
+      expect(executionId).toBe('test-exec-123');
     });
 
     it('should set SSE headers', async () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -89,19 +81,16 @@ describe('Execution Stream Routes', () => {
         .expect(200);
 
       // Verify SSE headers are set by transport
-      assert.strictEqual(response.headers['content-type'], 'text/event-stream');
-      assert.strictEqual(response.headers['cache-control'], 'no-cache');
-      assert.strictEqual(response.headers['connection'], 'keep-alive');
+      expect(response.headers['content-type']).toBe('text/event-stream');
+      expect(response.headers['cache-control']).toBe('no-cache');
+      expect(response.headers['connection']).toBe('keep-alive');
     });
 
     it('should handle different execution IDs', async () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      const handleConnectionSpy = mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      const handleConnectionSpy = vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -121,26 +110,23 @@ describe('Execution Stream Routes', () => {
         .get('/api/executions/exec-2/stream')
         .expect(200);
 
-      assert.strictEqual(handleConnectionSpy.mock.callCount(), 2);
+      expect(handleConnectionSpy.mock.calls.length).toBe(2);
 
       // Verify different execution IDs
       const firstExecId =
-        handleConnectionSpy.mock.calls[0].arguments[2];
+        handleConnectionSpy.mock.calls[0][2];
       const secondExecId =
-        handleConnectionSpy.mock.calls[1].arguments[2];
+        handleConnectionSpy.mock.calls[1][2];
 
-      assert.strictEqual(firstExecId, 'exec-1');
-      assert.strictEqual(secondExecId, 'exec-2');
+      expect(firstExecId).toBe('exec-1');
+      expect(secondExecId).toBe('exec-2');
     });
 
     it('should generate unique client IDs for each connection', async () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      const handleConnectionSpy = mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      const handleConnectionSpy = vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -159,27 +145,24 @@ describe('Execution Stream Routes', () => {
         .get('/api/executions/test-exec-123/stream')
         .expect(200);
 
-      assert.strictEqual(handleConnectionSpy.mock.callCount(), 2);
+      expect(handleConnectionSpy.mock.calls.length).toBe(2);
 
       // Verify different client IDs
       const firstClientId =
-        handleConnectionSpy.mock.calls[0].arguments[0];
+        handleConnectionSpy.mock.calls[0][0];
       const secondClientId =
-        handleConnectionSpy.mock.calls[1].arguments[0];
+        handleConnectionSpy.mock.calls[1][0];
 
-      assert.ok(firstClientId);
-      assert.ok(secondClientId);
-      assert.notStrictEqual(firstClientId, secondClientId);
+      expect(firstClientId).toBeTruthy();
+      expect(secondClientId).toBeTruthy();
+      expect(firstClientId).not.toBe(secondClientId);
     });
 
     it('should support multiple concurrent connections', async () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      const handleConnectionSpy = mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      const handleConnectionSpy = vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -196,7 +179,7 @@ describe('Execution Stream Routes', () => {
         request(app).get('/api/executions/exec-3/stream').expect(200),
       ]);
 
-      assert.strictEqual(handleConnectionSpy.mock.callCount(), 3);
+      expect(handleConnectionSpy.mock.calls.length).toBe(3);
     });
   });
 
@@ -205,10 +188,7 @@ describe('Execution Stream Routes', () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -232,17 +212,14 @@ describe('Execution Stream Routes', () => {
       });
 
       // With mocked connection, count will be 0
-      assert.strictEqual(count, 0);
+      expect(count).toBe(0);
     });
 
     it('should isolate events between different executions', async () => {
       const sseTransport = transportManager.getSseTransport();
 
       // Mock handleConnection to immediately end the response
-      mock.method(
-        sseTransport,
-        'handleConnection',
-        (_clientId: string, res: any, _runId?: string) => {
+      vi.spyOn(sseTransport, 'handleConnection').mockImplementation((_clientId: string, res: any, _runId?: string) => {
           res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -268,14 +245,14 @@ describe('Execution Stream Routes', () => {
         data: { message: 'To exec-1' },
       });
 
-      assert.strictEqual(count1, 0);
+      expect(count1).toBe(0);
 
       const count2 = sseTransport.broadcastToRun('exec-2', {
         event: 'test-event',
         data: { message: 'To exec-2' },
       });
 
-      assert.strictEqual(count2, 0);
+      expect(count2).toBe(0);
     });
   });
 });

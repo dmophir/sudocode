@@ -2,8 +2,7 @@
  * Tests for Step Execution Logic
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { LinearOrchestrator } from '../../../../src/execution/workflow/linear-orchestrator.js';
 import type { IResilientExecutor } from '../../../../src/execution/resilience/executor.js';
 import type { ResilientExecutionResult } from '../../../../src/execution/resilience/types.js';
@@ -90,16 +89,16 @@ describe('Step Execution Logic', () => {
       );
 
       // Verify result
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(result.output, 'Test output');
+      expect(result.success).toBe(true);
+      expect(result.output).toBe('Test output');
 
       // Verify executor was called
-      assert.strictEqual(mockExecutor.executedTasks.length, 1);
+      expect(mockExecutor.executedTasks.length).toBe(1);
 
       const executedTask = mockExecutor.executedTasks[0].task;
-      assert.strictEqual(executedTask.prompt, 'Fix issue ISSUE-001');
-      assert.strictEqual(executedTask.type, 'issue');
-      assert.strictEqual(executedTask.workDir, '/test/dir');
+      expect(executedTask.prompt).toBe('Fix issue ISSUE-001');
+      expect(executedTask.type).toBe('issue');
+      expect(executedTask.workDir).toBe('/test/dir');
     });
 
     it('should pass retry policy to executor', async () => {
@@ -139,7 +138,7 @@ describe('Step Execution Logic', () => {
       await (orchestrator as any)._executeStep(step, execution, '/test');
 
       const executedRetryPolicy = mockExecutor.executedTasks[0].retryPolicy;
-      assert.deepStrictEqual(executedRetryPolicy, retryPolicy);
+      expect(executedRetryPolicy).toEqual(retryPolicy);
     });
 
     it('should include task config in execution task', async () => {
@@ -170,7 +169,7 @@ describe('Step Execution Logic', () => {
       await (orchestrator as any)._executeStep(step, execution, '/test');
 
       const executedTask = mockExecutor.executedTasks[0].task;
-      assert.deepStrictEqual(executedTask.config, step.taskConfig);
+      expect(executedTask.config).toEqual(step.taskConfig);
     });
 
     it('should handle variables in template', async () => {
@@ -197,7 +196,7 @@ describe('Step Execution Logic', () => {
       await (orchestrator as any)._executeStep(step, execution, '/test');
 
       const executedTask = mockExecutor.executedTasks[0].task;
-      assert.strictEqual(executedTask.prompt, 'Process test with value 42');
+      expect(executedTask.prompt).toBe('Process test with value 42');
     });
   });
 
@@ -235,7 +234,7 @@ describe('Step Execution Logic', () => {
 
       (orchestrator as any)._applyOutputMapping(step, result, context);
 
-      assert.strictEqual(context.result, 'Analysis complete');
+      expect(context.result).toBe('Analysis complete');
     });
 
     it('should map nested values to context', () => {
@@ -263,8 +262,8 @@ describe('Step Execution Logic', () => {
 
       (orchestrator as any)._applyOutputMapping(step, result, context);
 
-      assert.deepStrictEqual(context.files, ['file1.ts', 'file2.ts']);
-      assert.strictEqual(context.count, 2);
+      expect(context.files).toEqual(['file1.ts', 'file2.ts']);
+      expect(context.count).toBe(2);
     });
 
     it('should handle missing output mapping', () => {
@@ -285,7 +284,7 @@ describe('Step Execution Logic', () => {
       // Should not throw
       (orchestrator as any)._applyOutputMapping(step, result, context);
 
-      assert.deepStrictEqual(context, {});
+      expect(context).toEqual({});
     });
 
     it('should handle multiple mappings', () => {
@@ -310,9 +309,9 @@ describe('Step Execution Logic', () => {
 
       (orchestrator as any)._applyOutputMapping(step, result, context);
 
-      assert.strictEqual(context.output1, 'Test output');
-      assert.strictEqual(context.success, true);
-      assert.strictEqual(context.code, 0);
+      expect(context.output1).toBe('Test output');
+      expect(context.success).toBe(true);
+      expect(context.code).toBe(0);
     });
   });
 
@@ -341,7 +340,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._areDependenciesMet(step, execution);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
 
     it('should return true when all dependencies met', () => {
@@ -393,7 +392,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._areDependenciesMet(step2, execution);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
 
     it('should return false when dependency not executed', () => {
@@ -426,7 +425,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._areDependenciesMet(step2, execution);
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
 
     it('should return false when dependency failed', () => {
@@ -479,7 +478,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._areDependenciesMet(step2, execution);
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
 
     it('should return false when dependency not found in workflow', () => {
@@ -506,7 +505,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._areDependenciesMet(step, execution);
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
   });
 
@@ -523,7 +522,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
 
     it('should evaluate condition to true', () => {
@@ -538,7 +537,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
 
     it('should evaluate condition to false', () => {
@@ -553,7 +552,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
 
     it('should evaluate string "true" as true', () => {
@@ -568,7 +567,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
 
     it('should evaluate missing variable as false', () => {
@@ -583,7 +582,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, false);
+      expect(result).toBe(false);
     });
 
     it('should evaluate non-empty string as true', () => {
@@ -598,7 +597,7 @@ describe('Step Execution Logic', () => {
 
       const result = (orchestrator as any)._shouldExecuteStep(step, context);
 
-      assert.strictEqual(result, true);
+      expect(result).toBe(true);
     });
   });
 });

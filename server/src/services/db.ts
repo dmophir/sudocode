@@ -1,51 +1,20 @@
 /**
  * Database service for sudocode server
- * Extends CLI schema with server-specific tables
+ * Uses shared schema from @sudocode/types
  */
 
 import Database from "better-sqlite3";
 import * as path from "path";
 import * as fs from "fs";
-
-/**
- * Server-specific table schemas
- */
-
-export const EXECUTIONS_TABLE = `
-CREATE TABLE IF NOT EXISTS executions (
-    id TEXT PRIMARY KEY,
-    issue_id TEXT NOT NULL,
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('claude-code', 'codex')),
-    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'stopped')),
-
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    exit_code INTEGER,
-    error_message TEXT,
-
-    before_commit TEXT,
-    after_commit TEXT,
-    target_branch TEXT,
-    worktree_path TEXT,
-
-    session_id TEXT,
-    summary TEXT,
-
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-
-    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-);
-`;
-
-/**
- * Indexes for server tables
- */
-export const SERVER_INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_executions_issue_id ON executions(issue_id);
-CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
-CREATE INDEX IF NOT EXISTS idx_executions_session_id ON executions(session_id);
-`;
+import {
+  EXECUTIONS_TABLE,
+  EXECUTIONS_INDEXES,
+  PROMPT_TEMPLATES_TABLE,
+  PROMPT_TEMPLATES_INDEXES,
+  EXECUTION_LOGS_TABLE,
+  EXECUTION_LOGS_INDEXES,
+} from "@sudocode/types/schema";
+import { initializeDefaultTemplates } from "./prompt-templates.js";
 
 /**
  * Database configuration
@@ -86,9 +55,16 @@ export function initDatabase(config: DatabaseConfig): Database.Database {
 
   // Create server-specific tables
   db.exec(EXECUTIONS_TABLE);
+  db.exec(PROMPT_TEMPLATES_TABLE);
+  db.exec(EXECUTION_LOGS_TABLE);
 
   // Create indexes
-  db.exec(SERVER_INDEXES);
+  db.exec(EXECUTIONS_INDEXES);
+  db.exec(PROMPT_TEMPLATES_INDEXES);
+  db.exec(EXECUTION_LOGS_INDEXES);
+
+  // Initialize default prompt templates
+  initializeDefaultTemplates(db);
 
   return db;
 }

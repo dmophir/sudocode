@@ -308,7 +308,8 @@ export class SudocodeMCPServer {
           },
           {
             name: "add_feedback",
-            description: "Provide feedback to a spec.",
+            description:
+              "Provide anchored feedback to a spec. IMPORTANT: You MUST specify either 'line' OR 'text' to anchor the feedback to a specific location in the spec. ",
             inputSchema: {
               type: "object",
               properties: {
@@ -334,12 +335,12 @@ export class SudocodeMCPServer {
                 line: {
                   type: "number",
                   description:
-                    "Line number to anchor feedback (use line OR text, not both)",
+                    "Line number to anchor feedback (REQUIRED: must use either 'line' OR 'text', not both). Use this if you know the exact line number in the spec markdown file.",
                 },
                 text: {
                   type: "string",
                   description:
-                    "Text snippet to anchor feedback (use line OR text, not both)",
+                    "Text snippet to anchor feedback (REQUIRED: must use either 'line' OR 'text', not both). Must be an EXACT substring match from the spec content - case-sensitive and whitespace-sensitive. Use show_spec first to see the exact content and copy the text precisely.",
                 },
                 // TODO: Re-enable when the agent data structure is more developed.
                 // agent: {

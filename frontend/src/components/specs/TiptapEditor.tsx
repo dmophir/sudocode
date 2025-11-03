@@ -1,6 +1,7 @@
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Placeholder from '@tiptap/extension-placeholder'
 import { common, createLowlight } from 'lowlight'
 import { useEffect, useState, useRef } from 'react'
 import { unified } from 'unified'
@@ -10,6 +11,7 @@ import remarkRehype from 'remark-rehype'
 import rehypeStringify from 'rehype-stringify'
 import TurndownService from 'turndown'
 import { Button } from '@/components/ui/button'
+import { calculateMarkdownLineNumbers } from '@/lib/markdown'
 import {
   Bold,
   Italic,
@@ -226,6 +228,7 @@ interface TiptapEditorProps {
   showLineNumbers?: boolean
   selectedLine?: number | null
   onLineClick?: (lineNumber: number) => void
+  placeholder?: string
 }
 
 /**
@@ -252,6 +255,7 @@ export function TiptapEditor({
   showLineNumbers = false,
   selectedLine,
   onLineClick,
+  placeholder,
 }: TiptapEditorProps) {
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -279,12 +283,21 @@ export function TiptapEditor({
             class: 'border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4',
           },
         },
+        // Disable default list extensions to use ListKit instead
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        listKeymap: false,
       }),
       CodeBlockLowlight.configure({
         lowlight,
         HTMLAttributes: {
           class: 'bg-muted/50 rounded-md p-4 font-mono text-sm my-4 overflow-x-auto',
         },
+      }),
+      Placeholder.configure({
+        placeholder: placeholder,
+        emptyEditorClass: 'is-editor-empty',
       }),
       Table.extend({
         addNodeView() {
@@ -424,84 +437,7 @@ export function TiptapEditor({
     if (!editor || !showLineNumbers || !content) return
 
     const applyLineNumbers = () => {
-      const lines = content.split('\n')
-
-      // Count leading empty lines to ensure correct offset
-      let leadingEmptyLines = 0
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim() === '') {
-          leadingEmptyLines++
-        } else {
-          break
-        }
-      }
-
-      // Parse markdown to identify block start lines
-      let inCodeBlock = false
-      let inList = false
-      let firstContentBlockFound = false
-      const blockLineNumbers: number[] = []
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]
-        const trimmedLine = line.trim()
-
-        // Track code blocks
-        if (trimmedLine.startsWith('```')) {
-          inCodeBlock = !inCodeBlock
-          if (!inCodeBlock) {
-            inList = false
-            continue
-          } else {
-            blockLineNumbers.push(i + 1)
-            firstContentBlockFound = true
-            inList = false
-            continue
-          }
-        }
-
-        if (inCodeBlock) {
-          continue
-        }
-
-        // Skip empty lines
-        if (!trimmedLine) {
-          inList = false
-          continue
-        }
-
-        // Check if this is a block-level element
-        const isHeading = /^#{1,6}\s/.test(trimmedLine)
-        const isBulletList = /^[-*+]\s/.test(trimmedLine)
-        const isOrderedList = /^\d+\.\s/.test(trimmedLine)
-        const isBlockquote = trimmedLine.startsWith('>')
-        const isHorizontalRule = /^[-*_]{3,}$/.test(trimmedLine)
-
-        // For lists, only count the first item
-        if (isBulletList || isOrderedList) {
-          if (!inList) {
-            blockLineNumbers.push(i + 1)
-            firstContentBlockFound = true
-            inList = true
-          }
-          // Skip subsequent list items
-          continue
-        }
-
-        // Non-list items end the list
-        inList = false
-
-        // Add block if it's a special element or starts a new block
-        // For the first content block, use its actual line number regardless of position
-        if (isHeading || isBlockquote || isHorizontalRule) {
-          blockLineNumbers.push(i + 1)
-          firstContentBlockFound = true
-        } else if (!firstContentBlockFound || !lines[i - 1].trim()) {
-          // Regular paragraph: add if it's the first content block or preceded by empty line
-          blockLineNumbers.push(i + 1)
-          firstContentBlockFound = true
-        }
-      }
+      const blockLineNumbers = calculateMarkdownLineNumbers(content)
 
       // Apply line numbers to nodes using Tiptap transactions
       const { state } = editor

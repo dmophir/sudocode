@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Plus,
   Archive,
@@ -12,6 +13,9 @@ import {
   ExpandIcon,
   FileText,
   Code2,
+  Play,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
 import { Card } from '@/components/ui/card'
@@ -28,10 +32,16 @@ import {
 import { DeleteIssueDialog } from './DeleteIssueDialog'
 import { RelationshipList } from '@/components/relationships/RelationshipList'
 import { RelationshipForm } from '@/components/relationships/RelationshipForm'
-import { relationshipsApi } from '@/lib/api'
+import { relationshipsApi, executionsApi } from '@/lib/api'
+import { ExecutionConfigDialog } from '@/components/executions/ExecutionConfigDialog'
+import { ExecutionHistory } from '@/components/executions/ExecutionHistory'
+import type { ExecutionConfig } from '@/types/execution'
 import { useRelationshipMutations } from '@/hooks/useRelationshipMutations'
 import { TiptapEditor } from '@/components/specs/TiptapEditor'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+
+const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
+const DESCRIPTION_COLLAPSED_STORAGE_KEY = 'sudocode:issue:descriptionCollapsed'
 
 interface IssuePanelProps {
   issue: Issue
@@ -84,7 +94,14 @@ export function IssuePanel({
   const [title, setTitle] = useState(issue.title)
   const [content, setContent] = useState(issue.content || '')
   const [status, setStatus] = useState<IssueStatus>(issue.status)
-  const [internalViewMode, setInternalViewMode] = useState<'formatted' | 'markdown'>('formatted')
+  const [internalViewMode, setInternalViewMode] = useState<'formatted' | 'markdown'>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : 'formatted'
+  })
+  const [isDescriptionCollapsed, setIsDescriptionCollapsed] = useState<boolean>(() => {
+    const stored = localStorage.getItem(DESCRIPTION_COLLAPSED_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : false
+  })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Use external viewMode if provided, otherwise use internal state
@@ -98,6 +115,7 @@ export function IssuePanel({
   }
   const [priority, setPriority] = useState<number>(issue.priority)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showExecutionConfigDialog, setShowExecutionConfigDialog] = useState(false)
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [showAddRelationship, setShowAddRelationship] = useState(false)
   const [isLoadingRelationships, setIsLoadingRelationships] = useState(false)
@@ -129,6 +147,19 @@ export function IssuePanel({
     // Reset hasChanges to prevent saving old content to new issue
     setHasChanges(false)
   }, [issue.id])
+
+  // Save internal view mode preference to localStorage
+  useEffect(() => {
+    // Only save if we're using internal view mode (not externally controlled)
+    if (!externalViewMode) {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(internalViewMode))
+    }
+  }, [internalViewMode, externalViewMode])
+
+  // Save description collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem(DESCRIPTION_COLLAPSED_STORAGE_KEY, JSON.stringify(isDescriptionCollapsed))
+  }, [isDescriptionCollapsed])
 
   // Update form values when issue changes
   useEffect(() => {
@@ -217,6 +248,25 @@ export function IssuePanel({
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [onClose])
+
+  // Handle ESC key to close panel
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (!onClose) return
+
+      // Don't close if ESC is pressed while a dialog or dropdown is open
+      if (showDeleteDialog || showExecutionConfigDialog || showAddRelationship) return
+
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscKey)
+    return () => {
+      document.removeEventListener('keydown', handleEscKey)
+    }
+  }, [onClose, showDeleteDialog, showExecutionConfigDialog, showAddRelationship])
 
   // Auto-save effect with debounce
   useEffect(() => {
@@ -340,6 +390,21 @@ export function IssuePanel({
     }
   }
 
+  const handleStartExecution = async (config: ExecutionConfig, prompt: string) => {
+    try {
+      const execution = await executionsApi.create(issue.id, {
+        config,
+        prompt,
+      })
+      setShowExecutionConfigDialog(false)
+      // Navigate to execution view
+      navigate(`/executions/${execution.id}`)
+    } catch (error) {
+      console.error('Failed to create execution:', error)
+      // TODO: Show error toast/alert to user
+    }
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full flex-col" ref={panelRef}>
@@ -348,13 +413,18 @@ export function IssuePanel({
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center gap-4">
               {onClose && (
-                <button
-                  onClick={onClose}
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={onClose}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Back"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Close (ESC)</TooltipContent>
+                </Tooltip>
               )}
               {showOpenDetail && (
                 <Tooltip>
@@ -377,7 +447,7 @@ export function IssuePanel({
               {showViewToggleInline && (
                 <div className="mr-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
                   <Button
-                    variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+                    variant={viewMode === 'formatted' ? 'outline' : 'ghost'}
                     size="sm"
                     onClick={() => handleViewModeChange('formatted')}
                     className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -386,7 +456,7 @@ export function IssuePanel({
                     Formatted
                   </Button>
                   <Button
-                    variant={viewMode === 'markdown' ? 'default' : 'ghost'}
+                    variant={viewMode === 'markdown' ? 'outline' : 'ghost'}
                     size="sm"
                     onClick={() => handleViewModeChange('markdown')}
                     className={`h-7 rounded-sm ${viewMode === 'markdown' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -519,8 +589,8 @@ export function IssuePanel({
               {/* Timestamp */}
               <div className="ml-auto text-xs text-muted-foreground">
                 {issue.closed_at
-                  ? `Closed at ${new Date(issue.closed_at).toLocaleString()}`
-                  : `Updated ${new Date(issue.updated_at).toLocaleString()}`}
+                  ? `Closed ${formatDistanceToNow(new Date(issue.closed_at.endsWith('Z') ? issue.closed_at : issue.closed_at + 'Z'), { addSuffix: true })}`
+                  : `Updated ${formatDistanceToNow(new Date(issue.updated_at.endsWith('Z') ? issue.updated_at : issue.updated_at + 'Z'), { addSuffix: true })}`}
               </div>
             </div>
 
@@ -573,47 +643,87 @@ export function IssuePanel({
 
             {/* Content Editor */}
             <div className="space-y-2">
-              <Card className="overflow-hidden">
-                {viewMode === 'formatted' ? (
-                  <TiptapEditor
-                    content={content}
-                    editable={true}
-                    onChange={handleContentChange}
-                    onCancel={() => {
-                      setContent(issue.content || '')
-                      setHasChanges(false)
-                    }}
-                    className="min-h-[200px]"
-                  />
-                ) : (
-                  <div className="flex">
-                    {/* Line numbers column */}
-                    <div className="select-none border-r border-border bg-muted/30 px-4 py-4">
-                      {(content || '\n').split('\n').map((_, index) => (
-                        <div
-                          key={index}
-                          className="text-right font-mono text-xs leading-6 text-muted-foreground"
-                        >
-                          {index + 1}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Content column */}
-                    <div className="flex-1 p-4">
-                      <textarea
-                        ref={textareaRef}
-                        value={content}
-                        onChange={(e) => handleContentChange(e.target.value)}
-                        placeholder="Write issue description in markdown..."
-                        className="w-full resize-none border-none bg-transparent font-mono text-sm leading-6 outline-none focus:ring-0"
-                        spellCheck={false}
-                        style={{ minHeight: '200px' }}
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-muted-foreground">Description</h3>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setIsDescriptionCollapsed(!isDescriptionCollapsed)}
+                  className="h-6 gap-1 text-muted-foreground"
+                >
+                  {isDescriptionCollapsed ? (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Expand
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Collapse
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="relative">
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    isDescriptionCollapsed ? 'max-h-[200px] cursor-pointer 2xl:max-h-[300px]' : ''
+                  }`}
+                  onClick={() => {
+                    if (isDescriptionCollapsed) {
+                      setIsDescriptionCollapsed(false)
+                    }
+                  }}
+                >
+                  <Card className="overflow-hidden rounded-md border">
+                    {viewMode === 'formatted' ? (
+                      <TiptapEditor
+                        content={content}
+                        editable={!isDescriptionCollapsed}
+                        onChange={handleContentChange}
+                        onCancel={() => {
+                          setContent(issue.content || '')
+                          setHasChanges(false)
+                        }}
+                        className="min-h-[200px]"
+                        placeholder="Issue description..."
                       />
+                    ) : (
+                      <div className="p-4">
+                        <textarea
+                          ref={textareaRef}
+                          value={content}
+                          onChange={(e) => handleContentChange(e.target.value)}
+                          placeholder="Issue description in markdown..."
+                          className="w-full resize-none border-none bg-transparent font-mono text-sm leading-6 outline-none focus:ring-0"
+                          spellCheck={false}
+                          disabled={isDescriptionCollapsed}
+                          style={{ minHeight: '200px' }}
+                        />
+                      </div>
+                    )}
+                  </Card>
+                </div>
+                {isDescriptionCollapsed && (
+                  <>
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent" />
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsDescriptionCollapsed(false)
+                        }}
+                        className="gap-1 shadow-sm"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                        Expand
+                      </Button>
                     </div>
-                  </div>
+                  </>
                 )}
-              </Card>
+              </div>
             </div>
 
             {/* Additional Metadata */}
@@ -625,6 +735,30 @@ export function IssuePanel({
                 </div>
               </div>
             )}
+
+            {/* Execution History */}
+            <ExecutionHistory issueId={issue.id} />
+          </div>
+        </div>
+
+        {/* Fixed Footer - Execution Actions */}
+        <div className="border-t bg-background px-6 py-3">
+          <div className="flex items-center justify-end gap-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => setShowExecutionConfigDialog(true)}
+                  disabled={issue.archived || isUpdating}
+                  variant="default"
+                  size="xs"
+                  className="gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Run Agent
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Configure and start agent execution</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -634,6 +768,13 @@ export function IssuePanel({
           onClose={() => setShowDeleteDialog(false)}
           onConfirm={handleDelete}
           isDeleting={isDeleting}
+        />
+
+        <ExecutionConfigDialog
+          issueId={issue.id}
+          open={showExecutionConfigDialog}
+          onStart={handleStartExecution}
+          onCancel={() => setShowExecutionConfigDialog(false)}
         />
       </div>
     </TooltipProvider>

@@ -2,21 +2,40 @@
  * Worktree Manager
  *
  * Manages git worktrees for session isolation.
- * Based on design from SPEC-010 and vibe-kanban implementation.
+ *
+ * WORKTREE ISOLATION:
+ * ===================
+ * Each worktree created by this manager is completely isolated from the main
+ * repository. This prevents race conditions and unexpected modifications during
+ * concurrent executions.
+ *
+ * Isolation is achieved through:
+ * 1. Local database (.sudocode/cache.db) in each worktree
+ * 2. Synced JSONL files with latest state (including uncommitted changes)
+ * 3. Claude config (.claude/config.json) that forces MCP to use local database
+ *
+ * Key Benefit: Multiple executions can run concurrently without interfering
+ * with each other or the main repository. All MCP/CLI operations in a worktree
+ * stay contained within that worktree.
+ *
+ * See setupWorktreeEnvironment() method for detailed implementation.
  *
  * @module execution/worktree/manager
  */
 
-import { Mutex } from 'async-mutex';
-import fs from 'fs';
-import path from 'path';
+import { Mutex } from "async-mutex";
+import fs from "fs";
+import path from "path";
 import type {
   WorktreeCreateParams,
   WorktreeConfig,
   WorktreeInfo,
-} from './types.js';
-import { WorktreeError, WorktreeErrorCode } from './types.js';
-import { GitCli, type IGitCli } from './git-cli.js';
+} from "./types.js";
+import { WorktreeError, WorktreeErrorCode } from "./types.js";
+import { GitCli, type IGitCli } from "./git-cli.js";
+import { initDatabase } from "@sudocode/cli/dist/db.js";
+import { importFromJSONL } from "@sudocode/cli/dist/import.js";
+import { execSync } from "child_process";
 
 /**
  * IWorktreeManager - Interface for worktree management
@@ -85,6 +104,22 @@ export interface IWorktreeManager {
    * @returns Current worktree configuration
    */
   getConfig(): WorktreeConfig;
+
+  /**
+   * Check if a path is a valid git repository
+   *
+   * @param repoPath - Path to check
+   * @returns Promise resolving to true if valid repo, false otherwise
+   */
+  isValidRepo(repoPath: string): Promise<boolean>;
+
+  /**
+   * List all branches in a repository
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Promise resolving to array of branch names
+   */
+  listBranches(repoPath: string): Promise<string[]>;
 }
 
 /**
@@ -130,12 +165,22 @@ export class WorktreeManager implements IWorktreeManager {
   }
 
   async createWorktree(params: WorktreeCreateParams): Promise<void> {
-    const { repoPath, branchName, worktreePath, baseBranch, createBranch } = params;
+    const {
+      repoPath,
+      branchName,
+      worktreePath,
+      baseBranch: _baseBranch,
+      createBranch,
+      commitSha,
+    } = params;
 
     try {
       // 1. Create branch if requested
       if (createBranch) {
-        await this.git.createBranch(repoPath, branchName, baseBranch);
+        // Use the specified commit SHA or the current HEAD commit SHA to branch from
+        const targetCommit =
+          commitSha || (await this.git.getCurrentCommit(repoPath));
+        await this.git.createBranch(repoPath, branchName, targetCommit);
       }
 
       // 2. Create parent directory if needed
@@ -148,7 +193,10 @@ export class WorktreeManager implements IWorktreeManager {
       await this.git.worktreeAdd(repoPath, worktreePath, branchName);
 
       // 4. Apply sparse-checkout if configured
-      if (this.config.enableSparseCheckout && this.config.sparseCheckoutPatterns) {
+      if (
+        this.config.enableSparseCheckout &&
+        this.config.sparseCheckoutPatterns
+      ) {
         await this.git.configureSparseCheckout(
           worktreePath,
           this.config.sparseCheckoutPatterns
@@ -162,6 +210,12 @@ export class WorktreeManager implements IWorktreeManager {
           WorktreeErrorCode.REPOSITORY_ERROR
         );
       }
+
+      // 6. Setup isolated worktree environment
+      // This is critical for preventing the worktree from modifying the main repository.
+      // It creates a local database, syncs JSONL files, and configures Claude to use
+      // the local environment. See setupWorktreeEnvironment() for detailed explanation.
+      await this.setupWorktreeEnvironment(repoPath, worktreePath);
     } catch (error) {
       if (error instanceof WorktreeError) {
         throw error;
@@ -172,6 +226,167 @@ export class WorktreeManager implements IWorktreeManager {
         error as Error
       );
     }
+  }
+
+  /**
+   * Setup isolated environment for worktree
+   *
+   * WORKTREE ISOLATION ARCHITECTURE:
+   * ================================
+   * Problem: Previously, MCP/CLI tools running in worktrees would search upward
+   * and find the main repository's database, causing race conditions and
+   * unexpected modifications to the main repo during execution.
+   *
+   * Solution: Each worktree gets its own isolated environment:
+   * - Local database (.sudocode/cache.db in worktree)
+   * - Synced JSONL files with latest state (including uncommitted changes)
+   * - Claude config that forces MCP to use the local database
+   *
+   * Benefits:
+   * - Worktree operations never affect main repository
+   * - Multiple executions can run concurrently without conflicts
+   * - Worktree gets consistent state (newly created issues are available)
+   * - Easy to inspect/debug worktree state after execution
+   *
+   * Flow:
+   * 1. Git creates worktree → checks out files from committed git tree
+   * 2. This method runs → copies latest JSONL (including uncommitted changes)
+   * 3. Initializes local DB from JSONL → worktree has complete state
+   * 4. Creates .claude/config.json → MCP uses local DB via env vars
+   * 5. Claude runs → all MCP operations stay in worktree
+   * 6. (Future) Merge worktree changes back to main after execution
+   *
+   * @param repoPath - Path to the main git repository
+   * @param worktreePath - Path to the worktree directory
+   */
+  private async setupWorktreeEnvironment(
+    repoPath: string,
+    worktreePath: string
+  ): Promise<void> {
+    console.debug(
+      "[WorktreeManager] Setting up isolated worktree environment",
+      {
+        repoPath,
+        worktreePath,
+      }
+    );
+
+    const mainSudocodeDir = path.join(repoPath, ".sudocode");
+    const worktreeSudocodeDir = path.join(worktreePath, ".sudocode");
+
+    console.debug("[WorktreeManager] Directory paths", {
+      mainSudocodeDir,
+      worktreeSudocodeDir,
+    });
+
+    // Ensure .sudocode directory exists in worktree
+    if (!fs.existsSync(worktreeSudocodeDir)) {
+      fs.mkdirSync(worktreeSudocodeDir, { recursive: true });
+      console.debug(
+        `[WorktreeManager] Created .sudocode directory in worktree: ${worktreeSudocodeDir}`
+      );
+    } else {
+      console.debug(
+        `[WorktreeManager] .sudocode directory already exists in worktree`
+      );
+    }
+
+    // STEP 1: Copy uncommitted JSONL files from main repo to worktree
+    // ================================================================
+    // Why: Git worktree checkout only gets committed files from git history.
+    // If the user created new issues/specs before starting the execution,
+    // those changes are in the main repo's JSONL files but not committed.
+    // We need to copy them so the worktree has the complete, up-to-date state.
+    //
+    // Example: User creates ISSUE-144, starts execution immediately.
+    // - Git tree: has 138 issues (old state)
+    // - Main JSONL: has 140 issues (includes ISSUE-144, uncommitted)
+    // - Without this copy: worktree would only have 138 issues, ISSUE-144 missing!
+    // - With this copy: worktree gets all 140 issues, execution can reference ISSUE-144
+    const jsonlFiles = ["issues.jsonl", "specs.jsonl"];
+    for (const file of jsonlFiles) {
+      const mainFile = path.join(mainSudocodeDir, file);
+      const worktreeFile = path.join(worktreeSudocodeDir, file);
+
+      console.debug(`[WorktreeManager] Processing ${file}`, {
+        mainFile,
+        worktreeFile,
+        mainFileExists: fs.existsSync(mainFile),
+      });
+
+      if (fs.existsSync(mainFile)) {
+        const mainStats = fs.statSync(mainFile);
+        fs.copyFileSync(mainFile, worktreeFile);
+        const worktreeStats = fs.statSync(worktreeFile);
+        console.debug(
+          `[WorktreeManager] Synced ${file} from main repo to worktree`,
+          {
+            mainFileSize: mainStats.size,
+            worktreeFileSize: worktreeStats.size,
+          }
+        );
+      } else {
+        console.debug(
+          `[WorktreeManager] Main file does not exist: ${mainFile}`
+        );
+      }
+    }
+
+    // STEP 2: Copy config.json
+    // ========================
+    // Copy sudocode configuration to maintain consistency
+    const mainConfig = path.join(mainSudocodeDir, "config.json");
+    const worktreeConfig = path.join(worktreeSudocodeDir, "config.json");
+    if (fs.existsSync(mainConfig)) {
+      fs.copyFileSync(mainConfig, worktreeConfig);
+      console.debug(
+        `[WorktreeManager] Copied config.json from main repo to worktree`
+      );
+    } else {
+      console.debug(`[WorktreeManager] No config.json to copy from main repo`);
+    }
+
+    // STEP 3: Initialize local database in worktree
+    // ==============================================
+    // Create a brand new SQLite database in the worktree and import the JSONL
+    // files we just copied. This gives the worktree its own isolated database
+    // with the complete current state.
+    //
+    // Important: This database is completely separate from the main repo's DB.
+    // All MCP/CLI operations in the worktree will use THIS database, not the main one.
+
+    const worktreeDbPath = path.join(worktreeSudocodeDir, "cache.db");
+
+    // Initialize database with CLI's initDatabase (creates all tables)
+    const db = initDatabase({ path: worktreeDbPath, verbose: false });
+
+    try {
+      await importFromJSONL(db, {
+        inputDir: worktreeSudocodeDir,
+      });
+      console.debug(
+        `[WorktreeManager] Successfully initialized local database in worktree at ${worktreeDbPath}`
+      );
+
+      // Verify database was created
+      if (fs.existsSync(worktreeDbPath)) {
+        const dbStats = fs.statSync(worktreeDbPath);
+        console.debug("[WorktreeManager] Database file created", {
+          path: worktreeDbPath,
+          size: dbStats.size,
+        });
+      } else {
+        console.error(
+          "[WorktreeManager] ERROR: Database file was not created!"
+        );
+      }
+    } catch (error) {
+      console.error("[WorktreeManager] Failed to initialize database", error);
+      throw error;
+    } finally {
+      db.close();
+    }
+    console.debug("[WorktreeManager] Worktree environment setup complete");
   }
 
   async ensureWorktreeExists(
@@ -196,14 +411,18 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 
-  async cleanupWorktree(worktreePath: string, repoPath?: string): Promise<void> {
+  async cleanupWorktree(
+    worktreePath: string,
+    repoPath?: string
+  ): Promise<void> {
     // Get lock for this specific path
     const lock = this.getLock(worktreePath);
     const release = await lock.acquire();
 
     try {
       // Infer repoPath if not provided (try to find from worktree)
-      const effectiveRepoPath = repoPath || await this.inferRepoPath(worktreePath);
+      const effectiveRepoPath =
+        repoPath || (await this.inferRepoPath(worktreePath));
 
       if (!effectiveRepoPath) {
         // Can't determine repo path, just cleanup the directory
@@ -217,7 +436,19 @@ export class WorktreeManager implements IWorktreeManager {
       let branchName: string | undefined;
       try {
         const worktrees = await this.git.worktreeList(effectiveRepoPath);
-        const worktreeInfo = worktrees.find((w) => w.path === worktreePath);
+
+        // Normalize paths for comparison (resolves symlinks like /var -> /private/var on macOS)
+        const normalizedWorktreePath = fs.realpathSync(worktreePath);
+        const worktreeInfo = worktrees.find((w) => {
+          try {
+            const normalizedGitPath = fs.realpathSync(w.path);
+            return normalizedGitPath === normalizedWorktreePath;
+          } catch {
+            // If path doesn't exist, try direct comparison
+            return w.path === worktreePath;
+          }
+        });
+
         if (worktreeInfo) {
           branchName = worktreeInfo.branch;
         }
@@ -236,8 +467,8 @@ export class WorktreeManager implements IWorktreeManager {
       const worktreeName = path.basename(worktreePath);
       const metadataPath = path.join(
         effectiveRepoPath,
-        '.git',
-        'worktrees',
+        ".git",
+        "worktrees",
         worktreeName
       );
       if (fs.existsSync(metadataPath)) {
@@ -257,7 +488,11 @@ export class WorktreeManager implements IWorktreeManager {
       }
 
       // 5. Delete branch if configured
-      if (this.config.autoDeleteBranches && branchName && branchName !== '(detached)') {
+      if (
+        this.config.autoDeleteBranches &&
+        branchName &&
+        branchName !== "(detached)"
+      ) {
         try {
           await this.git.deleteBranch(effectiveRepoPath, branchName, true);
         } catch (error) {
@@ -269,7 +504,10 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 
-  async isWorktreeValid(repoPath: string, worktreePath: string): Promise<boolean> {
+  async isWorktreeValid(
+    repoPath: string,
+    worktreePath: string
+  ): Promise<boolean> {
     try {
       // 1. Check filesystem path exists
       if (!fs.existsSync(worktreePath)) {
@@ -278,7 +516,18 @@ export class WorktreeManager implements IWorktreeManager {
 
       // 2. Check worktree is registered in git metadata
       const worktrees = await this.git.worktreeList(repoPath);
-      const isRegistered = worktrees.some((w) => w.path === worktreePath);
+
+      // Normalize paths for comparison (resolves symlinks like /var -> /private/var on macOS)
+      const normalizedWorktreePath = fs.realpathSync(worktreePath);
+      const isRegistered = worktrees.some((w) => {
+        try {
+          const normalizedGitPath = fs.realpathSync(w.path);
+          return normalizedGitPath === normalizedWorktreePath;
+        } catch {
+          // If path doesn't exist, try direct comparison
+          return w.path === worktreePath;
+        }
+      });
 
       return isRegistered;
     } catch (error) {
@@ -293,6 +542,14 @@ export class WorktreeManager implements IWorktreeManager {
 
   getConfig(): WorktreeConfig {
     return { ...this.config };
+  }
+
+  async isValidRepo(repoPath: string): Promise<boolean> {
+    return this.git.isValidRepo(repoPath);
+  }
+
+  async listBranches(repoPath: string): Promise<string[]> {
+    return this.git.listBranches(repoPath);
   }
 
   /**
@@ -325,7 +582,10 @@ export class WorktreeManager implements IWorktreeManager {
         await this.git.worktreeAdd(repoPath, worktreePath, branchName);
 
         // Apply sparse-checkout if configured
-        if (this.config.enableSparseCheckout && this.config.sparseCheckoutPatterns) {
+        if (
+          this.config.enableSparseCheckout &&
+          this.config.sparseCheckoutPatterns
+        ) {
           await this.git.configureSparseCheckout(
             worktreePath,
             this.config.sparseCheckoutPatterns
@@ -340,6 +600,9 @@ export class WorktreeManager implements IWorktreeManager {
           );
         }
 
+        // Setup isolated worktree environment (see setupWorktreeEnvironment for details)
+        await this.setupWorktreeEnvironment(repoPath, worktreePath);
+
         return; // Success!
       } catch (error) {
         lastError = error as Error;
@@ -349,8 +612,8 @@ export class WorktreeManager implements IWorktreeManager {
           const worktreeName = path.basename(worktreePath);
           const metadataPath = path.join(
             repoPath,
-            '.git',
-            'worktrees',
+            ".git",
+            "worktrees",
             worktreeName
           );
           if (fs.existsSync(metadataPath)) {
@@ -375,23 +638,24 @@ export class WorktreeManager implements IWorktreeManager {
    * @param worktreePath - Path to worktree
    * @returns Repository path or undefined
    */
-  private async inferRepoPath(worktreePath: string): Promise<string | undefined> {
+  private async inferRepoPath(
+    worktreePath: string
+  ): Promise<string | undefined> {
     try {
       if (!fs.existsSync(worktreePath)) {
         return undefined;
       }
 
       // Try to use git to find the common git directory
-      const { execSync } = await import('child_process');
-      const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      const gitCommonDir = execSync("git rev-parse --git-common-dir", {
         cwd: worktreePath,
-        encoding: 'utf8',
+        encoding: "utf8",
       }).trim();
 
       // git-common-dir gives us the .git directory
       // We need the working directory (parent of .git)
       const gitDirPath = path.resolve(worktreePath, gitCommonDir);
-      if (path.basename(gitDirPath) === '.git') {
+      if (path.basename(gitDirPath) === ".git") {
         return path.dirname(gitDirPath);
       }
 
@@ -401,4 +665,3 @@ export class WorktreeManager implements IWorktreeManager {
     }
   }
 }
-

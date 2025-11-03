@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 import { useSpec, useSpecFeedback, useSpecs } from '@/hooks/useSpecs'
 import { useIssues } from '@/hooks/useIssues'
 import { useFeedback } from '@/hooks/useFeedback'
@@ -28,7 +29,8 @@ import {
   FileText,
   Code2,
 } from 'lucide-react'
-import type { IssueFeedback } from '@/types/api'
+import type { IssueFeedback, Relationship, EntityType, RelationshipType } from '@/types/api'
+import { relationshipsApi } from '@/lib/api'
 
 const PRIORITY_OPTIONS = [
   { value: '0', label: 'Critical (P0)' },
@@ -37,6 +39,9 @@ const PRIORITY_OPTIONS = [
   { value: '3', label: 'Low (P3)' },
   { value: '4', label: 'None (P4)' },
 ]
+
+const SHOW_FEEDBACK_STORAGE_KEY = 'sudocode:specs:showFeedbackPanel'
+const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
 
 export default function SpecDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -49,14 +54,24 @@ export default function SpecDetailPage() {
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [_selectedText, setSelectedText] = useState<string | null>(null) // Reserved for future text selection feature
-  const [showFeedbackPanel, setShowFeedbackPanel] = useState(true)
-  const [viewMode, setViewMode] = useState<'formatted' | 'source'>('formatted')
+  const [showFeedbackPanel, setShowFeedbackPanel] = useState(() => {
+    const stored = localStorage.getItem(SHOW_FEEDBACK_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : true
+  })
+  const [viewMode, setViewMode] = useState<'formatted' | 'source'>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return stored !== null ? JSON.parse(stored) : 'formatted'
+  })
 
   // Local state for editable fields
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [priority, setPriority] = useState<number>(2)
   const [hasChanges, setHasChanges] = useState(false)
+
+  // Relationships state
+  const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [_isLoadingRelationships, setIsLoadingRelationships] = useState(false)
 
   // Refs for auto-save and position tracking
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -101,6 +116,34 @@ export default function SpecDetailPage() {
       setHasChanges(false)
     }
   }, [spec])
+
+  // Fetch relationships when spec ID changes
+  useEffect(() => {
+    const fetchRelationships = async () => {
+      if (!id) return
+
+      setIsLoadingRelationships(true)
+      try {
+        const data = await relationshipsApi.getForEntity(id, 'spec')
+        // Handle both array and grouped object responses
+        let relationshipsArray: Relationship[] = []
+        if (Array.isArray(data)) {
+          relationshipsArray = data
+        } else if (data && typeof data === 'object' && 'outgoing' in data && 'incoming' in data) {
+          const grouped = data as { outgoing: Relationship[]; incoming: Relationship[] }
+          relationshipsArray = [...(grouped.outgoing || []), ...(grouped.incoming || [])]
+        }
+        setRelationships(relationshipsArray)
+      } catch (error) {
+        console.error('Failed to fetch relationships:', error)
+        setRelationships([])
+      } finally {
+        setIsLoadingRelationships(false)
+      }
+    }
+
+    fetchRelationships()
+  }, [id])
 
   // Auto-save effect with debounce
   useEffect(() => {
@@ -150,6 +193,16 @@ export default function SpecDetailPage() {
       }
     }
   }, [])
+
+  // Save feedback panel preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(SHOW_FEEDBACK_STORAGE_KEY, JSON.stringify(showFeedbackPanel))
+  }, [showFeedbackPanel])
+
+  // Save view mode preference to localStorage
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(viewMode))
+  }, [viewMode])
 
   if (isLoading) {
     return (
@@ -250,6 +303,55 @@ export default function SpecDetailPage() {
     })
   }
 
+  const handleDeleteRelationship = async (relationship: Relationship) => {
+    try {
+      await relationshipsApi.delete({
+        from_id: relationship.from_id,
+        from_type: relationship.from_type,
+        to_id: relationship.to_id,
+        to_type: relationship.to_type,
+        relationship_type: relationship.relationship_type,
+      })
+
+      // Optimistically update local state
+      setRelationships(
+        relationships.filter(
+          (r) =>
+            !(
+              r.from_id === relationship.from_id &&
+              r.to_id === relationship.to_id &&
+              r.relationship_type === relationship.relationship_type
+            )
+        )
+      )
+    } catch (error) {
+      console.error('Failed to delete relationship:', error)
+    }
+  }
+
+  const handleCreateRelationship = async (
+    toId: string,
+    toType: EntityType,
+    relationshipType: RelationshipType
+  ) => {
+    if (!id) return
+
+    try {
+      const newRelationship = await relationshipsApi.create({
+        from_id: id,
+        from_type: 'spec',
+        to_id: toId,
+        to_type: toType,
+        relationship_type: relationshipType,
+      })
+
+      // Optimistically update local state
+      setRelationships([...relationships, newRelationship])
+    } catch (error) {
+      console.error('Failed to create relationship:', error)
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
@@ -264,7 +366,7 @@ export default function SpecDetailPage() {
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
               <Button
-                variant={viewMode === 'formatted' ? 'default' : 'ghost'}
+                variant={viewMode === 'formatted' ? 'outline' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('formatted')}
                 className={`h-7 rounded-sm ${viewMode === 'formatted' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -273,7 +375,7 @@ export default function SpecDetailPage() {
                 Formatted
               </Button>
               <Button
-                variant={viewMode === 'source' ? 'default' : 'ghost'}
+                variant={viewMode === 'source' ? 'outline' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('source')}
                 className={`h-7 rounded-sm ${viewMode === 'source' ? 'shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
@@ -387,7 +489,7 @@ export default function SpecDetailPage() {
                 <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
                   {spec.updated_at && (
                     <div className="ml-auto flex items-center text-xs text-muted-foreground">
-                      Updated at {new Date(spec.updated_at).toLocaleString()}
+                      Updated {formatDistanceToNow(new Date(spec.updated_at.endsWith('Z') ? spec.updated_at : spec.updated_at + 'Z'), { addSuffix: true })}
                     </div>
                   )}
                 </div>
@@ -419,9 +521,13 @@ export default function SpecDetailPage() {
             <AlignedFeedbackPanel
               feedback={feedback}
               positions={feedbackPositions}
+              relationships={relationships}
+              currentEntityId={id}
               onFeedbackClick={handleFeedbackClick}
               onDismiss={handleFeedbackDismiss}
               onDelete={handleFeedbackDelete}
+              onDeleteRelationship={handleDeleteRelationship}
+              onCreateRelationship={handleCreateRelationship}
               addFeedbackButton={
                 <div className="flex justify-center">
                   <AddFeedbackDialog

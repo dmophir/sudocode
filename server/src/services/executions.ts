@@ -10,11 +10,16 @@ import { randomUUID } from "crypto";
  * Input for creating a new execution
  */
 export interface CreateExecutionInput {
-  issue_id: string;
+  id?: string; // Optional, auto-generated if not provided
+  issue_id: string | null; // Optional, can be null for executions not tied to an issue
   agent_type: AgentType;
+  mode?: string; // Execution mode ('worktree' | 'local')
+  prompt?: string; // Rendered prompt
+  config?: string; // JSON string of execution configuration
   before_commit?: string;
-  target_branch?: string;
-  worktree_path?: string;
+  target_branch: string; // Required for worktree integration
+  branch_name: string; // Required for worktree integration
+  worktree_path?: string; // Optional, set after worktree creation
 }
 
 /**
@@ -22,7 +27,7 @@ export interface CreateExecutionInput {
  */
 export interface UpdateExecutionInput {
   status?: ExecutionStatus;
-  completed_at?: number | null;
+  completed_at?: string | null;
   exit_code?: number | null;
   error_message?: string | null;
   after_commit?: string | null;
@@ -39,32 +44,53 @@ export function createExecution(
   db: Database.Database,
   input: CreateExecutionInput
 ): Execution {
-  const id = randomUUID();
-  const now = Math.floor(Date.now() / 1000);
+  const id = input.id || randomUUID();
+  const now = new Date().toISOString();
+
+  // Get issue_uuid if issue_id is provided
+  let issue_uuid: string | null = null;
+  if (input.issue_id) {
+    const issue = db
+      .prepare(`SELECT uuid FROM issues WHERE id = ?`)
+      .get(input.issue_id) as { uuid: string } | undefined;
+    if (issue) {
+      issue_uuid = issue.uuid;
+    }
+  }
 
   const stmt = db.prepare(`
     INSERT INTO executions (
       id,
       issue_id,
+      issue_uuid,
       agent_type,
+      mode,
+      prompt,
+      config,
       status,
       started_at,
       before_commit,
       target_branch,
+      branch_name,
       worktree_path,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
     id,
     input.issue_id,
+    issue_uuid,
     input.agent_type,
+    input.mode || null,
+    input.prompt || null,
+    input.config || null,
     "running" as ExecutionStatus,
     now,
     input.before_commit || null,
-    input.target_branch || null,
+    input.target_branch,
+    input.branch_name,
     input.worktree_path || null,
     now,
     now
@@ -172,7 +198,7 @@ export function updateExecution(
 
   // Always update updated_at
   updates.push("updated_at = ?");
-  values.push(Math.floor(Date.now() / 1000));
+  values.push(new Date().toISOString());
 
   if (updates.length === 1) {
     // Only updated_at, no other changes
@@ -200,10 +226,7 @@ export function updateExecution(
 /**
  * Delete an execution
  */
-export function deleteExecution(
-  db: Database.Database,
-  id: string
-): boolean {
+export function deleteExecution(db: Database.Database, id: string): boolean {
   const stmt = db.prepare(`
     DELETE FROM executions WHERE id = ?
   `);

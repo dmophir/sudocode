@@ -5,8 +5,7 @@
  * These tests verify the skeleton implementation before adding actual functionality.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 
 describe('SimpleProcessManager', () => {
@@ -19,7 +18,7 @@ describe('SimpleProcessManager', () => {
   describe('constructor', () => {
     it('creates an instance without config', () => {
       const mgr = new SimpleProcessManager();
-      assert.ok(mgr instanceof SimpleProcessManager);
+      expect(mgr instanceof SimpleProcessManager).toBeTruthy();
     });
 
     it('creates an instance with default config', () => {
@@ -27,66 +26,66 @@ describe('SimpleProcessManager', () => {
         executablePath: 'claude',
         args: ['--print', '--output-format', 'stream-json'],
       });
-      assert.ok(mgr instanceof SimpleProcessManager);
+      expect(mgr instanceof SimpleProcessManager).toBeTruthy();
     });
 
     it('creates an instance with partial config', () => {
       const mgr = new SimpleProcessManager({
         executablePath: '/usr/local/bin/claude',
       });
-      assert.ok(mgr instanceof SimpleProcessManager);
+      expect(mgr instanceof SimpleProcessManager).toBeTruthy();
     });
   });
 
   describe('interface compliance', () => {
     it('implements acquireProcess method', () => {
-      assert.ok(manager.acquireProcess);
-      assert.strictEqual(typeof manager.acquireProcess, 'function');
+      expect(manager.acquireProcess).toBeTruthy();
+      expect(typeof manager.acquireProcess).toBe('function');
     });
 
     it('implements releaseProcess method', () => {
-      assert.ok(manager.releaseProcess);
-      assert.strictEqual(typeof manager.releaseProcess, 'function');
+      expect(manager.releaseProcess).toBeTruthy();
+      expect(typeof manager.releaseProcess).toBe('function');
     });
 
     it('implements terminateProcess method', () => {
-      assert.ok(manager.terminateProcess);
-      assert.strictEqual(typeof manager.terminateProcess, 'function');
+      expect(manager.terminateProcess).toBeTruthy();
+      expect(typeof manager.terminateProcess).toBe('function');
     });
 
     it('implements sendInput method', () => {
-      assert.ok(manager.sendInput);
-      assert.strictEqual(typeof manager.sendInput, 'function');
+      expect(manager.sendInput).toBeTruthy();
+      expect(typeof manager.sendInput).toBe('function');
     });
 
     it('implements onOutput method', () => {
-      assert.ok(manager.onOutput);
-      assert.strictEqual(typeof manager.onOutput, 'function');
+      expect(manager.onOutput).toBeTruthy();
+      expect(typeof manager.onOutput).toBe('function');
     });
 
     it('implements onError method', () => {
-      assert.ok(manager.onError);
-      assert.strictEqual(typeof manager.onError, 'function');
+      expect(manager.onError).toBeTruthy();
+      expect(typeof manager.onError).toBe('function');
     });
 
     it('implements getProcess method', () => {
-      assert.ok(manager.getProcess);
-      assert.strictEqual(typeof manager.getProcess, 'function');
+      expect(manager.getProcess).toBeTruthy();
+      expect(typeof manager.getProcess).toBe('function');
     });
 
     it('implements getActiveProcesses method', () => {
-      assert.ok(manager.getActiveProcesses);
-      assert.strictEqual(typeof manager.getActiveProcesses, 'function');
+      expect(manager.getActiveProcesses).toBeTruthy();
+      expect(typeof manager.getActiveProcesses).toBe('function');
     });
 
     it('implements getMetrics method', () => {
-      assert.ok(manager.getMetrics);
-      assert.strictEqual(typeof manager.getMetrics, 'function');
+      expect(manager.getMetrics).toBeTruthy();
+      expect(typeof manager.getMetrics).toBe('function');
     });
 
     it('implements shutdown method', () => {
-      assert.ok(manager.shutdown);
-      assert.strictEqual(typeof manager.shutdown, 'function');
+      expect(manager.shutdown).toBeTruthy();
+      expect(typeof manager.shutdown).toBe('function');
     });
 
     // acquireProcess is now implemented - tested in spawning.test.ts
@@ -112,7 +111,7 @@ describe('SimpleProcessManager', () => {
         void type;
       };
 
-      assert.throws(() => manager.onOutput('test-id', handler));
+      expect(() => manager.onOutput('test-id', handler)).toThrow();
     });
 
     it('onError accepts ErrorHandler', () => {
@@ -120,7 +119,7 @@ describe('SimpleProcessManager', () => {
         void error;
       };
 
-      assert.throws(() => manager.onError('test-id', handler));
+      expect(() => manager.onError('test-id', handler)).toThrow();
     });
   });
 });

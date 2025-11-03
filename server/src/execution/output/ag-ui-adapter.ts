@@ -19,11 +19,14 @@ import {
   type ToolCallArgsEvent,
   type ToolCallEndEvent,
   type ToolCallResultEvent,
+  type TextMessageStartEvent,
+  type TextMessageContentEvent,
+  type TextMessageEndEvent,
   type StateDeltaEvent,
   type StateSnapshotEvent,
   type CustomEvent,
   type State,
-} from '@ag-ui/core';
+} from "@ag-ui/core";
 
 import {
   IOutputProcessor,
@@ -34,26 +37,30 @@ import {
   FileChangeHandler,
   ProgressHandler,
   ErrorHandler,
-} from './types.js';
+} from "./types.js";
 
 /**
  * Event listener callback type
  *
  * Accepts any AG-UI event type from @ag-ui/core
  */
-export type AgUiEventListener = (event:
-  | RunStartedEvent
-  | RunFinishedEvent
-  | RunErrorEvent
-  | StepStartedEvent
-  | StepFinishedEvent
-  | ToolCallStartEvent
-  | ToolCallArgsEvent
-  | ToolCallEndEvent
-  | ToolCallResultEvent
-  | StateDeltaEvent
-  | StateSnapshotEvent
-  | CustomEvent
+export type AgUiEventListener = (
+  event:
+    | RunStartedEvent
+    | RunFinishedEvent
+    | RunErrorEvent
+    | StepStartedEvent
+    | StepFinishedEvent
+    | ToolCallStartEvent
+    | ToolCallArgsEvent
+    | ToolCallEndEvent
+    | ToolCallResultEvent
+    | TextMessageStartEvent
+    | TextMessageContentEvent
+    | TextMessageEndEvent
+    | StateDeltaEvent
+    | StateSnapshotEvent
+    | CustomEvent
 ) => void;
 
 /**
@@ -82,7 +89,10 @@ export class AgUiEventAdapter {
   private listeners: Set<AgUiEventListener> = new Set();
   private processor: IOutputProcessor | null = null;
   private currentState: any = {};
-  private activeToolCalls: Map<string, { startTime: number; messageId: string }> = new Map();
+  private activeToolCalls: Map<
+    string,
+    { startTime: number; messageId: string }
+  > = new Map();
   private messageCounter: number = 0;
 
   /**
@@ -109,6 +119,8 @@ export class AgUiEventAdapter {
     processor.onFileChange(this.handleFileChange.bind(this));
     processor.onProgress(this.handleProgress.bind(this));
     processor.onError(this.handleError.bind(this));
+    processor.onMessage(this.handleMessage.bind(this));
+    processor.onUsage(this.handleUsage.bind(this));
   }
 
   /**
@@ -208,7 +220,7 @@ export class AgUiEventAdapter {
       const messageId = `msg-${this.messageCounter++}`;
       this.activeToolCalls.set(toolCallId, {
         startTime: Date.now(),
-        messageId
+        messageId,
       });
 
       const startEvent: ToolCallStartEvent = {
@@ -229,7 +241,7 @@ export class AgUiEventAdapter {
     }
 
     // If tool call is complete (success or error), emit END and RESULT
-    if (toolCall.status === 'success' || toolCall.status === 'error') {
+    if (toolCall.status === "success" || toolCall.status === "error") {
       const toolInfo = this.activeToolCalls.get(toolCallId);
       const duration = toolInfo ? Date.now() - toolInfo.startTime : undefined;
 
@@ -247,9 +259,12 @@ export class AgUiEventAdapter {
           timestamp,
           messageId: toolInfo.messageId,
           toolCallId,
-          content: toolCall.status === 'success'
-            ? (typeof toolCall.result === 'string' ? toolCall.result : JSON.stringify(toolCall.result))
-            : (toolCall.error || 'Tool call failed'),
+          content:
+            toolCall.status === "success"
+              ? typeof toolCall.result === "string"
+                ? toolCall.result
+                : JSON.stringify(toolCall.result)
+              : toolCall.error || "Tool call failed",
         };
         this.emit(resultEvent);
       }
@@ -272,7 +287,7 @@ export class AgUiEventAdapter {
     const event: CustomEvent = {
       type: EventType.CUSTOM,
       timestamp: Date.now(),
-      name: 'file_change',
+      name: "file_change",
       value: {
         path: fileChange.path,
         operation: fileChange.operation,
@@ -332,6 +347,84 @@ export class AgUiEventAdapter {
   };
 
   /**
+   * Handle message events
+   *
+   * Transforms text messages into TEXT_MESSAGE_* AG-UI events.
+   * For now, we emit the full message content in a single event.
+   */
+  private handleMessage: import("./types.js").MessageHandler = (
+    message: import("./types.js").OutputMessage
+  ) => {
+    if (message.type !== "text") return;
+
+    const messageId = `msg-${this.messageCounter++}`;
+    const timestamp = Date.now();
+
+    // Emit TEXT_MESSAGE_START
+    const startEvent: TextMessageStartEvent = {
+      type: EventType.TEXT_MESSAGE_START,
+      timestamp,
+      messageId,
+      role: "assistant",
+    };
+    this.emit(startEvent);
+
+    // Emit TEXT_MESSAGE_CONTENT with the full message
+    const contentEvent: TextMessageContentEvent = {
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      timestamp,
+      messageId,
+      delta: message.content,
+    };
+    this.emit(contentEvent);
+
+    // Emit TEXT_MESSAGE_END
+    const endEvent: TextMessageEndEvent = {
+      type: EventType.TEXT_MESSAGE_END,
+      timestamp,
+      messageId,
+    };
+    this.emit(endEvent);
+  };
+
+  /**
+   * Handle usage metric updates
+   *
+   * Transforms usage metrics into CUSTOM usage events and updates state.
+   */
+  private handleUsage: import("./types.js").UsageHandler = (
+    usage: import("./types.js").UsageMetrics
+  ) => {
+    const timestamp = Date.now();
+
+    // Emit USAGE event as CUSTOM event
+    const usageEvent: CustomEvent = {
+      type: EventType.CUSTOM,
+      timestamp,
+      name: "USAGE_UPDATE",
+      value: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheTokens: usage.cacheTokens,
+        totalTokens: usage.totalTokens,
+        cost: usage.cost,
+        provider: usage.provider,
+        model: usage.model,
+      },
+    };
+    this.emit(usageEvent);
+
+    // Update state with latest usage
+    this.emitStateDelta({
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      },
+    });
+  };
+
+  /**
    * Emit a state delta with partial state updates
    *
    * @param updates - Partial state updates to apply
@@ -342,7 +435,7 @@ export class AgUiEventAdapter {
 
     // Convert updates to JSON Patch operations
     const delta = Object.entries(updates).map(([key, value]) => ({
-      op: 'replace' as const,
+      op: "replace" as const,
       path: `/${key}`,
       value,
     }));
@@ -360,25 +453,29 @@ export class AgUiEventAdapter {
    *
    * @param event - The event to emit
    */
-  private emit(event:
-    | RunStartedEvent
-    | RunFinishedEvent
-    | RunErrorEvent
-    | StepStartedEvent
-    | StepFinishedEvent
-    | ToolCallStartEvent
-    | ToolCallArgsEvent
-    | ToolCallEndEvent
-    | ToolCallResultEvent
-    | StateDeltaEvent
-    | StateSnapshotEvent
-    | CustomEvent
+  private emit(
+    event:
+      | RunStartedEvent
+      | RunFinishedEvent
+      | RunErrorEvent
+      | StepStartedEvent
+      | StepFinishedEvent
+      | ToolCallStartEvent
+      | ToolCallArgsEvent
+      | ToolCallEndEvent
+      | ToolCallResultEvent
+      | TextMessageStartEvent
+      | TextMessageContentEvent
+      | TextMessageEndEvent
+      | StateDeltaEvent
+      | StateSnapshotEvent
+      | CustomEvent
   ): void {
     this.listeners.forEach((listener) => {
       try {
         listener(event);
       } catch (error) {
-        console.error('Error in AG-UI event listener:', error);
+        console.error("Error in AG-UI event listener:", error);
       }
     });
   }
@@ -411,7 +508,7 @@ export class AgUiEventAdapter {
    */
   emitStepFinished(
     stepId: string,
-    status: 'success' | 'error',
+    status: "success" | "error",
     output?: any
   ): void {
     const event: StepFinishedEvent = {

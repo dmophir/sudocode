@@ -2,8 +2,7 @@
  * Tests for Issues API routes
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from "supertest";
 import express from "express";
 import type Database from "better-sqlite3";
@@ -21,7 +20,7 @@ describe("Issues API", () => {
   let testDir: string;
   let createdIssueId: string;
 
-  before(() => {
+  beforeAll(() => {
     // Create a unique temporary directory in system temp
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sudocode-test-issues-"));
     testDbPath = path.join(testDir, "cache.db");
@@ -49,7 +48,7 @@ describe("Issues API", () => {
     app.use("/api/issues", createIssuesRouter(db));
   });
 
-  after(() => {
+  afterAll(() => {
     // Clean up export debouncer first
     cleanupExport();
     // Clean up database
@@ -68,9 +67,9 @@ describe("Issues API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.strictEqual(response.body.data.length, 0);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length).toBe(0);
     });
 
     it("should support filtering by status", async () => {
@@ -78,8 +77,8 @@ describe("Issues API", () => {
         .get("/api/issues?status=open")
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
     });
 
     it("should support limit parameter", async () => {
@@ -87,9 +86,9 @@ describe("Issues API", () => {
         .get("/api/issues?limit=5")
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
-      assert.ok(response.body.data.length <= 5);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
+      expect(response.body.data.length <= 5).toBeTruthy();
     });
   });
 
@@ -108,13 +107,13 @@ describe("Issues API", () => {
         .expect(201)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.ok(response.body.data.id);
-      assert.strictEqual(response.body.data.title, newIssue.title);
-      assert.strictEqual(response.body.data.content, newIssue.content);
-      assert.strictEqual(response.body.data.status, newIssue.status);
-      assert.strictEqual(response.body.data.priority, newIssue.priority);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBeTruthy();
+      expect(response.body.data.title).toBe(newIssue.title);
+      expect(response.body.data.content).toBe(newIssue.content);
+      expect(response.body.data.status).toBe(newIssue.status);
+      expect(response.body.data.priority).toBe(newIssue.priority);
 
       // Save the ID for later tests
       createdIssueId = response.body.data.id;
@@ -130,8 +129,8 @@ describe("Issues API", () => {
         .send(invalidIssue)
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("Title"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("Title")).toBeTruthy();
     });
 
     it("should reject issue with title too long", async () => {
@@ -145,8 +144,8 @@ describe("Issues API", () => {
         .send(invalidIssue)
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("500 characters"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("500 characters")).toBeTruthy();
     });
 
     it("should create issue with default values", async () => {
@@ -159,11 +158,11 @@ describe("Issues API", () => {
         .send(minimalIssue)
         .expect(201);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.title, minimalIssue.title);
-      assert.strictEqual(response.body.data.content, "");
-      assert.strictEqual(response.body.data.status, "open");
-      assert.strictEqual(response.body.data.priority, 2);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.title).toBe(minimalIssue.title);
+      expect(response.body.data.content).toBe("");
+      expect(response.body.data.status).toBe("open");
+      expect(response.body.data.priority).toBe(2);
     });
   });
 
@@ -174,10 +173,10 @@ describe("Issues API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.id, createdIssueId);
-      assert.strictEqual(response.body.data.title, "Test Issue");
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBe(createdIssueId);
+      expect(response.body.data.title).toBe("Test Issue");
     });
 
     it("should return 404 for non-existent issue", async () => {
@@ -185,8 +184,8 @@ describe("Issues API", () => {
         .get("/api/issues/ISSUE-99999")
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
   });
 
@@ -203,12 +202,12 @@ describe("Issues API", () => {
         .expect(200)
         .expect("Content-Type", /json/);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.id, createdIssueId);
-      assert.strictEqual(response.body.data.status, updates.status);
-      assert.strictEqual(response.body.data.priority, updates.priority);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.id).toBe(createdIssueId);
+      expect(response.body.data.status).toBe(updates.status);
+      expect(response.body.data.priority).toBe(updates.priority);
       // Original title should remain
-      assert.strictEqual(response.body.data.title, "Test Issue");
+      expect(response.body.data.title).toBe("Test Issue");
     });
 
     it("should return 404 for non-existent issue", async () => {
@@ -217,8 +216,8 @@ describe("Issues API", () => {
         .send({ status: "closed" })
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
 
     it("should reject empty update", async () => {
@@ -227,8 +226,8 @@ describe("Issues API", () => {
         .send({})
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("At least one field"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("At least one field")).toBeTruthy();
     });
 
     it("should reject title that is too long", async () => {
@@ -237,8 +236,8 @@ describe("Issues API", () => {
         .send({ title: "x".repeat(501) })
         .expect(400);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("500 characters"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("500 characters")).toBeTruthy();
     });
   });
 
@@ -246,7 +245,7 @@ describe("Issues API", () => {
     let issueToDelete: string;
 
     // Create an issue to delete in tests
-    before(async () => {
+    beforeAll(async () => {
       const response = await request(app)
         .post("/api/issues")
         .send({ title: "Issue to Delete" });
@@ -258,10 +257,10 @@ describe("Issues API", () => {
         .delete(`/api/issues/${issueToDelete}`)
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(response.body.data);
-      assert.strictEqual(response.body.data.id, issueToDelete);
-      assert.strictEqual(response.body.data.deleted, true);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.id).toBe(issueToDelete);
+      expect(response.body.data.deleted).toBe(true);
     });
 
     it("should return 404 when deleting non-existent issue", async () => {
@@ -269,8 +268,8 @@ describe("Issues API", () => {
         .delete("/api/issues/ISSUE-99999")
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
-      assert.ok(response.body.message.includes("not found"));
+      expect(response.body.success).toBe(false);
+      expect(response.body.message.includes("not found")).toBeTruthy();
     });
 
     it("should not find deleted issue", async () => {
@@ -278,7 +277,7 @@ describe("Issues API", () => {
         .get(`/api/issues/${issueToDelete}`)
         .expect(404);
 
-      assert.strictEqual(response.body.success, false);
+      expect(response.body.success).toBe(false);
     });
   });
 
@@ -286,17 +285,17 @@ describe("Issues API", () => {
     it("should list the created issues", async () => {
       const response = await request(app).get("/api/issues").expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
       // At least the issues we created should be there
-      assert.ok(response.body.data.length >= 2);
+      expect(response.body.data.length >= 2).toBeTruthy();
 
       // Find our created issue
       const foundIssue = response.body.data.find(
         (issue: any) => issue.id === createdIssueId
       );
-      assert.ok(foundIssue);
-      assert.strictEqual(foundIssue.status, "in_progress"); // Updated in PUT test
+      expect(foundIssue).toBeTruthy();
+      expect(foundIssue.status).toBe("in_progress"); // Updated in PUT test
     });
 
     it("should filter issues by status", async () => {
@@ -304,12 +303,12 @@ describe("Issues API", () => {
         .get("/api/issues?status=in_progress")
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.ok(Array.isArray(response.body.data));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBeTruthy();
 
       // All returned issues should have in_progress status
       response.body.data.forEach((issue: any) => {
-        assert.strictEqual(issue.status, "in_progress");
+        expect(issue.status).toBe("in_progress");
       });
     });
 
@@ -319,9 +318,9 @@ describe("Issues API", () => {
         .send({ status: "closed" })
         .expect(200);
 
-      assert.strictEqual(response.body.success, true);
-      assert.strictEqual(response.body.data.status, "closed");
-      assert.ok(response.body.data.closed_at); // Should have closed_at timestamp
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.status).toBe("closed");
+      expect(response.body.data.closed_at).toBeTruthy(); // Should have closed_at timestamp
     });
   });
 });

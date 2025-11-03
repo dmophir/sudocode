@@ -308,6 +308,11 @@ export class SimpleExecutionEngine implements IExecutionEngine {
         } else {
           errorOutput += data.toString();
         }
+
+        // Call optional output handler for real-time processing
+        if (this._config.onOutput) {
+          this._config.onOutput(data, type);
+        }
       });
 
       // Set up error handler

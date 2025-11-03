@@ -7,10 +7,10 @@
  * @module routes/executions-stream
  */
 
-import { Router } from 'express';
-import type { Request, Response } from 'express';
-import { randomUUID } from 'crypto';
-import type { TransportManager } from '../execution/transport/transport-manager.js';
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { randomUUID } from "crypto";
+import type { TransportManager } from "../execution/transport/transport-manager.js";
 
 /**
  * Create execution stream routes
@@ -39,7 +39,7 @@ export function createExecutionStreamRoutes(
    *
    * @param executionId - Execution ID to stream events for
    */
-  router.get('/:executionId/stream', (req: Request, res: Response) => {
+  router.get("/:executionId/stream", (req: Request, res: Response) => {
     const { executionId } = req.params;
 
     // TODO: Add authentication/authorization check
@@ -48,19 +48,18 @@ export function createExecutionStreamRoutes(
     // Generate unique client ID
     const clientId = randomUUID();
 
-    // Handle client disconnect
-    req.on('close', () => {
-      // Client disconnected, SSE transport will clean up automatically
-      console.log(`Client ${clientId} disconnected from execution ${executionId}`);
-    });
+    // Get buffered events for replay
+    const bufferedEvents = transportManager.getBufferedEvents(executionId);
+    const replayEvents = bufferedEvents.map((buffered) => ({
+      event: buffered.event.type,
+      data: buffered.event,
+    }));
 
     // Establish SSE connection through transport manager
-    // This will set appropriate headers and send connection acknowledgment
+    // This will set appropriate headers, send connection acknowledgment, and replay buffered events
     transportManager
       .getSseTransport()
-      .handleConnection(clientId, res, executionId);
-
-    console.log(`Client ${clientId} connected to execution ${executionId} stream`);
+      .handleConnection(clientId, res, executionId, replayEvents);
   });
 
   return router;

@@ -4,8 +4,7 @@
  * Tests automatic retry behavior, retry limits, and failure propagation.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -40,8 +39,8 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 1);
-      assert.strictEqual(metrics.completedTasks, 0);
+      expect(metrics.failedTasks).toBe(1);
+      expect(metrics.completedTasks).toBe(0);
     });
 
     it("does not retry task when maxRetries is 0", async () => {
@@ -66,8 +65,8 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 1);
-      assert.strictEqual(metrics.completedTasks, 0);
+      expect(metrics.failedTasks).toBe(1);
+      expect(metrics.completedTasks).toBe(0);
     });
   });
 
@@ -100,9 +99,9 @@ describe("Task Retry Logic", () => {
       // Wait for original attempt + 1 retry
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      assert.strictEqual(attemptCount, 2); // Original + 1 retry
+      expect(attemptCount).toBe(2); // Original + 1 retry
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 1); // Only final failure counts
+      expect(metrics.failedTasks).toBe(1); // Only final failure counts
     });
 
     it("retries task multiple times when maxRetries is 3", async () => {
@@ -132,9 +131,9 @@ describe("Task Retry Logic", () => {
       // Wait for original attempt + 3 retries
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.strictEqual(attemptCount, 4); // Original + 3 retries
+      expect(attemptCount).toBe(4); // Original + 3 retries
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 1); // Only final failure counts
+      expect(metrics.failedTasks).toBe(1); // Only final failure counts
     });
   });
 
@@ -166,10 +165,10 @@ describe("Task Retry Logic", () => {
       // Wait for failure + successful retry
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      assert.strictEqual(attemptCount, 2); // Original + 1 retry
+      expect(attemptCount).toBe(2); // Original + 1 retry
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 0);
-      assert.strictEqual(metrics.completedTasks, 1);
+      expect(metrics.failedTasks).toBe(0);
+      expect(metrics.completedTasks).toBe(1);
     });
 
     it("completes task when final retry succeeds", async () => {
@@ -199,10 +198,10 @@ describe("Task Retry Logic", () => {
       // Wait for 2 failures + successful retry
       await new Promise((resolve) => setTimeout(resolve, 75));
 
-      assert.strictEqual(attemptCount, 3); // Original + 2 retries
+      expect(attemptCount).toBe(3); // Original + 2 retries
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 0);
-      assert.strictEqual(metrics.completedTasks, 1);
+      expect(metrics.failedTasks).toBe(0);
+      expect(metrics.completedTasks).toBe(1);
     });
   });
 
@@ -238,11 +237,11 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should have attempted twice: original + 1 retry
-      assert.strictEqual(attemptCount, 2);
+      expect(attemptCount).toBe(2);
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.completedTasks, 1);
-      assert.strictEqual(metrics.failedTasks, 0);
+      expect(metrics.completedTasks).toBe(1);
+      expect(metrics.failedTasks).toBe(0);
     });
   });
 
@@ -292,8 +291,8 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.completedTasks, 2);
-      assert.strictEqual(metrics.failedTasks, 0);
+      expect(metrics.completedTasks).toBe(2);
+      expect(metrics.failedTasks).toBe(0);
     });
   });
 
@@ -326,8 +325,8 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 75));
 
       // Should only emit failure event once, after final retry
-      assert.strictEqual(failureEvents.length, 1);
-      assert.strictEqual(failureEvents[0], "task-1");
+      expect(failureEvents.length).toBe(1);
+      expect(failureEvents[0]).toBe("task-1");
     });
 
     it("does not emit failure event when retry succeeds", async () => {
@@ -363,7 +362,7 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should not emit any failure events
-      assert.strictEqual(failureEvents.length, 0);
+      expect(failureEvents.length).toBe(0);
     });
   });
 
@@ -402,7 +401,7 @@ describe("Task Retry Logic", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.failedTasks, 2);
+      expect(metrics.failedTasks).toBe(2);
     });
 
     it("handles very large maxRetries value", async () => {
@@ -432,10 +431,10 @@ describe("Task Retry Logic", () => {
       // Wait for retries to complete
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      assert.strictEqual(attemptCount, 5); // Should stop after success
+      expect(attemptCount).toBe(5); // Should stop after success
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.completedTasks, 1);
-      assert.strictEqual(metrics.failedTasks, 0);
+      expect(metrics.completedTasks).toBe(1);
+      expect(metrics.failedTasks).toBe(0);
     });
   });
 });

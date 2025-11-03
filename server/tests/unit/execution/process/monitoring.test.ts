@@ -7,8 +7,7 @@
  * - getMetrics: Get process manager metrics
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach, afterEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 
@@ -35,20 +34,20 @@ describe('Process Monitoring and Metrics', () => {
       const spawned = await manager.acquireProcess(config);
       const retrieved = manager.getProcess(spawned.id);
 
-      assert.ok(retrieved, 'Process should be found');
-      assert.strictEqual(retrieved.id, spawned.id);
-      assert.strictEqual(retrieved.pid, spawned.pid);
-      assert.strictEqual(retrieved.status, spawned.status);
+      expect(retrieved, 'Process should be found').toBeTruthy();
+      expect(retrieved?.id).toBe(spawned.id);
+      expect(retrieved?.pid).toBe(spawned.pid);
+      expect(retrieved?.status).toBe(spawned.status);
     });
 
     it('returns null when process does not exist', () => {
       const result = manager.getProcess('nonexistent-id');
-      assert.strictEqual(result, null);
+      expect(result).toBe(null);
     });
 
     it('returns null for empty string ID', () => {
       const result = manager.getProcess('');
-      assert.strictEqual(result, null);
+      expect(result).toBe(null);
     });
 
     it('returns same object reference for multiple calls', async () => {
@@ -62,7 +61,7 @@ describe('Process Monitoring and Metrics', () => {
       const retrieved1 = manager.getProcess(spawned.id);
       const retrieved2 = manager.getProcess(spawned.id);
 
-      assert.strictEqual(retrieved1, retrieved2, 'Should return same object reference');
+      expect(retrieved1, 'Should return same object reference').toBe(retrieved2);
     });
 
     it('returns process that matches activeProcesses map', async () => {
@@ -76,15 +75,15 @@ describe('Process Monitoring and Metrics', () => {
       const retrieved = manager.getProcess(spawned.id);
       const allActive = manager.getActiveProcesses();
 
-      assert.ok(allActive.includes(retrieved!));
+      expect(allActive.includes(retrieved!)).toBeTruthy();
     });
   });
 
   describe('getActiveProcesses', () => {
     it('returns empty array when no processes exist', () => {
       const processes = manager.getActiveProcesses();
-      assert.ok(Array.isArray(processes));
-      assert.strictEqual(processes.length, 0);
+      expect(Array.isArray(processes)).toBeTruthy();
+      expect(processes.length).toBe(0);
     });
 
     it('returns array with single process', async () => {
@@ -97,8 +96,8 @@ describe('Process Monitoring and Metrics', () => {
       const spawned = await manager.acquireProcess(config);
       const processes = manager.getActiveProcesses();
 
-      assert.strictEqual(processes.length, 1);
-      assert.strictEqual(processes[0].id, spawned.id);
+      expect(processes.length).toBe(1);
+      expect(processes[0].id).toBe(spawned.id);
     });
 
     it('returns array with multiple processes', async () => {
@@ -114,12 +113,12 @@ describe('Process Monitoring and Metrics', () => {
 
       const processes = manager.getActiveProcesses();
 
-      assert.strictEqual(processes.length, 3);
+      expect(processes.length).toBe(3);
 
       const ids = processes.map(p => p.id);
-      assert.ok(ids.includes(spawned1.id));
-      assert.ok(ids.includes(spawned2.id));
-      assert.ok(ids.includes(spawned3.id));
+      expect(ids.includes(spawned1.id)).toBeTruthy();
+      expect(ids.includes(spawned2.id)).toBeTruthy();
+      expect(ids.includes(spawned3.id)).toBeTruthy();
     });
 
     it('returns new array instance on each call', async () => {
@@ -134,8 +133,8 @@ describe('Process Monitoring and Metrics', () => {
       const processes1 = manager.getActiveProcesses();
       const processes2 = manager.getActiveProcesses();
 
-      assert.notStrictEqual(processes1, processes2, 'Should return new array instance');
-      assert.deepStrictEqual(processes1, processes2, 'But arrays should contain same elements');
+      expect(processes1, 'Should return new array instance').not.toBe(processes2);
+      expect(processes1, 'But arrays should contain same elements').toEqual(processes2);
     });
 
     it('returns array that can be safely modified', async () => {
@@ -154,7 +153,7 @@ describe('Process Monitoring and Metrics', () => {
 
       // Original should be unchanged
       const refreshedProcesses = manager.getActiveProcesses();
-      assert.strictEqual(refreshedProcesses.length, 1);
+      expect(refreshedProcesses.length).toBe(1);
     });
 
     it('reflects changes as processes are added', async () => {
@@ -164,13 +163,13 @@ describe('Process Monitoring and Metrics', () => {
         workDir: process.cwd(),
       };
 
-      assert.strictEqual(manager.getActiveProcesses().length, 0);
+      expect(manager.getActiveProcesses().length).toBe(0);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getActiveProcesses().length, 1);
+      expect(manager.getActiveProcesses().length).toBe(1);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getActiveProcesses().length, 2);
+      expect(manager.getActiveProcesses().length).toBe(2);
     });
 
     it('excludes processes after they exit', async () => {
@@ -181,17 +180,16 @@ describe('Process Monitoring and Metrics', () => {
       };
 
       const spawned = await manager.acquireProcess(config);
-      assert.strictEqual(manager.getActiveProcesses().length, 1);
+      expect(manager.getActiveProcesses().length).toBe(1);
 
       // Wait for process to exit and be cleaned up (5s cleanup delay)
       await new Promise(resolve => setTimeout(resolve, 5100));
 
       const processes = manager.getActiveProcesses();
-      assert.strictEqual(
+      expect(
         processes.filter(p => p.id === spawned.id).length,
-        0,
         'Process should be removed after cleanup delay'
-      );
+      ).toBe(0);
     });
   });
 
@@ -199,30 +197,30 @@ describe('Process Monitoring and Metrics', () => {
     it('returns metrics object with correct structure', () => {
       const metrics = manager.getMetrics();
 
-      assert.ok(typeof metrics === 'object');
-      assert.ok('totalSpawned' in metrics);
-      assert.ok('currentlyActive' in metrics);
-      assert.ok('totalCompleted' in metrics);
-      assert.ok('totalFailed' in metrics);
-      assert.ok('averageDuration' in metrics);
+      expect(typeof metrics === 'object').toBeTruthy();
+      expect('totalSpawned' in metrics).toBeTruthy();
+      expect('currentlyActive' in metrics).toBeTruthy();
+      expect('totalCompleted' in metrics).toBeTruthy();
+      expect('totalFailed' in metrics).toBeTruthy();
+      expect('averageDuration' in metrics).toBeTruthy();
     });
 
     it('returns initial metrics when no processes spawned', () => {
       const metrics = manager.getMetrics();
 
-      assert.strictEqual(metrics.totalSpawned, 0);
-      assert.strictEqual(metrics.currentlyActive, 0);
-      assert.strictEqual(metrics.totalCompleted, 0);
-      assert.strictEqual(metrics.totalFailed, 0);
-      assert.strictEqual(metrics.averageDuration, 0);
+      expect(metrics.totalSpawned).toBe(0);
+      expect(metrics.currentlyActive).toBe(0);
+      expect(metrics.totalCompleted).toBe(0);
+      expect(metrics.totalFailed).toBe(0);
+      expect(metrics.averageDuration).toBe(0);
     });
 
     it('returns copy of metrics, not reference', () => {
       const metrics1 = manager.getMetrics();
       const metrics2 = manager.getMetrics();
 
-      assert.notStrictEqual(metrics1, metrics2, 'Should return different object instances');
-      assert.deepStrictEqual(metrics1, metrics2, 'But values should be equal');
+      expect(metrics1, 'Should return different object instances').not.toBe(metrics2);
+      expect(metrics1, 'But values should be equal').toEqual(metrics2);
     });
 
     it('returned object cannot mutate internal metrics', async () => {
@@ -235,7 +233,7 @@ describe('Process Monitoring and Metrics', () => {
       await manager.acquireProcess(config);
 
       const metrics = manager.getMetrics();
-      assert.strictEqual(metrics.totalSpawned, 1);
+      expect(metrics.totalSpawned).toBe(1);
 
       // Try to mutate the returned object
       metrics.totalSpawned = 999;
@@ -243,8 +241,8 @@ describe('Process Monitoring and Metrics', () => {
 
       // Original should be unchanged
       const freshMetrics = manager.getMetrics();
-      assert.strictEqual(freshMetrics.totalSpawned, 1);
-      assert.strictEqual(freshMetrics.currentlyActive, 1);
+      expect(freshMetrics.totalSpawned).toBe(1);
+      expect(freshMetrics.currentlyActive).toBe(1);
     });
 
     it('tracks totalSpawned correctly', async () => {
@@ -254,16 +252,16 @@ describe('Process Monitoring and Metrics', () => {
         workDir: process.cwd(),
       };
 
-      assert.strictEqual(manager.getMetrics().totalSpawned, 0);
+      expect(manager.getMetrics().totalSpawned).toBe(0);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().totalSpawned, 1);
+      expect(manager.getMetrics().totalSpawned).toBe(1);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().totalSpawned, 2);
+      expect(manager.getMetrics().totalSpawned).toBe(2);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().totalSpawned, 3);
+      expect(manager.getMetrics().totalSpawned).toBe(3);
     });
 
     it('tracks currentlyActive correctly', async () => {
@@ -273,13 +271,13 @@ describe('Process Monitoring and Metrics', () => {
         workDir: process.cwd(),
       };
 
-      assert.strictEqual(manager.getMetrics().currentlyActive, 0);
+      expect(manager.getMetrics().currentlyActive).toBe(0);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().currentlyActive, 1);
+      expect(manager.getMetrics().currentlyActive).toBe(1);
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().currentlyActive, 2);
+      expect(manager.getMetrics().currentlyActive).toBe(2);
     });
 
     it('tracks totalCompleted correctly', async () => {
@@ -289,14 +287,19 @@ describe('Process Monitoring and Metrics', () => {
         workDir: process.cwd(),
       };
 
-      await manager.acquireProcess(config);
+      const managedProcess = await manager.acquireProcess(config);
 
-      // Wait for process to exit
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for process to exit and metrics to update
+      await new Promise<void>((resolve) => {
+        managedProcess.process.once('exit', () => {
+          // Give the manager time to update metrics
+          setTimeout(resolve, 100);
+        });
+      });
 
       const metrics = manager.getMetrics();
-      assert.strictEqual(metrics.totalCompleted, 1);
-      assert.strictEqual(metrics.totalFailed, 0);
+      expect(metrics.totalCompleted).toBe(1);
+      expect(metrics.totalFailed).toBe(0);
     });
 
     it('decrements currentlyActive when process exits', async () => {
@@ -307,12 +310,12 @@ describe('Process Monitoring and Metrics', () => {
       };
 
       await manager.acquireProcess(config);
-      assert.strictEqual(manager.getMetrics().currentlyActive, 1);
+      expect(manager.getMetrics().currentlyActive).toBe(1);
 
       // Wait for process to exit
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      assert.strictEqual(manager.getMetrics().currentlyActive, 0);
+      expect(manager.getMetrics().currentlyActive).toBe(0);
     });
 
     it('calculates averageDuration correctly', async () => {
@@ -330,8 +333,8 @@ describe('Process Monitoring and Metrics', () => {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const metrics = manager.getMetrics();
-      assert.ok(metrics.averageDuration > 0, 'Average duration should be greater than 0');
-      assert.ok(metrics.averageDuration < 1000, 'Average duration should be reasonable');
+      expect(metrics.averageDuration > 0, 'Average duration should be greater than 0').toBeTruthy();
+      expect(metrics.averageDuration < 1000, 'Average duration should be reasonable').toBeTruthy();
     });
 
     it('handles failed processes in metrics', async () => {
@@ -347,8 +350,8 @@ describe('Process Monitoring and Metrics', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const metrics = manager.getMetrics();
-      assert.strictEqual(metrics.totalFailed, 1);
-      assert.strictEqual(metrics.totalCompleted, 0);
+      expect(metrics.totalFailed).toBe(1);
+      expect(metrics.totalCompleted).toBe(0);
     });
   });
 
@@ -370,12 +373,12 @@ describe('Process Monitoring and Metrics', () => {
       const process1 = manager.getProcess(p1.id);
       const process2 = manager.getProcess(p2.id);
 
-      assert.strictEqual(metrics.currentlyActive, 2);
-      assert.strictEqual(activeProcesses.length, 2);
-      assert.ok(process1);
-      assert.ok(process2);
-      assert.ok(activeProcesses.includes(process1!));
-      assert.ok(activeProcesses.includes(process2!));
+      expect(metrics.currentlyActive).toBe(2);
+      expect(activeProcesses.length).toBe(2);
+      expect(process1).toBeTruthy();
+      expect(process2).toBeTruthy();
+      expect(activeProcesses.includes(process1!)).toBeTruthy();
+      expect(activeProcesses.includes(process2!)).toBeTruthy();
     });
   });
 });

@@ -2,8 +2,7 @@
  * Tests for Retry Logic and Backoff Strategies
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import {
   calculateBackoff,
   isRetryableError,
@@ -28,15 +27,15 @@ describe('Retry Logic', () => {
         };
 
         // 2^0 = 1x
-        assert.strictEqual(calculateBackoff(1, config), 1000);
+        expect(calculateBackoff(1, config)).toBe(1000);
         // 2^1 = 2x
-        assert.strictEqual(calculateBackoff(2, config), 2000);
+        expect(calculateBackoff(2, config)).toBe(2000);
         // 2^2 = 4x
-        assert.strictEqual(calculateBackoff(3, config), 4000);
+        expect(calculateBackoff(3, config)).toBe(4000);
         // 2^3 = 8x
-        assert.strictEqual(calculateBackoff(4, config), 8000);
+        expect(calculateBackoff(4, config)).toBe(8000);
         // 2^4 = 16x
-        assert.strictEqual(calculateBackoff(5, config), 16000);
+        expect(calculateBackoff(5, config)).toBe(16000);
       });
 
       it('should enforce maxDelay cap', () => {
@@ -48,9 +47,9 @@ describe('Retry Logic', () => {
         };
 
         // Would be 8000 but capped at 5000
-        assert.strictEqual(calculateBackoff(4, config), 5000);
+        expect(calculateBackoff(4, config)).toBe(5000);
         // Would be 16000 but capped at 5000
-        assert.strictEqual(calculateBackoff(5, config), 5000);
+        expect(calculateBackoff(5, config)).toBe(5000);
       });
 
       it('should add jitter when enabled', () => {
@@ -73,15 +72,15 @@ describe('Retry Logic', () => {
         const maxExpected = baseDelay * 1.1; // 2200
 
         delays.forEach((delay) => {
-          assert.ok(
+          expect(
             delay >= minExpected && delay <= maxExpected,
             `Delay ${delay} should be between ${minExpected} and ${maxExpected}`
-          );
+          ).toBeTruthy();
         });
 
         // At least some variation should exist
         const uniqueDelays = new Set(delays);
-        assert.ok(uniqueDelays.size > 1, 'Jitter should create variation in delays');
+        expect(uniqueDelays.size > 1, 'Jitter should create variation in delays').toBeTruthy();
       });
 
       it('should not exceed maxDelay even with jitter', () => {
@@ -95,10 +94,10 @@ describe('Retry Logic', () => {
         // Run multiple times with jitter
         for (let i = 0; i < 20; i++) {
           const delay = calculateBackoff(10, config);
-          assert.ok(
+          expect(
             delay <= 5000 && delay >= 0,
             `Delay ${delay} should be between 0 and 5000`
-          );
+          ).toBeTruthy();
         }
       });
     });
@@ -113,15 +112,15 @@ describe('Retry Logic', () => {
         };
 
         // 1 * 1000
-        assert.strictEqual(calculateBackoff(1, config), 1000);
+        expect(calculateBackoff(1, config)).toBe(1000);
         // 2 * 1000
-        assert.strictEqual(calculateBackoff(2, config), 2000);
+        expect(calculateBackoff(2, config)).toBe(2000);
         // 3 * 1000
-        assert.strictEqual(calculateBackoff(3, config), 3000);
+        expect(calculateBackoff(3, config)).toBe(3000);
         // 4 * 1000
-        assert.strictEqual(calculateBackoff(4, config), 4000);
+        expect(calculateBackoff(4, config)).toBe(4000);
         // 5 * 1000
-        assert.strictEqual(calculateBackoff(5, config), 5000);
+        expect(calculateBackoff(5, config)).toBe(5000);
       });
 
       it('should enforce maxDelay cap', () => {
@@ -133,9 +132,9 @@ describe('Retry Logic', () => {
         };
 
         // Would be 4000 but capped at 3500
-        assert.strictEqual(calculateBackoff(4, config), 3500);
+        expect(calculateBackoff(4, config)).toBe(3500);
         // Would be 5000 but capped at 3500
-        assert.strictEqual(calculateBackoff(5, config), 3500);
+        expect(calculateBackoff(5, config)).toBe(3500);
       });
     });
 
@@ -149,10 +148,10 @@ describe('Retry Logic', () => {
         };
 
         // All attempts should return same delay
-        assert.strictEqual(calculateBackoff(1, config), 2000);
-        assert.strictEqual(calculateBackoff(2, config), 2000);
-        assert.strictEqual(calculateBackoff(3, config), 2000);
-        assert.strictEqual(calculateBackoff(10, config), 2000);
+        expect(calculateBackoff(1, config)).toBe(2000);
+        expect(calculateBackoff(2, config)).toBe(2000);
+        expect(calculateBackoff(3, config)).toBe(2000);
+        expect(calculateBackoff(10, config)).toBe(2000);
       });
     });
   });
@@ -175,24 +174,24 @@ describe('Retry Logic', () => {
     });
 
     it('should return true for retryable errors', () => {
-      assert.strictEqual(isRetryableError(new Error('Connection timeout'), policy), true);
-      assert.strictEqual(isRetryableError(new Error('ECONNREFUSED'), policy), true);
-      assert.strictEqual(isRetryableError(new Error('network error occurred'), policy), true);
+      expect(isRetryableError(new Error('Connection timeout'), policy)).toBe(true);
+      expect(isRetryableError(new Error('ECONNREFUSED'), policy)).toBe(true);
+      expect(isRetryableError(new Error('network error occurred'), policy)).toBe(true);
     });
 
     it('should return false for non-retryable errors', () => {
-      assert.strictEqual(isRetryableError(new Error('Permission denied'), policy), false);
-      assert.strictEqual(isRetryableError(new Error('File not found'), policy), false);
-      assert.strictEqual(isRetryableError(new Error('Invalid input'), policy), false);
+      expect(isRetryableError(new Error('Permission denied'), policy)).toBe(false);
+      expect(isRetryableError(new Error('File not found'), policy)).toBe(false);
+      expect(isRetryableError(new Error('Invalid input'), policy)).toBe(false);
     });
 
     it('should handle errors with empty messages', () => {
-      assert.strictEqual(isRetryableError(new Error(''), policy), false);
+      expect(isRetryableError(new Error(''), policy)).toBe(false);
     });
 
     it('should be case-sensitive by default', () => {
-      assert.strictEqual(isRetryableError(new Error('TIMEOUT'), policy), false);
-      assert.strictEqual(isRetryableError(new Error('timeout'), policy), true);
+      expect(isRetryableError(new Error('TIMEOUT'), policy)).toBe(false);
+      expect(isRetryableError(new Error('timeout'), policy)).toBe(true);
     });
   });
 
@@ -214,15 +213,15 @@ describe('Retry Logic', () => {
     });
 
     it('should return true for retryable exit codes', () => {
-      assert.strictEqual(isRetryableExitCode(1, policy), true);
-      assert.strictEqual(isRetryableExitCode(137, policy), true);
-      assert.strictEqual(isRetryableExitCode(143, policy), true);
+      expect(isRetryableExitCode(1, policy)).toBe(true);
+      expect(isRetryableExitCode(137, policy)).toBe(true);
+      expect(isRetryableExitCode(143, policy)).toBe(true);
     });
 
     it('should return false for non-retryable exit codes', () => {
-      assert.strictEqual(isRetryableExitCode(0, policy), false);
-      assert.strictEqual(isRetryableExitCode(2, policy), false);
-      assert.strictEqual(isRetryableExitCode(127, policy), false);
+      expect(isRetryableExitCode(0, policy)).toBe(false);
+      expect(isRetryableExitCode(2, policy)).toBe(false);
+      expect(isRetryableExitCode(127, policy)).toBe(false);
     });
   });
 
@@ -255,7 +254,7 @@ describe('Retry Logic', () => {
         duration: 100,
       };
 
-      assert.strictEqual(isRetryableResult(result, policy), true);
+      expect(isRetryableResult(result, policy)).toBe(true);
     });
 
     it('should return true for retryable errors', () => {
@@ -271,7 +270,7 @@ describe('Retry Logic', () => {
         duration: 100,
       };
 
-      assert.strictEqual(isRetryableResult(result, policy), true);
+      expect(isRetryableResult(result, policy)).toBe(true);
     });
 
     it('should return true if either exit code or error is retryable', () => {
@@ -287,7 +286,7 @@ describe('Retry Logic', () => {
         duration: 100,
       };
 
-      assert.strictEqual(isRetryableResult(result, policy), true);
+      expect(isRetryableResult(result, policy)).toBe(true);
     });
 
     it('should return false for non-retryable results', () => {
@@ -303,7 +302,7 @@ describe('Retry Logic', () => {
         duration: 100,
       };
 
-      assert.strictEqual(isRetryableResult(result, policy), false);
+      expect(isRetryableResult(result, policy)).toBe(false);
     });
   });
 
@@ -314,7 +313,7 @@ describe('Retry Logic', () => {
       const elapsed = Date.now() - start;
 
       // Allow some tolerance for timer accuracy
-      assert.ok(elapsed >= 90 && elapsed < 150, `Elapsed time ${elapsed}ms should be around 100ms`);
+      expect(elapsed >= 90 && elapsed < 150, `Elapsed time ${elapsed}ms should be around 100ms`).toBeTruthy();
     });
 
     it('should work with zero delay', async () => {
@@ -322,7 +321,7 @@ describe('Retry Logic', () => {
       await sleep(0);
       const elapsed = Date.now() - start;
 
-      assert.ok(elapsed < 50, `Zero delay should complete quickly, took ${elapsed}ms`);
+      expect(elapsed < 50, `Zero delay should complete quickly, took ${elapsed}ms`).toBeTruthy();
     });
   });
 
@@ -330,12 +329,12 @@ describe('Retry Logic', () => {
     it('should create basic attempt', () => {
       const attempt = createAttempt(1, true);
 
-      assert.strictEqual(attempt.attemptNumber, 1);
-      assert.strictEqual(attempt.success, true);
-      assert.ok(attempt.startedAt instanceof Date);
-      assert.strictEqual(attempt.willRetry, false);
-      assert.strictEqual(attempt.completedAt, undefined);
-      assert.strictEqual(attempt.duration, undefined);
+      expect(attempt.attemptNumber).toBe(1);
+      expect(attempt.success).toBe(true);
+      expect(attempt.startedAt instanceof Date).toBeTruthy();
+      expect(attempt.willRetry).toBe(false);
+      expect(attempt.completedAt).toBe(undefined);
+      expect(attempt.duration).toBe(undefined);
     });
 
     it('should include optional fields', () => {
@@ -350,14 +349,14 @@ describe('Retry Logic', () => {
         nextRetryAt,
       });
 
-      assert.strictEqual(attempt.attemptNumber, 2);
-      assert.strictEqual(attempt.success, false);
-      assert.strictEqual(attempt.error, error);
-      assert.strictEqual(attempt.exitCode, 1);
-      assert.strictEqual(attempt.duration, 500);
-      assert.strictEqual(attempt.willRetry, true);
-      assert.strictEqual(attempt.nextRetryAt, nextRetryAt);
-      assert.ok(attempt.completedAt instanceof Date);
+      expect(attempt.attemptNumber).toBe(2);
+      expect(attempt.success).toBe(false);
+      expect(attempt.error).toBe(error);
+      expect(attempt.exitCode).toBe(1);
+      expect(attempt.duration).toBe(500);
+      expect(attempt.willRetry).toBe(true);
+      expect(attempt.nextRetryAt).toBe(nextRetryAt);
+      expect(attempt.completedAt instanceof Date).toBeTruthy();
     });
   });
 
@@ -372,7 +371,7 @@ describe('Retry Logic', () => {
 
       // 3 attempts: no delay for 1st, 2000 for 2nd, 4000 for 3rd = 6000 total
       const total = calculateTotalRetryDelay(3, config);
-      assert.strictEqual(total, 6000);
+      expect(total).toBe(6000);
     });
 
     it('should calculate total delay for linear backoff', () => {
@@ -385,7 +384,7 @@ describe('Retry Logic', () => {
 
       // 3 attempts: no delay for 1st, 2000 for 2nd, 3000 for 3rd = 5000 total
       const total = calculateTotalRetryDelay(3, config);
-      assert.strictEqual(total, 5000);
+      expect(total).toBe(5000);
     });
 
     it('should calculate total delay for fixed backoff', () => {
@@ -398,7 +397,7 @@ describe('Retry Logic', () => {
 
       // 3 attempts: no delay for 1st, 1000 for 2nd, 1000 for 3rd = 2000 total
       const total = calculateTotalRetryDelay(3, config);
-      assert.strictEqual(total, 2000);
+      expect(total).toBe(2000);
     });
 
     it('should respect maxDelay cap', () => {
@@ -411,7 +410,7 @@ describe('Retry Logic', () => {
 
       // 5 attempts: 0 + 2000 + 3000 (capped) + 3000 (capped) + 3000 (capped) = 11000
       const total = calculateTotalRetryDelay(5, config);
-      assert.strictEqual(total, 11000);
+      expect(total).toBe(11000);
     });
   });
 });

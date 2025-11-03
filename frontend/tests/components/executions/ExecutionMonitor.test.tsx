@@ -175,7 +175,7 @@ describe('ExecutionMonitor', () => {
     it('should display messages from stream', () => {
       const messages = new Map()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Hello, this is a test message!',
         complete: true,
@@ -204,7 +204,8 @@ describe('ExecutionMonitor', () => {
 
       render(<ExecutionMonitor executionId="test-exec-1" />)
 
-      expect(screen.getByText('Messages')).toBeInTheDocument()
+      // In the unified trajectory view, there's no "Messages" header
+      // Just verify the message content is displayed
       expect(screen.getByText('assistant')).toBeInTheDocument()
       expect(screen.getByText('Hello, this is a test message!')).toBeInTheDocument()
     })
@@ -212,7 +213,7 @@ describe('ExecutionMonitor', () => {
     it('should show spinner for incomplete messages', () => {
       const messages = new Map()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Streaming message...',
         complete: false,
@@ -283,7 +284,8 @@ describe('ExecutionMonitor', () => {
 
       render(<ExecutionMonitor executionId="test-exec-1" />)
 
-      expect(screen.getByText('Tool Calls')).toBeInTheDocument()
+      // In the unified trajectory view, there's no "Tool Calls" header
+      // Just verify the tool call is displayed
       expect(screen.getByText('Read')).toBeInTheDocument()
       // Check for completed status badge
       const completedBadges = screen.getAllByText('completed')
@@ -355,7 +357,7 @@ describe('ExecutionMonitor', () => {
 
       const messages = new Map()
       messages.set('msg-1', {
-        messageId: 'msg-1',
+        messageId: 'msg-1', timestamp: Date.now(),
         role: 'assistant',
         content: 'Test',
         complete: true,

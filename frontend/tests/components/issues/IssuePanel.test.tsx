@@ -208,7 +208,7 @@ describe('IssuePanel', () => {
   it('should not show closed_at when issue is not closed', () => {
     renderWithProviders(<IssuePanel issue={mockIssue} />)
 
-    expect(screen.queryByText(/Closed at/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Closed/)).not.toBeInTheDocument()
   })
 
   it('should show closed_at when issue is closed', () => {
@@ -220,7 +220,7 @@ describe('IssuePanel', () => {
 
     renderWithProviders(<IssuePanel issue={closedIssue} />)
 
-    expect(screen.getByText(/Closed at/)).toBeInTheDocument()
+    expect(screen.getByText(/Closed.*ago/)).toBeInTheDocument()
   })
 
   it('should not show assignee section when assignee is undefined', () => {
@@ -288,10 +288,36 @@ describe('IssuePanel', () => {
   it('should disable Archive button when isUpdating is true', () => {
     const onArchive = vi.fn()
 
-    renderWithProviders(
-      <IssuePanel issue={mockIssue} onArchive={onArchive} isUpdating={true} />
-    )
+    renderWithProviders(<IssuePanel issue={mockIssue} onArchive={onArchive} isUpdating={true} />)
 
     expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
+  })
+
+  it('should call onClose when ESC key is pressed', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onClose={onClose} />)
+
+    await user.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should not call onClose when ESC is pressed while delete dialog is open', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onDelete = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onClose={onClose} onDelete={onDelete} />)
+
+    // Open delete dialog
+    const deleteButton = screen.getByLabelText('Delete')
+    await user.click(deleteButton)
+
+    // ESC should not close the panel when dialog is open
+    await user.keyboard('{Escape}')
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

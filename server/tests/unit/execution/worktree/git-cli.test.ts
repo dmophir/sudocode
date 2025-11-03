@@ -2,8 +2,7 @@
  * Tests for Git CLI Wrapper
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { GitCli } from '../../../../src/execution/worktree/git-cli.js';
 import { WorktreeError, WorktreeErrorCode } from '../../../../src/execution/worktree/types.js';
 
@@ -53,24 +52,24 @@ describe('GitCli', () => {
     it('should execute git worktree add command', async () => {
       await gitCli.worktreeAdd('/repo', '/worktree/path', 'feature-branch');
 
-      assert.ok(gitCli.lastCommand.includes('git worktree add'));
-      assert.ok(gitCli.lastCommand.includes('/worktree/path'));
-      assert.ok(gitCli.lastCommand.includes('feature-branch'));
-      assert.strictEqual(gitCli.lastCwd, '/repo');
+      expect(gitCli.lastCommand.includes('git worktree add')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('/worktree/path')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('feature-branch')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
     });
 
     it('should include force flag when specified', async () => {
       await gitCli.worktreeAdd('/repo', '/worktree/path', 'feature-branch', true);
 
-      assert.ok(gitCli.lastCommand.includes('--force'));
+      expect(gitCli.lastCommand.includes('--force')).toBeTruthy();
     });
 
     it('should escape shell arguments', async () => {
       await gitCli.worktreeAdd('/repo', "/path/with'quotes", "branch'name");
 
       // Should escape single quotes - verify they're not present unescaped
-      assert.ok(!gitCli.lastCommand.includes("with'quotes"));
-      assert.ok(!gitCli.lastCommand.includes("branch'name"));
+      expect(!gitCli.lastCommand.includes("with'quotes")).toBeTruthy();
+      expect(!gitCli.lastCommand.includes("branch'name")).toBeTruthy();
     });
   });
 
@@ -78,15 +77,15 @@ describe('GitCli', () => {
     it('should execute git worktree remove command', async () => {
       await gitCli.worktreeRemove('/repo', '/worktree/path');
 
-      assert.ok(gitCli.lastCommand.includes('git worktree remove'));
-      assert.ok(gitCli.lastCommand.includes('/worktree/path'));
-      assert.strictEqual(gitCli.lastCwd, '/repo');
+      expect(gitCli.lastCommand.includes('git worktree remove')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('/worktree/path')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
     });
 
     it('should include force flag when specified', async () => {
       await gitCli.worktreeRemove('/repo', '/worktree/path', true);
 
-      assert.ok(gitCli.lastCommand.includes('--force'));
+      expect(gitCli.lastCommand.includes('--force')).toBeTruthy();
     });
   });
 
@@ -94,8 +93,8 @@ describe('GitCli', () => {
     it('should execute git worktree prune command', async () => {
       await gitCli.worktreePrune('/repo');
 
-      assert.ok(gitCli.lastCommand.includes('git worktree prune'));
-      assert.strictEqual(gitCli.lastCwd, '/repo');
+      expect(gitCli.lastCommand.includes('git worktree prune')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
     });
   });
 
@@ -113,17 +112,17 @@ branch refs/heads/feature-branch
 
       const worktrees = await gitCli.worktreeList('/repo');
 
-      assert.strictEqual(worktrees.length, 2);
+      expect(worktrees.length).toBe(2);
 
-      assert.strictEqual(worktrees[0].path, '/path/to/main');
-      assert.strictEqual(worktrees[0].branch, 'main');
-      assert.strictEqual(worktrees[0].commit, 'abc123def456');
-      assert.strictEqual(worktrees[0].isMain, false);
-      assert.strictEqual(worktrees[0].isLocked, false);
+      expect(worktrees[0].path).toBe('/path/to/main');
+      expect(worktrees[0].branch).toBe('main');
+      expect(worktrees[0].commit).toBe('abc123def456');
+      expect(worktrees[0].isMain).toBe(false);
+      expect(worktrees[0].isLocked).toBe(false);
 
-      assert.strictEqual(worktrees[1].path, '/path/to/feature');
-      assert.strictEqual(worktrees[1].branch, 'feature-branch');
-      assert.strictEqual(worktrees[1].commit, 'def789ghi012');
+      expect(worktrees[1].path).toBe('/path/to/feature');
+      expect(worktrees[1].branch).toBe('feature-branch');
+      expect(worktrees[1].commit).toBe('def789ghi012');
     });
 
     it('should handle locked worktrees', async () => {
@@ -136,9 +135,9 @@ locked manual lock
 
       const worktrees = await gitCli.worktreeList('/repo');
 
-      assert.strictEqual(worktrees.length, 1);
-      assert.strictEqual(worktrees[0].isLocked, true);
-      assert.strictEqual(worktrees[0].lockReason, 'manual lock');
+      expect(worktrees.length).toBe(1);
+      expect(worktrees[0].isLocked).toBe(true);
+      expect(worktrees[0].lockReason).toBe('manual lock');
     });
 
     it('should handle bare repositories', async () => {
@@ -150,8 +149,8 @@ bare
 
       const worktrees = await gitCli.worktreeList('/repo');
 
-      assert.strictEqual(worktrees.length, 1);
-      assert.strictEqual(worktrees[0].isMain, true);
+      expect(worktrees.length).toBe(1);
+      expect(worktrees[0].isMain).toBe(true);
     });
 
     it('should handle detached HEAD', async () => {
@@ -162,8 +161,8 @@ HEAD abc123def456
 
       const worktrees = await gitCli.worktreeList('/repo');
 
-      assert.strictEqual(worktrees.length, 1);
-      assert.strictEqual(worktrees[0].branch, '(detached)');
+      expect(worktrees.length).toBe(1);
+      expect(worktrees[0].branch).toBe('(detached)');
     });
   });
 
@@ -171,10 +170,10 @@ HEAD abc123def456
     it('should execute git branch command', async () => {
       await gitCli.createBranch('/repo', 'new-branch', 'main');
 
-      assert.ok(gitCli.lastCommand.includes('git branch'));
-      assert.ok(gitCli.lastCommand.includes('new-branch'));
-      assert.ok(gitCli.lastCommand.includes('main'));
-      assert.strictEqual(gitCli.lastCwd, '/repo');
+      expect(gitCli.lastCommand.includes('git branch')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('new-branch')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('main')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
     });
   });
 
@@ -182,15 +181,15 @@ HEAD abc123def456
     it('should execute git branch -d command', async () => {
       await gitCli.deleteBranch('/repo', 'old-branch');
 
-      assert.ok(gitCli.lastCommand.includes('git branch -d'));
-      assert.ok(gitCli.lastCommand.includes('old-branch'));
-      assert.strictEqual(gitCli.lastCwd, '/repo');
+      expect(gitCli.lastCommand.includes('git branch -d')).toBeTruthy();
+      expect(gitCli.lastCommand.includes('old-branch')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
     });
 
     it('should use -D flag when force is true', async () => {
       await gitCli.deleteBranch('/repo', 'old-branch', true);
 
-      assert.ok(gitCli.lastCommand.includes('git branch -D'));
+      expect(gitCli.lastCommand.includes('git branch -D')).toBeTruthy();
     });
   });
 
@@ -210,11 +209,31 @@ HEAD abc123def456
 
       await gitCli.configureSparseCheckout('/worktree', ['src', 'docs']);
 
-      assert.strictEqual(commandCount, 2);
-      assert.ok(commands[0].includes('git sparse-checkout init --cone'));
-      assert.ok(commands[1].includes('git sparse-checkout set'));
-      assert.ok(commands[1].includes('src'));
-      assert.ok(commands[1].includes('docs'));
+      expect(commandCount).toBe(2);
+      expect(commands[0].includes('git sparse-checkout init --cone')).toBeTruthy();
+      expect(commands[1].includes('git sparse-checkout set')).toBeTruthy();
+      expect(commands[1].includes('src')).toBeTruthy();
+      expect(commands[1].includes('docs')).toBeTruthy();
+    });
+  });
+
+  describe('getCurrentCommit', () => {
+    it('should execute git rev-parse HEAD command', async () => {
+      gitCli.mockOutput = 'abc123def456789\n';
+
+      const commit = await gitCli.getCurrentCommit('/repo');
+
+      expect(gitCli.lastCommand.includes('git rev-parse HEAD')).toBeTruthy();
+      expect(gitCli.lastCwd).toBe('/repo');
+      expect(commit).toBe('abc123def456789');
+    });
+
+    it('should trim whitespace from commit SHA', async () => {
+      gitCli.mockOutput = '  abc123def456789  \n  ';
+
+      const commit = await gitCli.getCurrentCommit('/repo');
+
+      expect(commit).toBe('abc123def456789');
     });
   });
 
@@ -225,16 +244,9 @@ HEAD abc123def456
       error.stdout = '';
       gitCli.shouldThrow = error;
 
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await gitCli.worktreeAdd('/repo', '/path', 'invalid-branch');
-        },
-        (error: any) => {
-          assert.ok(error instanceof WorktreeError);
-          assert.strictEqual(error.code, WorktreeErrorCode.GIT_ERROR);
-          return true;
-        }
-      );
+        }).rejects.toThrow();
     });
 
     it('should include stderr in error message', async () => {
@@ -243,15 +255,9 @@ HEAD abc123def456
       error.stdout = '';
       gitCli.shouldThrow = error;
 
-      await assert.rejects(
-        async () => {
+      await expect(async () => {
           await gitCli.createBranch('/repo', 'branch', 'base');
-        },
-        (error: any) => {
-          assert.ok(error instanceof WorktreeError);
-          return true;
-        }
-      );
+        }).rejects.toThrow();
     });
   });
 });

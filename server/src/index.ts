@@ -11,10 +11,15 @@ import type Database from "better-sqlite3";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { initDatabase, getDatabaseInfo } from "./services/db.js";
+import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
+import { ExecutionService } from "./services/execution-service.js";
+import { WorktreeManager } from "./execution/worktree/manager.js";
+import { getWorktreeConfig } from "./execution/worktree/config.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
+import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
@@ -35,37 +40,78 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const DEFAULT_PORT = 3000;
+const MAX_PORT_ATTEMPTS = 20;
 
 // Falls back to current directory for development/testing
 const SUDOCODE_DIR =
   process.env.SUDOCODE_DIR || path.join(process.cwd(), ".sudocode");
 const DB_PATH = path.join(SUDOCODE_DIR, "cache.db");
+// TODO: Include sudocode install package for serving static files.
+
+// Derive repo root from SUDOCODE_DIR (which is <repo>/.sudocode)
+// This ensures consistency across database and execution paths
+const REPO_ROOT = path.dirname(SUDOCODE_DIR);
 
 // Initialize database and transport manager
-let db: Database.Database;
+let db!: Database.Database;
 let watcher: ServerWatcherControl | null = null;
-let transportManager: TransportManager;
+let transportManager!: TransportManager;
+let executionService: ExecutionService | null = null;
 
-try {
-  console.log(`Initializing database at: ${DB_PATH}`);
-  db = initDatabase({ path: DB_PATH });
-  const info = getDatabaseInfo(db);
-  console.log(`Database initialized with ${info.tables.length} tables`);
-  if (!info.hasCliTables) {
-    // TODO: Automatically import and sync.
-    console.warn(
-      "Warning: CLI tables not found. Run 'sudocode sync' to initialize the database."
+// Async initialization function
+async function initialize() {
+  try {
+    console.log(`Initializing database at: ${DB_PATH}`);
+    db = initDatabase({ path: DB_PATH });
+    const info = getDatabaseInfo(db);
+    console.log(`Database initialized with ${info.tables.length} tables`);
+    if (!info.hasCliTables) {
+      // TODO: Automatically import and sync.
+      console.warn(
+        "Warning: CLI tables not found. Run 'sudocode sync' to initialize the database."
+      );
+    }
+
+    // Initialize transport manager for SSE streaming
+    transportManager = new TransportManager();
+    console.log("Transport manager initialized");
+
+    // Initialize execution service globally for cleanup on shutdown
+    executionService = new ExecutionService(
+      db,
+      REPO_ROOT,
+      undefined,
+      transportManager
     );
-  }
+    console.log("Execution service initialized");
 
-  // Initialize transport manager for SSE streaming
-  transportManager = new TransportManager();
-  console.log('Transport manager initialized');
-} catch (error) {
-  console.error("Failed to initialize database:", error);
-  process.exit(1);
+    // Cleanup orphaned worktrees on startup (if configured)
+    const worktreeConfig = getWorktreeConfig(REPO_ROOT);
+    if (worktreeConfig.cleanupOrphanedWorktreesOnStartup) {
+      try {
+        console.log("Cleaning up orphaned worktrees...");
+        const worktreeManager = new WorktreeManager(worktreeConfig);
+        const lifecycleService = new ExecutionLifecycleService(
+          db,
+          REPO_ROOT,
+          worktreeManager
+        );
+        await lifecycleService.cleanupOrphanedWorktrees();
+        console.log("Orphaned worktree cleanup complete");
+      } catch (error) {
+        console.error("Failed to cleanup orphaned worktrees:", error);
+        // Don't exit - this is best-effort cleanup
+      }
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    process.exit(1);
+  }
 }
+
+// Run initialization
+await initialize();
 
 // Start file watcher (enabled by default, disable with WATCH=false)
 const WATCH_ENABLED = process.env.WATCH !== "false";
@@ -128,6 +174,11 @@ app.use("/api/issues", createIssuesRouter(db));
 app.use("/api/specs", createSpecsRouter(db));
 app.use("/api/relationships", createRelationshipsRouter(db));
 app.use("/api/feedback", createFeedbackRouter(db));
+// Mount execution routes (must be before stream routes to avoid conflicts)
+app.use(
+  "/api",
+  createExecutionsRouter(db, REPO_ROOT, transportManager, executionService!)
+);
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
 // Health check endpoint
@@ -156,7 +207,9 @@ app.get("/api/version", (_req: Request, res: Response) => {
 
     const cliPackage = JSON.parse(readFileSync(cliPackagePath, "utf-8"));
     const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf-8"));
-    const frontendPackage = JSON.parse(readFileSync(frontendPackagePath, "utf-8"));
+    const frontendPackage = JSON.parse(
+      readFileSync(frontendPackagePath, "utf-8")
+    );
 
     res.status(200).json({
       cli: cliPackage.version,
@@ -187,7 +240,7 @@ app.get("/ws/stats", (_req: Request, res: Response) => {
   res.status(200).json(stats);
 });
 
-// Serve static frontend
+// Serve static frontend from sudocode installation directory
 const frontendPath = path.join(__dirname, "../../../frontend/dist");
 console.log(`[server] Serving static frontend from: ${frontendPath}`);
 
@@ -208,21 +261,117 @@ app.get("*", (req: Request, res: Response) => {
   }
 });
 
-// Create HTTP server and initialize WebSocket
+// Create HTTP server
 const server = http.createServer(app);
 
-// Initialize WebSocket server
+/**
+ * Attempts to start the server on the given port, incrementing if unavailable.
+ * Only scans for ports if no explicit PORT was provided.
+ */
+async function startServer(
+  initialPort: number,
+  maxAttempts: number
+): Promise<number> {
+  const explicitPort = process.env.PORT;
+  const shouldScan = !explicitPort;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const port = initialPort + attempt;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const errorHandler = (err: NodeJS.ErrnoException) => {
+          server.removeListener("error", errorHandler);
+          server.removeListener("listening", listeningHandler);
+          reject(err);
+        };
+
+        const listeningHandler = () => {
+          server.removeListener("error", errorHandler);
+          resolve();
+        };
+
+        server.once("error", errorHandler);
+        server.once("listening", listeningHandler);
+        server.listen(port);
+      });
+
+      // Success! Return the port we successfully bound to
+      return port;
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
+
+      if (error.code === "EADDRINUSE") {
+        if (!shouldScan) {
+          // Explicit port was specified and it's in use - fail immediately
+          throw new Error(
+            `Port ${port} is already in use. Please specify a different PORT.`
+          );
+        }
+
+        // Port is in use, try next one if we have attempts left
+        if (attempt < maxAttempts - 1) {
+          console.log(`Port ${port} is already in use, trying ${port + 1}...`);
+          continue;
+        } else {
+          throw new Error(
+            `Could not find an available port after ${maxAttempts} attempts (${initialPort}-${port})`
+          );
+        }
+      } else {
+        // Some other error - fail immediately
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`Could not start server after ${maxAttempts} attempts`);
+}
+
+// Start listening with port scanning
+const startPort = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : DEFAULT_PORT;
+const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
+
+// Initialize WebSocket server AFTER successfully binding to a port
 initWebSocketServer(server, "/ws");
 
-// Start listening
-server.listen(PORT, () => {
-  console.log(`sudocode local server running on http://localhost:${PORT}`);
-  console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
+// Format URLs as clickable links with color
+const httpUrl = `http://localhost:${actualPort}`;
+const wsUrl = `ws://localhost:${actualPort}/ws`;
+
+// ANSI escape codes for green color and clickable links
+const green = "\u001b[32m";
+const bold = "\u001b[1m";
+const reset = "\u001b[0m";
+const makeClickable = (url: string, text: string) =>
+  `\u001b]8;;${url}\u001b\\${text}\u001b]8;;\u001b\\`;
+
+console.log(`WebSocket server available at: ${makeClickable(wsUrl, wsUrl)}`);
+console.log(
+  `${bold}${green}sudocode local server running on: ${makeClickable(httpUrl, httpUrl)}${reset}`
+);
+
+// Error handlers for debugging
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  console.error("Stack trace:", error.stack);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled rejection at:", promise);
+  console.error("Reason:", reason);
 });
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
+
+  // Shutdown execution service (cancel active executions)
+  if (executionService) {
+    await executionService.shutdown();
+  }
 
   // Stop file watcher
   if (watcher) {
@@ -246,10 +395,21 @@ process.on("SIGINT", async () => {
     console.log("Server closed");
     process.exit(0);
   });
+
+  // Force exit after 10 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    console.error("Shutdown timeout - forcing exit");
+    process.exit(1);
+  }, 10000);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nShutting down server...");
+
+  // Shutdown execution service (cancel active executions)
+  if (executionService) {
+    await executionService.shutdown();
+  }
 
   // Stop file watcher
   if (watcher) {

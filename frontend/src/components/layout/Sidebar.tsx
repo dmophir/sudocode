@@ -93,7 +93,7 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
                   collapsed && 'justify-center px-2'
                 )}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
+                <Icon className={'h-5 w-5 flex-shrink-0' + (active ? ' text-white' : '')} />
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             )

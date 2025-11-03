@@ -45,6 +45,21 @@ describe("Sync Commands - Auto Direction Detection", () => {
     fs.mkdirSync(specsDir, { recursive: true });
     fs.mkdirSync(issuesDir, { recursive: true });
 
+    // Create config.json to mark directory as initialized (prevents auto-init during tests)
+    const config = {
+      version: "0.1.0",
+      id_prefix: { spec: "SPEC", issue: "ISSUE" },
+    };
+    fs.writeFileSync(
+      path.join(tempDir, "config.json"),
+      JSON.stringify(config, null, 2),
+      "utf8"
+    );
+
+    // Create cache.db file
+    const dbPath = path.join(tempDir, "cache.db");
+    fs.writeFileSync(dbPath, "");
+
     // Spy on console methods
     consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -942,6 +957,76 @@ describe("Export and Import Commands", () => {
       expect(relationships[0].relationship_type).toBe("implements");
 
       db2.close();
+    });
+  });
+
+  describe("Auto-initialization", () => {
+    let uninitDb: Database.Database;
+    let uninitTempDir: string;
+
+    beforeEach(() => {
+      // Create a fresh uninitialized directory (no config.json)
+      uninitDb = initDatabase({ path: ":memory:" });
+      uninitTempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "sudocode-uninit-test-")
+      );
+      // Do NOT create config.json - this directory is uninitialized
+    });
+
+    afterEach(() => {
+      if (uninitDb) {
+        uninitDb.close();
+      }
+      if (uninitTempDir && fs.existsSync(uninitTempDir)) {
+        fs.rmSync(uninitTempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should auto-initialize when directory is not initialized", async () => {
+      const ctx = { db: uninitDb, outputDir: uninitTempDir, jsonOutput: false };
+
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).toContain("Initializing sudocode...");
+      expect(output).toContain("✓ Initialized sudocode");
+
+      // Verify directory structure was created
+      expect(fs.existsSync(path.join(uninitTempDir, "config.json"))).toBe(true);
+      expect(fs.existsSync(path.join(uninitTempDir, "cache.db"))).toBe(true);
+      expect(fs.existsSync(path.join(uninitTempDir, "specs"))).toBe(true);
+      expect(fs.existsSync(path.join(uninitTempDir, "issues"))).toBe(true);
+      expect(fs.existsSync(path.join(uninitTempDir, "specs.jsonl"))).toBe(true);
+      expect(fs.existsSync(path.join(uninitTempDir, "issues.jsonl"))).toBe(
+        true
+      );
+      expect(fs.existsSync(path.join(uninitTempDir, ".gitignore"))).toBe(true);
+    });
+
+    it("should proceed with sync after auto-initialization", async () => {
+      const ctx = { db: uninitDb, outputDir: uninitTempDir, jsonOutput: false };
+
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      // Should contain both initialization AND sync messages
+      expect(output).toContain("Initializing sudocode...");
+      expect(output).toContain("Detecting sync direction");
+    });
+
+    it("should not re-initialize on second sync call", async () => {
+      const ctx = { db: uninitDb, outputDir: uninitTempDir, jsonOutput: false };
+
+      // First sync - should initialize
+      await handleSync(ctx, {});
+      consoleLogSpy.mockClear();
+
+      // Second sync - should NOT initialize again
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).not.toContain("Initializing sudocode...");
+      expect(output).toContain("Detecting sync direction");
     });
   });
 });

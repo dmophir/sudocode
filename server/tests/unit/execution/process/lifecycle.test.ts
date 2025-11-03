@@ -5,8 +5,7 @@
  * and timeout management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleProcessManager } from '../../../../src/execution/process/simple-manager.js';
 import type { ProcessConfig } from '../../../../src/execution/process/types.js';
 
@@ -36,10 +35,10 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'completed');
-      assert.strictEqual(managedProcess.exitCode, 0);
-      assert.strictEqual(manager.getMetrics().currentlyActive, initialActive - 1);
-      assert.strictEqual(manager.getMetrics().totalCompleted, 1);
+      expect(managedProcess.status).toBe('completed');
+      expect(managedProcess.exitCode).toBe(0);
+      expect(manager.getMetrics().currentlyActive).toBe(initialActive - 1);
+      expect(manager.getMetrics().totalCompleted).toBe(1);
     });
 
     it('sets status to crashed on non-zero exit code', async () => {
@@ -59,10 +58,10 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.strictEqual(managedProcess.exitCode, 1);
-      assert.strictEqual(manager.getMetrics().currentlyActive, initialActive - 1);
-      assert.strictEqual(manager.getMetrics().totalFailed, 1);
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.exitCode).toBe(1);
+      expect(manager.getMetrics().currentlyActive).toBe(initialActive - 1);
+      expect(manager.getMetrics().totalFailed).toBe(1);
     });
 
     it('captures exit signal when process is killed', async () => {
@@ -84,8 +83,8 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.signal, 'SIGTERM');
-      assert.strictEqual(managedProcess.status, 'crashed');
+      expect(managedProcess.signal).toBe('SIGTERM');
+      expect(managedProcess.status).toBe('crashed');
     });
 
     it('calculates process duration on exit', async () => {
@@ -104,8 +103,8 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.ok(managedProcess.metrics.totalDuration >= 100);
-      assert.ok(managedProcess.metrics.totalDuration < 500);
+      expect(managedProcess.metrics.totalDuration >= 100).toBeTruthy();
+      expect(managedProcess.metrics.totalDuration < 500).toBeTruthy();
     });
 
     it('updates average duration metric', async () => {
@@ -128,8 +127,8 @@ describe('Process Lifecycle Events', () => {
       });
 
       const metrics = manager.getMetrics();
-      assert.ok(metrics.averageDuration > 0);
-      assert.ok(metrics.averageDuration >= 50);
+      expect(metrics.averageDuration > 0).toBeTruthy();
+      expect(metrics.averageDuration >= 50).toBeTruthy();
     });
 
     it('schedules cleanup after 5 seconds', async () => {
@@ -148,13 +147,13 @@ describe('Process Lifecycle Events', () => {
       });
 
       // Process should still be in activeProcesses
-      assert.ok(manager.getProcess(processId));
+      expect(manager.getProcess(processId)).toBeTruthy();
 
       // Wait for cleanup (5 seconds + buffer)
       await new Promise((resolve) => setTimeout(resolve, 5100));
 
       // Process should be removed from activeProcesses
-      assert.strictEqual(manager.getProcess(processId), null);
+      expect(manager.getProcess(processId)).toBe(null);
     });
   });
 
@@ -166,8 +165,7 @@ describe('Process Lifecycle Events', () => {
         workDir: process.cwd(),
       };
 
-      await assert.rejects(
-        manager.acquireProcess(config),
+      await expect(manager.acquireProcess(config)).rejects.toThrow(
         /Failed to spawn process: no PID assigned/
       );
     });
@@ -188,8 +186,8 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.notStrictEqual(managedProcess.exitCode, 0);
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.exitCode).not.toBe(0);
     });
   });
 
@@ -211,7 +209,7 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.ok(managedProcess.lastActivity > initialActivity);
+      expect(managedProcess.lastActivity > initialActivity).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -234,7 +232,7 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.ok(managedProcess.lastActivity > initialActivity);
+      expect(managedProcess.lastActivity > initialActivity).toBeTruthy();
 
       // Cleanup
       managedProcess.process.kill();
@@ -259,8 +257,8 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.ok(managedProcess.signal); // Should be killed by signal
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.signal).toBeTruthy(); // Should be killed by signal
     });
 
     it('clears timeout when process exits before timeout', async () => {
@@ -280,8 +278,8 @@ describe('Process Lifecycle Events', () => {
         });
       });
 
-      assert.strictEqual(managedProcess.status, 'completed');
-      assert.strictEqual(managedProcess.exitCode, 0);
+      expect(managedProcess.status).toBe('completed');
+      expect(managedProcess.exitCode).toBe(0);
     });
 
     it('sets status to terminating before killing on timeout', async () => {
@@ -298,10 +296,10 @@ describe('Process Lifecycle Events', () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Status should be terminating or crashed (if already exited)
-      assert.ok(
+      expect(
         managedProcess.status === 'terminating' ||
           managedProcess.status === 'crashed'
-      );
+      ).toBeTruthy();
 
       // Cleanup
       if (!managedProcess.process.killed) {
@@ -337,10 +335,10 @@ describe('Process Lifecycle Events', () => {
         }),
       ]);
 
-      assert.strictEqual(process1.status, 'completed');
-      assert.strictEqual(process2.status, 'crashed');
-      assert.strictEqual(manager.getMetrics().totalCompleted, 1);
-      assert.strictEqual(manager.getMetrics().totalFailed, 1);
+      expect(process1.status).toBe('completed');
+      expect(process2.status).toBe('crashed');
+      expect(manager.getMetrics().totalCompleted).toBe(1);
+      expect(manager.getMetrics().totalFailed).toBe(1);
     });
   });
 
@@ -355,7 +353,7 @@ describe('Process Lifecycle Events', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Initial state should be 'busy'
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Wait for process to exit
       await new Promise<void>((resolve) => {
@@ -363,8 +361,8 @@ describe('Process Lifecycle Events', () => {
       });
 
       // Final state should be 'completed'
-      assert.strictEqual(managedProcess.status, 'completed');
-      assert.strictEqual(managedProcess.exitCode, 0);
+      expect(managedProcess.status).toBe('completed');
+      expect(managedProcess.exitCode).toBe(0);
     });
 
     it('follows busy → crashed transition on error exit', async () => {
@@ -377,7 +375,7 @@ describe('Process Lifecycle Events', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Initial state should be 'busy'
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Wait for process to exit
       await new Promise<void>((resolve) => {
@@ -385,8 +383,8 @@ describe('Process Lifecycle Events', () => {
       });
 
       // Final state should be 'crashed'
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.strictEqual(managedProcess.exitCode, 1);
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.exitCode).toBe(1);
     });
 
     it('follows busy → terminating → completed transition on graceful termination', async () => {
@@ -410,7 +408,7 @@ describe('Process Lifecycle Events', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Initial state should be 'busy'
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Terminate the process
       await manager.terminateProcess(managedProcess.id);
@@ -419,14 +417,14 @@ describe('Process Lifecycle Events', () => {
       // Either completed (if it handled SIGTERM gracefully) or crashed (if force-killed)
       // Both are valid outcomes depending on timing
       const finalStatus = managedProcess.status as string;
-      assert.ok(
+      expect(
         finalStatus === 'completed' || finalStatus === 'crashed',
         `Expected status to be completed or crashed, got ${finalStatus}`
-      );
+      ).toBeTruthy();
 
       // If completed, exitCode should be 0
       if (finalStatus === 'completed') {
-        assert.strictEqual(managedProcess.exitCode, 0);
+        expect(managedProcess.exitCode).toBe(0);
       }
     });
 
@@ -445,7 +443,7 @@ describe('Process Lifecycle Events', () => {
       const managedProcess = await manager.acquireProcess(config);
 
       // Initial state should be 'busy'
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Terminate the process (will wait then force kill)
       await manager.terminateProcess(managedProcess.id);
@@ -454,8 +452,8 @@ describe('Process Lifecycle Events', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Final state should be 'crashed' (killed by signal)
-      assert.strictEqual(managedProcess.status, 'crashed');
-      assert.ok(managedProcess.signal); // Should have a signal
+      expect(managedProcess.status).toBe('crashed');
+      expect(managedProcess.signal).toBeTruthy(); // Should have a signal
     });
 
     it('tracks state transition on timeout-triggered termination', async () => {
@@ -470,7 +468,7 @@ describe('Process Lifecycle Events', () => {
       const states: string[] = [managedProcess.status];
 
       // Initial state should be 'busy'
-      assert.strictEqual(managedProcess.status, 'busy');
+      expect(managedProcess.status).toBe('busy');
 
       // Monitor state changes (poll very frequently to catch quick transitions)
       const checkInterval = setInterval(() => {
@@ -489,9 +487,9 @@ describe('Process Lifecycle Events', () => {
       });
 
       // Should have seen busy → terminating → crashed
-      assert.ok(states.includes('busy'));
-      assert.ok(states.includes('terminating'));
-      assert.strictEqual(managedProcess.status, 'crashed');
+      expect(states.includes('busy')).toBeTruthy();
+      expect(states.includes('terminating')).toBeTruthy();
+      expect(managedProcess.status).toBe('crashed');
     });
 
     it('maintains consistent state during concurrent operations', async () => {
@@ -528,17 +526,16 @@ describe('Process Lifecycle Events', () => {
       // Should only see: busy, possibly terminating, then completed/crashed
       for (let i = 0; i < statuses.length; i++) {
         const status = statuses[i];
-        assert.ok(
-          ['busy', 'terminating', 'completed', 'crashed'].includes(status),
-          `Invalid status in sequence: ${status}`
-        );
+        expect(
+          ['busy', 'terminating', 'completed', 'crashed'].includes(status)
+        ).toBeTruthy();
 
         // Cannot go from completed/crashed back to any other state
         if (i > 0 && (statuses[i-1] === 'completed' || statuses[i-1] === 'crashed')) {
-          assert.ok(
+          expect(
             status === statuses[i-1],
             `Invalid transition from ${statuses[i-1]} to ${status}`
-          );
+          ).toBeTruthy();
         }
       }
     });

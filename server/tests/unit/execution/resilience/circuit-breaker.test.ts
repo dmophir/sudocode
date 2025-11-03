@@ -2,8 +2,7 @@
  * Tests for Circuit Breaker Implementation
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeEach , expect } from 'vitest'
 import {
   CircuitBreakerManager,
   createCircuitBreaker,
@@ -25,11 +24,11 @@ describe('Circuit Breaker', () => {
       it('should create new circuit breaker with default config', () => {
         const breaker = manager.getOrCreate('test-service');
 
-        assert.strictEqual(breaker.name, 'test-service');
-        assert.strictEqual(breaker.state, 'closed');
-        assert.strictEqual(breaker.config.failureThreshold, 5);
-        assert.strictEqual(breaker.config.successThreshold, 2);
-        assert.strictEqual(breaker.config.timeout, 60000);
+        expect(breaker.name).toBe('test-service');
+        expect(breaker.state).toBe('closed');
+        expect(breaker.config.failureThreshold).toBe(5);
+        expect(breaker.config.successThreshold).toBe(2);
+        expect(breaker.config.timeout).toBe(60000);
       });
 
       it('should create new circuit breaker with custom config', () => {
@@ -39,39 +38,39 @@ describe('Circuit Breaker', () => {
           timeout: 30000,
         });
 
-        assert.strictEqual(breaker.config.failureThreshold, 10);
-        assert.strictEqual(breaker.config.successThreshold, 3);
-        assert.strictEqual(breaker.config.timeout, 30000);
+        expect(breaker.config.failureThreshold).toBe(10);
+        expect(breaker.config.successThreshold).toBe(3);
+        expect(breaker.config.timeout).toBe(30000);
       });
 
       it('should return existing circuit breaker on subsequent calls', () => {
         const breaker1 = manager.getOrCreate('test-service');
         const breaker2 = manager.getOrCreate('test-service');
 
-        assert.strictEqual(breaker1, breaker2);
+        expect(breaker1).toBe(breaker2);
       });
 
       it('should create separate breakers for different names', () => {
         const breaker1 = manager.getOrCreate('service-1');
         const breaker2 = manager.getOrCreate('service-2');
 
-        assert.notStrictEqual(breaker1, breaker2);
-        assert.strictEqual(breaker1.name, 'service-1');
-        assert.strictEqual(breaker2.name, 'service-2');
+        expect(breaker1).not.toBe(breaker2);
+        expect(breaker1.name).toBe('service-1');
+        expect(breaker2.name).toBe('service-2');
       });
     });
 
     describe('get', () => {
       it('should return null for non-existent breaker', () => {
         const breaker = manager.get('non-existent');
-        assert.strictEqual(breaker, null);
+        expect(breaker).toBe(null);
       });
 
       it('should return existing breaker', () => {
         const created = manager.getOrCreate('test-service');
         const retrieved = manager.get('test-service');
 
-        assert.strictEqual(created, retrieved);
+        expect(created).toBe(retrieved);
       });
     });
 
@@ -84,17 +83,17 @@ describe('Circuit Breaker', () => {
             timeout: 60000,
           });
 
-          assert.strictEqual(breaker.state, 'closed');
+          expect(breaker.state).toBe('closed');
 
           // Record failures up to threshold
           manager.recordFailure('test-service', new Error('Failure 1'));
-          assert.strictEqual(breaker.state, 'closed');
+          expect(breaker.state).toBe('closed');
 
           manager.recordFailure('test-service', new Error('Failure 2'));
-          assert.strictEqual(breaker.state, 'closed');
+          expect(breaker.state).toBe('closed');
 
           manager.recordFailure('test-service', new Error('Failure 3'));
-          assert.strictEqual(breaker.state, 'open');
+          expect(breaker.state).toBe('open');
         });
 
         it('should not open circuit if failures below threshold', () => {
@@ -107,7 +106,7 @@ describe('Circuit Breaker', () => {
           manager.recordFailure('test-service', new Error('Failure 1'));
           manager.recordFailure('test-service', new Error('Failure 2'));
 
-          assert.strictEqual(breaker.state, 'closed');
+          expect(breaker.state).toBe('closed');
         });
       });
 
@@ -122,17 +121,17 @@ describe('Circuit Breaker', () => {
           // Open the circuit
           manager.recordFailure('test-service', new Error('Failure 1'));
           manager.recordFailure('test-service', new Error('Failure 2'));
-          assert.strictEqual(breaker.state, 'open');
+          expect(breaker.state).toBe('open');
 
           // Before timeout, should still reject
-          assert.strictEqual(manager.canExecute('test-service'), false);
+          expect(manager.canExecute('test-service')).toBe(false);
 
           // Wait for timeout
           await new Promise((resolve) => setTimeout(resolve, 150));
 
           // canExecute should transition to half-open
-          assert.strictEqual(manager.canExecute('test-service'), true);
-          assert.strictEqual(breaker.state, 'half-open');
+          expect(manager.canExecute('test-service')).toBe(true);
+          expect(breaker.state).toBe('half-open');
         });
 
         it('should not transition before timeout elapsed', () => {
@@ -146,8 +145,8 @@ describe('Circuit Breaker', () => {
           manager.recordFailure('test-service', new Error('Failure 1'));
           manager.recordFailure('test-service', new Error('Failure 2'));
 
-          assert.strictEqual(breaker.state, 'open');
-          assert.strictEqual(manager.canExecute('test-service'), false);
+          expect(breaker.state).toBe('open');
+          expect(manager.canExecute('test-service')).toBe(false);
         });
       });
 
@@ -162,19 +161,19 @@ describe('Circuit Breaker', () => {
           // Open the circuit
           manager.recordFailure('test-service', new Error('Failure 1'));
           manager.recordFailure('test-service', new Error('Failure 2'));
-          assert.strictEqual(breaker.state, 'open');
+          expect(breaker.state).toBe('open');
 
           // Wait for timeout and transition to half-open
           await new Promise((resolve) => setTimeout(resolve, 150));
           manager.canExecute('test-service');
-          assert.strictEqual(breaker.state, 'half-open');
+          expect(breaker.state).toBe('half-open');
 
           // Record successes
           manager.recordSuccess('test-service');
-          assert.strictEqual(breaker.state, 'half-open');
+          expect(breaker.state).toBe('half-open');
 
           manager.recordSuccess('test-service');
-          assert.strictEqual(breaker.state, 'closed');
+          expect(breaker.state).toBe('closed');
         });
 
         it('should reset failure count when closing', async () => {
@@ -194,8 +193,8 @@ describe('Circuit Breaker', () => {
           manager.recordSuccess('test-service');
           manager.recordSuccess('test-service');
 
-          assert.strictEqual(breaker.state, 'closed');
-          assert.strictEqual(breaker.metrics.failedRequests, 0);
+          expect(breaker.state).toBe('closed');
+          expect(breaker.metrics.failedRequests).toBe(0);
         });
       });
 
@@ -214,11 +213,11 @@ describe('Circuit Breaker', () => {
           // Transition to half-open
           await new Promise((resolve) => setTimeout(resolve, 150));
           manager.canExecute('test-service');
-          assert.strictEqual(breaker.state, 'half-open');
+          expect(breaker.state).toBe('half-open');
 
           // Any failure reopens the circuit
           manager.recordFailure('test-service', new Error('Failure 3'));
-          assert.strictEqual(breaker.state, 'open');
+          expect(breaker.state).toBe('open');
         });
       });
     });
@@ -226,7 +225,7 @@ describe('Circuit Breaker', () => {
     describe('canExecute', () => {
       it('should return true for closed circuit', () => {
         manager.getOrCreate('test-service');
-        assert.strictEqual(manager.canExecute('test-service'), true);
+        expect(manager.canExecute('test-service')).toBe(true);
       });
 
       it('should return false for open circuit before timeout', () => {
@@ -239,8 +238,8 @@ describe('Circuit Breaker', () => {
         manager.recordFailure('test-service', new Error('Failure 1'));
         manager.recordFailure('test-service', new Error('Failure 2'));
 
-        assert.strictEqual(breaker.state, 'open');
-        assert.strictEqual(manager.canExecute('test-service'), false);
+        expect(breaker.state).toBe('open');
+        expect(manager.canExecute('test-service')).toBe(false);
       });
 
       it('should return true for half-open circuit', async () => {
@@ -256,12 +255,12 @@ describe('Circuit Breaker', () => {
         await new Promise((resolve) => setTimeout(resolve, 150));
         manager.canExecute('test-service');
 
-        assert.strictEqual(breaker.state, 'half-open');
-        assert.strictEqual(manager.canExecute('test-service'), true);
+        expect(breaker.state).toBe('half-open');
+        expect(manager.canExecute('test-service')).toBe(true);
       });
 
       it('should return true for non-existent breaker', () => {
-        assert.strictEqual(manager.canExecute('non-existent'), true);
+        expect(manager.canExecute('non-existent')).toBe(true);
       });
     });
 
@@ -271,9 +270,9 @@ describe('Circuit Breaker', () => {
 
         manager.recordSuccess('test-service');
 
-        assert.strictEqual(breaker.metrics.totalRequests, 1);
-        assert.strictEqual(breaker.metrics.successfulRequests, 1);
-        assert.ok(breaker.metrics.lastSuccessTime instanceof Date);
+        expect(breaker.metrics.totalRequests).toBe(1);
+        expect(breaker.metrics.successfulRequests).toBe(1);
+        expect(breaker.metrics.lastSuccessTime instanceof Date).toBeTruthy();
       });
 
       it('should track multiple successes', () => {
@@ -283,8 +282,8 @@ describe('Circuit Breaker', () => {
         manager.recordSuccess('test-service');
         manager.recordSuccess('test-service');
 
-        assert.strictEqual(breaker.metrics.totalRequests, 3);
-        assert.strictEqual(breaker.metrics.successfulRequests, 3);
+        expect(breaker.metrics.totalRequests).toBe(3);
+        expect(breaker.metrics.successfulRequests).toBe(3);
       });
     });
 
@@ -294,9 +293,9 @@ describe('Circuit Breaker', () => {
 
         manager.recordFailure('test-service', new Error('Test error'));
 
-        assert.strictEqual(breaker.metrics.totalRequests, 1);
-        assert.strictEqual(breaker.metrics.failedRequests, 1);
-        assert.ok(breaker.metrics.lastFailureTime instanceof Date);
+        expect(breaker.metrics.totalRequests).toBe(1);
+        expect(breaker.metrics.failedRequests).toBe(1);
+        expect(breaker.metrics.lastFailureTime instanceof Date).toBeTruthy();
       });
 
       it('should track multiple failures', () => {
@@ -309,8 +308,8 @@ describe('Circuit Breaker', () => {
         manager.recordFailure('test-service', new Error('Error 1'));
         manager.recordFailure('test-service', new Error('Error 2'));
 
-        assert.strictEqual(breaker.metrics.totalRequests, 2);
-        assert.strictEqual(breaker.metrics.failedRequests, 2);
+        expect(breaker.metrics.totalRequests).toBe(2);
+        expect(breaker.metrics.failedRequests).toBe(2);
       });
     });
 
@@ -325,14 +324,14 @@ describe('Circuit Breaker', () => {
         // Open the circuit
         manager.recordFailure('test-service', new Error('Failure 1'));
         manager.recordFailure('test-service', new Error('Failure 2'));
-        assert.strictEqual(breaker.state, 'open');
+        expect(breaker.state).toBe('open');
 
         // Reset
         manager.reset('test-service');
 
-        assert.strictEqual(breaker.state, 'closed');
-        assert.strictEqual(breaker.metrics.failedRequests, 0);
-        assert.strictEqual(breaker.metrics.successfulRequests, 0);
+        expect(breaker.state).toBe('closed');
+        expect(breaker.metrics.failedRequests).toBe(0);
+        expect(breaker.metrics.successfulRequests).toBe(0);
       });
 
       it('should handle reset of non-existent breaker', () => {
@@ -344,7 +343,7 @@ describe('Circuit Breaker', () => {
     describe('getAll', () => {
       it('should return empty map initially', () => {
         const all = manager.getAll();
-        assert.strictEqual(all.size, 0);
+        expect(all.size).toBe(0);
       });
 
       it('should return all created breakers', () => {
@@ -353,10 +352,10 @@ describe('Circuit Breaker', () => {
         manager.getOrCreate('service-3');
 
         const all = manager.getAll();
-        assert.strictEqual(all.size, 3);
-        assert.ok(all.has('service-1'));
-        assert.ok(all.has('service-2'));
-        assert.ok(all.has('service-3'));
+        expect(all.size).toBe(3);
+        expect(all.has('service-1')).toBeTruthy();
+        expect(all.has('service-2')).toBeTruthy();
+        expect(all.has('service-3')).toBeTruthy();
       });
 
       it('should return a copy of the map', () => {
@@ -365,7 +364,7 @@ describe('Circuit Breaker', () => {
         const all1 = manager.getAll();
         const all2 = manager.getAll();
 
-        assert.notStrictEqual(all1, all2);
+        expect(all1).not.toBe(all2);
       });
     });
   });
@@ -374,12 +373,12 @@ describe('Circuit Breaker', () => {
     it('should create breaker with default config', () => {
       const breaker = createCircuitBreaker('test-service');
 
-      assert.strictEqual(breaker.name, 'test-service');
-      assert.strictEqual(breaker.state, 'closed');
-      assert.strictEqual(breaker.config.failureThreshold, 5);
-      assert.strictEqual(breaker.config.successThreshold, 2);
-      assert.strictEqual(breaker.config.timeout, 60000);
-      assert.strictEqual(breaker.metrics.totalRequests, 0);
+      expect(breaker.name).toBe('test-service');
+      expect(breaker.state).toBe('closed');
+      expect(breaker.config.failureThreshold).toBe(5);
+      expect(breaker.config.successThreshold).toBe(2);
+      expect(breaker.config.timeout).toBe(60000);
+      expect(breaker.metrics.totalRequests).toBe(0);
     });
 
     it('should create breaker with custom config', () => {
@@ -389,9 +388,9 @@ describe('Circuit Breaker', () => {
         timeout: 30000,
       });
 
-      assert.strictEqual(breaker.config.failureThreshold, 10);
-      assert.strictEqual(breaker.config.successThreshold, 3);
-      assert.strictEqual(breaker.config.timeout, 30000);
+      expect(breaker.config.failureThreshold).toBe(10);
+      expect(breaker.config.successThreshold).toBe(3);
+      expect(breaker.config.timeout).toBe(30000);
     });
   });
 
@@ -399,22 +398,25 @@ describe('Circuit Breaker', () => {
     it('should return true for matching state', () => {
       const breaker = createCircuitBreaker('test-service');
 
-      assert.strictEqual(isInState(breaker, 'closed'), true);
-      assert.strictEqual(isInState(breaker, 'open'), false);
-      assert.strictEqual(isInState(breaker, 'half-open'), false);
+      expect(isInState(breaker, 'closed')).toBe(true);
+      expect(isInState(breaker, 'open')).toBe(false);
+      expect(isInState(breaker, 'half-open')).toBe(false);
     });
 
     it('should work for all states', () => {
       const breaker = createCircuitBreaker('test-service');
 
       breaker.state = 'open';
-      assert.strictEqual(isInState(breaker, 'open'), true);
+      expect(isInState(breaker, 'open')).toBe(true);
+      expect(isInState(breaker, 'closed')).toBe(false);
 
       breaker.state = 'half-open';
-      assert.strictEqual(isInState(breaker, 'half-open'), true);
+      expect(isInState(breaker, 'half-open')).toBe(true);
+      expect(isInState(breaker, 'open')).toBe(false);
 
       breaker.state = 'closed';
-      assert.strictEqual(isInState(breaker, 'closed'), true);
+      expect(isInState(breaker, 'closed')).toBe(true);
+      expect(isInState(breaker, 'open')).toBe(false);
     });
   });
 
@@ -422,20 +424,20 @@ describe('Circuit Breaker', () => {
     it('should return current state', () => {
       const breaker = createCircuitBreaker('test-service');
 
-      assert.strictEqual(getState(breaker), 'closed');
+      expect(getState(breaker)).toBe('closed');
 
       breaker.state = 'open';
-      assert.strictEqual(getState(breaker), 'open');
+      expect(getState(breaker)).toBe('open');
 
       breaker.state = 'half-open';
-      assert.strictEqual(getState(breaker), 'half-open');
+      expect(getState(breaker)).toBe('half-open');
     });
   });
 
   describe('getFailureRate', () => {
     it('should return 0 for no requests', () => {
       const breaker = createCircuitBreaker('test-service');
-      assert.strictEqual(getFailureRate(breaker), 0);
+      expect(getFailureRate(breaker)).toBe(0);
     });
 
     it('should calculate correct failure rate', () => {
@@ -444,7 +446,7 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 10;
       breaker.metrics.failedRequests = 3;
 
-      assert.strictEqual(getFailureRate(breaker), 0.3);
+      expect(getFailureRate(breaker)).toBe(0.3);
     });
 
     it('should return 1 for all failures', () => {
@@ -453,7 +455,7 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 5;
       breaker.metrics.failedRequests = 5;
 
-      assert.strictEqual(getFailureRate(breaker), 1);
+      expect(getFailureRate(breaker)).toBe(1);
     });
 
     it('should return 0 for no failures', () => {
@@ -462,14 +464,14 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 10;
       breaker.metrics.failedRequests = 0;
 
-      assert.strictEqual(getFailureRate(breaker), 0);
+      expect(getFailureRate(breaker)).toBe(0);
     });
   });
 
   describe('getSuccessRate', () => {
     it('should return 0 for no requests', () => {
       const breaker = createCircuitBreaker('test-service');
-      assert.strictEqual(getSuccessRate(breaker), 0);
+      expect(getSuccessRate(breaker)).toBe(0);
     });
 
     it('should calculate correct success rate', () => {
@@ -478,7 +480,7 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 10;
       breaker.metrics.successfulRequests = 7;
 
-      assert.strictEqual(getSuccessRate(breaker), 0.7);
+      expect(getSuccessRate(breaker)).toBe(0.7);
     });
 
     it('should return 1 for all successes', () => {
@@ -487,7 +489,7 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 5;
       breaker.metrics.successfulRequests = 5;
 
-      assert.strictEqual(getSuccessRate(breaker), 1);
+      expect(getSuccessRate(breaker)).toBe(1);
     });
 
     it('should return 0 for no successes', () => {
@@ -496,7 +498,7 @@ describe('Circuit Breaker', () => {
       breaker.metrics.totalRequests = 10;
       breaker.metrics.successfulRequests = 0;
 
-      assert.strictEqual(getSuccessRate(breaker), 0);
+      expect(getSuccessRate(breaker)).toBe(0);
     });
   });
 });

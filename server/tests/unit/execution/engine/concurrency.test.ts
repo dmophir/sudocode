@@ -4,8 +4,7 @@
  * Tests capacity limits, task tracking, and concurrent execution.
  */
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach , expect } from 'vitest'
 import { SimpleExecutionEngine } from "../../../../src/execution/engine/simple-engine.js";
 import { MockProcessManager } from "./mock-process-manager.js";
 import type { ExecutionTask } from "../../../../src/execution/engine/types.js";
@@ -65,15 +64,15 @@ describe("Concurrency Control", () => {
       // Should have 2 running and 1 queued (since executeTask throws, they'll fail but be tracked briefly)
       // With current stub implementation, tasks fail immediately so metrics may show 0 running
       // But maxConcurrent should be enforced - never more than 2 running at once
-      assert.ok(
+      expect(
         metrics.currentlyRunning <= 2,
         "Should never exceed maxConcurrent"
-      );
+      ).toBeTruthy();
     });
 
     it("uses default maxConcurrent of 3", () => {
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 3);
+      expect(metrics.maxConcurrent).toBe(3);
     });
 
     it("respects custom maxConcurrent config", () => {
@@ -82,15 +81,15 @@ describe("Concurrency Control", () => {
       });
 
       const metrics = customEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 5);
+      expect(metrics.maxConcurrent).toBe(5);
     });
   });
 
   describe("Capacity Metrics", () => {
     it("initializes with full available capacity", () => {
       const metrics = engine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.availableSlots, 3);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.availableSlots).toBe(3);
     });
 
     it("updates currentlyRunning when task starts", async () => {
@@ -107,7 +106,7 @@ describe("Concurrency Control", () => {
 
       // Before submission
       const beforeMetrics = engine.getMetrics();
-      assert.strictEqual(beforeMetrics.currentlyRunning, 0);
+      expect(beforeMetrics.currentlyRunning).toBe(0);
 
       // Submit task (it will try to execute and fail, but should be tracked briefly)
       await engine.submitTask(task);
@@ -118,11 +117,11 @@ describe("Concurrency Control", () => {
       // Check if task was tracked (it may have already failed and been removed)
       const status = engine.getTaskStatus("task-1");
       // Status could be null if task failed quickly, which is expected with stub
-      assert.ok(
+      expect(
         status === null ||
           status.state === "running" ||
           status.state === "failed"
-      );
+      ).toBeTruthy();
     });
 
     it("updates availableSlots correctly", async () => {
@@ -132,7 +131,7 @@ describe("Concurrency Control", () => {
       });
 
       const beforeMetrics = singleEngine.getMetrics();
-      assert.strictEqual(beforeMetrics.availableSlots, 1);
+      expect(beforeMetrics.availableSlots).toBe(1);
 
       // Submit task
       await singleEngine.submitTask({
@@ -152,16 +151,15 @@ describe("Concurrency Control", () => {
 
       const afterMetrics = singleEngine.getMetrics();
       // With stub, task fails immediately so availableSlots returns to 1
-      assert.ok(
+      expect(
         afterMetrics.availableSlots >= 0 && afterMetrics.availableSlots <= 1
-      );
+      ).toBeTruthy();
     });
 
     it("calculates availableSlots as maxConcurrent - currentlyRunning", () => {
       const metrics = engine.getMetrics();
-      assert.strictEqual(
-        metrics.availableSlots,
-        metrics.maxConcurrent - metrics.currentlyRunning
+      expect(
+        metrics.availableSlots).toBe(metrics.maxConcurrent - metrics.currentlyRunning
       );
     });
   });
@@ -186,7 +184,7 @@ describe("Concurrency Control", () => {
 
       // Task should be running or completed
       const status = engine.getTaskStatus("task-1");
-      assert.ok(status !== null, "Task should be tracked");
+      expect(status !== null, "Task should be tracked").toBeTruthy();
     });
 
     it("removes tasks from runningTasks on completion", async () => {
@@ -209,7 +207,7 @@ describe("Concurrency Control", () => {
       // Task should be completed (not running)
       const status = engine.getTaskStatus("task-1");
       if (status) {
-        assert.ok(status.state === "completed", "Task should be completed");
+        expect(status.state === "completed", "Task should be completed").toBeTruthy();
       }
     });
   });
@@ -221,7 +219,7 @@ describe("Concurrency Control", () => {
       });
 
       const beforeMetrics = customEngine.getMetrics();
-      assert.strictEqual(beforeMetrics.availableSlots, 1);
+      expect(beforeMetrics.availableSlots).toBe(1);
 
       await customEngine.submitTask({
         id: "task-1",
@@ -239,8 +237,8 @@ describe("Concurrency Control", () => {
 
       const afterMetrics = customEngine.getMetrics();
       // Capacity should be released after completion
-      assert.strictEqual(afterMetrics.availableSlots, 1);
-      assert.strictEqual(afterMetrics.currentlyRunning, 0);
+      expect(afterMetrics.availableSlots).toBe(1);
+      expect(afterMetrics.currentlyRunning).toBe(0);
     });
 
     it("triggers processQueue when capacity becomes available", async () => {
@@ -277,11 +275,10 @@ describe("Concurrency Control", () => {
 
       // Both tasks should have completed
       const metrics = customEngine.getMetrics();
-      assert.strictEqual(
+      expect(
         metrics.completedTasks,
-        2,
         "Both tasks should have completed"
-      );
+      ).toBe(2);
     });
   });
 
@@ -317,7 +314,7 @@ describe("Concurrency Control", () => {
 
       const metrics = engine.getMetrics();
       // With default maxConcurrent=3, both should have completed
-      assert.strictEqual(metrics.completedTasks, 2);
+      expect(metrics.completedTasks).toBe(2);
     });
 
     it("queues tasks beyond capacity", async () => {
@@ -370,7 +367,7 @@ describe("Concurrency Control", () => {
       const processedCount = [status1, status2, status3].filter(
         (s) => s === null
       ).length;
-      assert.ok(processedCount >= 0, "Tasks should be processed");
+      expect(processedCount >= 0, "Tasks should be processed").toBeTruthy();
     });
   });
 
@@ -392,8 +389,8 @@ describe("Concurrency Control", () => {
       });
 
       const metrics = blockedEngine.getMetrics();
-      assert.strictEqual(metrics.currentlyRunning, 0);
-      assert.strictEqual(metrics.queuedTasks, 1);
+      expect(metrics.currentlyRunning).toBe(0);
+      expect(metrics.queuedTasks).toBe(1);
     });
 
     it("handles maxConcurrent=1 (sequential execution)", async () => {
@@ -402,8 +399,8 @@ describe("Concurrency Control", () => {
       });
 
       const metrics = sequentialEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 1);
-      assert.strictEqual(metrics.availableSlots, 1);
+      expect(metrics.maxConcurrent).toBe(1);
+      expect(metrics.availableSlots).toBe(1);
     });
 
     it("handles large maxConcurrent values", () => {
@@ -412,8 +409,8 @@ describe("Concurrency Control", () => {
       });
 
       const metrics = largeEngine.getMetrics();
-      assert.strictEqual(metrics.maxConcurrent, 100);
-      assert.strictEqual(metrics.availableSlots, 100);
+      expect(metrics.maxConcurrent).toBe(100);
+      expect(metrics.availableSlots).toBe(100);
     });
   });
 });

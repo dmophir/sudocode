@@ -7,7 +7,7 @@
  * @module execution/transport/sse-transport
  */
 
-import type { Response } from 'express';
+import type { Response } from "express";
 
 /**
  * SSE Client Connection
@@ -91,16 +91,22 @@ export class SseTransport {
    * @param clientId - Unique identifier for this client
    * @param res - Express response object
    * @param runId - Optional run ID to filter events
+   * @param replayEvents - Optional: buffered events to replay to this client
    */
-  handleConnection(clientId: string, res: Response, runId?: string): void {
+  handleConnection(
+    clientId: string,
+    res: Response,
+    runId?: string,
+    replayEvents?: Array<{ event: string; data: any }>
+  ): void {
     // Set SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
     // Enable CORS for SSE (if needed)
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     // Disable compression for SSE
     res.flushHeaders();
@@ -117,7 +123,7 @@ export class SseTransport {
 
     // Send initial connection acknowledgment
     this.sendToClient(clientId, {
-      event: 'connected',
+      event: "connected",
       data: {
         clientId,
         runId,
@@ -125,8 +131,15 @@ export class SseTransport {
       },
     });
 
+    // Replay buffered events if provided
+    if (replayEvents && replayEvents.length > 0) {
+      for (const event of replayEvents) {
+        this.sendToClient(clientId, event);
+      }
+    }
+
     // Handle client disconnect
-    res.on('close', () => {
+    res.on("close", () => {
       this.removeClient(clientId);
     });
   }
@@ -174,9 +187,11 @@ export class SseTransport {
    */
   broadcastToRun(runId: string, event: SseEvent): number {
     let sentCount = 0;
+    let matchingClients = 0;
 
     for (const client of this.clients.values()) {
       if (client.runId === runId) {
+        matchingClients++;
         if (this.writeEvent(client, event)) {
           sentCount++;
         }
@@ -281,7 +296,7 @@ export class SseTransport {
       }
 
       // Format SSE message
-      let message = '';
+      let message = "";
 
       // Add event type if specified
       if (event.event) {
@@ -295,18 +310,18 @@ export class SseTransport {
 
       // Add data (JSON stringify if object)
       const dataString =
-        typeof event.data === 'string'
+        typeof event.data === "string"
           ? event.data
           : JSON.stringify(event.data);
 
       // SSE spec requires data to be on separate lines if multiline
-      const dataLines = dataString.split('\n');
+      const dataLines = dataString.split("\n");
       for (const line of dataLines) {
         message += `data: ${line}\n`;
       }
 
       // SSE messages end with double newline
-      message += '\n';
+      message += "\n";
 
       // Write to response
       response.write(message);
@@ -330,7 +345,7 @@ export class SseTransport {
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       const pingEvent: SseEvent = {
-        event: 'ping',
+        event: "ping",
         data: { timestamp: Date.now() },
       };
 

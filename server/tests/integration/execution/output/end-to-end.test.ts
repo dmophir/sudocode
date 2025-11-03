@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it , expect } from 'vitest'
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ClaudeCodeOutputProcessor } from '../../../../src/execution/output/claude-code-output-processor.js';
@@ -34,18 +33,18 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('simple-bash.jsonl');
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 1);
-      assert.strictEqual(toolCalls[0].name, 'Bash');
-      assert.strictEqual(toolCalls[0].status, 'success');
+      expect(toolCalls.length).toBe(1);
+      expect(toolCalls[0].name).toBe('Bash');
+      expect(toolCalls[0].status).toBe('success');
     });
 
     it('should track usage metrics correctly', async () => {
       const processor = await processFixture('simple-bash.jsonl');
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.usage.inputTokens, 150);
-      assert.strictEqual(metrics.usage.outputTokens, 50);
-      assert.strictEqual(metrics.usage.cacheTokens, 25);
+      expect(metrics.usage.inputTokens).toBe(150);
+      expect(metrics.usage.outputTokens).toBe(50);
+      expect(metrics.usage.cacheTokens).toBe(25);
     });
 
     it('should calculate cost correctly', async () => {
@@ -56,7 +55,7 @@ describe('End-to-End Output Processing', () => {
       // Output: 50 * $15/M = $0.00075
       // Cache: 25 * $0.30/M = $0.0000075
       // Total: $0.0012075
-      assert.ok(Math.abs(cost - 0.0012075) < 0.0000001);
+      expect(Math.abs(cost - 0.0012075) < 0.0000001).toBeTruthy();
     });
   });
 
@@ -65,38 +64,38 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('file-operations.jsonl');
 
       const fileChanges = processor.getFileChanges();
-      assert.strictEqual(fileChanges.length, 3);
+      expect(fileChanges.length).toBe(3);
     });
 
     it('should identify read operations', async () => {
       const processor = await processFixture('file-operations.jsonl');
 
       const reads = processor.getFileChangesByOperation('read');
-      assert.strictEqual(reads.length, 1);
-      assert.strictEqual(reads[0].path, '/path/to/config.ts');
+      expect(reads.length).toBe(1);
+      expect(reads[0].path).toBe('/path/to/config.ts');
     });
 
     it('should identify edit operations', async () => {
       const processor = await processFixture('file-operations.jsonl');
 
       const edits = processor.getFileChangesByOperation('edit');
-      assert.strictEqual(edits.length, 1);
-      assert.strictEqual(edits[0].path, '/path/to/config.ts');
+      expect(edits.length).toBe(1);
+      expect(edits[0].path).toBe('/path/to/config.ts');
     });
 
     it('should identify write operations', async () => {
       const processor = await processFixture('file-operations.jsonl');
 
       const writes = processor.getFileChangesByOperation('write');
-      assert.strictEqual(writes.length, 1);
-      assert.strictEqual(writes[0].path, '/path/to/new-file.ts');
+      expect(writes.length).toBe(1);
+      expect(writes[0].path).toBe('/path/to/new-file.ts');
     });
 
     it('should filter file changes by path', async () => {
       const processor = await processFixture('file-operations.jsonl');
 
       const configChanges = processor.getFileChangesByPath('/path/to/config.ts');
-      assert.strictEqual(configChanges.length, 2); // read and edit
+      expect(configChanges.length).toBe(2); // read and edit
     });
   });
 
@@ -105,16 +104,16 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('error-case.jsonl');
 
       const failedCalls = processor.getFailedToolCalls();
-      assert.strictEqual(failedCalls.length, 3);
+      expect(failedCalls.length).toBe(3);
     });
 
     it('should mark tool calls with errors', async () => {
       const processor = await processFixture('error-case.jsonl');
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 3);
+      expect(toolCalls.length).toBe(3);
       for (const call of toolCalls) {
-        assert.strictEqual(call.status, 'error');
+        expect(call.status).toBe('error');
       }
     });
 
@@ -122,15 +121,15 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('error-case.jsonl');
 
       const failedReads = processor.getToolCallsByName('Read');
-      assert.strictEqual(failedReads.length, 1);
-      assert.strictEqual(failedReads[0].status, 'error');
+      expect(failedReads.length).toBe(1);
+      expect(failedReads[0].status).toBe('error');
     });
 
     it('should calculate success rate correctly for errors', async () => {
       const processor = await processFixture('error-case.jsonl');
 
       const summary = processor.getExecutionSummary();
-      assert.strictEqual(summary.successRate, 0);
+      expect(summary.successRate).toBe(0);
     });
   });
 
@@ -139,39 +138,39 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('complex-workflow.jsonl');
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls.length, 5);
+      expect(toolCalls.length).toBe(5);
 
       const grepCalls = processor.getToolCallsByName('Grep');
       const readCalls = processor.getToolCallsByName('Read');
       const editCalls = processor.getToolCallsByName('Edit');
       const bashCalls = processor.getToolCallsByName('Bash');
 
-      assert.strictEqual(grepCalls.length, 1);
-      assert.strictEqual(readCalls.length, 2);
-      assert.strictEqual(editCalls.length, 1);
-      assert.strictEqual(bashCalls.length, 1);
+      expect(grepCalls.length).toBe(1);
+      expect(readCalls.length).toBe(2);
+      expect(editCalls.length).toBe(1);
+      expect(bashCalls.length).toBe(1);
     });
 
     it('should track tool call execution order', async () => {
       const processor = await processFixture('complex-workflow.jsonl');
 
       const toolCalls = processor.getToolCalls();
-      assert.strictEqual(toolCalls[0].name, 'Grep');
-      assert.strictEqual(toolCalls[1].name, 'Read');
-      assert.strictEqual(toolCalls[2].name, 'Edit');
-      assert.strictEqual(toolCalls[3].name, 'Bash');
-      assert.strictEqual(toolCalls[4].name, 'Read');
+      expect(toolCalls[0].name).toBe('Grep');
+      expect(toolCalls[1].name).toBe('Read');
+      expect(toolCalls[2].name).toBe('Edit');
+      expect(toolCalls[3].name).toBe('Bash');
+      expect(toolCalls[4].name).toBe('Read');
     });
 
     it('should generate accurate execution summary', async () => {
       const processor = await processFixture('complex-workflow.jsonl');
 
       const summary = processor.getExecutionSummary();
-      assert.strictEqual(summary.toolCallsByType['Grep'], 1);
-      assert.strictEqual(summary.toolCallsByType['Read'], 2);
-      assert.strictEqual(summary.toolCallsByType['Edit'], 1);
-      assert.strictEqual(summary.toolCallsByType['Bash'], 1);
-      assert.strictEqual(summary.successRate, 100);
+      expect(summary.toolCallsByType['Grep']).toBe(1);
+      expect(summary.toolCallsByType['Read']).toBe(2);
+      expect(summary.toolCallsByType['Edit']).toBe(1);
+      expect(summary.toolCallsByType['Bash']).toBe(1);
+      expect(summary.successRate).toBe(100);
     });
   });
 
@@ -192,15 +191,15 @@ describe('End-to-End Output Processing', () => {
         0
       );
 
-      assert.strictEqual(totalInput, 900); // 150 + 250 + 500
-      assert.strictEqual(totalOutput, 350); // 50 + 100 + 200
+      expect(totalInput).toBe(900); // 150 + 250 + 500
+      expect(totalOutput).toBe(350); // 50 + 100 + 200
     });
 
     it('should track cache tokens separately', async () => {
       const processor = await processFixture('simple-bash.jsonl');
 
       const metrics = processor.getMetrics();
-      assert.strictEqual(metrics.usage.cacheTokens, 25);
+      expect(metrics.usage.cacheTokens).toBe(25);
     });
 
     it('should calculate total cost across multiple operations', async () => {
@@ -211,7 +210,7 @@ describe('End-to-End Output Processing', () => {
       // Output: 100 * $15/M = $0.00150
       // Cache: 50 * $0.30/M = $0.000015
       // Total: $0.002265
-      assert.ok(Math.abs(cost - 0.002265) < 0.000001);
+      expect(Math.abs(cost - 0.002265) < 0.000001).toBeTruthy();
     });
   });
 
@@ -238,8 +237,8 @@ describe('End-to-End Output Processing', () => {
         await processor.processLine(line);
       }
 
-      assert.strictEqual(toolCallEvents.length, 1);
-      assert.strictEqual(toolCallEvents[0].name, 'Bash');
+      expect(toolCallEvents.length).toBe(1);
+      expect(toolCallEvents[0].name).toBe('Bash');
     });
 
     it('should emit file change events', async () => {
@@ -264,7 +263,7 @@ describe('End-to-End Output Processing', () => {
         await processor.processLine(line);
       }
 
-      assert.strictEqual(fileChangeEvents.length, 3);
+      expect(fileChangeEvents.length).toBe(3);
     });
 
     it('should emit progress events', async () => {
@@ -289,7 +288,7 @@ describe('End-to-End Output Processing', () => {
         await processor.processLine(line);
       }
 
-      assert.ok(progressCount > 0);
+      expect(progressCount > 0).toBeTruthy();
     });
 
     it('should not emit error events for successful processing', async () => {
@@ -314,7 +313,7 @@ describe('End-to-End Output Processing', () => {
         await processor.processLine(line);
       }
 
-      assert.strictEqual(errors.length, 0);
+      expect(errors.length).toBe(0);
     });
   });
 
@@ -323,10 +322,10 @@ describe('End-to-End Output Processing', () => {
       const processor = await processFixture('complex-workflow.jsonl');
 
       const successfulCalls = processor.getSuccessfulToolCalls();
-      assert.strictEqual(successfulCalls.length, 5);
+      expect(successfulCalls.length).toBe(5);
 
       const failedCalls = processor.getFailedToolCalls();
-      assert.strictEqual(failedCalls.length, 0);
+      expect(failedCalls.length).toBe(0);
     });
 
     it('should provide execution summary with all metrics', async () => {
@@ -334,14 +333,14 @@ describe('End-to-End Output Processing', () => {
 
       const summary = processor.getExecutionSummary();
 
-      assert.strictEqual(summary.totalMessages, 11); // All messages processed
-      assert.ok(summary.toolCallsByType);
-      assert.ok(summary.fileOperationsByType);
-      assert.strictEqual(summary.successRate, 100);
-      assert.ok(summary.totalTokens.input > 0);
-      assert.ok(summary.totalTokens.output > 0);
-      assert.ok(summary.totalCost > 0);
-      assert.ok(summary.duration >= 0);
+      expect(summary.totalMessages).toBe(11); // All messages processed
+      expect(summary.toolCallsByType).toBeTruthy();
+      expect(summary.fileOperationsByType).toBeTruthy();
+      expect(summary.successRate).toBe(100);
+      expect(summary.totalTokens.input > 0).toBeTruthy();
+      expect(summary.totalTokens.output > 0).toBeTruthy();
+      expect(summary.totalCost > 0).toBeTruthy();
+      expect(summary.duration >= 0).toBeTruthy();
     });
 
     it('should combine queries for complex analysis', async () => {
@@ -351,13 +350,13 @@ describe('End-to-End Output Processing', () => {
       const successfulCalls = processor.getSuccessfulToolCalls();
       const writeCalls = successfulCalls.filter((call) => call.name === 'Write');
 
-      assert.strictEqual(writeCalls.length, 1);
-      assert.strictEqual(writeCalls[0].name, 'Write');
+      expect(writeCalls.length).toBe(1);
+      expect(writeCalls[0].name).toBe('Write');
 
       // Verify corresponding file change was tracked
       const writes = processor.getFileChangesByOperation('write');
-      assert.strictEqual(writes.length, 1);
-      assert.strictEqual(writes[0].path, '/path/to/new-file.ts');
+      expect(writes.length).toBe(1);
+      expect(writes[0].path).toBe('/path/to/new-file.ts');
     });
   });
 });
