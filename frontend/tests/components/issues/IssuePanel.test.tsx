@@ -292,4 +292,32 @@ describe('IssuePanel', () => {
 
     expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
   })
+
+  it('should call onClose when ESC key is pressed', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onClose={onClose} />)
+
+    await user.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should not call onClose when ESC is pressed while delete dialog is open', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onDelete = vi.fn()
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onClose={onClose} onDelete={onDelete} />)
+
+    // Open delete dialog
+    const deleteButton = screen.getByLabelText('Delete')
+    await user.click(deleteButton)
+
+    // ESC should not close the panel when dialog is open
+    await user.keyboard('{Escape}')
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })

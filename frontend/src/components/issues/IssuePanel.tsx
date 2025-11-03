@@ -249,6 +249,25 @@ export function IssuePanel({
     }
   }, [onClose])
 
+  // Handle ESC key to close panel
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (!onClose) return
+
+      // Don't close if ESC is pressed while a dialog or dropdown is open
+      if (showDeleteDialog || showExecutionConfigDialog || showAddRelationship) return
+
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscKey)
+    return () => {
+      document.removeEventListener('keydown', handleEscKey)
+    }
+  }, [onClose, showDeleteDialog, showExecutionConfigDialog, showAddRelationship])
+
   // Auto-save effect with debounce
   useEffect(() => {
     if (!hasChanges || !onUpdateRef.current) return
@@ -394,13 +413,18 @@ export function IssuePanel({
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center gap-4">
               {onClose && (
-                <button
-                  onClick={onClose}
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={onClose}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Back"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Close (ESC)</TooltipContent>
+                </Tooltip>
               )}
               {showOpenDetail && (
                 <Tooltip>
