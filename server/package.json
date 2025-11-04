@@ -9,8 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "node build.js",
-    "build:dev": "tsc && chmod +x dist/cli.js",
+    "build": "tsc && chmod +x dist/cli.js && node scripts/copy-frontend.js",
     "start": "node dist/index.js",
     "test": "NODE_ENV=test vitest",
     "test:e2e": "RUN_E2E_TESTS=true NODE_ENV=test vitest --run",
@@ -42,7 +41,6 @@
   },
   "dependencies": {
     "@ag-ui/core": "^0.0.39",
-    "@copilotkit/runtime": "^1.10.6",
     "@sudocode-ai/cli": "^0.1.0",
     "@sudocode-ai/types": "^0.1.0",
     "@types/ws": "^8.18.1",

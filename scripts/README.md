@@ -1,6 +1,38 @@
 # Publishing Scripts
 
-This directory contains scripts for version management and publishing sudocode packages to npm.
+This directory contains scripts for version management, dependency synchronization, and publishing sudocode packages to npm.
+
+## Dependency Management
+
+The `sudocode` meta-package **automatically syncs** dependencies from bundled workspace packages during build.
+
+### Automatic Sync (Recommended)
+
+Dependencies are automatically synced when building the meta-package:
+
+```bash
+npm run build --workspace=sudocode
+# or
+npm run build  # (builds all packages including meta-package)
+```
+
+The build process:
+1. Syncs dependencies from workspace packages → meta-package
+2. Copies workspace packages to `node_modules/@sudocode-ai/`
+3. Ready for `npm pack` or `npm publish`
+
+### Manual Sync (Optional)
+
+If you want to manually check/sync dependencies:
+
+```bash
+npm run sync-deps
+```
+
+This shows detailed output and is useful for:
+- Reviewing what dependencies will be included
+- Debugging dependency issues
+- Understanding the dependency tree
 
 ## Version Management
 

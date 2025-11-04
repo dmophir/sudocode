@@ -30,7 +30,8 @@
     "start:server": "SUDOCODE_DIR=$(pwd)/.sudocode npm start --workspace=server",
     "version": "./scripts/version.sh",
     "publish": "./scripts/publish.sh",
-    "publish:dry-run": "./scripts/publish.sh --dry-run --skip-tests"
+    "publish:dry-run": "./scripts/publish.sh --dry-run --skip-tests",
+    "sync-deps": "node scripts/sync-dependencies.js"
   },
   "author": "sudocode AI",
   "license": "Apache-2.0",

@@ -13,8 +13,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node build.js",
-    "build:dev": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
