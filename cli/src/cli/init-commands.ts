@@ -39,8 +39,9 @@ export function isInitialized(dir: string): boolean {
 export async function performInitialization(
   options: InitOptions = {}
 ): Promise<void> {
-  const specPrefix = options.specPrefix || "SPEC";
-  const issuePrefix = options.issuePrefix || "ISSUE";
+  // Default to hash-based ID prefixes
+  const specPrefix = options.specPrefix || "s";
+  const issuePrefix = options.issuePrefix || "i";
   const dir = options.dir || path.join(process.cwd(), ".sudocode");
   const jsonOutput = options.jsonOutput || false;
 

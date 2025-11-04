@@ -41,10 +41,12 @@ export async function handleIssueCreate(
   options: IssueCreateOptions
 ): Promise<void> {
   try {
-    const issueId = generateIssueId(ctx.db, ctx.outputDir);
+    // Generate issue ID and UUID
+    const { id: issueId, uuid: issueUUID } = generateIssueId(ctx.db, ctx.outputDir);
 
     const issue = createIssue(ctx.db, {
       id: issueId,
+      uuid: issueUUID,
       title,
       content: options.description || "",
       status: "open",

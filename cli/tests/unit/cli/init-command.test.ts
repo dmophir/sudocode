@@ -46,12 +46,12 @@ describe("Init Command", () => {
       expect(fs.existsSync(path.join(sudocodeDir, "config.json"))).toBe(true);
       expect(fs.existsSync(path.join(sudocodeDir, ".gitignore"))).toBe(true);
 
-      // Verify config content
+      // Verify config content - should use new hash-based defaults
       const config = JSON.parse(
         fs.readFileSync(path.join(sudocodeDir, "config.json"), "utf8")
       );
-      expect(config.id_prefix.spec).toBe("SPEC");
-      expect(config.id_prefix.issue).toBe("ISSUE");
+      expect(config.id_prefix.spec).toBe("s");
+      expect(config.id_prefix.issue).toBe("i");
 
       // Verify JSONL files are empty
       expect(fs.readFileSync(path.join(sudocodeDir, "specs.jsonl"), "utf8")).toBe("");
