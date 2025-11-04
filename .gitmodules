@@ -1,0 +1,15 @@
+[submodule "references/vibe-kanban"]
+	path = references/vibe-kanban
+	url = https://github.com/BloopAI/vibe-kanban.git
+[submodule "references/beads"]
+	path = references/beads
+	url = https://github.com/steveyegge/beads.git
+[submodule "references/CodeMachine-CLI"]
+	path = references/CodeMachine-CLI
+	url = https://github.com/moazbuilds/CodeMachine-CLI.git
+[submodule "references/claude-flow"]
+	path = references/claude-flow
+	url = https://github.com/ruvnet/claude-flow.git
+[submodule "references/agentapi"]
+	path = references/agentapi
+	url = https://github.com/coder/agentapi

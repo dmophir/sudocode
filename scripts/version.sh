@@ -102,12 +102,64 @@ for pkg in "${PACKAGES[@]}"; do
   echo "Updating $name to $target_version..."
 
   # Use npm version to update (this also updates package-lock.json)
-  cd "$dir"
-  npm version "$target_version" --no-git-tag-version --allow-same-version
-  cd ..
+  (
+    cd "$dir"
+    npm version "$target_version" --no-git-tag-version --allow-same-version
+  )
 
   echo "✓ Updated $name"
 done
+
+echo ""
+echo "Updating interdependencies..."
+echo ""
+
+# Update interdependencies in each package
+# For workspace packages, update references to other @sudocode-ai packages
+for pkg in "${PACKAGES[@]}"; do
+  IFS=':' read -r dir name target_version <<< "$pkg"
+
+  # Skip meta-package as it will be handled by sync-dependencies.js
+  if [ "$name" = "sudocode" ]; then
+    continue
+  fi
+
+  PKG_FILE="$dir/package.json"
+
+  # Update @sudocode-ai/types reference
+  if grep -q '"@sudocode-ai/types"' "$PKG_FILE"; then
+    echo "  Updating @sudocode-ai/types in $name..."
+    node -e "
+      const fs = require('fs');
+      const pkg = JSON.parse(fs.readFileSync('$PKG_FILE', 'utf8'));
+      if (pkg.dependencies && pkg.dependencies['@sudocode-ai/types']) {
+        pkg.dependencies['@sudocode-ai/types'] = '^$VERSION';
+      }
+      if (pkg.devDependencies && pkg.devDependencies['@sudocode-ai/types']) {
+        pkg.devDependencies['@sudocode-ai/types'] = '^$VERSION';
+      }
+      fs.writeFileSync('$PKG_FILE', JSON.stringify(pkg, null, 2) + '\n');
+    "
+  fi
+
+  # Update @sudocode-ai/cli reference
+  if grep -q '"@sudocode-ai/cli"' "$PKG_FILE"; then
+    echo "  Updating @sudocode-ai/cli in $name..."
+    node -e "
+      const fs = require('fs');
+      const pkg = JSON.parse(fs.readFileSync('$PKG_FILE', 'utf8'));
+      if (pkg.dependencies && pkg.dependencies['@sudocode-ai/cli']) {
+        pkg.dependencies['@sudocode-ai/cli'] = '^$VERSION';
+      }
+      if (pkg.devDependencies && pkg.devDependencies['@sudocode-ai/cli']) {
+        pkg.devDependencies['@sudocode-ai/cli'] = '^$VERSION';
+      }
+      fs.writeFileSync('$PKG_FILE', JSON.stringify(pkg, null, 2) + '\n');
+    "
+  fi
+done
+
+echo "✓ Interdependencies updated"
 
 echo ""
 echo "=========================================="
