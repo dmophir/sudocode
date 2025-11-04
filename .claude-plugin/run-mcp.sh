@@ -5,7 +5,6 @@
 # 1. Use installed sudocode-mcp command (from npm package)
 # 2. Try local development build
 # 3. Build from local source
-# 4. Install from npm (when package is published)
 
 set -e
 
@@ -70,23 +69,15 @@ if [ -d "$MCP_DIR" ] && [ -d "$CLI_DIR" ] && [ -f "$REPO_ROOT/package.json" ]; t
     fi
 fi
 
-# 4. Future: Install from npm when package is published
-# TODO: Uncomment when sudocode is published on npm
-# echo "sudocode not found. Installing from npm..." >&2
-# npm install -g sudocode
-# if check_sudocode_installed; then
-#     echo "sudocode installed successfully" >&2
-#     exec sudocode-mcp
-# else
-#     echo "Error: Installation failed" >&2
-#     exit 1
-# fi
-
-echo "Error: sudocode not found and cannot build locally." >&2
+echo "Error: sudocode not found" >&2
 echo "" >&2
-echo "To fix this:" >&2
-echo "  • Install from npm: npm install -g sudocode" >&2
-echo "  • Or ensure you're in the sudocode repository with source at:" >&2
-echo "    - $CLI_DIR" >&2
-echo "    - $MCP_DIR" >&2
+echo "The sudocode plugin requires the sudocode CLI and MCP server to be installed." >&2
+echo "" >&2
+echo "To install sudocode:" >&2
+echo "  npm install -g sudocode" >&2
+echo "" >&2
+echo "After installation, restart Claude Code for changes to take effect." >&2
+echo "" >&2
+echo "For more information, visit:" >&2
+echo "  https://github.com/sudocode-ai/sudocode" >&2
 exit 1

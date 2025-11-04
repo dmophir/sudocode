@@ -13,7 +13,12 @@ Model Context Protocol (MCP) server for [sudocode](https://github.com/sudocode-a
 ## Installation
 
 ```bash
-npm install -g sudocode-mcp
+npm install -g sudocode
+```
+
+Or to install just the MCP server and CLI:
+```bash
+npm install -g @sudocode-ai/cli @sudocode-ai/mcp
 ```
 
 ## Configuration
@@ -32,7 +37,18 @@ If you see errors about missing database or .sudocode directory, run \`sudocode 
 
 ### Claude Code
 
-Add to your Claude Code configuration:
+**Option 1: Install via Plugin (Recommended)**
+
+```bash
+/plugin marketplace add sudocode-ai/sudocode
+/plugin install sudocode
+```
+
+The plugin handles MCP server setup automatically. See [.claude-plugin/README.md](../.claude-plugin/README.md) for details.
+
+**Option 2: Manual MCP Configuration**
+
+If you've installed via npm, add to your Claude Code configuration:
 
 ```json
 {
@@ -64,7 +80,7 @@ Add to your Claude Code configuration:
 
 - `SUDOCODE_PATH` - Path to `sudocode` CLI executable (default: `sudocode`)
 - `SUDOCODE_WORKING_DIR` - Working directory for sudocode (default: current directory)
-- `SUDOCODE_DB` - Custom database path (default: `.sudocode/db.sqlite`)
+- `SUDOCODE_DB` - Custom database path (default: `.sudocode/cache.db`)
 - `SUDOCODE_ACTOR` - Actor name for operations (default: system username)
 
 ## Available Tools
@@ -101,8 +117,7 @@ You must have the sudocode CLI (aliased `sudocode` or `sdc`) installed and avail
 Install sudocode:
 
 ```bash
-# Installation instructions for sudocode CLI
-# (Add link to main sudocode installation docs)
+npm install -g sudocode
 ```
 
 ## Usage Example
@@ -172,7 +187,7 @@ If you get database errors:
 
 1. Run `sudocode init` in your project directory first
 2. Ensure the working directory is set correctly
-3. Check that `.sudocode/db.sqlite` exists
+3. Check that `.sudocode/cache.db` exists
 
 ### Permission Errors
 
