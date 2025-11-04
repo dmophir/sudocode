@@ -70,7 +70,7 @@ describe("Update Checker", () => {
     it("should not show update available if versions are equal", async () => {
       // Mock fetch to return current version
       const pkg = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "../../../package.json"), "utf-8")
+        fs.readFileSync(path.join(__dirname, "../../package.json"), "utf-8")
       );
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -87,7 +87,7 @@ describe("Update Checker", () => {
     it("should return null if no update available", async () => {
       // Mock fetch to return current version
       const pkg = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "../../../package.json"), "utf-8")
+        fs.readFileSync(path.join(__dirname, "../../package.json"), "utf-8")
       );
 
       global.fetch = vi.fn().mockResolvedValue({

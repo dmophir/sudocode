@@ -60,6 +60,7 @@ PACKAGES=(
   "server:@sudocode-ai/local-server:$VERSION"
   "frontend:@sudocode-ai/local-ui:$VERSION"
   "sudocode:sudocode:$META_VERSION"
+  ".:root:$VERSION"
 )
 
 # Note: frontend (@sudocode-ai/local-ui) is NOT bundled in the meta-package
@@ -106,10 +107,20 @@ for pkg in "${PACKAGES[@]}"; do
   echo "Updating $name to $target_version..."
 
   # Use npm version to update (this also updates package-lock.json)
-  (
-    cd "$dir"
-    npm version "$target_version" --no-git-tag-version --allow-same-version
-  )
+  if [ "$dir" = "." ]; then
+    # Root package - update directly with Node.js to avoid triggering version script
+    node -e "
+      const fs = require('fs');
+      const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+      pkg.version = '$target_version';
+      fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+    "
+  else
+    (
+      cd "$dir"
+      npm version "$target_version" --no-git-tag-version --allow-same-version
+    )
+  fi
 
   echo "✓ Updated $name"
 done
@@ -177,6 +188,40 @@ for pkg in "${PACKAGES[@]}"; do
 done
 
 echo "✓ Interdependencies updated"
+
+echo ""
+echo "Updating Claude plugin files..."
+echo ""
+
+# Update .claude-plugin/plugin.json
+PLUGIN_JSON=".claude-plugin/plugin.json"
+if [ -f "$PLUGIN_JSON" ]; then
+  echo "  Updating $PLUGIN_JSON..."
+  node -e "
+    const fs = require('fs');
+    const plugin = JSON.parse(fs.readFileSync('$PLUGIN_JSON', 'utf8'));
+    plugin.version = '$VERSION';
+    fs.writeFileSync('$PLUGIN_JSON', JSON.stringify(plugin, null, 2) + '\n');
+  "
+  echo "  ✓ Updated plugin.json"
+fi
+
+# Update .claude-plugin/marketplace.json
+MARKETPLACE_JSON=".claude-plugin/marketplace.json"
+if [ -f "$MARKETPLACE_JSON" ]; then
+  echo "  Updating $MARKETPLACE_JSON..."
+  node -e "
+    const fs = require('fs');
+    const marketplace = JSON.parse(fs.readFileSync('$MARKETPLACE_JSON', 'utf8'));
+    if (marketplace.plugins && marketplace.plugins.length > 0) {
+      marketplace.plugins[0].version = '$VERSION';
+    }
+    fs.writeFileSync('$MARKETPLACE_JSON', JSON.stringify(marketplace, null, 2) + '\n');
+  "
+  echo "  ✓ Updated marketplace.json"
+fi
+
+echo "✓ Claude plugin files updated"
 
 echo ""
 echo "=========================================="
