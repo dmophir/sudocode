@@ -18,9 +18,9 @@ Sudocode is a git-native workflow tool designed for AI-assisted development. It 
 
 This meta-package bundles all sudocode components:
 
-- **@sudocode/cli** - Command-line interface (`sudocode` command)
-- **@sudocode/mcp** - Model Context Protocol server for AI assistants
-- **@sudocode/types** - TypeScript type definitions
+- **@sudocode-ai/cli** - Command-line interface (`sudocode` command)
+- **@sudocode-ai/mcp** - Model Context Protocol server for AI assistants
+- **@sudocode-ai/types** - TypeScript type definitions
 
 ## Installation
 
@@ -90,7 +90,7 @@ sudocode sync                                    # Sync JSONL with database
 sudocode sync --watch                            # Auto-sync on changes
 ```
 
-For full command documentation, see [@sudocode/cli](https://github.com/sudocode-ai/sudocode/tree/main/cli).
+For full command documentation, see [@sudocode-ai/cli](https://github.com/sudocode-ai/sudocode/tree/main/cli).
 
 ## MCP Integration
 
@@ -118,7 +118,7 @@ Sudocode includes an MCP server for seamless AI assistant integration. To use wi
 
 Restart Claude Code to apply changes.
 
-For full MCP documentation, see [@sudocode/mcp](https://github.com/sudocode-ai/sudocode/tree/main/mcp).
+For full MCP documentation, see [@sudocode-ai/mcp](https://github.com/sudocode-ai/sudocode/tree/main/mcp).
 
 ## Example Workflow
 
@@ -207,16 +207,17 @@ The JSONL files are designed to be merged in git like code - each line is a comp
 
 ## Documentation
 
-- **CLI Reference:** [@sudocode/cli](https://github.com/sudocode-ai/sudocode/tree/main/cli)
-- **MCP Server:** [@sudocode/mcp](https://github.com/sudocode-ai/sudocode/tree/main/mcp)
-- **Type Definitions:** [@sudocode/types](https://github.com/sudocode-ai/sudocode/tree/main/types)
+- **CLI Reference:** [@sudocode-ai/cli](https://github.com/sudocode-ai/sudocode/tree/main/cli)
+- **MCP Server:** [@sudocode-ai/mcp](https://github.com/sudocode-ai/sudocode/tree/main/mcp)
+- **Type Definitions:** [@sudocode-ai/types](https://github.com/sudocode-ai/sudocode/tree/main/types)
 
 ## Individual Package Installation
 
 You can also install packages individually:
 
 ```bash
-npm install -g @sudocode/cli       # CLI only
-npm install -g @sudocode/mcp       # MCP server only
-npm install @sudocode/types        # Types only (for development)
+npm install -g @sudocode-ai/cli             # CLI only
+npm install -g @sudocode-ai/mcp             # MCP server only
+npm install -g @sudocode-ai/local-server    # Under construction!
+npm install @sudocode-ai/types              # Types only (for development)
 ```

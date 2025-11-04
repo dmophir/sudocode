@@ -4,7 +4,7 @@
  */
 
 import type Database from "better-sqlite3";
-import type { IssueFeedback } from "@sudocode/types";
+import type { IssueFeedback } from "@sudocode-ai/types";
 import {
   createFeedback,
   getFeedback,
@@ -17,7 +17,7 @@ import {
   type CreateFeedbackInput,
   type UpdateFeedbackInput,
   type ListFeedbackOptions,
-} from "@sudocode/cli/dist/operations/feedback.js";
+} from "@sudocode-ai/cli/dist/operations/feedback.js";
 
 /**
  * Create a new feedback entry

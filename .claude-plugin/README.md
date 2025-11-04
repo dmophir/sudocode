@@ -28,11 +28,17 @@ Then restart Claude Code to activate the MCP server.
 
 ## Prerequisites
 
-1. **Node.js 18+** must be installed
-2. **npm** must be available in PATH
-3. **sudocode CLI** should be installed (installed alongside the MCP server if missing)
+**Before installing this plugin, you must install sudocode:**
 
-The plugin will **automatically build the MCP server** on first run if not already built.
+```bash
+npm install -g sudocode
+```
+
+This installs both the CLI and MCP server that the plugin requires.
+
+**Additional requirements:**
+- Node.js 18+ must be installed
+- npm must be available in PATH
 
 ## Features
 
@@ -73,19 +79,19 @@ The plugin includes a Claude Code skill that automatically guides workflow:
 ## Quick Start
 
 ```bash
-# 1. Install the plugin (see Installation above)
-/plugin marketplace add .
+# 1. Install sudocode globally (required!)
+npm install -g sudocode
+
+# 2. Install the plugin (Claude Code)
+/plugin marketplace add sudocode-ai/sudocode  # Or: /plugin marketplace add . (for local dev)
 /plugin install sudocode
 
-# 2. Restart Claude Code
-
-# 3. The MCP server will auto-build on first run
+# 3. Restart Claude Code
 
 # 4. Initialize sudocode in your project (if not done already)
-`sudocode init`
+sudocode init
 
-# 5. Manage specs/issues directly or co-write specs/issues with Claude
-Ask Claude: "Show me ready issues and specs"
+# 5. Start using sudocode with Claude: "Show me ready issues and specs"
 ```
 
 ## Using the MCP Server
@@ -101,17 +107,42 @@ Claude will automatically use the appropriate MCP tools.
 
 ## Troubleshooting
 
+### Error: "sudocode not found"
+
+The plugin requires the sudocode package to be installed globally:
+
+```bash
+npm install -g sudocode
+```
+
+After installation, restart Claude Code.
+
+### Verify Installation
+
+Check that sudocode is properly installed:
+
+```bash
+# Check sudocode CLI
+sudocode --version
+
+# Check MCP server
+sudocode-mcp --help
+```
+
+Both commands should work. If not, reinstall:
+
+```bash
+npm uninstall -g sudocode
+npm install -g sudocode
+```
+
 ### MCP Server Not Starting
 
-1. Check Node.js is installed: `node --version`
-2. Check npm is available: `npm --version`
+1. Ensure sudocode is installed globally (see above)
+2. Check Node.js is installed: `node --version` (requires 18+)
 3. Check plugin is installed: `/plugin list`
 4. Restart Claude Code
-5. Check Claude Code logs for build/startup errors
-
-The MCP server automatically builds on first run. If it fails:
-- Manually build: `cd mcp && npm install && npm run build`
-- Check for errors in the build output
+5. Check Claude Code logs for errors
 
 ### MCP Tools Not Available
 

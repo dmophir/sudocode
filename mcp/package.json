@@ -1,6 +1,6 @@
 {
-  "name": "@sudocode/mcp",
-  "version": "0.1.0",
+  "name": "@sudocode-ai/mcp",
+  "version": "0.1.2",
   "description": "MCP server for sudocode, git-native context management for AI-assisted development",
   "type": "module",
   "main": "dist/index.js",
@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
@@ -39,24 +39,28 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sudocode-ai/sudocode.git",
+    "url": "git+https://github.com/sudocode-ai/sudocode.git",
     "directory": "mcp"
   },
   "homepage": "https://sudocode.ai",
   "bugs": {
     "url": "https://github.com/sudocode-ai/sudocode/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@sudocode/cli": "^0.1.0",
-    "@sudocode/types": "^0.1.0",
+    "@sudocode-ai/cli": "^0.1.2",
+    "@sudocode-ai/types": "^0.1.2",
     "vite": "7.1.12"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
+    "esbuild": "^0.24.2",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
   }

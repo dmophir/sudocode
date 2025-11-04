@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { initDatabase } from '../../src/db.js';
 import { createSpec, updateSpec } from '../../src/operations/specs.js';
@@ -23,26 +24,23 @@ import { readJSONL } from '../../src/jsonl.js';
 import type Database from 'better-sqlite3';
 import type { SpecJSONL, IssueJSONL } from '../../src/types.js';
 
-const TEST_DIR = path.join(process.cwd(), 'test-export');
-
 describe('Export Operations', () => {
   let db: Database.Database;
+  let testDir: string;
 
   beforeEach(() => {
     db = initDatabase({ path: ':memory:' });
 
-    // Create test directory
-    if (!fs.existsSync(TEST_DIR)) {
-      fs.mkdirSync(TEST_DIR, { recursive: true });
-    }
+    // Create temporary test directory
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'export-test-'));
   });
 
   afterEach(() => {
     db.close();
 
-    // Clean up test directory
-    if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+    // Clean up temporary test directory
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
@@ -250,14 +248,14 @@ describe('Export Operations', () => {
     });
 
     it('should export both specs and issues to JSONL files', async () => {
-      const result = await exportToJSONL(db, { outputDir: TEST_DIR });
+      const result = await exportToJSONL(db, { outputDir: testDir });
 
       expect(result.specsCount).toBe(1);
       expect(result.issuesCount).toBe(1);
 
       // Verify files exist
-      const specsPath = path.join(TEST_DIR, 'specs.jsonl');
-      const issuesPath = path.join(TEST_DIR, 'issues.jsonl');
+      const specsPath = path.join(testDir, 'specs.jsonl');
+      const issuesPath = path.join(testDir, 'issues.jsonl');
 
       expect(fs.existsSync(specsPath)).toBe(true);
       expect(fs.existsSync(issuesPath)).toBe(true);
@@ -274,13 +272,13 @@ describe('Export Operations', () => {
 
     it('should use custom file paths', async () => {
       await exportToJSONL(db, {
-        outputDir: TEST_DIR,
+        outputDir: testDir,
         specsFile: 'custom-specs.jsonl',
         issuesFile: 'custom-issues.jsonl',
       });
 
-      const specsPath = path.join(TEST_DIR, 'custom-specs.jsonl');
-      const issuesPath = path.join(TEST_DIR, 'custom-issues.jsonl');
+      const specsPath = path.join(testDir, 'custom-specs.jsonl');
+      const issuesPath = path.join(testDir, 'custom-issues.jsonl');
 
       expect(fs.existsSync(specsPath)).toBe(true);
       expect(fs.existsSync(issuesPath)).toBe(true);
@@ -295,7 +293,7 @@ describe('Export Operations', () => {
         file_path: 'test.md',
       });
 
-      const debouncer = new ExportDebouncer(db, 100, { outputDir: TEST_DIR });
+      const debouncer = new ExportDebouncer(db, 100, { outputDir: testDir });
 
       // Trigger multiple times
       debouncer.trigger();
@@ -310,12 +308,12 @@ describe('Export Operations', () => {
       expect(debouncer.isPending()).toBe(false);
 
       // Verify export happened once
-      const specsPath = path.join(TEST_DIR, 'specs.jsonl');
+      const specsPath = path.join(testDir, 'specs.jsonl');
       expect(fs.existsSync(specsPath)).toBe(true);
     });
 
     it('should cancel pending export', () => {
-      const debouncer = new ExportDebouncer(db, 1000, { outputDir: TEST_DIR });
+      const debouncer = new ExportDebouncer(db, 1000, { outputDir: testDir });
 
       debouncer.trigger();
       expect(debouncer.isPending()).toBe(true);
@@ -331,7 +329,7 @@ describe('Export Operations', () => {
         file_path: 'test.md',
       });
 
-      const debouncer = new ExportDebouncer(db, 5000, { outputDir: TEST_DIR });
+      const debouncer = new ExportDebouncer(db, 5000, { outputDir: testDir });
 
       debouncer.trigger();
       expect(debouncer.isPending()).toBe(true);
@@ -341,12 +339,12 @@ describe('Export Operations', () => {
 
       expect(debouncer.isPending()).toBe(false);
 
-      const specsPath = path.join(TEST_DIR, 'specs.jsonl');
+      const specsPath = path.join(testDir, 'specs.jsonl');
       expect(fs.existsSync(specsPath)).toBe(true);
     });
 
     it('should handle execute when not pending', async () => {
-      const debouncer = new ExportDebouncer(db, 100, { outputDir: TEST_DIR });
+      const debouncer = new ExportDebouncer(db, 100, { outputDir: testDir });
 
       // Execute without trigger
       await debouncer.execute();
@@ -358,7 +356,7 @@ describe('Export Operations', () => {
 
   describe('createDebouncedExport', () => {
     it('should create a debouncer instance', () => {
-      const debouncer = createDebouncedExport(db, 1000, { outputDir: TEST_DIR });
+      const debouncer = createDebouncedExport(db, 1000, { outputDir: testDir });
 
       expect(debouncer).toBeInstanceOf(ExportDebouncer);
       expect(debouncer.isPending()).toBe(false);

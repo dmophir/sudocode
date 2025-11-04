@@ -1,15 +1,15 @@
 {
-  "name": "@sudocode/cli",
-  "version": "0.1.0",
+  "name": "@sudocode-ai/cli",
+  "version": "0.1.2",
   "description": "Git-native spec and issue management CLI for AI-assisted software development",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "sudocode": "./dist/cli.js",
-    "sdc": "./dist/cli.js"
+    "sudocode": "dist/cli.js",
+    "sdc": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli.js",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:schema": "tsc && node dist/test-schema.js",
@@ -19,12 +19,30 @@
     "sudocode",
     "cli",
     "specs",
-    "issues"
+    "issues",
+    "ai-assisted-development",
+    "git-native",
+    "project-management"
   ],
-  "author": "",
+  "author": "sudocode AI",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sudocode-ai/sudocode.git",
+    "directory": "cli"
+  },
+  "homepage": "https://sudocode.ai",
+  "bugs": {
+    "url": "https://github.com/sudocode-ai/sudocode/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "@sudocode/types": "^0.1.0",
+    "@sudocode-ai/types": "^0.1.2",
     "better-sqlite3": "^11.8.1",
     "chalk": "^5.6.2",
     "chokidar": "^4.0.3",
@@ -37,6 +55,7 @@
     "@types/better-sqlite3": "^7.6.8",
     "@types/chokidar": "^1.7.5",
     "@types/node": "^20.10.6",
+    "esbuild": "^0.24.2",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
   },

@@ -338,17 +338,19 @@ describe('useAgUiStream', () => {
         timeout: 2000,
       })
 
+      const messageTimestamp = Date.now()
+
       // Start message
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_START, {
           type: EventType.TEXT_MESSAGE_START,
-          messageId: 'msg-1', timestamp: Date.now(),
+          messageId: 'msg-1', timestamp: messageTimestamp,
           role: 'assistant',
         })
       })
 
       expect(result.current.messages.get('msg-1')).toEqual({
-        messageId: 'msg-1', timestamp: Date.now(),
+        messageId: 'msg-1', timestamp: messageTimestamp,
         role: 'assistant',
         content: '',
         complete: false,
@@ -358,7 +360,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_CONTENT, {
           type: EventType.TEXT_MESSAGE_CONTENT,
-          messageId: 'msg-1', timestamp: Date.now(),
+          messageId: 'msg-1', timestamp: messageTimestamp,
           delta: 'Hello ',
         })
       })
@@ -368,7 +370,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_CONTENT, {
           type: EventType.TEXT_MESSAGE_CONTENT,
-          messageId: 'msg-1', timestamp: Date.now(),
+          messageId: 'msg-1', timestamp: messageTimestamp,
           delta: 'world!',
         })
       })
@@ -380,7 +382,7 @@ describe('useAgUiStream', () => {
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TEXT_MESSAGE_END, {
           type: EventType.TEXT_MESSAGE_END,
-          messageId: 'msg-1', timestamp: Date.now(),
+          messageId: 'msg-1', timestamp: messageTimestamp,
         })
       })
 
@@ -447,10 +449,11 @@ describe('useAgUiStream', () => {
       expect(onToolCallEnd).toHaveBeenCalledTimes(1)
 
       // Result
+      const resultTimestamp = Date.now()
       act(() => {
         mockEventSourceInstance?.simulateEvent(EventType.TOOL_CALL_RESULT, {
           type: EventType.TOOL_CALL_RESULT,
-          messageId: 'msg-1', timestamp: Date.now(),
+          messageId: 'msg-1', timestamp: resultTimestamp,
           toolCallId: 'tool-1',
           content: 'File contents here',
         })

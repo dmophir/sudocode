@@ -9,7 +9,7 @@
 
 import path from "path";
 import type Database from "better-sqlite3";
-import type { AgentType, Execution } from "@sudocode/types";
+import type { AgentType, Execution } from "@sudocode-ai/types";
 import {
   WorktreeManager,
   type IWorktreeManager,
@@ -288,6 +288,12 @@ export class ExecutionLifecycleService {
     const config = this.worktreeManager.getConfig();
 
     try {
+      // Check if this is a valid git repository first
+      const isValidRepo = await this.worktreeManager.isValidRepo(repoPath);
+      if (!isValidRepo) {
+        return;
+      }
+
       // List all worktrees from git
       const worktrees = await this.worktreeManager.listWorktrees(repoPath);
 

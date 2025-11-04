@@ -41,7 +41,7 @@ describe("SudocodeClient", () => {
       const config = {
         workingDir: "/custom/path",
         cliPath: "/usr/local/bin/sg",
-        dbPath: "/custom/db.sqlite",
+        dbPath: "/custom/cache.db",
       };
       const client = new SudocodeClient(config);
       expect(client).toBeDefined();
@@ -50,7 +50,7 @@ describe("SudocodeClient", () => {
     it("should read from environment variables", () => {
       process.env.SUDOCODE_WORKING_DIR = "/env/path";
       process.env.SUDOCODE_PATH = "sudocode-custom";
-      process.env.SUDOCODE_DB = "/env/db.sqlite";
+      process.env.SUDOCODE_DB = "/env/cache.db";
 
       const client = new SudocodeClient();
       expect(client).toBeDefined();
@@ -97,18 +97,24 @@ describe("SudocodeClient", () => {
       // Check that the command includes the correct arguments
       if (command === "sudocode") {
         // CLI found in PATH
-        expect(args).toEqual(expect.arrayContaining(["issue", "list", "--json"]));
+        expect(args).toEqual(
+          expect.arrayContaining(["issue", "list", "--json"])
+        );
       } else {
         // CLI found in node_modules - uses node binary
         expect(command).toBe(process.execPath);
-        expect(args).toEqual(expect.arrayContaining(["issue", "list", "--json"]));
+        expect(args).toEqual(
+          expect.arrayContaining(["issue", "list", "--json"])
+        );
         expect(args[0]).toContain("cli.js");
       }
 
-      expect(options).toEqual(expect.objectContaining({
-        cwd: expect.any(String),
-        env: process.env,
-      }));
+      expect(options).toEqual(
+        expect.objectContaining({
+          cwd: expect.any(String),
+          env: process.env,
+        })
+      );
       expect(result).toEqual({ result: "success" });
     });
 
@@ -168,7 +174,7 @@ describe("SudocodeClient", () => {
     });
 
     it("should add --db flag when dbPath is configured", async () => {
-      const client = new SudocodeClient({ dbPath: "/custom/db.sqlite" });
+      const client = new SudocodeClient({ dbPath: "/custom/cache.db" });
 
       // Mock version check
       const versionProcess = new EventEmitter() as any;
@@ -191,7 +197,7 @@ describe("SudocodeClient", () => {
 
       const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
       expect(lastCall[1]).toContain("--db");
-      expect(lastCall[1]).toContain("/custom/db.sqlite");
+      expect(lastCall[1]).toContain("/custom/cache.db");
     });
 
     it("should parse JSON output correctly", async () => {

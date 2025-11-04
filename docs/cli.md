@@ -20,7 +20,7 @@ sudocode init [--prefix <prefix>]
 
 # Creates:
 # - .sudocode/ directory
-# - .sudocode/db.sqlite
+# - .sudocode/cache.db
 # - .sudocode/specs/ directory (for JSONL)
 # - .sudocode/issues/ directory (for JSONL)
 # - specs/ directory (for markdown files)
@@ -34,7 +34,7 @@ sudocode init [--prefix <prefix>]
 - Fails if .sudocode already exists
 - Initializes SQLite database with schema
 - Creates directory structure
-- Adds .sudocode/db.sqlite to .gitignore
+- Adds .sudocode/cache.db to .gitignore
 
 ### Status
 

@@ -12,8 +12,8 @@ import {
   type CreateIssueInput,
   type UpdateIssueInput,
   type ListIssuesOptions,
-} from "@sudocode/cli/dist/operations/index.js";
-import type { Issue } from "@sudocode/types";
+} from "@sudocode-ai/cli/dist/operations/index.js";
+import type { Issue } from "@sudocode-ai/types";
 
 /**
  * Get all issues with optional filtering
@@ -28,10 +28,7 @@ export function getAllIssues(
 /**
  * Get a single issue by ID
  */
-export function getIssueById(
-  db: Database.Database,
-  id: string
-): Issue | null {
+export function getIssueById(db: Database.Database, id: string): Issue | null {
   return getIssue(db, id);
 }
 
