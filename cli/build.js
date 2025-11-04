@@ -11,8 +11,8 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Common build options
-const commonOptions = {
+// Common build options for bundled outputs
+const bundledOptions = {
   bundle: true,
   platform: "node",
   target: "node18",
@@ -32,13 +32,22 @@ const commonOptions = {
   ],
 };
 
+// Options for non-bundled library outputs (preserve module structure)
+const libraryOptions = {
+  bundle: false,
+  platform: "node",
+  target: "node18",
+  format: "esm",
+  sourcemap: true,
+};
+
 async function build() {
   try {
     console.log("Building CLI...");
 
-    // Build the main CLI entry point
+    // Build the main CLI entry point (bundled for distribution)
     await esbuild.build({
-      ...commonOptions,
+      ...bundledOptions,
       entryPoints: ["src/cli.ts"],
       outfile: "dist/cli.js",
     });
@@ -47,11 +56,42 @@ async function build() {
     const cliPath = join(__dirname, "dist/cli.js");
     chmodSync(cliPath, 0o755);
 
-    // Build the main library export (for programmatic use)
+    // Build the main library export (bundled for programmatic use)
     await esbuild.build({
-      ...commonOptions,
+      ...bundledOptions,
       entryPoints: ["src/index.ts"],
       outfile: "dist/index.js",
+    });
+
+    // Build all library modules individually (non-bundled) for internal imports
+    // This allows other packages to import specific modules like @sudocode-ai/cli/dist/db.js
+    const { readdir } = await import("fs/promises");
+    const { resolve } = await import("path");
+
+    async function findTsFiles(dir) {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const files = await Promise.all(
+        entries.map(async (entry) => {
+          const res = resolve(dir, entry.name);
+          if (entry.isDirectory()) {
+            return findTsFiles(res);
+          } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") && !entry.name.endsWith(".spec.ts")) {
+            return res;
+          }
+          return null;
+        })
+      );
+      return files.flat().filter(Boolean);
+    }
+
+    const srcFiles = await findTsFiles("src");
+
+    console.log("Building individual library modules...");
+    await esbuild.build({
+      ...libraryOptions,
+      entryPoints: srcFiles,
+      outdir: "dist",
+      outExtension: { ".js": ".js" },
     });
 
     // Generate TypeScript declarations (still need tsc for this)
@@ -69,8 +109,9 @@ async function build() {
     });
 
     console.log("✓ Build complete!");
-    console.log("  - CLI: dist/cli.js (minified)");
-    console.log("  - Library: dist/index.js (minified)");
+    console.log("  - CLI: dist/cli.js (bundled & minified)");
+    console.log("  - Library: dist/index.js (bundled & minified)");
+    console.log("  - Individual modules: dist/**/*.js (non-bundled)");
     console.log("  - Type definitions: dist/**/*.d.ts");
   } catch (error) {
     console.error("Build failed:", error);
