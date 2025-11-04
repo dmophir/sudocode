@@ -74,6 +74,13 @@ describe('Worktree Integration Tests', () => {
     // Clean up database
     db.close();
 
+    // Kill any git processes still running in the test directory
+    try {
+      execSync(`pkill -f "${testDir}" || true`, { stdio: 'ignore' });
+    } catch (e) {
+      // Ignore errors
+    }
+
     // Clean up temporary directory
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });

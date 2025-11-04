@@ -227,9 +227,35 @@ describe('Workflow Integration Tests', { skip: SKIP_E2E }, () => {
     return issue.id;
   }
 
-  afterAll(() => {
+  afterAll(async () => {
+    // Ensure all spawned processes are dead
+    if (executionService) {
+      try {
+        const activeExecutions = db
+          .prepare('SELECT id FROM executions WHERE status = ?')
+          .all('running') as Array<{ id: string }>;
+
+        for (const exec of activeExecutions) {
+          try {
+            await executionService.cancelExecution(exec.id);
+          } catch (e) {
+            // Already cancelled or doesn't exist
+          }
+        }
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
+
     // Clean up database
     db.close();
+
+    // Kill any processes still running in the test directory
+    try {
+      execSync(`pkill -f "${testDir}" || true`, { stdio: 'ignore' });
+    } catch (e) {
+      // Ignore errors
+    }
 
     // Clean up temporary directory
     if (fs.existsSync(testDir)) {

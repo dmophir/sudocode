@@ -72,6 +72,18 @@ describe('Full-Stack E2E Tests', { skip: SKIP_E2E }, () => {
   afterEach(async () => {
     // Clean up all processes
     await manager.shutdown();
+
+    // Force cleanup if shutdown didn't work
+    const activeProcesses = manager.getAllProcesses();
+    for (const proc of activeProcesses) {
+      if (proc.status === 'running' && proc.pid) {
+        try {
+          process.kill(proc.pid, 'SIGKILL');
+        } catch (e) {
+          // Process already dead, ignore
+        }
+      }
+    }
   });
 
   describe('Process + Output Layer Integration', () => {
