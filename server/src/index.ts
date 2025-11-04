@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 import { initDatabase, getDatabaseInfo } from "./services/db.js";
 import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
 import { ExecutionService } from "./services/execution-service.js";
+import { ExecutionLogsStore } from "./services/execution-logs-store.js";
 import { WorktreeManager } from "./execution/worktree/manager.js";
 import { getWorktreeConfig } from "./execution/worktree/config.js";
 import { createIssuesRouter } from "./routes/issues.js";
@@ -57,6 +58,7 @@ const REPO_ROOT = path.dirname(SUDOCODE_DIR);
 let db!: Database.Database;
 let watcher: ServerWatcherControl | null = null;
 let transportManager!: TransportManager;
+let logsStore!: ExecutionLogsStore;
 let executionService: ExecutionService | null = null;
 
 // Async initialization function
@@ -77,12 +79,17 @@ async function initialize() {
     transportManager = new TransportManager();
     console.log("Transport manager initialized");
 
+    // Initialize execution logs store
+    logsStore = new ExecutionLogsStore(db);
+    console.log("Execution logs store initialized");
+
     // Initialize execution service globally for cleanup on shutdown
     executionService = new ExecutionService(
       db,
       REPO_ROOT,
       undefined,
-      transportManager
+      transportManager,
+      logsStore
     );
     console.log("Execution service initialized");
 
@@ -178,7 +185,7 @@ app.use("/api/feedback", createFeedbackRouter(db));
 // Mount execution routes (must be before stream routes to avoid conflicts)
 app.use(
   "/api",
-  createExecutionsRouter(db, REPO_ROOT, transportManager, executionService!)
+  createExecutionsRouter(db, REPO_ROOT, transportManager, executionService!, logsStore)
 );
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
