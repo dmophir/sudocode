@@ -492,9 +492,11 @@ program.parse();
 
 // Check for updates (non-blocking)
 // Skip for update and server commands (server handles it explicitly)
+// Also skip when --json flag is present (to avoid interfering with JSON output)
 const isUpdateCommand = process.argv.includes("update");
 const isServerCommand = process.argv.includes("server");
-if (!isUpdateCommand && !isServerCommand) {
+const isJsonOutput = process.argv.includes("--json");
+if (!isUpdateCommand && !isServerCommand && !isJsonOutput) {
   getUpdateNotification()
     .then((notification) => {
       if (notification) {

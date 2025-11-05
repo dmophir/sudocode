@@ -294,7 +294,7 @@ export async function handleIssueUpdate(
     if (options.priority) updates.priority = parseInt(options.priority);
     if (options.assignee) updates.assignee = options.assignee;
     if (options.title) updates.title = options.title;
-    if (options.description) updates.description = options.description;
+    if (options.description) updates.content = options.description;
     if (options.archived !== undefined) {
       updates.archived = options.archived === 'true';
     }

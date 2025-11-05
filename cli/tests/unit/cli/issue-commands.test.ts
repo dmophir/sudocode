@@ -260,6 +260,52 @@ describe("Issue CLI Commands", () => {
       expect(calls).toContain("assignee: user2");
       expect(calls).toContain("priority: 1");
     });
+
+    it("should update issue description (content field)", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: true };
+      const issueId = createdIssueIds[0];
+      const newDescription = "This is the updated description text";
+      const options = {
+        description: newDescription,
+      };
+
+      await handleIssueUpdate(ctx, issueId, options);
+
+      // Get the JSON output
+      const output = consoleLogSpy.mock.calls
+        .flat()
+        .join("")
+        .replace(/\n/g, "");
+      const result = JSON.parse(output);
+
+      // Verify the content field was updated (not description)
+      expect(result.content).toBe(newDescription);
+      expect(result.id).toBe(issueId);
+    });
+
+    it("should export to JSONL after update", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const issueId = createdIssueIds[0];
+      const options = {
+        description: "New content to export",
+      };
+
+      await handleIssueUpdate(ctx, issueId, options);
+
+      // Check that JSONL file was created and contains the issue
+      const jsonlPath = path.join(tempDir, "issues.jsonl");
+      expect(fs.existsSync(jsonlPath)).toBe(true);
+
+      const jsonlContent = fs.readFileSync(jsonlPath, "utf8");
+      const issues = jsonlContent
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+
+      const updatedIssue = issues.find((i: any) => i.id === issueId);
+      expect(updatedIssue).toBeDefined();
+      expect(updatedIssue.content).toBe("New content to export");
+    });
   });
 
   describe("handleIssueClose", () => {
