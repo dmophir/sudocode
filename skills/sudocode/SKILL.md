@@ -1,6 +1,6 @@
 ---
 name: sudocode
-description: Use when starting development sessions with issues and specs, planning multi-component features, breaking down complex work, tracking work across sessions, managing dependencies, or providing implementation feedback - spec and issue management with hierarchical organization and dependency graphs
+description: Use when viewing, creating, or modifying sudocode specs or issues (show_spec, show_issue, upsert_spec, upsert_issue, list_issues, list_specs), planning features, breaking down work, creating dependency graphs, or providing implementation feedback - spec and issue management with hierarchical organization and relationships
 ---
 
 # sudocode: Spec & Issue Management
