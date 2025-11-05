@@ -5,7 +5,10 @@
 import type Database from "better-sqlite3";
 import type { Issue, IssueStatus } from "../types.js";
 import { generateUUID } from "../id-generator.js";
-import { getIncomingRelationships } from "./relationships.js";
+import {
+  getIncomingRelationships,
+  getOutgoingRelationships,
+} from "./relationships.js";
 
 export interface CreateIssueInput {
   id: string;
@@ -322,22 +325,39 @@ export function updateIssue(
 /**
  * Update status of issues that were blocked by the given issue
  * Called when a blocker issue is closed
+ * Semantics:
+ *   - blocks: closedIssueId --[blocks]--> blocked (outgoing blocks)
+ *   - depends-on: blocked --[depends-on]--> closedIssueId (incoming depends-on)
  */
 function updateDependentBlockedIssues(
   db: Database.Database,
   closedIssueId: string
 ): void {
   // Find all issues that are blocked by this issue
-  // (issues that have a 'blocks' relationship pointing to this issue)
-  const dependentRelationships = getIncomingRelationships(
+  // Check both outgoing 'blocks' and incoming 'depends-on' relationships
+  const blocksRelationships = getOutgoingRelationships(
     db,
     closedIssueId,
     "issue",
     "blocks"
   );
+  const dependsOnRelationships = getIncomingRelationships(
+    db,
+    closedIssueId,
+    "issue",
+    "depends-on"
+  );
 
-  for (const rel of dependentRelationships) {
-    const blockedIssueId = rel.from_id;
+  const allDependentRelationships = [
+    ...blocksRelationships,
+    ...dependsOnRelationships,
+  ];
+
+  for (const rel of allDependentRelationships) {
+    // For 'blocks': closedIssueId blocks to_id
+    // For 'depends-on': from_id depends-on closedIssueId
+    const blockedIssueId =
+      rel.relationship_type === "blocks" ? rel.to_id : rel.from_id;
     const blockedIssue = getIssue(db, blockedIssueId);
 
     // Only update if the issue is currently marked as 'blocked'
@@ -362,6 +382,9 @@ function updateDependentBlockedIssues(
 
 /**
  * Check if an issue has any open blockers (excluding the specified blocker)
+ * Semantics:
+ *   - blocks: blocker --[blocks]--> issueId (incoming blocks)
+ *   - depends-on: issueId --[depends-on]--> blocker (outgoing depends-on)
  */
 function hasOpenBlockers(
   db: Database.Database,
@@ -371,15 +394,21 @@ function hasOpenBlockers(
   const stmt = db.prepare(`
     SELECT COUNT(*) as count
     FROM relationships r
-    JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
-    WHERE r.from_id = ?
-      AND r.from_type = 'issue'
-      AND r.relationship_type = 'blocks'
+    JOIN issues blocker ON (
+      (r.relationship_type = 'blocks' AND r.from_id = blocker.id AND r.from_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.to_id = blocker.id AND r.to_type = 'issue')
+    )
+    WHERE (
+      (r.relationship_type = 'blocks' AND r.to_id = ? AND r.to_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.from_id = ? AND r.from_type = 'issue')
+    )
       AND blocker.status IN ('open', 'in_progress', 'blocked')
       ${excludeBlockerId ? "AND blocker.id != ?" : ""}
   `);
 
-  const params = excludeBlockerId ? [issueId, excludeBlockerId] : [issueId];
+  const params = excludeBlockerId
+    ? [issueId, issueId, excludeBlockerId]
+    : [issueId, issueId];
   const result = stmt.get(...params) as { count: number };
   return result.count > 0;
 }

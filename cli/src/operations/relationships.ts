@@ -91,13 +91,23 @@ export function addRelationship(
       throw new Error("Failed to create relationship");
     }
 
-    // Auto-update blocked status when adding a 'blocks' relationship
+    // Auto-update blocked status when adding a 'blocks' or 'depends-on' relationship
+    // Semantics:
+    //   - blocks: from_id blocks to_id (from_id is the blocker, to_id gets blocked)
+    //   - depends-on: from_id depends-on to_id (from_id gets blocked until to_id is done)
     if (
-      input.relationship_type === "blocks" &&
+      (input.relationship_type === "blocks" ||
+        input.relationship_type === "depends-on") &&
       input.from_type === "issue" &&
       input.to_type === "issue"
     ) {
-      autoUpdateBlockedStatusOnAdd(db, input.from_id, input.to_id);
+      // For 'blocks': to_id is blocked by from_id
+      // For 'depends-on': from_id is blocked by to_id
+      const blockedId =
+        input.relationship_type === "blocks" ? input.to_id : input.from_id;
+      const blockerId =
+        input.relationship_type === "blocks" ? input.from_id : input.to_id;
+      autoUpdateBlockedStatusOnAdd(db, blockedId, blockerId);
     }
 
     return rel;
@@ -112,7 +122,10 @@ export function addRelationship(
 }
 
 /**
- * Auto-update blocked status when adding a 'blocks' relationship
+ * Auto-update blocked status when adding a 'blocks' or 'depends-on' relationship
+ * Semantics:
+ *   - blocks: blocker blocks blocked (blocker is the issue doing the blocking)
+ *   - depends-on: blocked depends on blocker (blocked needs blocker to be done)
  */
 function autoUpdateBlockedStatusOnAdd(
   db: Database.Database,
@@ -192,14 +205,18 @@ export function removeRelationship(
   );
   const removed = result.changes > 0;
 
-  // Auto-update blocked status when removing a 'blocks' relationship
+  // Auto-update blocked status when removing a 'blocks' or 'depends-on' relationship
+  // Semantics:
+  //   - blocks: from_id blocks to_id, so to_id is the one being unblocked
+  //   - depends-on: from_id depends-on to_id, so from_id is the one being unblocked
   if (
     removed &&
-    relationship_type === "blocks" &&
+    (relationship_type === "blocks" || relationship_type === "depends-on") &&
     from_type === "issue" &&
     to_type === "issue"
   ) {
-    autoUpdateBlockedStatusOnRemove(db, from_id);
+    const unblockedId = relationship_type === "blocks" ? to_id : from_id;
+    autoUpdateBlockedStatusOnRemove(db, unblockedId);
   }
 
   return removed;
@@ -233,19 +250,26 @@ function autoUpdateBlockedStatusOnRemove(
 
 /**
  * Check if an issue has any open blockers
+ * Semantics:
+ *   - blocks: blocker --[blocks]--> issueId (incoming blocks)
+ *   - depends-on: issueId --[depends-on]--> blocker (outgoing depends-on)
  */
 function hasOpenBlockers(db: Database.Database, issueId: string): boolean {
   const stmt = db.prepare(`
     SELECT COUNT(*) as count
     FROM relationships r
-    JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
-    WHERE r.from_id = ?
-      AND r.from_type = 'issue'
-      AND r.relationship_type = 'blocks'
+    JOIN issues blocker ON (
+      (r.relationship_type = 'blocks' AND r.from_id = blocker.id AND r.from_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.to_id = blocker.id AND r.to_type = 'issue')
+    )
+    WHERE (
+      (r.relationship_type = 'blocks' AND r.to_id = ? AND r.to_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.from_id = ? AND r.from_type = 'issue')
+    )
       AND blocker.status IN ('open', 'in_progress', 'blocked')
   `);
 
-  const result = stmt.get(issueId) as { count: number };
+  const result = stmt.get(issueId, issueId) as { count: number };
   return result.count > 0;
 }
 

@@ -14,7 +14,11 @@ import {
   relationshipExists,
   removeAllRelationships,
 } from "../../../src/operations/relationships.js";
-import { createIssue, getIssue, updateIssue } from "../../../src/operations/issues.js";
+import {
+  createIssue,
+  getIssue,
+  updateIssue,
+} from "../../../src/operations/issues.js";
 import type Database from "better-sqlite3";
 
 describe("Relationship Operations", () => {
@@ -207,7 +211,7 @@ describe("Relationship Operations", () => {
 
   describe("getDependencies and getDependents", () => {
     beforeEach(() => {
-      // issue-002 blocks issue-001
+      // issue-001 blocks issue-002 (new semantic: from_id blocks to_id)
       addRelationship(db, {
         from_id: "issue-001",
         from_type: "issue",
@@ -218,12 +222,14 @@ describe("Relationship Operations", () => {
     });
 
     it("should get dependencies", () => {
+      // issue-001 has outgoing blocks relationship to issue-002
       const deps = getDependencies(db, "issue-001", "issue");
       expect(deps).toHaveLength(1);
       expect(deps[0].to_id).toBe("issue-002");
     });
 
     it("should get dependents", () => {
+      // issue-002 has incoming blocks relationship from issue-001
       const deps = getDependents(db, "issue-002", "issue");
       expect(deps).toHaveLength(1);
       expect(deps[0].from_id).toBe("issue-001");
@@ -262,10 +268,10 @@ describe("Relationship Operations", () => {
   describe("Automatic Blocked Status Management", () => {
     it("should automatically set status to blocked when blocks relationship is added", () => {
       // Verify initial state
-      const before = getIssue(db, "issue-001");
+      const before = getIssue(db, "issue-002");
       expect(before?.status).toBe("open");
 
-      // Add blocking relationship (issue-001 is blocked by issue-002)
+      // Add blocking relationship (issue-001 blocks issue-002 - new semantic)
       addRelationship(db, {
         from_id: "issue-001",
         from_type: "issue",
@@ -274,16 +280,16 @@ describe("Relationship Operations", () => {
         relationship_type: "blocks",
       });
 
-      // Verify status automatically changed to blocked
-      const after = getIssue(db, "issue-001");
+      // Verify issue-002 status automatically changed to blocked
+      const after = getIssue(db, "issue-002");
       expect(after?.status).toBe("blocked");
     });
 
     it("should not set status to blocked if blocker is already closed", () => {
-      // Close the blocker first
-      updateIssue(db, "issue-002", { status: "closed" });
+      // Close issue-001 (the blocker) first
+      updateIssue(db, "issue-001", { status: "closed" });
 
-      // Add blocking relationship
+      // Add blocking relationship (issue-001 blocks issue-002)
       addRelationship(db, {
         from_id: "issue-001",
         from_type: "issue",
@@ -292,13 +298,13 @@ describe("Relationship Operations", () => {
         relationship_type: "blocks",
       });
 
-      // Status should remain open (blocker is closed)
-      const after = getIssue(db, "issue-001");
+      // issue-002 status should remain open (blocker is closed)
+      const after = getIssue(db, "issue-002");
       expect(after?.status).toBe("open");
     });
 
     it("should automatically unblock when last blocks relationship is removed", () => {
-      // Add blocking relationship and manually set blocked
+      // Add blocking relationship (issue-001 blocks issue-002)
       addRelationship(db, {
         from_id: "issue-001",
         from_type: "issue",
@@ -306,29 +312,29 @@ describe("Relationship Operations", () => {
         to_type: "issue",
         relationship_type: "blocks",
       });
-      updateIssue(db, "issue-001", { status: "blocked" });
+      // issue-002 will be automatically set to blocked
 
-      // Verify blocked
-      const before = getIssue(db, "issue-001");
+      // Verify issue-002 is blocked
+      const before = getIssue(db, "issue-002");
       expect(before?.status).toBe("blocked");
 
       // Remove blocking relationship
-      removeRelationship(db, "issue-001", "issue", "issue-002", "issue", "blocks");
+      removeRelationship(
+        db,
+        "issue-001",
+        "issue",
+        "issue-002",
+        "issue",
+        "blocks"
+      );
 
-      // Status should automatically change to open
-      const after = getIssue(db, "issue-001");
+      // issue-002 status should automatically change to open
+      const after = getIssue(db, "issue-002");
       expect(after?.status).toBe("open");
     });
 
     it("should keep status as blocked when removing one of multiple blockers", () => {
-      // Add two blocking relationships
-      addRelationship(db, {
-        from_id: "issue-001",
-        from_type: "issue",
-        to_id: "issue-002",
-        to_type: "issue",
-        relationship_type: "blocks",
-      });
+      // Add two blocking relationships (both issue-001 and issue-002 block issue-003)
       addRelationship(db, {
         from_id: "issue-001",
         from_type: "issue",
@@ -336,13 +342,27 @@ describe("Relationship Operations", () => {
         to_type: "issue",
         relationship_type: "blocks",
       });
-      updateIssue(db, "issue-001", { status: "blocked" });
+      addRelationship(db, {
+        from_id: "issue-002",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "blocks",
+      });
+      // issue-003 will be automatically set to blocked
 
       // Remove one blocker
-      removeRelationship(db, "issue-001", "issue", "issue-002", "issue", "blocks");
+      removeRelationship(
+        db,
+        "issue-001",
+        "issue",
+        "issue-003",
+        "issue",
+        "blocks"
+      );
 
-      // Status should remain blocked (issue-003 is still blocking)
-      const after = getIssue(db, "issue-001");
+      // issue-003 status should remain blocked (issue-002 is still blocking)
+      const after = getIssue(db, "issue-003");
       expect(after?.status).toBe("blocked");
     });
 
@@ -359,6 +379,124 @@ describe("Relationship Operations", () => {
       // Status should remain open
       const after = getIssue(db, "issue-001");
       expect(after?.status).toBe("open");
+    });
+  });
+
+  describe("Automatic Blocked Status Management for depends-on", () => {
+    it("should automatically set status to blocked when depends-on relationship is added", () => {
+      // Verify initial state
+      const before = getIssue(db, "issue-001");
+      expect(before?.status).toBe("open");
+
+      // Add depends-on relationship (issue-001 depends-on issue-002)
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-002",
+        to_type: "issue",
+        relationship_type: "depends-on",
+      });
+
+      // Verify issue-001 status automatically changed to blocked
+      const after = getIssue(db, "issue-001");
+      expect(after?.status).toBe("blocked");
+    });
+
+    it("should not set status to blocked if dependency is already closed", () => {
+      // Close issue-002 (the dependency) first
+      updateIssue(db, "issue-002", { status: "closed" });
+
+      // Add depends-on relationship (issue-001 depends-on issue-002)
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-002",
+        to_type: "issue",
+        relationship_type: "depends-on",
+      });
+
+      // issue-001 status should remain open (dependency is closed)
+      const after = getIssue(db, "issue-001");
+      expect(after?.status).toBe("open");
+    });
+
+    it("should automatically unblock when last depends-on relationship is removed", () => {
+      // Add depends-on relationship (issue-001 depends-on issue-002)
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-002",
+        to_type: "issue",
+        relationship_type: "depends-on",
+      });
+      // issue-001 will be automatically set to blocked
+
+      // Verify issue-001 is blocked
+      const before = getIssue(db, "issue-001");
+      expect(before?.status).toBe("blocked");
+
+      // Remove depends-on relationship
+      removeRelationship(
+        db,
+        "issue-001",
+        "issue",
+        "issue-002",
+        "issue",
+        "depends-on"
+      );
+
+      // issue-001 status should automatically change to open
+      const after = getIssue(db, "issue-001");
+      expect(after?.status).toBe("open");
+    });
+
+    it("should work with mixed blocks and depends-on relationships", () => {
+      // issue-001 is blocked by issue-002 (via blocks)
+      addRelationship(db, {
+        from_id: "issue-002",
+        from_type: "issue",
+        to_id: "issue-001",
+        to_type: "issue",
+        relationship_type: "blocks",
+      });
+
+      // issue-001 also depends-on issue-003
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "depends-on",
+      });
+
+      // issue-001 should be blocked
+      expect(getIssue(db, "issue-001")?.status).toBe("blocked");
+
+      // Remove blocks relationship
+      removeRelationship(
+        db,
+        "issue-002",
+        "issue",
+        "issue-001",
+        "issue",
+        "blocks"
+      );
+
+      // issue-001 should still be blocked (depends-on issue-003 remains)
+      expect(getIssue(db, "issue-001")?.status).toBe("blocked");
+
+      // Remove depends-on relationship
+      removeRelationship(
+        db,
+        "issue-001",
+        "issue",
+        "issue-003",
+        "issue",
+        "depends-on"
+      );
+
+      // Now issue-001 should be open
+      expect(getIssue(db, "issue-001")?.status).toBe("open");
     });
   });
 });

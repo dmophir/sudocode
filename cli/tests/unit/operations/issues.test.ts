@@ -390,17 +390,16 @@ describe("Issue Operations", () => {
         status: "open",
       });
 
-      // Add blocks relationship (blocked issue blocks on blocker)
+      // Add blocks relationship (issue-blocker blocks issue-blocked - new semantic)
       addRelationship(db, {
-        from_id: "issue-blocked",
+        from_id: "issue-blocker",
         from_type: "issue",
-        to_id: "issue-blocker",
+        to_id: "issue-blocked",
         to_type: "issue",
         relationship_type: "blocks",
       });
 
-      // Manually set blocked issue status to 'blocked'
-      updateIssue(db, "issue-blocked", { status: "blocked" });
+      // issue-blocked will be automatically set to 'blocked'
 
       // Verify blocked issue is blocked
       const blockedBefore = getIssue(db, "issue-blocked");
@@ -434,25 +433,24 @@ describe("Issue Operations", () => {
         status: "open",
       });
 
-      // Add two blocks relationships
+      // Add two blocks relationships (both blockers block the same issue - new semantic)
       addRelationship(db, {
-        from_id: "issue-blocked",
+        from_id: "issue-blocker-1",
         from_type: "issue",
-        to_id: "issue-blocker-1",
+        to_id: "issue-blocked",
         to_type: "issue",
         relationship_type: "blocks",
       });
 
       addRelationship(db, {
-        from_id: "issue-blocked",
+        from_id: "issue-blocker-2",
         from_type: "issue",
-        to_id: "issue-blocker-2",
+        to_id: "issue-blocked",
         to_type: "issue",
         relationship_type: "blocks",
       });
 
-      // Set blocked issue status
-      updateIssue(db, "issue-blocked", { status: "blocked" });
+      // issue-blocked will be automatically set to 'blocked'
 
       // Close only the first blocker
       closeIssue(db, "issue-blocker-1");

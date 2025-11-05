@@ -313,10 +313,14 @@ WHERE i.status = 'open'
   AND i.archived = 0
   AND NOT EXISTS (
     SELECT 1 FROM relationships r
-    JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
-    WHERE r.from_id = i.id
-      AND r.from_type = 'issue'
-      AND r.relationship_type = 'blocks'
+    JOIN issues blocker ON (
+      (r.relationship_type = 'blocks' AND r.from_id = blocker.id AND r.from_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.to_id = blocker.id AND r.to_type = 'issue')
+    )
+    WHERE (
+      (r.relationship_type = 'blocks' AND r.to_id = i.id AND r.to_type = 'issue') OR
+      (r.relationship_type = 'depends-on' AND r.from_id = i.id AND r.from_type = 'issue')
+    )
       AND blocker.status IN ('open', 'in_progress', 'blocked')
   );
 `;
@@ -325,14 +329,19 @@ export const BLOCKED_ISSUES_VIEW = `
 CREATE VIEW IF NOT EXISTS blocked_issues AS
 SELECT
     i.*,
-    COUNT(r.to_id) as blocked_by_count,
-    GROUP_CONCAT(r.to_id) as blocked_by_ids
+    COUNT(DISTINCT blocker.id) as blocked_by_count,
+    GROUP_CONCAT(DISTINCT blocker.id) as blocked_by_ids
 FROM issues i
-JOIN relationships r ON i.id = r.from_id AND r.from_type = 'issue'
-JOIN issues blocker ON r.to_id = blocker.id AND r.to_type = 'issue'
+JOIN relationships r ON (
+  (r.relationship_type = 'blocks' AND i.id = r.to_id AND r.to_type = 'issue') OR
+  (r.relationship_type = 'depends-on' AND i.id = r.from_id AND r.from_type = 'issue')
+)
+JOIN issues blocker ON (
+  (r.relationship_type = 'blocks' AND r.from_id = blocker.id AND r.from_type = 'issue') OR
+  (r.relationship_type = 'depends-on' AND r.to_id = blocker.id AND r.to_type = 'issue')
+)
 WHERE i.status IN ('open', 'in_progress', 'blocked')
   AND i.archived = 0
-  AND r.relationship_type = 'blocks'
   AND blocker.status IN ('open', 'in_progress', 'blocked')
 GROUP BY i.id;
 `;
