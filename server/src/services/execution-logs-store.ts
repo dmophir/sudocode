@@ -221,9 +221,9 @@ export class ExecutionLogsStore {
    * ```
    */
   pruneOldLogs(olderThanMs: number): number {
-    // Calculate threshold timestamp
+    // Calculate threshold timestamp as ISO string
     const thresholdMs = Date.now() - olderThanMs;
-    const thresholdSeconds = Math.floor(thresholdMs / 1000);
+    const thresholdDate = new Date(thresholdMs).toISOString();
 
     const stmt = this.db.prepare(`
       DELETE FROM execution_logs
@@ -231,11 +231,11 @@ export class ExecutionLogsStore {
         SELECT id FROM executions
         WHERE status IN ('completed', 'failed', 'cancelled', 'stopped')
         AND completed_at IS NOT NULL
-        AND completed_at < datetime(?, 'unixepoch')
+        AND completed_at < ?
       )
     `);
 
-    const result = stmt.run(thresholdSeconds);
+    const result = stmt.run(thresholdDate);
     return result.changes;
   }
 

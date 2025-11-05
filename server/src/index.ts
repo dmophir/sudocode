@@ -14,6 +14,11 @@ import { initDatabase, getDatabaseInfo } from "./services/db.js";
 import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
 import { ExecutionService } from "./services/execution-service.js";
 import { ExecutionLogsStore } from "./services/execution-logs-store.js";
+// import {
+//   ExecutionLogsCleanup,
+//   DEFAULT_CLEANUP_CONFIG,
+//   type CleanupConfig,
+// } from "./services/execution-logs-cleanup.js";
 import { WorktreeManager } from "./execution/worktree/manager.js";
 import { getWorktreeConfig } from "./execution/worktree/config.js";
 import { createIssuesRouter } from "./routes/issues.js";
@@ -59,6 +64,7 @@ let db!: Database.Database;
 let watcher: ServerWatcherControl | null = null;
 let transportManager!: TransportManager;
 let logsStore!: ExecutionLogsStore;
+// let logsCleanup: ExecutionLogsCleanup | null = null;
 let executionService: ExecutionService | null = null;
 
 // Async initialization function
@@ -82,6 +88,24 @@ async function initialize() {
     // Initialize execution logs store
     logsStore = new ExecutionLogsStore(db);
     console.log("Execution logs store initialized");
+
+    // Initialize execution logs cleanup service
+    // TODO: Enable auto-cleanup config via .sudocode/config.json
+    // const cleanupConfig: CleanupConfig = {
+    //   enabled: process.env.CLEANUP_ENABLED !== "false",
+    //   intervalMs: parseInt(
+    //     process.env.CLEANUP_INTERVAL_MS ||
+    //       String(DEFAULT_CLEANUP_CONFIG.intervalMs),
+    //     10
+    //   ),
+    //   retentionMs: parseInt(
+    //     process.env.CLEANUP_RETENTION_MS ||
+    //       String(DEFAULT_CLEANUP_CONFIG.retentionMs),
+    //     10
+    //   ),
+    // };
+    // logsCleanup = new ExecutionLogsCleanup(logsStore, cleanupConfig);
+    // logsCleanup.start();
 
     // Initialize execution service globally for cleanup on shutdown
     executionService = new ExecutionService(
@@ -185,7 +209,13 @@ app.use("/api/feedback", createFeedbackRouter(db));
 // Mount execution routes (must be before stream routes to avoid conflicts)
 app.use(
   "/api",
-  createExecutionsRouter(db, REPO_ROOT, transportManager, executionService!, logsStore)
+  createExecutionsRouter(
+    db,
+    REPO_ROOT,
+    transportManager,
+    executionService!,
+    logsStore
+  )
 );
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
@@ -388,6 +418,12 @@ process.on("SIGINT", async () => {
     await executionService.shutdown();
   }
 
+  // Stop logs cleanup service
+  // TODO: Re-enable when logs cleanup is supported
+  // if (logsCleanup) {
+  //   logsCleanup.stop();
+  // }
+
   // Stop file watcher
   if (watcher) {
     await watcher.stop();
@@ -425,6 +461,12 @@ process.on("SIGTERM", async () => {
   if (executionService) {
     await executionService.shutdown();
   }
+
+  // Stop logs cleanup service
+  // TODO: Re-enable when logs cleanup is supported
+  // if (logsCleanup) {
+  //   logsCleanup.stop();
+  // }
 
   // Stop file watcher
   if (watcher) {
