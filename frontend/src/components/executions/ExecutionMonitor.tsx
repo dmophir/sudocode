@@ -6,15 +6,18 @@
  * - Historical logs API for completed executions (completed, failed, cancelled, stopped)
  *
  * Shows execution progress, metrics, messages, and tool calls.
+ * Supports both structured (AG-UI) and terminal views.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAgUiStream } from '@/hooks/useAgUiStream'
 import { useExecutionLogs } from '@/hooks/useExecutionLogs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { AgentTrajectory } from './AgentTrajectory'
-import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { TerminalView } from './TerminalView'
+import { AlertCircle, CheckCircle2, Loader2, XCircle, Monitor, Terminal } from 'lucide-react'
 import type { Execution } from '@/types/execution'
 
 export interface ExecutionMonitorProps {
@@ -71,6 +74,17 @@ export function ExecutionMonitor({
   onError,
   className = '',
 }: ExecutionMonitorProps) {
+  // View mode state (structured or terminal)
+  const [viewMode, setViewMode] = useState<'structured' | 'terminal'>('structured')
+
+  // Check if terminal mode is available for this execution
+  // TODO: Add execution_mode field to Execution type
+  const hasTerminal = useMemo(() => {
+    // For now, always show terminal option for testing
+    // In production, check execution.execution_mode === 'interactive' || 'hybrid'
+    return true
+  }, [executionProp])
+
   // Determine if execution is active or completed
   // Active: preparing, pending, running, paused
   // Completed: completed, failed, cancelled, stopped
@@ -256,15 +270,40 @@ export function ExecutionMonitor({
             <h3 className="font-semibold">Execution Monitor</h3>
             {renderStatusBadge()}
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {execution.runId && (
-              <span className="font-mono text-xs">Run: {execution.runId.slice(0, 8)}</span>
+          <div className="flex items-center gap-2">
+            {/* Mode Switcher */}
+            {hasTerminal && (
+              <div className="flex items-center gap-1 mr-2">
+                <Button
+                  variant={viewMode === 'structured' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('structured')}
+                  className="text-xs"
+                >
+                  <Monitor className="mr-1 h-3 w-3" />
+                  Structured
+                </Button>
+                <Button
+                  variant={viewMode === 'terminal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('terminal')}
+                  className="text-xs"
+                >
+                  <Terminal className="mr-1 h-3 w-3" />
+                  Terminal
+                </Button>
+              </div>
             )}
-            {isConnected && (
-              <Badge variant="outline" className="text-xs">
-                Live
-              </Badge>
-            )}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {execution.runId && (
+                <span className="font-mono text-xs">Run: {execution.runId.slice(0, 8)}</span>
+              )}
+              {isConnected && (
+                <Badge variant="outline" className="text-xs">
+                  Live
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -296,37 +335,45 @@ export function ExecutionMonitor({
         )}
       </div>
 
-      {/* Main: Agent Trajectory */}
+      {/* Main: Content (Terminal or Structured View) */}
       <div className="flex-1 overflow-auto px-6 py-4">
-        {/* Error display */}
-        {(error || execution.error) && (
-          <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4 mb-4">
-            <div className="flex items-start gap-2">
-              <XCircle className="h-5 w-5 text-destructive mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-semibold text-destructive">Error</h4>
-                <p className="text-sm text-destructive/90 mt-1">
-                  {execution.error || error?.message}
+        {viewMode === 'terminal' ? (
+          /* Terminal View */
+          <TerminalView executionId={executionId} readonly={execution.status !== 'running'} />
+        ) : (
+          /* Structured View */
+          <>
+            {/* Error display */}
+            {(error || execution.error) && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <XCircle className="h-5 w-5 text-destructive mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-destructive">Error</h4>
+                    <p className="text-sm text-destructive/90 mt-1">
+                      {execution.error || error?.message}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Agent Trajectory - unified messages and tool calls */}
+            {(messageCount > 0 || toolCallCount > 0) && (
+              <AgentTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
+            )}
+
+            {/* Empty state */}
+            {messageCount === 0 && toolCallCount === 0 && !error && !execution.error && (
+              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                <AlertCircle className="h-8 w-8 mb-2" />
+                <p className="text-sm">No execution activity yet</p>
+                <p className="text-xs mt-1">
+                  {isConnected ? 'Waiting for events...' : 'Connecting...'}
                 </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Agent Trajectory - unified messages and tool calls */}
-        {(messageCount > 0 || toolCallCount > 0) && (
-          <AgentTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
-        )}
-
-        {/* Empty state */}
-        {messageCount === 0 && toolCallCount === 0 && !error && !execution.error && (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-            <AlertCircle className="h-8 w-8 mb-2" />
-            <p className="text-sm">No execution activity yet</p>
-            <p className="text-xs mt-1">
-              {isConnected ? 'Waiting for events...' : 'Connecting...'}
-            </p>
-          </div>
+            )}
+          </>
         )}
       </div>
 
