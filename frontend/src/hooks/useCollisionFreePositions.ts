@@ -11,6 +11,7 @@ interface CollisionFreePositionsOptions {
   positions: Map<string, number>
   cardHeight?: number // Default height of a feedback card
   minSpacing?: number // Minimum space between cards
+  measuredHeights?: Map<string, number> // Actual measured heights (overrides cardHeight)
 }
 
 /**
@@ -28,6 +29,7 @@ export function useCollisionFreePositions({
   positions,
   cardHeight = 120, // Approximate height of a FeedbackCard
   minSpacing = 8, // Minimum gap between cards
+  measuredHeights,
 }: CollisionFreePositionsOptions): Map<string, FeedbackPosition> {
   return useMemo(() => {
     const result = new Map<string, FeedbackPosition>()
@@ -44,6 +46,9 @@ export function useCollisionFreePositions({
     const placedItems: FeedbackPosition[] = []
 
     for (const item of items) {
+      // Use measured height if available, otherwise fall back to default
+      const itemHeight = measuredHeights?.get(item.id) ?? cardHeight
+
       let actualTop = item.idealTop
       let hasCollision = true
 
@@ -53,7 +58,7 @@ export function useCollisionFreePositions({
 
         for (const placed of placedItems) {
           const placedBottom = placed.actualTop + placed.height + minSpacing
-          const currentBottom = actualTop + cardHeight
+          const currentBottom = actualTop + itemHeight
 
           // Check if current item overlaps with placed item
           if (
@@ -72,7 +77,7 @@ export function useCollisionFreePositions({
         id: item.id,
         idealTop: item.idealTop,
         actualTop,
-        height: cardHeight,
+        height: itemHeight,
       }
 
       placedItems.push(position)
@@ -80,5 +85,5 @@ export function useCollisionFreePositions({
     }
 
     return result
-  }, [positions, cardHeight, minSpacing])
+  }, [positions, cardHeight, minSpacing, measuredHeights])
 }

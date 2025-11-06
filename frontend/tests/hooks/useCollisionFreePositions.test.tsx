@@ -207,4 +207,169 @@ describe('useCollisionFreePositions', () => {
 
     expect(fb1?.height).toBe(150)
   })
+
+  it('should use measured heights when provided', () => {
+    const positions = new Map([
+      ['fb1', 0],
+      ['fb2', 50],
+    ])
+    const measuredHeights = new Map([
+      ['fb1', 80], // Measured as 80px instead of default 100px
+      ['fb2', 120], // Measured as 120px instead of default 100px
+    ])
+
+    const { result } = renderHook(() =>
+      useCollisionFreePositions({
+        positions,
+        cardHeight: 100,
+        minSpacing: 8,
+        measuredHeights,
+      })
+    )
+
+    const fb1 = result.current.get('fb1')
+    const fb2 = result.current.get('fb2')
+
+    // fb1 should use measured height
+    expect(fb1?.height).toBe(80)
+    expect(fb1?.actualTop).toBe(0)
+
+    // fb2 should be pushed down based on fb1's measured height (80 + 8 = 88)
+    expect(fb2?.height).toBe(120)
+    expect(fb2?.actualTop).toBe(88)
+  })
+
+  it('should fall back to default height when measured height not available', () => {
+    const positions = new Map([
+      ['fb1', 0],
+      ['fb2', 50],
+    ])
+    const measuredHeights = new Map([
+      ['fb1', 80], // Only fb1 has measured height
+    ])
+
+    const { result } = renderHook(() =>
+      useCollisionFreePositions({
+        positions,
+        cardHeight: 100,
+        minSpacing: 8,
+        measuredHeights,
+      })
+    )
+
+    const fb1 = result.current.get('fb1')
+    const fb2 = result.current.get('fb2')
+
+    // fb1 uses measured height
+    expect(fb1?.height).toBe(80)
+
+    // fb2 falls back to default height
+    expect(fb2?.height).toBe(100)
+    expect(fb2?.actualTop).toBe(88) // 0 + 80 + 8
+  })
+
+  it('should handle different measured heights for collision detection', () => {
+    const positions = new Map([
+      ['fb1', 0],
+      ['fb2', 10],
+      ['fb3', 20],
+    ])
+    const measuredHeights = new Map([
+      ['fb1', 60], // Small card
+      ['fb2', 150], // Large card
+      ['fb3', 90], // Medium card
+    ])
+
+    const { result } = renderHook(() =>
+      useCollisionFreePositions({
+        positions,
+        cardHeight: 100,
+        minSpacing: 8,
+        measuredHeights,
+      })
+    )
+
+    const fb1 = result.current.get('fb1')
+    const fb2 = result.current.get('fb2')
+    const fb3 = result.current.get('fb3')
+
+    // fb1 stays at ideal position with height 60
+    expect(fb1?.actualTop).toBe(0)
+    expect(fb1?.height).toBe(60)
+
+    // fb2 pushed down below fb1 (0 + 60 + 8 = 68)
+    expect(fb2?.actualTop).toBe(68)
+    expect(fb2?.height).toBe(150)
+
+    // fb3 pushed down below fb2 (68 + 150 + 8 = 226)
+    expect(fb3?.actualTop).toBe(226)
+    expect(fb3?.height).toBe(90)
+  })
+
+  it('should recalculate positions when measured heights change', () => {
+    const positions = new Map([
+      ['fb1', 0],
+      ['fb2', 50],
+    ])
+    const initialMeasuredHeights = new Map([
+      ['fb1', 100],
+      ['fb2', 100],
+    ])
+
+    const { result, rerender } = renderHook(
+      ({ measuredHeights }) =>
+        useCollisionFreePositions({
+          positions,
+          cardHeight: 100,
+          minSpacing: 8,
+          measuredHeights,
+        }),
+      {
+        initialProps: { measuredHeights: initialMeasuredHeights },
+      }
+    )
+
+    // Initial state
+    let fb2 = result.current.get('fb2')
+    expect(fb2?.actualTop).toBe(108) // 0 + 100 + 8
+
+    // Update measured heights (fb1 expands)
+    const updatedMeasuredHeights = new Map([
+      ['fb1', 200], // fb1 expanded
+      ['fb2', 100],
+    ])
+
+    rerender({ measuredHeights: updatedMeasuredHeights })
+
+    // fb2 should be pushed further down
+    fb2 = result.current.get('fb2')
+    expect(fb2?.actualTop).toBe(208) // 0 + 200 + 8
+  })
+
+  it('should handle measured heights that prevent collisions', () => {
+    const positions = new Map([
+      ['fb1', 0],
+      ['fb2', 100],
+    ])
+    const measuredHeights = new Map([
+      ['fb1', 50], // Smaller than default, no collision
+      ['fb2', 80],
+    ])
+
+    const { result } = renderHook(() =>
+      useCollisionFreePositions({
+        positions,
+        cardHeight: 100,
+        minSpacing: 8,
+        measuredHeights,
+      })
+    )
+
+    const fb1 = result.current.get('fb1')
+    const fb2 = result.current.get('fb2')
+
+    // fb1 ends at 50, fb2 starts at 100 - no collision
+    expect(fb1?.actualTop).toBe(0)
+    expect(fb2?.actualTop).toBe(100) // Stays at ideal position
+  })
 })

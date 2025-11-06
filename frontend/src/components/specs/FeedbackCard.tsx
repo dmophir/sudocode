@@ -193,42 +193,42 @@ export function FeedbackCard({
           style={{
             maxHeight: isExpanded ? `${maxHeight}px` : '3rem', // 3rem = ~3 lines
             overflowY: 'auto',
-            overflowX: 'hidden',
+            overflowX: 'auto', // Allow horizontal scrolling for wide content
           }}
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
               // Customize rendering for compact display
-              p: ({ children }) => <p className="my-1">{children}</p>,
-              h1: ({ children }) => <h1 className="my-1 text-lg font-bold">{children}</h1>,
-              h2: ({ children }) => <h2 className="my-1 text-base font-bold">{children}</h2>,
-              h3: ({ children }) => <h3 className="my-1 text-sm font-bold">{children}</h3>,
+              p: ({ children }) => <p className="my-1 break-words">{children}</p>,
+              h1: ({ children }) => <h1 className="my-1 text-lg font-bold break-words">{children}</h1>,
+              h2: ({ children }) => <h2 className="my-1 text-base font-bold break-words">{children}</h2>,
+              h3: ({ children }) => <h3 className="my-1 text-sm font-bold break-words">{children}</h3>,
               ul: ({ children }) => <ul className="my-1 pl-4">{children}</ul>,
               ol: ({ children }) => <ol className="my-1 pl-4">{children}</ol>,
-              li: ({ children }) => <li className="my-0.5">{children}</li>,
+              li: ({ children }) => <li className="my-0.5 break-words">{children}</li>,
               code: ({ children, className }) => {
                 const isInline = !className
                 return isInline ? (
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>
+                  <code className="break-words rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>
                 ) : (
                   <code
-                    className={`my-1 block rounded bg-muted p-2 font-mono text-xs ${className || ''}`}
+                    className={`my-1 block overflow-x-auto rounded bg-muted p-2 font-mono text-xs ${className || ''}`}
                   >
                     {children}
                   </code>
                 )
               },
-              pre: ({ children }) => <pre className="my-1">{children}</pre>,
+              pre: ({ children }) => <pre className="my-1 overflow-x-auto">{children}</pre>,
               blockquote: ({ children }) => (
-                <blockquote className="my-1 border-l-2 border-muted-foreground/30 pl-2 italic">
+                <blockquote className="my-1 border-l-2 border-muted-foreground/30 pl-2 italic break-words">
                   {children}
                 </blockquote>
               ),
               a: ({ href, children }) => (
                 <a
                   href={href}
-                  className="text-primary underline hover:text-primary/80"
+                  className="break-all text-primary underline hover:text-primary/80"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}

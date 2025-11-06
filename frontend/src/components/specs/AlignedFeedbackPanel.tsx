@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import { FeedbackCard } from './FeedbackCard'
 import { useCollisionFreePositions } from '@/hooks/useCollisionFreePositions'
 import type {
@@ -68,6 +68,8 @@ export function AlignedFeedbackPanel({
   onCreateRelationship,
 }: AlignedFeedbackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const feedbackRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const [measuredHeights, setMeasuredHeights] = useState<Map<string, number>>(new Map())
   const [showAddRelationship, setShowAddRelationship] = useState(false)
   const [isRelationshipsCollapsed, setIsRelationshipsCollapsed] = useState(() => {
     const stored = localStorage.getItem(RELATIONSHIPS_COLLAPSED_STORAGE_KEY)
@@ -92,6 +94,65 @@ export function AlignedFeedbackPanel({
       JSON.stringify(isRelationshipsCollapsed)
     )
   }, [isRelationshipsCollapsed])
+
+  // Measure actual heights of rendered feedback cards
+  const measureHeights = useCallback(() => {
+    const newHeights = new Map<string, number>()
+    let hasChanges = false
+
+    feedback.forEach((fb) => {
+      const element = feedbackRefs.current.get(fb.id)
+      if (element) {
+        const rect = element.getBoundingClientRect()
+        const height = rect.height
+        const previousHeight = measuredHeights.get(fb.id)
+
+        // Only update if height changed significantly (> 5px difference)
+        if (previousHeight === undefined || Math.abs(height - previousHeight) > 5) {
+          newHeights.set(fb.id, height)
+          hasChanges = true
+        } else {
+          newHeights.set(fb.id, previousHeight)
+        }
+      }
+    })
+
+    if (hasChanges) {
+      setMeasuredHeights(newHeights)
+    }
+  }, [feedback, measuredHeights])
+
+  // Measure heights on mount, when feedback changes, and periodically
+  useEffect(() => {
+    // Initial measurement with delay to allow rendering
+    const initialTimer = setTimeout(measureHeights, 100)
+
+    // Periodic measurements to catch expand/collapse changes
+    const interval = setInterval(measureHeights, 500)
+
+    // Measure on window resize
+    const handleResize = () => {
+      measureHeights()
+    }
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      clearTimeout(initialTimer)
+      clearInterval(interval)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [measureHeights])
+
+  // Ref callback to register feedback elements
+  const setFeedbackRef = useCallback((id: string) => {
+    return (el: HTMLDivElement | null) => {
+      if (el) {
+        feedbackRefs.current.set(id, el)
+      } else {
+        feedbackRefs.current.delete(id)
+      }
+    }
+  }, [])
 
   // Prepare positions for all feedback, treating general comments as position 0
   const allFeedbackPositions = useMemo(() => {
@@ -119,11 +180,12 @@ export function AlignedFeedbackPanel({
   }, [feedback, positions])
 
   // Apply collision detection to prevent overlapping feedback cards
-  // Using conservative height estimate: header (40px) + content (60px collapsed) + footer (30px) = 130px
+  // Using measured heights when available, fallback to conservative estimate
   const collisionFreePositions = useCollisionFreePositions({
     positions: allFeedbackPositions,
     cardHeight: 130, // Conservative height estimate (collapsed state)
-    minSpacing: 0, // Minimum gap between cards (reduced for more compact layout)
+    minSpacing: 8, // Minimum gap between cards for better spacing
+    measuredHeights: measuredHeights, // Use actual measured heights
   })
 
   return (
@@ -209,6 +271,7 @@ export function AlignedFeedbackPanel({
             return (
               <div
                 key={fb.id}
+                ref={setFeedbackRef(fb.id)}
                 className="absolute w-full px-1"
                 style={{ top: `${position.actualTop}px`, zIndex: 10 }}
               >

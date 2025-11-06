@@ -430,4 +430,170 @@ describe('AlignedFeedbackPanel', () => {
     positionedDivs = container.querySelectorAll('.absolute.px-1')
     expect(positionedDivs).toHaveLength(2)
   })
+
+  it('should attach refs to feedback card containers for height measurement', () => {
+    const feedback: IssueFeedback[] = [
+      createMockFeedback({
+        id: 'FB-001',
+        content: 'Test feedback',
+      }),
+    ]
+
+    const positions = new Map<string, number>()
+    const { container } = render(
+      <Wrapper>
+        <AlignedFeedbackPanel feedback={feedback} positions={positions} />
+      </Wrapper>
+    )
+
+    // The feedback card container should be rendered
+    const positionedDiv = container.querySelector('.absolute.px-1')
+    expect(positionedDiv).not.toBeNull()
+    expect(positionedDiv).toBeInstanceOf(HTMLDivElement)
+  })
+
+  it('should use measured heights for collision detection when available', () => {
+    // Create feedback with different content lengths that would have different heights
+    const feedback: IssueFeedback[] = [
+      createMockFeedback({
+        id: 'FB-001',
+        content: 'Short content',
+        anchor: JSON.stringify({ line_number: 10 }),
+      }),
+      createMockFeedback({
+        id: 'FB-002',
+        content: 'Very long content that would make this card taller than the default estimate. '.repeat(
+          10
+        ),
+        anchor: JSON.stringify({ line_number: 15 }),
+      }),
+    ]
+
+    // Position them close together where they would overlap with default heights
+    const positions = new Map([
+      ['FB-001', 100],
+      ['FB-002', 120], // Only 20px apart
+    ])
+
+    const { container } = render(
+      <Wrapper>
+        <AlignedFeedbackPanel feedback={feedback} positions={positions} />
+      </Wrapper>
+    )
+
+    // Both should render
+    expect(screen.getByText('Short content')).toBeInTheDocument()
+    expect(screen.getByText(/Very long content/)).toBeInTheDocument()
+
+    // Both feedback items should be positioned
+    const positionedDivs = container.querySelectorAll('.absolute.px-1')
+    expect(positionedDivs).toHaveLength(2)
+
+    // The component should apply collision detection based on actual heights
+    // We can't test the exact positions without mocking getBoundingClientRect,
+    // but we can verify the structure is correct
+  })
+
+  it('should handle collision detection with minimum spacing', () => {
+    const feedback: IssueFeedback[] = [
+      createMockFeedback({
+        id: 'FB-001',
+        content: 'First feedback',
+        anchor: JSON.stringify({ line_number: 10 }),
+      }),
+      createMockFeedback({
+        id: 'FB-002',
+        content: 'Second feedback',
+        anchor: JSON.stringify({ line_number: 11 }),
+      }),
+      createMockFeedback({
+        id: 'FB-003',
+        content: 'Third feedback',
+        anchor: JSON.stringify({ line_number: 12 }),
+      }),
+    ]
+
+    // Position them all very close together
+    const positions = new Map([
+      ['FB-001', 100],
+      ['FB-002', 105],
+      ['FB-003', 110],
+    ])
+
+    const { container } = render(
+      <Wrapper>
+        <AlignedFeedbackPanel feedback={feedback} positions={positions} />
+      </Wrapper>
+    )
+
+    // All three should render
+    expect(screen.getByText('First feedback')).toBeInTheDocument()
+    expect(screen.getByText('Second feedback')).toBeInTheDocument()
+    expect(screen.getByText('Third feedback')).toBeInTheDocument()
+
+    // All should be positioned with collision detection applied
+    const positionedDivs = container.querySelectorAll('.absolute.px-1')
+    expect(positionedDivs).toHaveLength(3)
+  })
+
+  it('should render feedback with consistent z-index for proper stacking', () => {
+    const feedback: IssueFeedback[] = [
+      createMockFeedback({
+        id: 'FB-001',
+        content: 'First feedback',
+      }),
+      createMockFeedback({
+        id: 'FB-002',
+        content: 'Second feedback',
+      }),
+    ]
+
+    const positions = new Map<string, number>()
+    const { container } = render(
+      <Wrapper>
+        <AlignedFeedbackPanel feedback={feedback} positions={positions} />
+      </Wrapper>
+    )
+
+    const positionedDivs = container.querySelectorAll('.absolute.px-1')
+    expect(positionedDivs).toHaveLength(2)
+
+    // Both should have the same z-index for consistent stacking
+    positionedDivs.forEach((div) => {
+      const styles = window.getComputedStyle(div as Element)
+      expect(styles.zIndex).toBe('10')
+    })
+  })
+
+  it('should handle feedback with varying content that affects height', () => {
+    const feedback: IssueFeedback[] = [
+      createMockFeedback({
+        id: 'FB-001',
+        content: 'Short',
+      }),
+      createMockFeedback({
+        id: 'FB-002',
+        content: '# Large heading\n\n' + 'Paragraph text. '.repeat(20),
+      }),
+      createMockFeedback({
+        id: 'FB-003',
+        content: '- List item 1\n- List item 2\n- List item 3',
+      }),
+    ]
+
+    const positions = new Map<string, number>()
+    const { container } = render(
+      <Wrapper>
+        <AlignedFeedbackPanel feedback={feedback} positions={positions} />
+      </Wrapper>
+    )
+
+    // All feedback should render regardless of content length
+    expect(screen.getByText('Short')).toBeInTheDocument()
+    expect(screen.getByText('Large heading')).toBeInTheDocument()
+    expect(screen.getByText('List item 1')).toBeInTheDocument()
+
+    const positionedDivs = container.querySelectorAll('.absolute.px-1')
+    expect(positionedDivs).toHaveLength(3)
+  })
 })
