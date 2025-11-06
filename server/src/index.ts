@@ -41,6 +41,11 @@ import {
   broadcastIssueUpdate,
   broadcastSpecUpdate,
 } from "./services/websocket.js";
+import {
+  initTerminalWebSocketServer,
+  shutdownTerminalWebSocketServer,
+  getActiveTerminalSessionCount,
+} from "./services/terminal-websocket.js";
 
 // Load environment variables
 dotenv.config();
@@ -382,6 +387,9 @@ const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 // Initialize WebSocket server AFTER successfully binding to a port
 initWebSocketServer(server, "/ws");
 
+// Initialize terminal WebSocket server for interactive terminal sessions
+initTerminalWebSocketServer(server, db, REPO_ROOT);
+
 // Format URLs as clickable links with color
 const httpUrl = `http://localhost:${actualPort}`;
 const wsUrl = `ws://localhost:${actualPort}/ws`;
@@ -432,8 +440,9 @@ process.on("SIGINT", async () => {
     await watcher.stop();
   }
 
-  // Shutdown WebSocket server
+  // Shutdown WebSocket servers
   await shutdownWebSocketServer();
+  await shutdownTerminalWebSocketServer();
 
   // Shutdown transport manager
   if (transportManager) {
@@ -476,8 +485,9 @@ process.on("SIGTERM", async () => {
     await watcher.stop();
   }
 
-  // Shutdown WebSocket server
+  // Shutdown WebSocket servers
   await shutdownWebSocketServer();
+  await shutdownTerminalWebSocketServer();
 
   // Shutdown transport manager
   if (transportManager) {

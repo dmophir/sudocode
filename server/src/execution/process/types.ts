@@ -9,6 +9,7 @@
 
 import type { ChildProcess } from 'child_process';
 import type { Readable, Writable } from 'stream';
+import type { IPty } from 'node-pty';
 
 /**
  * Status of a managed process throughout its lifecycle
@@ -20,6 +21,30 @@ export type ProcessStatus =
   | 'terminating'  // Shutting down
   | 'crashed'      // Exited unexpectedly
   | 'completed';   // Exited normally
+
+/**
+ * Execution mode for CLI tools
+ * - structured: Non-interactive mode with structured output (JSON)
+ * - interactive: Interactive mode with PTY and terminal I/O
+ * - hybrid: Both interactive terminal and structured output parsing
+ */
+export type ExecutionMode = 'structured' | 'interactive' | 'hybrid';
+
+/**
+ * Terminal configuration for PTY-based execution
+ */
+export interface TerminalConfig {
+  /** Terminal width in columns */
+  cols: number;
+  /** Terminal height in rows */
+  rows: number;
+  /** Working directory (optional, defaults to ProcessConfig.workDir) */
+  cwd?: string;
+  /** Terminal type (default: xterm-256color) */
+  name?: string;
+  /** Use shell for execution */
+  shell?: boolean;
+}
 
 /**
  * Configuration for spawning a new process
@@ -51,6 +76,12 @@ export interface ProcessConfig {
     /** Initial backoff delay in milliseconds */
     backoffMs: number;
   };
+
+  /** Execution mode (default: structured) */
+  mode?: ExecutionMode;
+
+  /** Terminal configuration (for interactive/hybrid modes) */
+  terminal?: TerminalConfig;
 }
 
 /**
@@ -127,4 +158,27 @@ export interface ProcessMetrics {
   totalFailed: number;
   /** Average process duration in milliseconds */
   averageDuration: number;
+}
+
+/**
+ * Managed PTY process for interactive terminal execution
+ *
+ * Extends the base managed process concept with PTY-specific capabilities
+ * for full terminal interactivity, ANSI support, and bidirectional I/O.
+ */
+export interface ManagedPtyProcess extends Omit<ManagedProcess, 'process' | 'streams'> {
+  /** PTY process instance from node-pty */
+  ptyProcess: IPty;
+
+  /** Write data to the PTY (user input) */
+  write: (data: string) => void;
+
+  /** Resize the terminal */
+  resize: (cols: number, rows: number) => void;
+
+  /** Listen to PTY output (stdout + stderr combined) */
+  onData: (callback: (data: string) => void) => void;
+
+  /** Listen to PTY exit event */
+  onExit: (callback: (exitCode: number, signal?: number) => void) => void;
 }
