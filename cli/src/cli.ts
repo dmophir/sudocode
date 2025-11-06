@@ -49,6 +49,13 @@ import {
   handleInitMergeDriver,
   handleRemoveMergeDriver,
 } from "./cli/merge-commands.js";
+import {
+  handleAgentCreate,
+  handleAgentList,
+  handleAgentShow,
+  handleAgentValidate,
+  handleAgentDelete,
+} from "./cli/agent-commands.js";
 import { getUpdateNotification } from "./update-checker.js";
 import { VERSION } from "./version.js";
 
@@ -490,6 +497,65 @@ program
     } else {
       await handleUpdate();
     }
+  });
+
+// ============================================================================
+// AGENT COMMANDS
+// ============================================================================
+
+const agent = program
+  .command("agent")
+  .alias("agents")
+  .description("Manage agent presets");
+
+agent
+  .command("create <preset-id>")
+  .description("Create a new agent preset")
+  .option("-n, --name <name>", "Human-readable name")
+  .option("-d, --description <description>", "Description of agent purpose")
+  .option("-t, --agent-type <type>", "Agent type (claude-code, codex, cursor, gemini-cli)", "claude-code")
+  .option("-m, --model <model>", "Model to use (claude-sonnet-4-5, etc.)")
+  .option("--tools <tools>", "Comma-separated list of allowed tools")
+  .option("--mcp-servers <servers>", "Comma-separated list of MCP servers")
+  .option("--template <template>", "Use preset template (reviewer, tester, refactorer, documenter)")
+  .option("-i, --interactive", "Interactive mode with prompts")
+  .action(async (presetId, options) => {
+    await handleAgentCreate(presetId, options);
+  });
+
+agent
+  .command("list")
+  .description("List all available agent presets")
+  .option("-v, --verbose", "Show detailed information")
+  .option("--tag <tag>", "Filter by tag")
+  .option("--type <agent-type>", "Filter by agent type")
+  .action(async (options) => {
+    await handleAgentList(options);
+  });
+
+agent
+  .command("show <preset-id>")
+  .description("Display details of a specific agent preset")
+  .option("-f, --format <format>", "Output format (text, json, yaml)", "text")
+  .action(async (presetId, options) => {
+    await handleAgentShow(presetId, options);
+  });
+
+agent
+  .command("validate [preset-id]")
+  .description("Validate agent preset configuration")
+  .option("--all", "Validate all presets")
+  .option("--fix", "Auto-fix common issues")
+  .action(async (presetId, options) => {
+    await handleAgentValidate(presetId, options);
+  });
+
+agent
+  .command("delete <preset-id>")
+  .description("Delete an agent preset")
+  .option("-f, --force", "Force deletion without confirmation")
+  .action(async (presetId, options) => {
+    await handleAgentDelete(presetId, options);
   });
 
 // ============================================================================

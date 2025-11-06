@@ -497,3 +497,221 @@ export function updateFeedbackInIssue(
 
   return issueContent;
 }
+
+// ============================================================================
+// AGENT PRESET MARKDOWN FUNCTIONS
+// ============================================================================
+
+import type { AgentPreset, AgentConfig } from "@sudocode-ai/types";
+import * as path from "path";
+
+export interface AgentPresetFrontmatter {
+  // Metadata
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+
+  // Agent behavior
+  agent_type: string;
+  model?: string;
+
+  // Tool permissions
+  tools?: string[];
+  mcp_servers?: string[];
+
+  // Execution context
+  max_context_tokens?: number;
+  isolation_mode?: "subagent" | "isolated" | "shared";
+
+  // Hooks
+  hooks?: {
+    before_execution?: string[];
+    after_execution?: string[];
+    on_error?: string[];
+  };
+
+  // Platform-specific configs
+  platform_configs?: Record<string, any>;
+
+  // Variables/parameters
+  variables?: Record<string, any>;
+
+  // Interoperability
+  capabilities?: string[];
+  protocols?: string[];
+  tags?: string[];
+}
+
+/**
+ * Parse an agent preset file (.agent.md)
+ * @param filePath - Path to the .agent.md file
+ * @returns Parsed AgentPreset object
+ */
+export function parseAgentPresetFile(filePath: string): AgentPreset {
+  const content = fs.readFileSync(filePath, "utf8");
+  const parsed = parseMarkdown<AgentPresetFrontmatter>(content);
+  const stats = fs.statSync(filePath);
+
+  // Validate required fields
+  if (!parsed.data.id) {
+    throw new Error(`Agent preset missing required field: id in ${filePath}`);
+  }
+  if (!parsed.data.name) {
+    throw new Error(`Agent preset missing required field: name in ${filePath}`);
+  }
+  if (!parsed.data.description) {
+    throw new Error(
+      `Agent preset missing required field: description in ${filePath}`
+    );
+  }
+  if (!parsed.data.version) {
+    throw new Error(
+      `Agent preset missing required field: version in ${filePath}`
+    );
+  }
+  if (!parsed.data.agent_type) {
+    throw new Error(
+      `Agent preset missing required field: agent_type in ${filePath}`
+    );
+  }
+
+  // Build AgentConfig from frontmatter
+  const config: AgentConfig = {
+    preset_id: parsed.data.id,
+    agent_type: parsed.data.agent_type as any,
+    model: parsed.data.model,
+    system_prompt: parsed.content.trim(),
+    tools: parsed.data.tools,
+    mcp_servers: parsed.data.mcp_servers,
+    max_context_tokens: parsed.data.max_context_tokens,
+    isolation_mode: parsed.data.isolation_mode,
+    hooks: parsed.data.hooks,
+    variables: parsed.data.variables,
+    platform_configs: parsed.data.platform_configs,
+    capabilities: parsed.data.capabilities,
+    protocols: parsed.data.protocols,
+    tags: parsed.data.tags,
+  };
+
+  return {
+    id: parsed.data.id,
+    name: parsed.data.name,
+    description: parsed.data.description,
+    version: parsed.data.version,
+    file_path: filePath,
+    config,
+    system_prompt: parsed.content.trim(),
+    created_at: stats.birthtime.toISOString(),
+    updated_at: stats.mtime.toISOString(),
+  };
+}
+
+/**
+ * Create a new agent preset file
+ * @param outputPath - Path where the .agent.md file will be created
+ * @param preset - Agent preset data
+ */
+export function createAgentPresetFile(
+  outputPath: string,
+  preset: Partial<AgentPreset> & {
+    id: string;
+    name: string;
+    description: string;
+  }
+): void {
+  const frontmatter: AgentPresetFrontmatter = {
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    version: preset.version || "1.0.0",
+    agent_type: preset.config?.agent_type || "claude-code",
+    model: preset.config?.model,
+    tools: preset.config?.tools,
+    mcp_servers: preset.config?.mcp_servers,
+    max_context_tokens: preset.config?.max_context_tokens,
+    isolation_mode: preset.config?.isolation_mode,
+    hooks: preset.config?.hooks,
+    platform_configs: preset.config?.platform_configs,
+    variables: preset.config?.variables,
+    capabilities: preset.config?.capabilities,
+    protocols: preset.config?.protocols,
+    tags: preset.config?.tags,
+  };
+
+  // Remove undefined fields
+  const cleanFrontmatter = Object.fromEntries(
+    Object.entries(frontmatter).filter(([_, value]) => value !== undefined)
+  );
+
+  const systemPrompt =
+    preset.system_prompt ||
+    `# System Prompt\n\nYou are ${preset.name}.\n\n${preset.description}\n\n## Instructions\n\n[Add detailed instructions here]`;
+
+  writeMarkdownFile(outputPath, cleanFrontmatter, systemPrompt);
+}
+
+/**
+ * Validate an agent preset configuration
+ * @param preset - Agent preset to validate
+ * @returns Array of validation errors (empty if valid)
+ */
+export function validateAgentPreset(preset: AgentPreset): string[] {
+  const errors: string[] = [];
+
+  // Required fields
+  if (!preset.id) {
+    errors.push("Missing required field: id");
+  }
+  if (!preset.name) {
+    errors.push("Missing required field: name");
+  }
+  if (!preset.description) {
+    errors.push("Missing required field: description");
+  }
+  if (!preset.version) {
+    errors.push("Missing required field: version");
+  }
+
+  // Validate version format (semantic versioning)
+  if (preset.version && !/^\d+\.\d+\.\d+$/.test(preset.version)) {
+    errors.push(
+      `Invalid version format: ${preset.version} (expected X.Y.Z format)`
+    );
+  }
+
+  // Validate agent_type
+  const validAgentTypes = [
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini-cli",
+    "custom",
+  ];
+  if (
+    preset.config.agent_type &&
+    !validAgentTypes.includes(preset.config.agent_type)
+  ) {
+    errors.push(
+      `Invalid agent_type: ${preset.config.agent_type} (must be one of: ${validAgentTypes.join(", ")})`
+    );
+  }
+
+  // Validate isolation_mode
+  const validIsolationModes = ["subagent", "isolated", "shared"];
+  if (
+    preset.config.isolation_mode &&
+    !validIsolationModes.includes(preset.config.isolation_mode)
+  ) {
+    errors.push(
+      `Invalid isolation_mode: ${preset.config.isolation_mode} (must be one of: ${validIsolationModes.join(", ")})`
+    );
+  }
+
+  // Validate system prompt exists
+  if (!preset.system_prompt || preset.system_prompt.trim().length === 0) {
+    errors.push("Missing or empty system prompt");
+  }
+
+  return errors;
+}

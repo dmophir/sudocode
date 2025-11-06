@@ -207,7 +207,7 @@ export interface Config {
 /**
  * Agent types supported for execution
  */
-export type AgentType = "claude-code" | "codex";
+export type AgentType = "claude-code" | "codex" | "cursor" | "gemini-cli" | "custom";
 
 /**
  * Execution status
@@ -221,6 +221,114 @@ export type ExecutionStatus =
   | "failed" // Execution failed
   | "cancelled" // User cancelled
   | "stopped"; // User stopped (legacy alias for cancelled)
+
+/**
+ * Agent configuration for execution
+ */
+export interface AgentConfig {
+  // Core configuration
+  preset_id?: string; // Reference to .sudocode/agents/presets/*.agent.md
+  agent_type: AgentType;
+  model?: string;
+
+  // System prompt
+  system_prompt?: string; // Inline or loaded from preset
+
+  // Tool permissions
+  tools?: string[]; // Allowlist of tools
+  mcp_servers?: string[]; // MCP servers to enable
+
+  // Execution context
+  max_context_tokens?: number;
+  isolation_mode?: "subagent" | "isolated" | "shared";
+
+  // Hooks
+  hooks?: {
+    before_execution?: string[];
+    after_execution?: string[];
+    on_error?: string[];
+  };
+
+  // Variables/parameters
+  variables?: Record<string, any>;
+
+  // Platform-specific configs
+  platform_configs?: Record<string, any>;
+
+  // Interoperability
+  capabilities?: string[];
+  protocols?: string[];
+  tags?: string[];
+}
+
+/**
+ * Parsed agent preset from .agent.md file
+ */
+export interface AgentPreset {
+  // Metadata
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  file_path: string;
+
+  // Configuration (matches AgentConfig)
+  config: AgentConfig;
+
+  // System prompt
+  system_prompt: string;
+
+  // File metadata
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Hook event types
+ */
+export type HookEvent =
+  | "before_execution"
+  | "after_execution"
+  | "on_error"
+  | "on_complete"
+  | "on_cancel";
+
+/**
+ * Hook matcher types
+ */
+export type HookMatcherType = "exact" | "regex" | "wildcard";
+
+/**
+ * Hook failure behavior
+ */
+export type HookFailureBehavior = "block" | "warn" | "ignore";
+
+/**
+ * Hook configuration
+ */
+export interface HookConfig {
+  id: string;
+  event: HookEvent;
+  type: "command" | "plugin";
+  command: string; // Path to command or plugin name
+  matcher?: {
+    type: HookMatcherType;
+    pattern: string;
+  };
+  timeout_ms?: number;
+  required?: boolean;
+  on_failure?: HookFailureBehavior;
+  env?: Record<string, string>;
+}
+
+/**
+ * Hooks system configuration
+ */
+export interface HooksConfig {
+  version: string;
+  hooks: HookConfig[];
+  global_env?: Record<string, string>;
+}
 
 /**
  * Represents a single agent run on an issue
@@ -272,4 +380,8 @@ export interface Execution {
   step_type: string | null;
   step_index: number | null;
   step_config: string | null;
+
+  // Agent configuration
+  agent_config?: string | null; // JSON-serialized AgentConfig
+  preset_id?: string | null; // Reference to preset used
 }

@@ -8,6 +8,7 @@ import * as path from "path";
 import { initDatabase } from "../db.js";
 import type Database from "better-sqlite3";
 import { VERSION } from "../version.js";
+import { initializeAgentsDirectory } from "../operations/agents.js";
 
 export interface InitOptions {
   dir?: string;
@@ -153,6 +154,22 @@ issues/
 specs/
 worktrees/`;
   fs.writeFileSync(path.join(dir, ".gitignore"), gitignoreContent, "utf8");
+
+  // Initialize agents directory structure
+  try {
+    initializeAgentsDirectory(dir);
+    if (!jsonOutput) {
+      console.log(chalk.gray("  Created agents/ directory structure"));
+    }
+  } catch (error) {
+    if (!jsonOutput) {
+      console.log(
+        chalk.yellow(
+          `  Warning: Failed to initialize agents directory - ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
 
   database.close();
 
