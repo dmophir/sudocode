@@ -6,6 +6,135 @@
  * @module execution/worktree/types
  */
 
+import type { Issue, Spec, EntityType } from "@sudocode-ai/types";
+
+/**
+ * Worktree mutation event types
+ */
+export type WorktreeMutationType =
+  | "issue_created"
+  | "issue_updated"
+  | "issue_deleted"
+  | "spec_created"
+  | "spec_updated"
+  | "spec_deleted"
+  | "relationship_created"
+  | "relationship_deleted"
+  | "tag_added"
+  | "tag_removed";
+
+/**
+ * Source of the mutation detection
+ */
+export type MutationSource = "jsonl_diff" | "direct_observation";
+
+/**
+ * Represents a single mutation that occurred in a worktree
+ */
+export interface WorktreeMutationEvent {
+  /** Unique event ID (UUID) */
+  id: string;
+
+  /** Execution ID this mutation belongs to */
+  executionId: string;
+
+  /** Sequence number within this execution (for ordering) */
+  sequenceNumber: number;
+
+  /** Type of mutation */
+  type: WorktreeMutationType;
+
+  /** Entity type being mutated */
+  entityType: EntityType;
+
+  /** Entity ID being mutated */
+  entityId: string;
+
+  /** Previous state (null for creates) */
+  oldValue: Issue | Spec | null;
+
+  /** New state (null for deletes) */
+  newValue: Issue | Spec | null;
+
+  /** Delta/patch (for updates, optional optimization) */
+  delta?: Partial<Issue | Spec>;
+
+  /** When this mutation was detected (server time) */
+  detectedAt: number;
+
+  /** Source of the mutation (extracted from JSONL or inferred) */
+  source: MutationSource;
+
+  /** Optional metadata */
+  metadata?: {
+    /** Actor who made the change (extracted from updated_by field) */
+    actor?: string;
+
+    /** Worktree-local timestamp (from entity's updated_at) */
+    updatedAt?: string;
+
+    /** Whether this was an initial state snapshot */
+    isSnapshot?: boolean;
+  };
+}
+
+/**
+ * Buffered mutation event with timestamp
+ */
+export interface BufferedMutationEvent {
+  /** The mutation event */
+  event: WorktreeMutationEvent;
+
+  /** When the event was buffered */
+  bufferedAt: number;
+}
+
+/**
+ * Worktree event buffer for a single execution
+ */
+export interface WorktreeEventBuffer {
+  /** Execution ID */
+  executionId: string;
+
+  /** All mutation events in sequence order */
+  events: WorktreeMutationEvent[];
+
+  /** Next sequence number to assign */
+  nextSequence: number;
+
+  /** When the buffer was created */
+  createdAt: number;
+
+  /** When the buffer was last updated */
+  lastUpdatedAt: number;
+
+  /** Initial snapshot of worktree state (captured at execution start) */
+  initialSnapshot: {
+    issues: Record<string, Issue>;
+    specs: Record<string, Spec>;
+  };
+}
+
+/**
+ * Statistics about the event buffer
+ */
+export interface EventBufferStats {
+  /** Number of active buffers */
+  bufferCount: number;
+
+  /** Total number of events across all buffers */
+  totalEvents: number;
+
+  /** Average events per buffer */
+  avgEventsPerBuffer: number;
+
+  /** Oldest buffer creation time */
+  oldestBuffer: number | null;
+
+  /** Newest buffer creation time */
+  newestBuffer: number | null;
+}
+
 /**
  * Worktree creation parameters
  */
