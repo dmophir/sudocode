@@ -577,6 +577,78 @@ export class SudocodeMCPServer {
               required: ["spec_id"],
             },
           },
+          {
+            name: "analyze_spec_quality",
+            description: "Analyze spec quality and provide improvement suggestions. Returns overall quality score (0-100), missing sections, ambiguous language detection, and actionable suggestions for improvement.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                spec_id: {
+                  type: "string",
+                  description: "Spec ID to analyze",
+                },
+              },
+              required: ["spec_id"],
+            },
+          },
+          {
+            name: "add_bulk_feedback",
+            description: "Add multiple feedback items to a spec at once. Useful for project agent to provide comprehensive spec reviews with multiple feedback points.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                issue_id: {
+                  type: "string",
+                  description: "Issue ID providing the feedback",
+                },
+                spec_id: {
+                  type: "string",
+                  description: "Spec ID to add feedback to",
+                },
+                feedbackItems: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      content: {
+                        type: "string",
+                        description: "Feedback content",
+                      },
+                      type: {
+                        type: "string",
+                        enum: ["general", "question", "suggestion", "blocker"],
+                        description: "Feedback type (optional)",
+                      },
+                      category: {
+                        type: "string",
+                        enum: ["question", "suggestion", "blocker"],
+                        description: "Feedback category (optional)",
+                      },
+                      anchor: {
+                        type: "string",
+                        description: "Section or text to anchor feedback to (optional)",
+                      },
+                      line: {
+                        type: "number",
+                        description: "Line number to anchor to (optional)",
+                      },
+                      text: {
+                        type: "string",
+                        description: "Specific text to anchor to (optional)",
+                      },
+                    },
+                    required: ["content"],
+                  },
+                  description: "Array of feedback items to add",
+                },
+                agent: {
+                  type: "string",
+                  description: "Agent name providing feedback (optional)",
+                },
+              },
+              required: ["issue_id", "spec_id", "feedbackItems"],
+            },
+          },
         ],
       };
     });
@@ -683,6 +755,14 @@ export class SudocodeMCPServer {
 
           case "plan_spec":
             result = await projectTools.planSpec(this.client, args as any);
+            break;
+
+          case "analyze_spec_quality":
+            result = await projectTools.analyzeSpecQuality(this.client, args as any);
+            break;
+
+          case "add_bulk_feedback":
+            result = await feedbackTools.addBulkFeedback(this.client, args as any);
             break;
 
           default:

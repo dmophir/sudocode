@@ -16,6 +16,23 @@ export interface AddFeedbackParams {
   agent?: string;
 }
 
+// Bulk feedback parameters
+export interface BulkFeedbackItem {
+  content: string;
+  type?: FeedbackType;
+  category?: "question" | "suggestion" | "blocker";
+  anchor?: string;
+  line?: number;
+  text?: string;
+}
+
+export interface AddBulkFeedbackParams {
+  issue_id: string;
+  spec_id: string;
+  feedbackItems: BulkFeedbackItem[];
+  agent?: string;
+}
+
 /**
  * Add anchored feedback to a spec
  */
@@ -41,4 +58,39 @@ export async function addFeedback(
   // }
 
   return client.exec(args);
+}
+
+/**
+ * Add multiple feedback items to a spec
+ *
+ * Useful for project agent to add comprehensive feedback at once
+ */
+export async function addBulkFeedback(
+  client: SudocodeClient,
+  params: AddBulkFeedbackParams
+): Promise<{ feedbackCreated: number; feedback: Feedback[] }> {
+  const createdFeedback: Feedback[] = [];
+
+  for (const item of params.feedbackItems) {
+    try {
+      const feedback = await addFeedback(client, {
+        issue_id: params.issue_id,
+        spec_id: params.spec_id,
+        content: item.content,
+        type: item.type,
+        line: item.line,
+        text: item.text,
+        agent: params.agent,
+      });
+      createdFeedback.push(feedback);
+    } catch (error) {
+      console.error("[addBulkFeedback] Error adding feedback item:", error);
+      // Continue with other items
+    }
+  }
+
+  return {
+    feedbackCreated: createdFeedback.length,
+    feedback: createdFeedback,
+  };
 }

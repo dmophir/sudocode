@@ -14,6 +14,32 @@ export interface PlanSpecParams {
   include_existing?: boolean;
 }
 
+export interface AnalyzeSpecQualityParams {
+  spec_id: string;
+}
+
+export interface SpecQualityAnalysis {
+  specId: string;
+  title: string;
+  overallScore: number;
+  issues: Array<{
+    type: string;
+    severity: string;
+    message: string;
+    location?: { line?: number; section?: string };
+    suggestion?: string;
+  }>;
+  suggestions: Array<{
+    category: string;
+    title: string;
+    description: string;
+    priority: string;
+    actionable: boolean;
+  }>;
+  missingSections: string[];
+  strengths: string[];
+}
+
 // Result types
 
 export interface ProjectAnalysis {
@@ -248,5 +274,180 @@ export async function planSpec(
     existing_issues: existingIssues,
     timeline_estimate: "Unknown (analysis pending)",
     risks: [],
+  };
+}
+
+/**
+ * Analyze spec quality and provide improvement suggestions
+ *
+ * Returns detailed analysis including:
+ * - Overall quality score (0-100)
+ * - Missing sections
+ * - Ambiguous language
+ * - Structural issues
+ * - Actionable suggestions
+ */
+export async function analyzeSpecQuality(
+  client: SudocodeClient,
+  params: AnalyzeSpecQualityParams
+): Promise<SpecQualityAnalysis> {
+  // Get the spec
+  const spec = await client.exec(["spec", "show", params.spec_id]);
+
+  if (!spec || !spec.content) {
+    throw new Error(`Spec ${params.spec_id} not found or has no content`);
+  }
+
+  // Perform analysis using heuristics
+  const analysis = analyzeSpecContent(spec.id, spec.content, spec.title);
+
+  return {
+    specId: spec.id,
+    title: spec.title,
+    overallScore: analysis.overallScore,
+    issues: analysis.issues,
+    suggestions: analysis.suggestions,
+    missingSections: analysis.missingSections,
+    strengths: analysis.strengths,
+  };
+}
+
+/**
+ * Analyze spec content (local heuristic-based analysis)
+ */
+function analyzeSpecContent(
+  specId: string,
+  content: string,
+  title: string
+): SpecQualityAnalysis {
+  const issues: SpecQualityAnalysis["issues"] = [];
+  const suggestions: SpecQualityAnalysis["suggestions"] = [];
+  const missingSections: string[] = [];
+  const strengths: string[] = [];
+
+  // Required sections
+  const requiredSections = [
+    "Overview",
+    "Requirements",
+    "Implementation",
+    "Testing",
+    "Success Criteria",
+  ];
+
+  // Check for missing sections
+  for (const section of requiredSections) {
+    const regex = new RegExp(`^#{1,3}\\s*${section}\\s*$`, "mi");
+    if (!regex.test(content)) {
+      missingSections.push(section);
+    }
+  }
+
+  if (missingSections.length > 0) {
+    issues.push({
+      type: "missing_section",
+      severity: "critical",
+      message: `Missing required sections: ${missingSections.join(", ")}`,
+      suggestion: "Add these sections to provide complete context",
+    });
+  } else {
+    strengths.push("Contains all required sections");
+  }
+
+  // Check for ambiguous language
+  const ambiguousTerms = [
+    /\b(should|could|may|might|possibly|probably)\b/gi,
+    /\b(soon|later|eventually|sometime)\b/gi,
+    /\b(some|few|many|several)\b/gi,
+    /\b(fast|slow|big|small|simple)\b/gi,
+  ];
+
+  let ambiguousCount = 0;
+  for (const pattern of ambiguousTerms) {
+    const matches = content.match(pattern);
+    if (matches) {
+      ambiguousCount += matches.length;
+    }
+  }
+
+  if (ambiguousCount > 5) {
+    issues.push({
+      type: "ambiguous_language",
+      severity: "warning",
+      message: `Found ${ambiguousCount} instances of ambiguous language`,
+      suggestion: "Replace vague terms with specific, measurable criteria",
+    });
+
+    suggestions.push({
+      category: "clarity",
+      title: "Reduce ambiguous language",
+      description: `Found ${ambiguousCount} vague terms. Use specific criteria instead.`,
+      priority: "high",
+      actionable: true,
+    });
+  } else if (ambiguousCount === 0) {
+    strengths.push("Uses clear, specific language");
+  }
+
+  // Check word count
+  const wordCount = content.split(/\s+/).length;
+  if (wordCount < 100) {
+    issues.push({
+      type: "incomplete",
+      severity: "critical",
+      message: "Spec is very short and likely missing details",
+      suggestion: "Add more implementation details and examples",
+    });
+  } else if (wordCount > 200) {
+    strengths.push("Contains detailed information");
+  }
+
+  // Check for acceptance criteria
+  const hasAcceptanceCriteria =
+    /#{1,3}\s*(Success Criteria|Acceptance Criteria)/i.test(content) &&
+    (/^[\s]*[-*]\s+.+/m.test(content) || /^[\s]*\d+\.\s+.+/m.test(content));
+
+  if (!hasAcceptanceCriteria) {
+    issues.push({
+      type: "missing_section",
+      severity: "warning",
+      message: "No clear acceptance criteria found",
+      suggestion: "Add bullet-point list of testable criteria",
+    });
+  } else {
+    strengths.push("Has clear acceptance criteria");
+  }
+
+  // Check for code examples
+  if (/```/.test(content)) {
+    strengths.push("Includes code examples");
+  } else if (wordCount > 500) {
+    suggestions.push({
+      category: "clarity",
+      title: "Add code examples",
+      description: "Code examples would help illustrate implementation",
+      priority: "medium",
+      actionable: true,
+    });
+  }
+
+  // Calculate score
+  let score = 100;
+  for (const issue of issues) {
+    if (issue.severity === "critical") score -= 20;
+    else if (issue.severity === "warning") score -= 10;
+  }
+  if (wordCount < 100) score -= 30;
+  else if (wordCount < 200) score -= 15;
+  score += Math.min(strengths.length * 5, 20);
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    specId,
+    title,
+    overallScore: score,
+    issues,
+    suggestions,
+    missingSections,
+    strengths,
   };
 }
