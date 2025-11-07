@@ -13,6 +13,11 @@ import type {
   DeleteRelationshipRequest,
   CreateFeedbackRequest,
   UpdateFeedbackRequest,
+  AgentRequest,
+  RespondToRequestRequest,
+  Pattern,
+  AutoResponseConfig,
+  AutoResponseStats,
 } from '@/types/api'
 import type {
   Execution,
@@ -154,6 +159,78 @@ export const executionsApi = {
 
   // Delete worktree for execution
   deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
+}
+
+/**
+ * Agent Requests API
+ */
+export const agentRequestsApi = {
+  // Get all pending agent requests
+  getPending: () => get<AgentRequest[]>('/agent-requests/pending'),
+
+  // Get agent request by ID
+  getById: (id: string) => get<AgentRequest>(`/agent-requests/${id}`),
+
+  // Mark request as presented
+  markPresented: (id: string) => post<void>(`/agent-requests/${id}/presented`),
+
+  // Respond to request
+  respond: (id: string, data: RespondToRequestRequest) =>
+    post<void>(`/agent-requests/${id}/respond`, data),
+
+  // Cancel request
+  cancel: (id: string) => post<void>(`/agent-requests/${id}/cancel`),
+
+  // Get batches of similar requests
+  getBatches: () => get<{ requests: AgentRequest[] }[]>('/agent-requests/batches'),
+
+  // Get statistics
+  getStats: () =>
+    get<{
+      total: number
+      by_status: Record<string, number>
+      by_type: Record<string, number>
+      avg_response_time_ms: number
+    }>('/agent-requests/stats'),
+}
+
+/**
+ * Patterns API
+ */
+export const patternsApi = {
+  // Get all patterns
+  getAll: (options?: {
+    autoResponseOnly?: boolean
+    orderBy?: 'confidence' | 'occurrences' | 'recent'
+    limit?: number
+  }) => {
+    const params = new URLSearchParams()
+    if (options?.autoResponseOnly) params.append('autoResponseOnly', 'true')
+    if (options?.orderBy) params.append('orderBy', options.orderBy)
+    if (options?.limit) params.append('limit', options.limit.toString())
+    const query = params.toString()
+    return get<Pattern[]>(`/agent-requests/patterns${query ? `?${query}` : ''}`)
+  },
+
+  // Get pattern by ID
+  getById: (id: string) => get<Pattern>(`/agent-requests/patterns/${id}`),
+
+  // Toggle auto-response for pattern
+  setAutoResponse: (id: string, enabled: boolean) =>
+    put<void>(`/agent-requests/patterns/${id}/auto-response`, { enabled }),
+
+  // Delete pattern
+  delete: (id: string) => del(`/agent-requests/patterns/${id}`),
+
+  // Get auto-response configuration
+  getConfig: () => get<AutoResponseConfig>('/agent-requests/auto-response/config'),
+
+  // Update auto-response configuration
+  updateConfig: (config: Partial<AutoResponseConfig>) =>
+    put<void>('/agent-requests/auto-response/config', config),
+
+  // Get auto-response statistics
+  getStats: () => get<AutoResponseStats>('/agent-requests/auto-response/stats'),
 }
 
 export default api

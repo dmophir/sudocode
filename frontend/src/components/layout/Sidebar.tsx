@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FileText, ListTodo, X, Settings, HelpCircle } from 'lucide-react'
+import { FileText, ListTodo, X, Settings, HelpCircle, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SettingsDialog } from './SettingsDialog'
@@ -31,6 +31,11 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
       path: '/specs',
       label: 'Specs',
       icon: FileText,
+    },
+    {
+      path: '/orchestration',
+      label: 'Orchestration',
+      icon: Activity,
     },
   ]
 

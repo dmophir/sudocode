@@ -101,6 +101,97 @@ export interface UpdateFeedbackRequest {
 }
 
 /**
+ * Agent Request types
+ */
+export type RequestType = 'confirmation' | 'guidance' | 'choice' | 'input'
+export type RequestStatus = 'queued' | 'presented' | 'responded' | 'expired' | 'cancelled'
+export type IssuePriority = 'critical' | 'high' | 'medium' | 'low'
+export type Urgency = 'blocking' | 'non-blocking'
+
+export interface AgentRequest {
+  id: string
+  execution_id: string
+  issue_id: string
+
+  // Request details
+  type: RequestType
+  message: string
+  context?: any
+
+  // Priority and batching
+  issue_priority?: IssuePriority
+  urgency?: Urgency
+  estimated_impact?: number
+  batching_key?: string
+  keywords?: string[]
+  pattern_signature?: string
+
+  // Response options
+  options?: string[]
+
+  // Response
+  response_value?: string
+  response_timestamp?: string
+  response_auto?: boolean
+  response_pattern_id?: string
+
+  // Status
+  status: RequestStatus
+
+  // Timing
+  created_at: string
+  presented_at?: string
+  responded_at?: string
+  expires_at?: string
+}
+
+export interface RespondToRequestRequest {
+  value: string
+}
+
+/**
+ * Pattern types
+ */
+export interface Pattern {
+  id: string
+  signature: string
+
+  // Pattern characteristics
+  request_type: RequestType
+  keywords: string[]
+  context_patterns: string[]
+
+  // Statistics
+  total_occurrences: number
+  confidence_score: number
+  last_seen: string
+
+  // Auto-response
+  suggested_response: string | null
+  auto_response_enabled: boolean
+
+  // Metadata
+  created_at: string
+  updated_at: string
+}
+
+export interface AutoResponseConfig {
+  enabled: boolean
+  min_confidence: number
+  min_occurrences: number
+  notify_user: boolean
+  respect_recent_overrides: boolean
+  override_window_days: number
+}
+
+export interface AutoResponseStats {
+  total_patterns: number
+  auto_response_enabled: number
+  average_confidence: number
+  total_responses: number
+}
+
+/**
  * WebSocket message types
  */
 export interface WebSocketMessage {
@@ -116,7 +207,12 @@ export interface WebSocketMessage {
     | 'feedback_created'
     | 'feedback_updated'
     | 'feedback_deleted'
-  data: Issue | Spec | Relationship | IssueFeedback
+    | 'agent_request_queued'
+    | 'agent_request_presented'
+    | 'agent_request_responded'
+    | 'agent_request_expired'
+    | 'agent_auto_response'
+  data: Issue | Spec | Relationship | IssueFeedback | AgentRequest
   timestamp: string
 }
 
