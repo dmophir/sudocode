@@ -30,6 +30,7 @@ import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
 import { createSchedulerRouter } from "./routes/scheduler.js";
+import { createIssueGroupsRouter } from "./routes/issue-groups.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
 import { getSpecById } from "./services/specs.js";
@@ -227,6 +228,7 @@ app.use(
 );
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 app.use("/api/scheduler", createSchedulerRouter(db, executionScheduler!));
+app.use("/api/issue-groups", createIssueGroupsRouter(db));
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
