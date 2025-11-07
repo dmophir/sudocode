@@ -285,3 +285,35 @@ export interface SchedulerConfig {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Issue group for coordinating related issues
+ */
+export interface IssueGroup {
+  id: string;
+  uuid: string;
+  name: string;
+  description?: string;
+  baseBranch: string;
+  workingBranch: string;
+  status: "active" | "paused" | "completed";
+  pauseReason?: string;
+  color?: string;
+  lastExecutionId?: string;
+  lastCommitSha?: string;
+  created_at: string;
+  updated_at: string;
+  closed_at?: string;
+}
+
+/**
+ * Issue group member relationship
+ */
+export interface IssueGroupMember {
+  group_id: string;
+  group_uuid: string;
+  issue_id: string;
+  issue_uuid: string;
+  position?: number;
+  added_at: string;
+}

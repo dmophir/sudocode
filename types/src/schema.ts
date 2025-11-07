@@ -232,6 +232,44 @@ CREATE TABLE IF NOT EXISTS scheduler_config (
 INSERT OR IGNORE INTO scheduler_config (id) VALUES ('default');
 `;
 
+// Issue groups table - for coordinating related issues
+export const ISSUE_GROUPS_TABLE = `
+CREATE TABLE IF NOT EXISTS issue_groups (
+    id TEXT PRIMARY KEY,
+    uuid TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    base_branch TEXT NOT NULL DEFAULT 'main',
+    working_branch TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'completed')),
+    pause_reason TEXT,
+    color TEXT,
+    last_execution_id TEXT,
+    last_commit_sha TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    closed_at DATETIME,
+    FOREIGN KEY (last_execution_id) REFERENCES executions(id) ON DELETE SET NULL
+);
+`;
+
+// Issue group members table - maps issues to groups
+export const ISSUE_GROUP_MEMBERS_TABLE = `
+CREATE TABLE IF NOT EXISTS issue_group_members (
+    group_id TEXT NOT NULL,
+    group_uuid TEXT NOT NULL,
+    issue_id TEXT NOT NULL,
+    issue_uuid TEXT NOT NULL,
+    position INTEGER,
+    added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, issue_id),
+    FOREIGN KEY (group_id) REFERENCES issue_groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_uuid) REFERENCES issue_groups(uuid) ON DELETE CASCADE,
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (issue_uuid) REFERENCES issues(uuid) ON DELETE CASCADE
+);
+`;
+
 /**
  * Index definitions
  */
@@ -320,6 +358,20 @@ export const SCHEDULER_CONFIG_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_scheduler_config_enabled ON scheduler_config(enabled);
 `;
 
+export const ISSUE_GROUPS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_issue_groups_uuid ON issue_groups(uuid);
+CREATE INDEX IF NOT EXISTS idx_issue_groups_status ON issue_groups(status);
+CREATE INDEX IF NOT EXISTS idx_issue_groups_working_branch ON issue_groups(working_branch);
+CREATE INDEX IF NOT EXISTS idx_issue_groups_last_execution ON issue_groups(last_execution_id);
+`;
+
+export const ISSUE_GROUP_MEMBERS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_group_members_group_id ON issue_group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_group_uuid ON issue_group_members(group_uuid);
+CREATE INDEX IF NOT EXISTS idx_group_members_issue_id ON issue_group_members(issue_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_issue_uuid ON issue_group_members(issue_uuid);
+`;
+
 /**
  * View definitions
  */
@@ -379,6 +431,8 @@ export const ALL_TABLES = [
   PROMPT_TEMPLATES_TABLE,
   EXECUTION_LOGS_TABLE,
   SCHEDULER_CONFIG_TABLE,
+  ISSUE_GROUPS_TABLE,
+  ISSUE_GROUP_MEMBERS_TABLE,
 ];
 
 export const ALL_INDEXES = [
@@ -392,6 +446,8 @@ export const ALL_INDEXES = [
   PROMPT_TEMPLATES_INDEXES,
   EXECUTION_LOGS_INDEXES,
   SCHEDULER_CONFIG_INDEXES,
+  ISSUE_GROUPS_INDEXES,
+  ISSUE_GROUP_MEMBERS_INDEXES,
 ];
 
 export const ALL_VIEWS = [READY_ISSUES_VIEW, BLOCKED_ISSUES_VIEW];
