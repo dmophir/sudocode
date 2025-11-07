@@ -507,6 +507,67 @@ export class LinearOrchestrator implements IWorkflowOrchestrator {
       });
     }
 
+    // Set up workflow timeout if configured
+    const workflowTimeout = workflow.config?.timeout;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    let isTimedOut = false;
+
+    if (workflowTimeout && workflowTimeout > 0) {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          isTimedOut = true;
+          reject(new Error(`Workflow execution exceeded timeout of ${workflowTimeout}ms`));
+        }, workflowTimeout);
+      });
+
+      // Race between workflow execution and timeout
+      try {
+        await Promise.race([
+          this._executeWorkflowSteps(workflow, execution, workDir, checkpointInterval),
+          timeoutPromise,
+        ]);
+      } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+      }
+
+      // If timed out, handle cleanup
+      if (isTimedOut) {
+        execution.status = "failed";
+        execution.completedAt = new Date();
+        execution.error = `Execution timed out after ${workflowTimeout}ms`;
+
+        // Emit workflow failed event
+        const timeoutError = new Error(execution.error);
+        this._workflowFailedHandlers.forEach((handler) => {
+          handler(execution.executionId, timeoutError);
+        });
+
+        // Emit AG-UI RUN_ERROR event
+        if (this._agUiAdapter) {
+          this._agUiAdapter.emitRunError(execution.error, timeoutError.stack);
+        }
+
+        // Cleanup execution resources (worktree)
+        await this._cleanupExecution(execution);
+        throw timeoutError;
+      }
+    } else {
+      // No timeout configured, execute normally
+      await this._executeWorkflowSteps(workflow, execution, workDir, checkpointInterval);
+    }
+  }
+
+  /**
+   * Execute workflow steps sequentially
+   */
+  private async _executeWorkflowSteps(
+    workflow: WorkflowDefinition,
+    execution: WorkflowExecution,
+    workDir: string,
+    checkpointInterval?: number
+  ): Promise<void> {
     // 2. Execute steps sequentially
     for (let i = execution.currentStepIndex; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
