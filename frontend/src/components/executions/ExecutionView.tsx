@@ -3,6 +3,7 @@ import { executionsApi } from '@/lib/api'
 import { ExecutionMonitor } from './ExecutionMonitor'
 import { FollowUpDialog } from './FollowUpDialog'
 import { ResumeSessionDialog } from './ResumeSessionDialog'
+import { ForkSessionDialog } from './ForkSessionDialog'
 import { DeleteWorktreeDialog } from './DeleteWorktreeDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +20,7 @@ import {
   Clock,
   PauseCircle,
   Play,
+  GitFork,
 } from 'lucide-react'
 
 export interface ExecutionViewProps {
@@ -45,6 +47,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const [error, setError] = useState<string | null>(null)
   const [showFollowUp, setShowFollowUp] = useState(false)
   const [showResumeSession, setShowResumeSession] = useState(false)
+  const [showForkSession, setShowForkSession] = useState(false)
   const [showDeleteWorktree, setShowDeleteWorktree] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)
@@ -137,6 +140,16 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const handleResumeSessionSubmit = async (prompt: string) => {
     const newExecution = await executionsApi.resumeSession(executionId, { prompt })
     setShowResumeSession(false)
+
+    if (onFollowUpCreated) {
+      onFollowUpCreated(newExecution.id)
+    }
+  }
+
+  // Handle fork session submission
+  const handleForkSessionSubmit = async (prompt: string) => {
+    const newExecution = await executionsApi.forkSession(executionId, { prompt })
+    setShowForkSession(false)
 
     if (onFollowUpCreated) {
       onFollowUpCreated(newExecution.id)
@@ -265,6 +278,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
     execution.status === 'failed' ||
     execution.status === 'stopped'
   const canResumeSession =
+    (execution.status === 'completed' ||
+      execution.status === 'failed' ||
+      execution.status === 'stopped') &&
+    execution.session_id
+  const canForkSession =
     (execution.status === 'completed' ||
       execution.status === 'failed' ||
       execution.status === 'stopped') &&
@@ -404,6 +422,12 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                 Continue Session
               </Button>
             )}
+            {canForkSession && (
+              <Button variant="outline" size="sm" onClick={() => setShowForkSession(true)}>
+                <GitFork className="mr-2 h-4 w-4" />
+                Fork Session
+              </Button>
+            )}
             {canDeleteWorktree && (
               <Button
                 variant="outline"
@@ -448,6 +472,14 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         open={showResumeSession}
         onSubmit={handleResumeSessionSubmit}
         onCancel={() => setShowResumeSession(false)}
+        sessionId={execution.session_id}
+      />
+
+      {/* Fork Session Dialog */}
+      <ForkSessionDialog
+        open={showForkSession}
+        onSubmit={handleForkSessionSubmit}
+        onCancel={() => setShowForkSession(false)}
         sessionId={execution.session_id}
       />
 

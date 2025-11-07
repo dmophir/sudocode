@@ -267,6 +267,7 @@ export interface Execution {
   files_changed: string | null;
 
   parent_execution_id: string | null;
+  is_fork: number;
 
   // Multi-step workflow support (future extension)
   step_type: string | null;

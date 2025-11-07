@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS executions (
 
     -- Relationships
     parent_execution_id TEXT,
+    is_fork INTEGER DEFAULT 0 CHECK(is_fork IN (0, 1)),
 
     -- Multi-step workflow support (future extension)
     step_type TEXT,

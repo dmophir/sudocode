@@ -132,3 +132,7 @@ export interface CreateFollowUpRequest {
 export interface ResumeSessionRequest {
   prompt: string
 }
+
+export interface ForkSessionRequest {
+  prompt: string
+}

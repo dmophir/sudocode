@@ -333,6 +333,59 @@ export function createExecutionsRouter(
   );
 
   /**
+   * POST /api/executions/:executionId/fork
+   *
+   * Fork a previous Claude Code session to explore alternatives
+   */
+  router.post(
+    "/executions/:executionId/fork",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const { prompt } = req.body;
+
+        // Validate required fields
+        if (!prompt) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "Prompt is required",
+          });
+          return;
+        }
+
+        const forkedExecution = await service.forkSession(
+          executionId,
+          prompt
+        );
+
+        res.status(201).json({
+          success: true,
+          data: forkedExecution,
+        });
+      } catch (error) {
+        console.error("Error forking session:", error);
+
+        // Handle specific error cases
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const statusCode =
+          errorMessage.includes("not found") ||
+          errorMessage.includes("no session_id")
+            ? 404
+            : 500;
+
+        res.status(statusCode).json({
+          success: false,
+          data: null,
+          error_data: errorMessage,
+          message: "Failed to fork session",
+        });
+      }
+    }
+  );
+
+  /**
    * DELETE /api/executions/:executionId
    *
    * Cancel a running execution
