@@ -20,7 +20,7 @@ interface Client {
  */
 interface ClientMessage {
   type: "subscribe" | "unsubscribe" | "ping";
-  entity_type?: "issue" | "spec" | "all";
+  entity_type?: "issue" | "spec" | "execution" | "all";
   entity_id?: string;
 }
 
@@ -40,6 +40,7 @@ export interface ServerMessage {
     | "feedback_deleted"
     | "relationship_created"
     | "relationship_deleted"
+    | "worktree_mutation" // NEW: Provisional mutation from worktree
     | "pong"
     | "error"
     | "subscribed"
@@ -353,6 +354,45 @@ class WebSocketManager {
     if (sentCount > 0) {
       console.log(
         `[websocket] Broadcasted ${message.type} to ${sentCount} clients`
+      );
+    }
+  }
+
+  /**
+   * Broadcast a message to clients subscribed to a specific execution
+   * Used for worktree mutation events
+   */
+  broadcastExecution(executionId: string, message: ServerMessage): void {
+    const subscription = `execution:${executionId}`;
+    const typeSubscription = `execution:*`;
+    let sentCount = 0;
+
+    this.clients.forEach((client) => {
+      if (client.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      // Check if client is subscribed to this specific execution, all executions, or all
+      if (
+        client.subscriptions.has(subscription) ||
+        client.subscriptions.has(typeSubscription) ||
+        client.subscriptions.has("all")
+      ) {
+        try {
+          client.ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(
+            `[websocket] Failed to broadcast to ${client.id}:`,
+            error
+          );
+        }
+      }
+    });
+
+    if (sentCount > 0) {
+      console.log(
+        `[websocket] Broadcasted ${message.type} for ${subscription} to ${sentCount} clients`
       );
     }
   }

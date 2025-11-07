@@ -13,6 +13,7 @@ import { WorktreeMutationTracker } from "./mutation-tracker.js";
 import { WorktreeMutationEventBuffer } from "./mutation-event-buffer.js";
 import { JSONLDiffParser } from "./jsonl-diff-parser.js";
 import { ProvisionalStateManager } from "./provisional-state-manager.js";
+import { WorktreeWebSocketBroadcaster } from "./websocket-broadcaster.js";
 
 /**
  * Singleton container for worktree mutation system components
@@ -25,6 +26,7 @@ class WorktreeMutationSystem {
   private diffParser: JSONLDiffParser | null = null;
   private mutationTracker: WorktreeMutationTracker | null = null;
   private provisionalStateManager: ProvisionalStateManager | null = null;
+  private websocketBroadcaster: WorktreeWebSocketBroadcaster | null = null;
 
   private constructor() {
     // Private constructor to prevent direct instantiation
@@ -68,6 +70,9 @@ class WorktreeMutationSystem {
     );
     this.provisionalStateManager = new ProvisionalStateManager(
       db,
+      this.eventBuffer
+    );
+    this.websocketBroadcaster = new WorktreeWebSocketBroadcaster(
       this.eventBuffer
     );
 
@@ -152,6 +157,20 @@ class WorktreeMutationSystem {
   }
 
   /**
+   * Get the WebSocket broadcaster instance
+   *
+   * @throws Error if not initialized
+   */
+  getWebSocketBroadcaster(): WorktreeWebSocketBroadcaster {
+    if (!this.websocketBroadcaster) {
+      throw new Error(
+        "WorktreeMutationSystem not initialized. Call initialize() first."
+      );
+    }
+    return this.websocketBroadcaster;
+  }
+
+  /**
    * Shutdown the mutation system
    *
    * Stops all active tracking and cleans up resources.
@@ -164,12 +183,17 @@ class WorktreeMutationSystem {
       this.mutationTracker.stopAll();
     }
 
+    if (this.websocketBroadcaster) {
+      this.websocketBroadcaster.shutdown();
+    }
+
     // Clear references
     this.fileWatcher = null;
     this.eventBuffer = null;
     this.diffParser = null;
     this.mutationTracker = null;
     this.provisionalStateManager = null;
+    this.websocketBroadcaster = null;
 
     console.log("[WorktreeMutationSystem] Shutdown complete");
   }
@@ -226,6 +250,16 @@ export function getEventBuffer(): WorktreeMutationEventBuffer {
  */
 export function getProvisionalStateManager(): ProvisionalStateManager {
   return WorktreeMutationSystem.getInstance().getProvisionalStateManager();
+}
+
+/**
+ * Get the WebSocket broadcaster instance
+ *
+ * @returns WorktreeWebSocketBroadcaster instance
+ * @throws Error if system not initialized
+ */
+export function getWebSocketBroadcaster(): WorktreeWebSocketBroadcaster {
+  return WorktreeMutationSystem.getInstance().getWebSocketBroadcaster();
 }
 
 /**
