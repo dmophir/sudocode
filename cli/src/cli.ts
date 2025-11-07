@@ -49,6 +49,23 @@ import {
   handleInitMergeDriver,
   handleRemoveMergeDriver,
 } from "./cli/merge-commands.js";
+import {
+  handleRemoteAdd,
+  handleRemoteList,
+  handleRemoteShow,
+  handleRemoteUpdate,
+  handleRemoteRemove,
+  handleRemoteDiscover,
+  handleRemoteQuery,
+} from "./cli/remote-commands.js";
+import {
+  handleRequestPending,
+  handleRequestList,
+  handleRequestShow,
+  handleRequestCreate,
+  handleRequestApprove,
+  handleRequestReject,
+} from "./cli/request-commands.js";
 import { getUpdateNotification } from "./update-checker.js";
 import { VERSION } from "./version.js";
 
@@ -532,6 +549,154 @@ program
   .option("--global", "Remove from global config instead of just current repo")
   .action(async (options) => {
     await handleRemoveMergeDriver(options);
+  });
+
+// ============================================================================
+// FEDERATION COMMANDS - REMOTE REPOSITORIES
+// ============================================================================
+
+const remote = program
+  .command("remote")
+  .description("Manage remote repositories for federation");
+
+remote
+  .command("add <url>")
+  .description("Add a remote repository")
+  .option("--display-name <name>", "Display name for the remote")
+  .option(
+    "--trust-level <level>",
+    "Trust level: trusted, verified, untrusted",
+    "untrusted"
+  )
+  .option("--rest-endpoint <url>", "REST API endpoint")
+  .option("--ws-endpoint <url>", "WebSocket endpoint")
+  .option("--git-url <url>", "Git repository URL")
+  .option("--description <text>", "Description")
+  .option("--auto-sync <bool>", "Enable auto-sync", "false")
+  .option("--sync-interval <minutes>", "Sync interval in minutes", "60")
+  .option("--added-by <name>", "Who is adding this remote", "cli")
+  .action(async (url, options) => {
+    await handleRemoteAdd(getContext(), url, options);
+  });
+
+remote
+  .command("list")
+  .description("List all remote repositories")
+  .option("--trust-level <level>", "Filter by trust level")
+  .option("--sync-status <status>", "Filter by sync status")
+  .action(async (options) => {
+    await handleRemoteList(getContext(), options);
+  });
+
+remote
+  .command("show <url>")
+  .description("Show remote repository details")
+  .action(async (url) => {
+    await handleRemoteShow(getContext(), url);
+  });
+
+remote
+  .command("update <url>")
+  .description("Update a remote repository")
+  .option("--display-name <name>", "New display name")
+  .option("--description <text>", "New description")
+  .option("--trust-level <level>", "New trust level")
+  .option("--rest-endpoint <url>", "New REST API endpoint")
+  .option("--ws-endpoint <url>", "New WebSocket endpoint")
+  .option("--git-url <url>", "New Git repository URL")
+  .option("--auto-sync <bool>", "Enable/disable auto-sync")
+  .option("--sync-interval <minutes>", "New sync interval in minutes")
+  .action(async (url, options) => {
+    await handleRemoteUpdate(getContext(), url, options);
+  });
+
+remote
+  .command("remove <url>")
+  .description("Remove a remote repository")
+  .action(async (url) => {
+    await handleRemoteRemove(getContext(), url);
+  });
+
+remote
+  .command("discover <url>")
+  .description("Discover capabilities of a remote repository")
+  .action(async (url) => {
+    await handleRemoteDiscover(getContext(), url);
+  });
+
+remote
+  .command("query <url>")
+  .description("Query issues or specs from a remote repository")
+  .option("--entity <type>", "Entity type: issue or spec", "issue")
+  .option("--status <status>", "Filter by status")
+  .option("--priority <priority>", "Filter by priority")
+  .option("--limit <num>", "Limit results", "50")
+  .action(async (url, options) => {
+    await handleRemoteQuery(getContext(), url, options);
+  });
+
+// ============================================================================
+// FEDERATION COMMANDS - REQUESTS
+// ============================================================================
+
+const request = program
+  .command("request")
+  .description("Manage cross-repository requests");
+
+request
+  .command("pending")
+  .description("List pending requests")
+  .option("--direction <dir>", "Filter by direction: incoming or outgoing")
+  .action(async (options) => {
+    await handleRequestPending(getContext(), options);
+  });
+
+request
+  .command("list")
+  .description("List all requests")
+  .option("--status <status>", "Filter by status")
+  .option("--direction <dir>", "Filter by direction")
+  .option("--from-repo <url>", "Filter by source repository")
+  .option("--to-repo <url>", "Filter by destination repository")
+  .option("--limit <num>", "Limit results", "50")
+  .action(async (options) => {
+    await handleRequestList(getContext(), options);
+  });
+
+request
+  .command("show <id>")
+  .description("Show request details")
+  .action(async (id) => {
+    await handleRequestShow(getContext(), id);
+  });
+
+request
+  .command("create")
+  .description("Create a new cross-repo request")
+  .requiredOption("--remote-repo <url>", "Remote repository URL")
+  .option("--type <type>", "Operation type", "create")
+  .option("--entity <type>", "Entity type: issue or spec", "issue")
+  .requiredOption("--title <title>", "Title for the issue/spec")
+  .option("--description <text>", "Description")
+  .option("--priority <priority>", "Priority (0-4)", "2")
+  .action(async (options) => {
+    await handleRequestCreate(getContext(), options);
+  });
+
+request
+  .command("approve <id>")
+  .description("Approve an incoming request")
+  .option("--approver <name>", "Approver name", "cli")
+  .action(async (id, options) => {
+    await handleRequestApprove(getContext(), id, options);
+  });
+
+request
+  .command("reject <id>")
+  .description("Reject an incoming request")
+  .requiredOption("--reason <text>", "Reason for rejection")
+  .action(async (id, options) => {
+    await handleRequestReject(getContext(), id, options);
   });
 
 // Parse arguments
