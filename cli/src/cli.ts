@@ -36,6 +36,13 @@ import {
   handleContextQuery,
   handleContextStats,
 } from "./cli/context-commands.js";
+import {
+  handleTrajectoryList,
+  handleTrajectoryShow,
+  handleTrajectoryAnalyze,
+  handleTrajectoryRecommend,
+  handleTrajectoryStats,
+} from "./cli/trajectory-commands.js";
 import { handleLink } from "./cli/relationship-commands.js";
 import { handleAddReference } from "./cli/reference-commands.js";
 import { handleReady, handleBlocked } from "./cli/query-commands.js";
@@ -428,6 +435,60 @@ context
   .description("Show context coverage statistics")
   .action(async (options) => {
     await handleContextStats(getContext());
+  });
+
+// ============================================================================
+// TRAJECTORY COMMANDS
+// ============================================================================
+
+const trajectory = program
+  .command("trajectory")
+  .description("Manage and analyze execution trajectories");
+
+trajectory
+  .command("list")
+  .description("List stored trajectories")
+  .option("--issue <id>", "Filter by issue ID")
+  .option("--spec <id>", "Filter by spec ID")
+  .option("--outcome <outcome>", "Filter by outcome (success, failure, partial)")
+  .option("--agent <type>", "Filter by agent type")
+  .option("--since <date>", "Show trajectories since date (ISO format)")
+  .option("--limit <number>", "Limit number of results", parseInt)
+  .action(async (options) => {
+    await handleTrajectoryList(getContext(), options);
+  });
+
+trajectory
+  .command("show <id>")
+  .description("Show detailed trajectory information")
+  .action(async (id, options) => {
+    await handleTrajectoryShow(getContext(), id);
+  });
+
+trajectory
+  .command("analyze")
+  .description("Analyze trajectories for patterns and insights")
+  .option("--min-frequency <number>", "Minimum pattern frequency", parseInt)
+  .option("--min-similarity <number>", "Minimum similarity score", parseInt)
+  .action(async (options) => {
+    await handleTrajectoryAnalyze(getContext(), options);
+  });
+
+trajectory
+  .command("recommend <goal>")
+  .description("Get action recommendations based on past trajectories")
+  .option("--tags <tags>", "Comma-separated tags for context")
+  .option("--previous-actions <actions>", "Comma-separated previous actions")
+  .option("--top-k <number>", "Number of recommendations", parseInt)
+  .action(async (goal, options) => {
+    await handleTrajectoryRecommend(getContext(), goal, options);
+  });
+
+trajectory
+  .command("stats")
+  .description("Show trajectory statistics")
+  .action(async (options) => {
+    await handleTrajectoryStats(getContext());
   });
 
 // ============================================================================
