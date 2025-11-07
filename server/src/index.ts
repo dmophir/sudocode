@@ -40,6 +40,7 @@ import {
   shutdownWebSocketServer,
   broadcastIssueUpdate,
   broadcastSpecUpdate,
+  setVoiceTransport,
 } from "./services/websocket.js";
 
 // Load environment variables
@@ -381,6 +382,11 @@ const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 
 // Initialize WebSocket server AFTER successfully binding to a port
 initWebSocketServer(server, "/ws");
+
+// Connect voice transport to WebSocket manager
+const voiceTransport = transportManager.getVoiceTransport();
+setVoiceTransport(voiceTransport);
+console.log("Voice transport connected to WebSocket manager");
 
 // Format URLs as clickable links with color
 const httpUrl = `http://localhost:${actualPort}`;

@@ -391,13 +391,20 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
       </Card>
 
       {/* Voice Controls - show for running executions */}
-      {execution.status === 'running' && execution.config?.voice && (
-        <VoiceControls
-          executionId={executionId}
-          initialConfig={execution.config.voice}
-          compact={true}
-        />
-      )}
+      {execution.status === 'running' && (() => {
+        try {
+          const config = execution.config ? JSON.parse(execution.config) : null
+          return config?.voice ? (
+            <VoiceControls
+              executionId={executionId}
+              initialConfig={config.voice}
+              compact={true}
+            />
+          ) : null
+        } catch {
+          return null
+        }
+      })()}
 
       {/* Execution Monitor - uses SSE for active, logs API for completed */}
       {(execution.status === 'running' ||

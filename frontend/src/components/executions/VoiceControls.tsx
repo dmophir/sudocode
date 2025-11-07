@@ -64,7 +64,6 @@ export function VoiceControls({
   const { isSupported } = useVoiceContext()
 
   const {
-    isEnabled,
     isListening,
     isSpeaking,
     transcript,

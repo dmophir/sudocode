@@ -1,6 +1,8 @@
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import * as http from "http";
 import { randomUUID } from "crypto";
+import type { VoiceTransport } from "../execution/transport/voice-transport.js";
+import type { VoiceEvent } from "@sudocode-ai/types";
 
 const LOG_CONNECTIONS = false;
 
@@ -19,9 +21,11 @@ interface Client {
  * Message types that clients can send to the server
  */
 interface ClientMessage {
-  type: "subscribe" | "unsubscribe" | "ping";
+  type: "subscribe" | "unsubscribe" | "ping" | "voice_register" | "voice_unregister" | "voice_input";
   entity_type?: "issue" | "spec" | "all";
   entity_id?: string;
+  execution_id?: string; // For voice events
+  event?: VoiceEvent; // For voice_input
 }
 
 /**
@@ -43,10 +47,12 @@ export interface ServerMessage {
     | "pong"
     | "error"
     | "subscribed"
-    | "unsubscribed";
+    | "unsubscribed"
+    | "voice_event";
   data?: any;
   message?: string;
   subscription?: string;
+  event?: VoiceEvent; // For voice_event type
 }
 
 /**
@@ -57,6 +63,7 @@ class WebSocketManager {
   private clients: Map<string, Client> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private voiceTransport: VoiceTransport | null = null;
 
   /**
    * Initialize the WebSocket server
@@ -72,6 +79,20 @@ class WebSocketManager {
 
     this.wss.on("connection", this.handleConnection.bind(this));
     this.startHeartbeat();
+  }
+
+  /**
+   * Set the voice transport for handling voice events
+   */
+  setVoiceTransport(voiceTransport: VoiceTransport): void {
+    this.voiceTransport = voiceTransport;
+
+    // Connect voice transport broadcast callback to sendToClient
+    voiceTransport.setBroadcastCallback((clientId, message) => {
+      this.sendToClient(clientId, message);
+    });
+
+    console.log("[websocket] Voice transport connected");
   }
 
   /**
@@ -118,6 +139,12 @@ class WebSocketManager {
           `[websocket] Client disconnected: ${clientId} (subscriptions: ${client.subscriptions.size})`
         );
       }
+
+      // Clean up voice registrations
+      if (this.voiceTransport) {
+        this.voiceTransport.removeClient(clientId);
+      }
+
       this.clients.delete(clientId);
     }
   }
@@ -162,6 +189,18 @@ class WebSocketManager {
 
         case "ping":
           this.sendToClient(clientId, { type: "pong" });
+          break;
+
+        case "voice_register":
+          this.handleVoiceRegister(clientId, message);
+          break;
+
+        case "voice_unregister":
+          this.handleVoiceUnregister(clientId, message);
+          break;
+
+        case "voice_input":
+          this.handleVoiceInput(clientId, message);
           break;
 
         default:
@@ -264,9 +303,84 @@ class WebSocketManager {
   }
 
   /**
-   * Send a message to a specific client
+   * Handle voice registration request
    */
-  private sendToClient(clientId: string, message: ServerMessage): void {
+  private handleVoiceRegister(clientId: string, message: ClientMessage): void {
+    if (!message.execution_id) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "voice_register requires execution_id",
+      });
+      return;
+    }
+
+    if (!this.voiceTransport) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Voice transport not initialized",
+      });
+      return;
+    }
+
+    this.voiceTransport.registerClient(clientId, message.execution_id);
+    console.log(
+      `[websocket] Client ${clientId} registered for voice on execution ${message.execution_id}`
+    );
+  }
+
+  /**
+   * Handle voice unregistration request
+   */
+  private handleVoiceUnregister(clientId: string, message: ClientMessage): void {
+    if (!message.execution_id) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "voice_unregister requires execution_id",
+      });
+      return;
+    }
+
+    if (!this.voiceTransport) {
+      return;
+    }
+
+    this.voiceTransport.unregisterClient(clientId, message.execution_id);
+    console.log(
+      `[websocket] Client ${clientId} unregistered from voice on execution ${message.execution_id}`
+    );
+  }
+
+  /**
+   * Handle voice input from client
+   */
+  private async handleVoiceInput(
+    clientId: string,
+    message: ClientMessage
+  ): Promise<void> {
+    if (!message.event) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "voice_input requires event",
+      });
+      return;
+    }
+
+    if (!this.voiceTransport) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Voice transport not initialized",
+      });
+      return;
+    }
+
+    await this.voiceTransport.handleVoiceInput(clientId, message.event);
+  }
+
+  /**
+   * Send a message to a specific client
+   * Made public to allow voice transport to send messages
+   */
+  sendToClient(clientId: string, message: ServerMessage): void {
     const client = this.clients.get(clientId);
     if (!client || client.ws.readyState !== WebSocket.OPEN) {
       return;
@@ -530,4 +644,11 @@ export function getWebSocketStats() {
  */
 export async function shutdownWebSocketServer(): Promise<void> {
   await websocketManager.shutdown();
+}
+
+/**
+ * Set the voice transport for WebSocket manager
+ */
+export function setVoiceTransport(voiceTransport: VoiceTransport): void {
+  websocketManager.setVoiceTransport(voiceTransport);
 }

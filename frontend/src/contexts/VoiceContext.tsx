@@ -7,7 +7,12 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { VoiceService } from '../lib/voice-service'
-import type { VoiceConfig, Priority } from '@sudocode-ai/types'
+import type { VoiceConfig } from '@sudocode-ai/types'
+
+/**
+ * Priority levels for TTS
+ */
+export type Priority = 'high' | 'normal' | 'low'
 
 /**
  * TTS queue item

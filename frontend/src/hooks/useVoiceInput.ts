@@ -8,7 +8,7 @@
  * @module hooks/useVoiceInput
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useVoiceContext } from '../contexts/VoiceContext'
 import type { VoiceConfig } from '@sudocode-ai/types'
 
@@ -108,7 +108,6 @@ export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputRetur
     voiceService,
     registerExecution,
     unregisterExecution,
-    getExecutionConfig,
     updateExecutionConfig,
     currentlySpeaking,
   } = useVoiceContext()

@@ -75,7 +75,12 @@ class MockSpeechSynthesisUtterance {
 class MockSpeechSynthesis {
   private utterances: MockSpeechSynthesisUtterance[] = []
   private currentUtterance: MockSpeechSynthesisUtterance | null = null
-  private isPaused = false
+
+  // Required SpeechSynthesis properties
+  onvoiceschanged: ((this: SpeechSynthesis, ev: Event) => any) | null = null
+  paused = false
+  pending = false
+  speaking = false
 
   speak(utterance: MockSpeechSynthesisUtterance) {
     this.utterances.push(utterance)
@@ -90,11 +95,18 @@ class MockSpeechSynthesis {
   }
 
   pause() {
-    this.isPaused = true
+    this.paused = true
   }
 
   resume() {
-    this.isPaused = false
+    this.paused = false
+  }
+
+  // Required EventTarget methods
+  addEventListener() {}
+  removeEventListener() {}
+  dispatchEvent() {
+    return true
   }
 
   getVoices() {
@@ -337,7 +349,7 @@ describe('VoiceService', () => {
       })
 
       it('should stop speaking', async () => {
-        const promise = service.speak('Long text that will be interrupted')
+        void service.speak('Long text that will be interrupted')
 
         await new Promise((resolve) => setTimeout(resolve, 20))
         expect(service.isSpeaking).toBe(true)

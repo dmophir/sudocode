@@ -204,7 +204,7 @@ export class VoiceTransport {
     );
 
     // Notify all registered handlers
-    for (const handler of this.inputHandlers) {
+    for (const handler of Array.from(this.inputHandlers)) {
       try {
         await handler(executionId, data as VoiceInputData);
       } catch (error) {
@@ -234,7 +234,7 @@ export class VoiceTransport {
     );
 
     // Broadcast to all clients
-    for (const clientId of clients) {
+    for (const clientId of Array.from(clients)) {
       this.sendToClient(clientId, {
         type: "voice_event",
         event,
@@ -256,7 +256,7 @@ export class VoiceTransport {
     }
 
     // Broadcast to all clients
-    for (const clientId of clients) {
+    for (const clientId of Array.from(clients)) {
       this.sendToClient(clientId, {
         type: "voice_event",
         event,

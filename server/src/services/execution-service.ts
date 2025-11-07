@@ -41,6 +41,12 @@ export interface ExecutionConfig {
   continueOnStepFailure?: boolean;
   captureFileChanges?: boolean;
   captureToolCalls?: boolean;
+  voice?: {
+    enabled?: boolean;
+    autoStart?: boolean;
+    speakErrors?: boolean;
+    speakToolResults?: boolean;
+  };
 }
 
 /**
@@ -356,6 +362,14 @@ export class ExecutionService {
       // Connect adapter to transport for SSE streaming
       this.transportManager.connectAdapter(agUiAdapter, execution.id);
 
+      // Connect voice adapter if voice is enabled in config
+      if (config.voice?.enabled) {
+        this.transportManager.connectVoiceAdapter(execution.id, agUiAdapter);
+        console.log(
+          `[ExecutionService] Voice adapter connected for execution ${execution.id}`
+        );
+      }
+
       // Connect processor to execution engine for real-time output parsing
       // Buffer for incomplete lines (stream-json can split mid-line)
       let lineBuffer = "";
@@ -451,6 +465,10 @@ export class ExecutionService {
           }
         );
       }
+      // Disconnect voice adapter if present
+      if (this.transportManager) {
+        this.transportManager.disconnectVoiceAdapter(execution.id);
+      }
       // Remove orchestrator from active map
       this.activeOrchestrators.delete(execution.id);
     });
@@ -479,6 +497,10 @@ export class ExecutionService {
             note: "Execution may have been deleted (e.g., due to CASCADE DELETE from issue deletion)",
           }
         );
+      }
+      // Disconnect voice adapter if present
+      if (this.transportManager) {
+        this.transportManager.disconnectVoiceAdapter(execution.id);
       }
       // Remove orchestrator from active map
       this.activeOrchestrators.delete(execution.id);
@@ -638,6 +660,27 @@ Please continue working on this issue, taking into account the feedback above.`;
       agUiAdapter = agUiSystem.adapter;
       this.transportManager.connectAdapter(agUiAdapter, newExecution.id);
 
+      // Connect voice adapter if voice was enabled in original execution
+      if (prevExecution.config) {
+        try {
+          const prevConfig = JSON.parse(prevExecution.config);
+          if (prevConfig.voice?.enabled) {
+            this.transportManager.connectVoiceAdapter(
+              newExecution.id,
+              agUiAdapter
+            );
+            console.log(
+              `[ExecutionService] Voice adapter connected for follow-up execution ${newExecution.id}`
+            );
+          }
+        } catch (error) {
+          console.error(
+            `[ExecutionService] Failed to parse config for voice setup:`,
+            error
+          );
+        }
+      }
+
       // Connect processor to execution engine for real-time output parsing
       // Buffer for incomplete lines (stream-json can split mid-line)
       let lineBuffer = "";
@@ -729,6 +772,10 @@ Please continue working on this issue, taking into account the feedback above.`;
           }
         );
       }
+      // Disconnect voice adapter if present
+      if (this.transportManager) {
+        this.transportManager.disconnectVoiceAdapter(newExecution.id);
+      }
       this.activeOrchestrators.delete(newExecution.id);
     });
 
@@ -750,6 +797,10 @@ Please continue working on this issue, taking into account the feedback above.`;
                 : String(updateError),
           }
         );
+      }
+      // Disconnect voice adapter if present
+      if (this.transportManager) {
+        this.transportManager.disconnectVoiceAdapter(newExecution.id);
       }
       this.activeOrchestrators.delete(newExecution.id);
     });
