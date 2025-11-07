@@ -136,6 +136,60 @@ export interface EventBufferStats {
 }
 
 /**
+ * Provisional state computed from base state + worktree mutations
+ */
+export interface ProvisionalState {
+  /** Base state from main repository */
+  base: {
+    issues: Issue[];
+    specs: Spec[];
+  };
+
+  /** Overlay of worktree mutations */
+  provisional: {
+    /** Issues created in worktree */
+    issuesCreated: Issue[];
+
+    /** Issues updated in worktree (patches) */
+    issuesUpdated: Array<{
+      id: string;
+      baseIssue: Issue;
+      updatedIssue: Issue;
+      delta: Partial<Issue>;
+    }>;
+
+    /** Issue IDs deleted in worktree */
+    issuesDeleted: string[];
+
+    /** Specs created in worktree */
+    specsCreated: Spec[];
+
+    /** Specs updated in worktree (patches) */
+    specsUpdated: Array<{
+      id: string;
+      baseSpec: Spec;
+      updatedSpec: Spec;
+      delta: Partial<Spec>;
+    }>;
+
+    /** Spec IDs deleted in worktree */
+    specsDeleted: string[];
+  };
+
+  /** Execution metadata */
+  execution: {
+    id: string;
+    issueId: string | null;
+    status: string;
+    startedAt: string | null;
+    updatedAt: string | null;
+  };
+
+  /** When this provisional state was computed */
+  computedAt: number;
+}
+
+/**
  * Worktree creation parameters
  */
 export interface WorktreeCreateParams {
