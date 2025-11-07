@@ -18,30 +18,38 @@ export interface CreateRelationshipInput {
 /**
  * Add a relationship between entities
  */
+/**
+ * Get table name for entity type
+ */
+function getTableForEntityType(entityType: EntityType): string {
+  if (entityType === "spec") return "specs";
+  if (entityType === "issue") return "issues";
+  if (entityType === "session") return "sessions";
+  throw new Error(`Unknown entity type: ${entityType}`);
+}
+
 export function addRelationship(
   db: Database.Database,
   input: CreateRelationshipInput
 ): Relationship {
   // Check if from_id exists and get from_uuid
-  const fromTable = input.from_type === "spec" ? "specs" : "issues";
+  const fromTable = getTableForEntityType(input.from_type);
   const fromEntity = db
     .prepare(`SELECT id, uuid FROM ${fromTable} WHERE id = ?`)
     .get(input.from_id) as { id: string; uuid: string } | undefined;
   if (!fromEntity) {
-    throw new Error(
-      `${input.from_type === "spec" ? "Spec" : "Issue"} not found: ${input.from_id}`
-    );
+    const entityName = input.from_type.charAt(0).toUpperCase() + input.from_type.slice(1);
+    throw new Error(`${entityName} not found: ${input.from_id}`);
   }
 
   // Check if to_id exists and get to_uuid
-  const toTable = input.to_type === "spec" ? "specs" : "issues";
+  const toTable = getTableForEntityType(input.to_type);
   const toEntity = db
     .prepare(`SELECT id, uuid FROM ${toTable} WHERE id = ?`)
     .get(input.to_id) as { id: string; uuid: string } | undefined;
   if (!toEntity) {
-    throw new Error(
-      `${input.to_type === "spec" ? "Spec" : "Issue"} not found: ${input.to_id}`
-    );
+    const entityName = input.to_type.charAt(0).toUpperCase() + input.to_type.slice(1);
+    throw new Error(`${entityName} not found: ${input.to_id}`);
   }
 
   // Check if relationship already exists

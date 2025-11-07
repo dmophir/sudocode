@@ -15,15 +15,24 @@ export function addTag(
   tag: string
 ): Tag {
   // Get entity UUID
-  const table = entity_type === "spec" ? "specs" : "issues";
+  let table: string;
+  if (entity_type === "spec") {
+    table = "specs";
+  } else if (entity_type === "issue") {
+    table = "issues";
+  } else if (entity_type === "session") {
+    table = "sessions";
+  } else {
+    throw new Error(`Unknown entity type: ${entity_type}`);
+  }
+
   const entity = db
     .prepare(`SELECT uuid FROM ${table} WHERE id = ?`)
     .get(entity_id) as { uuid: string } | undefined;
 
   if (!entity) {
-    throw new Error(
-      `${entity_type === "spec" ? "Spec" : "Issue"} not found: ${entity_id}`
-    );
+    const entityName = entity_type.charAt(0).toUpperCase() + entity_type.slice(1);
+    throw new Error(`${entityName} not found: ${entity_id}`);
   }
 
   const stmt = db.prepare(`
