@@ -13,6 +13,16 @@ import {
   PROMPT_TEMPLATES_INDEXES,
   EXECUTION_LOGS_TABLE,
   EXECUTION_LOGS_INDEXES,
+  REMOTE_REPOS_TABLE,
+  REMOTE_REPOS_INDEXES,
+  CROSS_REPO_REFERENCES_TABLE,
+  CROSS_REPO_REFERENCES_INDEXES,
+  CROSS_REPO_REQUESTS_TABLE,
+  CROSS_REPO_REQUESTS_INDEXES,
+  CROSS_REPO_SUBSCRIPTIONS_TABLE,
+  CROSS_REPO_SUBSCRIPTIONS_INDEXES,
+  CROSS_REPO_AUDIT_LOG_TABLE,
+  CROSS_REPO_AUDIT_LOG_INDEXES,
 } from "@sudocode-ai/types/schema";
 import { initializeDefaultTemplates } from "./prompt-templates.js";
 
@@ -58,10 +68,22 @@ export function initDatabase(config: DatabaseConfig): Database.Database {
   db.exec(PROMPT_TEMPLATES_TABLE);
   db.exec(EXECUTION_LOGS_TABLE);
 
+  // Create federation tables
+  db.exec(REMOTE_REPOS_TABLE);
+  db.exec(CROSS_REPO_REFERENCES_TABLE);
+  db.exec(CROSS_REPO_REQUESTS_TABLE);
+  db.exec(CROSS_REPO_SUBSCRIPTIONS_TABLE);
+  db.exec(CROSS_REPO_AUDIT_LOG_TABLE);
+
   // Create indexes
   db.exec(EXECUTIONS_INDEXES);
   db.exec(PROMPT_TEMPLATES_INDEXES);
   db.exec(EXECUTION_LOGS_INDEXES);
+  db.exec(REMOTE_REPOS_INDEXES);
+  db.exec(CROSS_REPO_REFERENCES_INDEXES);
+  db.exec(CROSS_REPO_REQUESTS_INDEXES);
+  db.exec(CROSS_REPO_SUBSCRIPTIONS_INDEXES);
+  db.exec(CROSS_REPO_AUDIT_LOG_INDEXES);
 
   // Initialize default prompt templates
   initializeDefaultTemplates(db);

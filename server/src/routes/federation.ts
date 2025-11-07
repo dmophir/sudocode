@@ -47,18 +47,24 @@ export function createFederationRouter(
 ): Router {
   const router = Router();
 
-  // Middleware to parse JSON
+  // Middleware to validate JSON content-type for POST/PUT/PATCH requests
   router.use((req, res, next) => {
-    if (req.is("application/json")) {
-      next();
+    // Only check content-type for requests that send a body
+    if (["POST", "PUT", "PATCH"].includes(req.method)) {
+      if (req.is("application/json") || req.body) {
+        next();
+      } else {
+        res.status(415).json({
+          type: "https://sudocode.dev/errors/unsupported-media-type",
+          title: "Unsupported Media Type",
+          status: 415,
+          detail: "Content-Type must be application/json",
+          instance: req.path,
+        });
+      }
     } else {
-      res.status(415).json({
-        type: "https://sudocode.dev/errors/unsupported-media-type",
-        title: "Unsupported Media Type",
-        status: 415,
-        detail: "Content-Type must be application/json",
-        instance: req.path,
-      });
+      // GET, DELETE, etc. don't require content-type
+      next();
     }
   });
 
