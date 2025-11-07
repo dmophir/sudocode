@@ -236,6 +236,32 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `;
 
+// Context bundles table - group related entities for complex workflows
+export const CONTEXT_BUNDLES_TABLE = `
+CREATE TABLE IF NOT EXISTS context_bundles (
+    id TEXT PRIMARY KEY,
+    uuid TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL CHECK(length(name) <= 500),
+    description TEXT,
+    archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1)),
+    archived_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`;
+
+// Context bundle items table - entities within a bundle
+export const CONTEXT_BUNDLE_ITEMS_TABLE = `
+CREATE TABLE IF NOT EXISTS context_bundle_items (
+    bundle_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('session', 'spec', 'issue', 'execution')),
+    entity_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bundle_id, entity_type, entity_id),
+    FOREIGN KEY (bundle_id) REFERENCES context_bundles(id) ON DELETE CASCADE
+);
+`;
+
 /**
  * Index definitions
  */
@@ -330,6 +356,19 @@ CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 `;
 
+export const CONTEXT_BUNDLES_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_context_bundles_uuid ON context_bundles(uuid);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_archived ON context_bundles(archived);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_created_at ON context_bundles(created_at);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_updated_at ON context_bundles(updated_at);
+`;
+
+export const CONTEXT_BUNDLE_ITEMS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_bundle_items_bundle_id ON context_bundle_items(bundle_id);
+CREATE INDEX IF NOT EXISTS idx_bundle_items_entity ON context_bundle_items(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_bundle_items_order ON context_bundle_items(bundle_id, order_index);
+`;
+
 /**
  * View definitions
  */
@@ -389,6 +428,8 @@ export const ALL_TABLES = [
   PROMPT_TEMPLATES_TABLE,
   EXECUTION_LOGS_TABLE,
   SESSIONS_TABLE,
+  CONTEXT_BUNDLES_TABLE,
+  CONTEXT_BUNDLE_ITEMS_TABLE,
 ];
 
 export const ALL_INDEXES = [
@@ -402,6 +443,8 @@ export const ALL_INDEXES = [
   PROMPT_TEMPLATES_INDEXES,
   EXECUTION_LOGS_INDEXES,
   SESSIONS_INDEXES,
+  CONTEXT_BUNDLES_INDEXES,
+  CONTEXT_BUNDLE_ITEMS_INDEXES,
 ];
 
 export const ALL_VIEWS = [READY_ISSUES_VIEW, BLOCKED_ISSUES_VIEW];

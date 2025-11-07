@@ -9,6 +9,8 @@ export type {
   Spec,
   Issue,
   Session,
+  ContextBundle,
+  ContextBundleItem,
   Relationship,
   EntityType,
   RelationshipType,

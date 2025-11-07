@@ -53,6 +53,24 @@ export interface Session {
   updated_at: string;
 }
 
+export interface ContextBundle {
+  id: string;
+  uuid: string;
+  name: string;
+  description?: string;
+  archived?: boolean;
+  archived_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContextBundleItem {
+  bundle_id: string;
+  entity_type: "session" | "spec" | "issue" | "execution";
+  entity_id: string;
+  order_index: number;
+}
+
 export interface Relationship {
   from_id: string;
   from_uuid: string;
