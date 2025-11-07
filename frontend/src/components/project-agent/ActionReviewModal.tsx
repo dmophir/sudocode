@@ -277,12 +277,50 @@ export function ActionReviewModal({
               </div>
             </div>
 
+            {/* Diff Display for modify_spec actions */}
+            {action.action_type === 'modify_spec' && payload._diff && (
+              <div>
+                <Label>Proposed Changes</Label>
+                <div className="mt-1 space-y-2">
+                  {payload._diff.changes && payload._diff.changes.map((change: any, idx: number) => (
+                    <div key={idx} className="border rounded-md p-3 bg-muted/50">
+                      <div className="text-xs font-semibold text-muted-foreground mb-2">
+                        {change.field}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-start gap-2">
+                          <span className="text-xs text-red-600 dark:text-red-400 font-mono">-</span>
+                          <div className="flex-1 text-xs bg-red-50 dark:bg-red-950/30 p-2 rounded">
+                            {change.field === 'content' ? (
+                              <pre className="whitespace-pre-wrap">{change.before}</pre>
+                            ) : (
+                              <span>{String(change.before)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-xs text-green-600 dark:text-green-400 font-mono">+</span>
+                          <div className="flex-1 text-xs bg-green-50 dark:bg-green-950/30 p-2 rounded">
+                            {change.field === 'content' ? (
+                              <pre className="whitespace-pre-wrap">{change.after}</pre>
+                            ) : (
+                              <span>{String(change.after)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Payload Details */}
             <div>
               <Label>Action Details</Label>
               <div className="mt-1 p-3 bg-muted rounded-md">
                 <pre className="text-xs overflow-x-auto">
-                  {JSON.stringify(payload, null, 2)}
+                  {JSON.stringify(payload._diff ? { ...payload, _diff: undefined } : payload, null, 2)}
                 </pre>
               </div>
             </div>

@@ -74,6 +74,21 @@ export class ActionManager {
    * Propose a new action
    */
   async proposeAction(params: ProposeActionParams): Promise<ProjectAgentAction> {
+    // Generate diff for modify_spec actions to show in UI
+    let enrichedPayload = params.payload;
+    if (params.actionType === "modify_spec" && params.payload.spec_id) {
+      try {
+        const diff = await this.generateSpecDiff(params.payload);
+        enrichedPayload = {
+          ...params.payload,
+          _diff: diff, // Include diff for UI display
+        };
+      } catch (error) {
+        console.error("[action-manager] Failed to generate diff:", error);
+        // Continue without diff - not critical
+      }
+    }
+
     // Create the action in database
     const action = createProjectAgentAction(this.db, {
       projectAgentExecutionId: params.projectAgentExecutionId,
@@ -81,7 +96,7 @@ export class ActionManager {
       priority: params.priority,
       targetId: params.targetId,
       targetType: params.targetType,
-      payload: params.payload,
+      payload: enrichedPayload,
       justification: params.justification,
     });
 
@@ -99,6 +114,64 @@ export class ActionManager {
     }
 
     return action;
+  }
+
+  /**
+   * Generate diff for spec modifications
+   */
+  private async generateSpecDiff(payload: any): Promise<{
+    before: string;
+    after: string;
+    changes: Array<{ field: string; before: any; after: any }>;
+  }> {
+    try {
+      // Fetch current spec
+      const currentSpec = await this.cliClient.exec(["spec", "show", payload.spec_id]);
+
+      const changes: Array<{ field: string; before: any; after: any }> = [];
+
+      if (payload.title && payload.title !== currentSpec.title) {
+        changes.push({
+          field: "title",
+          before: currentSpec.title,
+          after: payload.title,
+        });
+      }
+
+      if (payload.description && payload.description !== currentSpec.content) {
+        changes.push({
+          field: "content",
+          before: currentSpec.content || "",
+          after: payload.description,
+        });
+      }
+
+      if (payload.priority !== undefined && payload.priority !== currentSpec.priority) {
+        changes.push({
+          field: "priority",
+          before: currentSpec.priority,
+          after: payload.priority,
+        });
+      }
+
+      return {
+        before: JSON.stringify(currentSpec, null, 2),
+        after: JSON.stringify(
+          {
+            ...currentSpec,
+            title: payload.title || currentSpec.title,
+            content: payload.description || currentSpec.content,
+            priority: payload.priority !== undefined ? payload.priority : currentSpec.priority,
+          },
+          null,
+          2
+        ),
+        changes,
+      };
+    } catch (error) {
+      console.error("[action-manager] Error generating diff:", error);
+      throw error;
+    }
   }
 
   /**

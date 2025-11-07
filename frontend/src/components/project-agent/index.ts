@@ -7,3 +7,4 @@
 export { ProjectAgentControlPanel } from './ProjectAgentControlPanel'
 export { ActionReviewModal } from './ActionReviewModal'
 export { NotificationCenter } from './NotificationCenter'
+export { SpecWorkshop } from './SpecWorkshop'
