@@ -67,6 +67,16 @@ import {
   handleAgentExport,
   handleAgentExportAll,
 } from "./cli/export-commands.js";
+import {
+  handlePlatformDetect,
+  handlePlatformAutoConfigure,
+} from "./cli/platform-commands.js";
+import {
+  handleA2AGenerate,
+  handleA2AExportAll,
+  handleA2AEnable,
+  handleA2ARegistry,
+} from "./cli/a2a-commands.js";
 import { getUpdateNotification } from "./update-checker.js";
 import { VERSION } from "./version.js";
 
@@ -644,6 +654,76 @@ hook
   .option("--issue-id <id>", "Test with specific issue ID")
   .action(async (hookId, options) => {
     await handleHookTest(hookId, options);
+  });
+
+// ============================================================================
+// PLATFORM COMMANDS
+// ============================================================================
+
+const platform = program
+  .command("platform")
+  .description("Platform detection and configuration");
+
+platform
+  .command("detect")
+  .description("Detect current platform (Claude Code, Cursor, VS Code, etc.)")
+  .option("-f, --format <format>", "Output format (text, json)", "text")
+  .action(async (options) => {
+    await handlePlatformDetect(options);
+  });
+
+platform
+  .command("auto-configure")
+  .description("Auto-configure sudocode for detected platform")
+  .option("--force", "Force reconfiguration")
+  .action(async (options) => {
+    await handlePlatformAutoConfigure(options);
+  });
+
+// ============================================================================
+// A2A (AGENT-TO-AGENT) PROTOCOL COMMANDS
+// ============================================================================
+
+const a2a = agent
+  .command("a2a")
+  .description("A2A (Agent-to-Agent) protocol operations");
+
+a2a
+  .command("generate <preset-id>")
+  .description("Generate A2A agent card for an agent preset")
+  .requiredOption("-e, --endpoint <url>", "Service endpoint URL")
+  .option("-o, --output <path>", "Output file path")
+  .option("--provider <name>", "Provider name")
+  .option("--provider-url <url>", "Provider URL")
+  .action(async (presetId, options) => {
+    await handleA2AGenerate(presetId, options);
+  });
+
+a2a
+  .command("export-all")
+  .description("Export all agent presets as A2A agent cards")
+  .requiredOption("-e, --endpoint <url>", "Base service endpoint URL")
+  .option("-o, --output-dir <dir>", "Output directory")
+  .option("--create-registry", "Create agent registry file")
+  .action(async (options) => {
+    await handleA2AExportAll(options);
+  });
+
+a2a
+  .command("enable <preset-id>")
+  .description("Enable A2A support for an agent preset")
+  .requiredOption("-e, --endpoint <url>", "Service endpoint URL")
+  .action(async (presetId, options) => {
+    await handleA2AEnable(presetId, options);
+  });
+
+a2a
+  .command("registry")
+  .description("Create agent registry for all presets")
+  .requiredOption("-e, --endpoint <url>", "Base service endpoint URL")
+  .option("-o, --output <path>", "Output file path")
+  .action(async (endpoint, options) => {
+    await handleA2ARegistry(endpoint, options);
   });
 
 // ============================================================================

@@ -11,3 +11,5 @@ export * from './references.js';
 export * from './agents.js';
 export * from './hooks.js';
 export * from './export.js';
+export * from './platform.js';
+export * from './a2a.js';
