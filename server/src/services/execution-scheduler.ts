@@ -20,6 +20,7 @@ import { getExecution, getAllExecutions } from "./executions.js";
 import { updateIssue } from "@sudocode-ai/cli/dist/operations/index.js";
 import { getGroupForIssue } from "./issue-groups.js";
 import { QualityGateService } from "./quality-gate.js";
+import { DependencyGraphService } from "./dependency-graph.js";
 
 /**
  * Active execution tracking
@@ -46,6 +47,7 @@ export class ExecutionScheduler {
   private db: Database.Database;
   private executionService: ExecutionService;
   private qualityGateService: QualityGateService;
+  private dependencyGraphService: DependencyGraphService;
   private enabled: boolean = false;
   private tickTimer: NodeJS.Timeout | null = null;
   private activeExecutions = new Map<string, ActiveExecution>();
@@ -65,6 +67,7 @@ export class ExecutionScheduler {
     this.db = db;
     this.executionService = executionService;
     this.qualityGateService = new QualityGateService(db, repoRoot);
+    this.dependencyGraphService = new DependencyGraphService(db);
   }
 
   /**
@@ -200,11 +203,14 @@ export class ExecutionScheduler {
    * 1. Get all ready issues (no blockers, status='open')
    * 2. Filter out issues already executing
    * 3. Filter out issues in groups that have active executions
-   * 4. Sort by priority (0=highest, 4=lowest)
-   * 5. Return highest priority issue
+   * 4. Use dependency graph to select next issue respecting:
+   *    - Dependencies (blocked/depends-on relationships)
+   *    - Priority (0=highest, 4=lowest)
+   *    - Topological order (dependencies execute first)
+   * 5. Return highest priority issue with all dependencies met
    */
   private async selectNextIssue(): Promise<Issue | null> {
-    // 1. Get ready issues
+    // 1. Get ready issues (no direct blockers, status='open')
     const readyIssues = getReadyIssues(this.db);
 
     if (readyIssues.length === 0) {
@@ -244,18 +250,31 @@ export class ExecutionScheduler {
       return null;
     }
 
-    // 4. Sort by priority (ascending - 0 is highest priority)
-    const sorted = available.sort((a, b) => {
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority;
-      }
-      // Tie-breaker: older issues first
-      return (
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-    });
+    // 4. Use dependency graph to select next issue
+    // Get all closed issues to determine which dependencies are met
+    const closedIssues = this.db
+      .prepare(`SELECT id FROM issues WHERE status = 'closed'`)
+      .all() as Array<{ id: string }>;
+    const completedIssueIds = new Set(closedIssues.map((i) => i.id));
 
-    return sorted[0];
+    // Get the next issue respecting dependencies and priority
+    const nextIssue = this.dependencyGraphService.getNextIssue(
+      available,
+      completedIssueIds
+    );
+
+    if (nextIssue) {
+      // Log dependency analysis for debugging
+      const analysis = this.dependencyGraphService.analyzeDependencies(available);
+      if (analysis.hasCycles) {
+        console.warn(
+          `[Scheduler] Warning: Circular dependencies detected in available issues:`,
+          analysis.cycles
+        );
+      }
+    }
+
+    return nextIssue;
   }
 
   /**
