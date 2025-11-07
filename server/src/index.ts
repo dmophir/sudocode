@@ -27,6 +27,7 @@ import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
+import { createProvisionalStateRouter } from "./routes/provisional-state.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
 import { getSpecById } from "./services/specs.js";
@@ -41,6 +42,7 @@ import {
   broadcastIssueUpdate,
   broadcastSpecUpdate,
 } from "./services/websocket.js";
+import { initializeWorktreeMutationSystem } from "./execution/worktree/singleton.js";
 
 // Load environment variables
 dotenv.config();
@@ -116,6 +118,10 @@ async function initialize() {
       logsStore
     );
     console.log("Execution service initialized");
+
+    // Initialize worktree mutation tracking system
+    initializeWorktreeMutationSystem(db);
+    console.log("Worktree mutation tracking system initialized");
 
     // Cleanup orphaned worktrees on startup (if configured)
     const worktreeConfig = getWorktreeConfig(REPO_ROOT);
@@ -218,6 +224,8 @@ app.use(
   )
 );
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
+// Mount provisional state routes
+app.use("/api", createProvisionalStateRouter());
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {

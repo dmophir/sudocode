@@ -17,6 +17,10 @@ import {
 import { getWorktreeConfig } from "../execution/worktree/config.js";
 import { createExecution, getExecution } from "./executions.js";
 import { randomUUID } from "crypto";
+import {
+  getMutationTracker,
+  isWorktreeMutationSystemInitialized,
+} from "../execution/worktree/singleton.js";
 
 /**
  * Parameters for creating an execution with worktree
@@ -172,6 +176,23 @@ export class ExecutionLifecycleService {
         worktree_path: worktreePath,
       });
 
+      // Step 3: Start tracking worktree mutations
+      if (isWorktreeMutationSystemInitialized()) {
+        try {
+          const mutationTracker = getMutationTracker();
+          mutationTracker.startTracking(executionId, worktreePath);
+          console.log(
+            `[ExecutionLifecycle] Started mutation tracking for execution ${executionId}`
+          );
+        } catch (error) {
+          // Log error but don't fail execution creation
+          console.error(
+            `[ExecutionLifecycle] Failed to start mutation tracking for execution ${executionId}:`,
+            error
+          );
+        }
+      }
+
       return {
         execution,
         worktreePath,
@@ -254,6 +275,23 @@ export class ExecutionLifecycleService {
     if (!execution) {
       // Execution doesn't exist, nothing to cleanup
       return;
+    }
+
+    // Stop tracking worktree mutations
+    if (isWorktreeMutationSystemInitialized()) {
+      try {
+        const mutationTracker = getMutationTracker();
+        mutationTracker.stopTracking(executionId);
+        console.log(
+          `[ExecutionLifecycle] Stopped mutation tracking for execution ${executionId}`
+        );
+      } catch (error) {
+        // Log error but don't fail cleanup
+        console.error(
+          `[ExecutionLifecycle] Failed to stop mutation tracking for execution ${executionId}:`,
+          error
+        );
+      }
     }
 
     // If execution has a worktree path, clean up the filesystem worktree
