@@ -25,7 +25,6 @@ class WorktreeMutationSystem {
   private diffParser: JSONLDiffParser | null = null;
   private mutationTracker: WorktreeMutationTracker | null = null;
   private provisionalStateManager: ProvisionalStateManager | null = null;
-  private db: Database.Database | null = null;
 
   private constructor() {
     // Private constructor to prevent direct instantiation
@@ -57,8 +56,6 @@ class WorktreeMutationSystem {
     }
 
     console.log("[WorktreeMutationSystem] Initializing mutation tracking system");
-
-    this.db = db;
 
     // Create components
     this.fileWatcher = new WorktreeFileWatcher();
@@ -173,7 +170,6 @@ class WorktreeMutationSystem {
     this.diffParser = null;
     this.mutationTracker = null;
     this.provisionalStateManager = null;
-    this.db = null;
 
     console.log("[WorktreeMutationSystem] Shutdown complete");
   }

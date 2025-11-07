@@ -9,14 +9,14 @@
 
 import type { Database } from "better-sqlite3";
 import type { Issue, Spec } from "@sudocode-ai/types";
-import type { WorktreeMutationEventBuffer } from "./mutation-event-buffer";
+import type { WorktreeMutationEventBuffer } from "./mutation-event-buffer.js";
 import type {
   WorktreeMutationEvent,
   ProvisionalState,
-} from "./types";
-import { getAllIssues } from "../../services/issues";
-import { getAllSpecs } from "../../services/specs";
-import { getExecution } from "../../services/executions";
+} from "./types.js";
+import { getAllIssues } from "../../services/issues.js";
+import { getAllSpecs } from "../../services/specs.js";
+import { getExecution } from "../../services/executions.js";
 
 /**
  * Configuration for provisional state computation
@@ -39,16 +39,15 @@ export interface ProvisionalStateManagerConfig {
 export class ProvisionalStateManager {
   private db: Database;
   private eventBuffer: WorktreeMutationEventBuffer;
-  private config: ProvisionalStateManagerConfig;
 
   constructor(
     db: Database,
     eventBuffer: WorktreeMutationEventBuffer,
-    config: ProvisionalStateManagerConfig = {}
+    _config: ProvisionalStateManagerConfig = {}
   ) {
     this.db = db;
     this.eventBuffer = eventBuffer;
-    this.config = config;
+    // Config reserved for future use
   }
 
   /**

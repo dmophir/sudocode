@@ -22,7 +22,7 @@ export function createProvisionalStateRouter(): Router {
   /**
    * Middleware to check if mutation system is initialized
    */
-  const checkInitialized = (req: Request, res: Response, next: Function) => {
+  const checkInitialized = (_req: Request, res: Response, next: Function) => {
     if (!isWorktreeMutationSystemInitialized()) {
       res.status(503).json({
         success: false,
