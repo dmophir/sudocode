@@ -217,6 +217,21 @@ CREATE TABLE IF NOT EXISTS execution_logs (
 );
 `;
 
+// Scheduler configuration table
+export const SCHEDULER_CONFIG_TABLE = `
+CREATE TABLE IF NOT EXISTS scheduler_config (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+    max_concurrency INTEGER NOT NULL DEFAULT 5 CHECK(max_concurrency > 0 AND max_concurrency <= 10),
+    poll_interval INTEGER NOT NULL DEFAULT 5000 CHECK(poll_interval >= 1000),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default config
+INSERT OR IGNORE INTO scheduler_config (id) VALUES ('default');
+`;
+
 /**
  * Index definitions
  */
@@ -301,6 +316,10 @@ CREATE INDEX IF NOT EXISTS idx_execution_logs_byte_size ON execution_logs(byte_s
 CREATE INDEX IF NOT EXISTS idx_execution_logs_line_count ON execution_logs(line_count);
 `;
 
+export const SCHEDULER_CONFIG_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_scheduler_config_enabled ON scheduler_config(enabled);
+`;
+
 /**
  * View definitions
  */
@@ -359,6 +378,7 @@ export const ALL_TABLES = [
   EXECUTIONS_TABLE,
   PROMPT_TEMPLATES_TABLE,
   EXECUTION_LOGS_TABLE,
+  SCHEDULER_CONFIG_TABLE,
 ];
 
 export const ALL_INDEXES = [
@@ -371,6 +391,7 @@ export const ALL_INDEXES = [
   EXECUTIONS_INDEXES,
   PROMPT_TEMPLATES_INDEXES,
   EXECUTION_LOGS_INDEXES,
+  SCHEDULER_CONFIG_INDEXES,
 ];
 
 export const ALL_VIEWS = [READY_ISSUES_VIEW, BLOCKED_ISSUES_VIEW];

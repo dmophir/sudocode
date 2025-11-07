@@ -273,3 +273,15 @@ export interface Execution {
   step_index: number | null;
   step_config: string | null;
 }
+
+/**
+ * Scheduler configuration for autonomous execution
+ */
+export interface SchedulerConfig {
+  id: string;
+  enabled: boolean;
+  maxConcurrency: number;
+  pollInterval: number;
+  created_at: string;
+  updated_at: string;
+}

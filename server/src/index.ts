@@ -14,6 +14,8 @@ import { initDatabase, getDatabaseInfo } from "./services/db.js";
 import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
 import { ExecutionService } from "./services/execution-service.js";
 import { ExecutionLogsStore } from "./services/execution-logs-store.js";
+import { ExecutionScheduler } from "./services/execution-scheduler.js";
+import { getSchedulerConfig } from "./services/scheduler-config.js";
 // import {
 //   ExecutionLogsCleanup,
 //   DEFAULT_CLEANUP_CONFIG,
@@ -27,6 +29,7 @@ import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
+import { createSchedulerRouter } from "./routes/scheduler.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
 import { getSpecById } from "./services/specs.js";
@@ -66,6 +69,7 @@ let transportManager!: TransportManager;
 let logsStore!: ExecutionLogsStore;
 // let logsCleanup: ExecutionLogsCleanup | null = null;
 let executionService: ExecutionService | null = null;
+let executionScheduler: ExecutionScheduler | null = null;
 
 // Async initialization function
 async function initialize() {
@@ -116,6 +120,10 @@ async function initialize() {
       logsStore
     );
     console.log("Execution service initialized");
+
+    // Initialize execution scheduler
+    executionScheduler = new ExecutionScheduler(db, executionService);
+    console.log("Execution scheduler initialized");
 
     // Cleanup orphaned worktrees on startup (if configured)
     const worktreeConfig = getWorktreeConfig(REPO_ROOT);
@@ -218,6 +226,7 @@ app.use(
   )
 );
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
+app.use("/api/scheduler", createSchedulerRouter(db, executionScheduler!));
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
@@ -379,6 +388,18 @@ const startPort = process.env.PORT
   : DEFAULT_PORT;
 const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 
+// Auto-start scheduler if enabled in config
+try {
+  const schedulerConfig = getSchedulerConfig(db);
+  if (schedulerConfig.enabled && executionScheduler) {
+    console.log("[Scheduler] Auto-starting (enabled in config)");
+    await executionScheduler.start();
+  }
+} catch (error) {
+  console.error("[Scheduler] Failed to auto-start:", error);
+  // Don't fail server startup if scheduler fails to start
+}
+
 // Initialize WebSocket server AFTER successfully binding to a port
 initWebSocketServer(server, "/ws");
 
@@ -415,6 +436,11 @@ process.on("unhandledRejection", (reason, promise) => {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
+
+  // Stop scheduler
+  if (executionScheduler) {
+    await executionScheduler.stop();
+  }
 
   // Shutdown execution service (cancel active executions)
   if (executionService) {
@@ -459,6 +485,11 @@ process.on("SIGINT", async () => {
 
 process.on("SIGTERM", async () => {
   console.log("\nShutting down server...");
+
+  // Stop scheduler
+  if (executionScheduler) {
+    await executionScheduler.stop();
+  }
 
   // Shutdown execution service (cancel active executions)
   if (executionService) {
