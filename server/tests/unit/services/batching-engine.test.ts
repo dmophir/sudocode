@@ -299,7 +299,7 @@ describe("BatchingEngine", () => {
         type: "confirmation",
       });
 
-      const should Add = batchingEngine.shouldAddToBatch(newRequest, batch);
+      const shouldAdd = batchingEngine.shouldAddToBatch(newRequest, batch);
       expect(shouldAdd).toBe(true);
     });
 

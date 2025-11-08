@@ -60,26 +60,46 @@ export class BatchingEngine {
 
     // Strategy 2: Keyword similarity matching
     const unbatchedRequests = recentRequests.filter((r) => !r.batchingKey);
+    const processedInStrategy2 = new Set<string>();
 
-    for (const request of unbatchedRequests) {
-      let foundBatch = false;
+    for (let i = 0; i < unbatchedRequests.length; i++) {
+      const request1 = unbatchedRequests[i];
+      if (processedInStrategy2.has(request1.id)) continue;
 
       // Try to find an existing batch this request can join
+      let joinedBatch = false;
       for (const [key, batch] of batches.entries()) {
         if (batch.length === 0) continue;
 
-        const similarity = this.calculateSimilarity(request, batch[0]);
+        const similarity = this.calculateSimilarity(request1, batch[0]);
         if (similarity >= this.similarityThreshold) {
-          batch.push(request);
-          foundBatch = true;
+          batch.push(request1);
+          processedInStrategy2.add(request1.id);
+          joinedBatch = true;
           break;
         }
       }
 
-      if (!foundBatch) {
-        // Create a new batch with this request
-        const newKey = `similarity:${request.patternSignature || request.id}`;
-        batches.set(newKey, [request]);
+      if (joinedBatch) continue;
+
+      // Look for similar requests to form a new batch
+      const similarRequests = [request1];
+      for (let j = i + 1; j < unbatchedRequests.length; j++) {
+        const request2 = unbatchedRequests[j];
+        if (processedInStrategy2.has(request2.id)) continue;
+
+        const similarity = this.calculateSimilarity(request1, request2);
+        if (similarity >= this.similarityThreshold) {
+          similarRequests.push(request2);
+          processedInStrategy2.add(request2.id);
+        }
+      }
+
+      // Create new batch only if we found multiple similar requests
+      if (similarRequests.length >= this.minBatchSize) {
+        const newKey = `similarity:${request1.patternSignature || request1.id}`;
+        batches.set(newKey, similarRequests);
+        processedInStrategy2.add(request1.id);
       }
     }
 
