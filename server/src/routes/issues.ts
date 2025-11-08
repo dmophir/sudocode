@@ -15,8 +15,9 @@ import { generateIssueId } from "@sudocode-ai/cli/dist/id-generator.js";
 import { broadcastIssueUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
 import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
+import { publishEvent } from "../services/subscriptions.js";
 
-export function createIssuesRouter(db: Database.Database): Router {
+export function createIssuesRouter(db: Database.Database, localRepo: string = "local"): Router {
   const router = Router();
 
   /**
@@ -151,6 +152,21 @@ export function createIssuesRouter(db: Database.Database): Router {
       // Broadcast issue creation to WebSocket clients
       broadcastIssueUpdate(issue.id, "created", issue);
 
+      // Publish to federation subscribers
+      publishEvent(
+        db,
+        {
+          entity_type: "issue",
+          entity_id: issue.id,
+          entity_uuid: issue.uuid,
+          event_type: "created",
+          payload: issue,
+        },
+        localRepo
+      ).catch((error) => {
+        console.error(`Failed to publish federation event for issue ${issue.id}:`, error);
+      });
+
       res.status(201).json({
         success: true,
         data: issue,
@@ -241,6 +257,21 @@ export function createIssuesRouter(db: Database.Database): Router {
       // Broadcast issue update to WebSocket clients
       broadcastIssueUpdate(issue.id, "updated", issue);
 
+      // Publish to federation subscribers
+      publishEvent(
+        db,
+        {
+          entity_type: "issue",
+          entity_id: issue.id,
+          entity_uuid: issue.uuid,
+          event_type: "updated",
+          payload: issue,
+        },
+        localRepo
+      ).catch((error) => {
+        console.error(`Failed to publish federation event for issue ${issue.id}:`, error);
+      });
+
       res.json({
         success: true,
         data: issue,
@@ -285,6 +316,9 @@ export function createIssuesRouter(db: Database.Database): Router {
         return;
       }
 
+      // Store UUID before deletion for federation event
+      const issueUuid = existingIssue.uuid;
+
       // Delete issue using CLI operation
       const deleted = deleteExistingIssue(db, id);
 
@@ -294,6 +328,21 @@ export function createIssuesRouter(db: Database.Database): Router {
 
         // Broadcast issue deletion to WebSocket clients
         broadcastIssueUpdate(id, "deleted", { id });
+
+        // Publish to federation subscribers
+        publishEvent(
+          db,
+          {
+            entity_type: "issue",
+            entity_id: id,
+            entity_uuid: issueUuid,
+            event_type: "deleted",
+            payload: { id, uuid: issueUuid },
+          },
+          localRepo
+        ).catch((error) => {
+          console.error(`Failed to publish federation event for issue ${id}:`, error);
+        });
 
         res.json({
           success: true,

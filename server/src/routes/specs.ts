@@ -15,9 +15,10 @@ import { generateSpecId } from "@sudocode-ai/cli/dist/id-generator.js";
 import { broadcastSpecUpdate } from "../services/websocket.js";
 import { getSudocodeDir } from "../utils/sudocode-dir.js";
 import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
+import { publishEvent } from "../services/subscriptions.js";
 import * as path from "path";
 
-export function createSpecsRouter(db: Database.Database): Router {
+export function createSpecsRouter(db: Database.Database, localRepo: string = "local"): Router {
   const router = Router();
 
   /**
@@ -147,6 +148,21 @@ export function createSpecsRouter(db: Database.Database): Router {
       // Broadcast spec creation to WebSocket clients
       broadcastSpecUpdate(spec.id, "created", spec);
 
+      // Publish to federation subscribers
+      publishEvent(
+        db,
+        {
+          entity_type: "spec",
+          entity_id: spec.id,
+          entity_uuid: spec.uuid,
+          event_type: "created",
+          payload: spec,
+        },
+        localRepo
+      ).catch((error) => {
+        console.error(`Failed to publish federation event for spec ${spec.id}:`, error);
+      });
+
       res.status(201).json({
         success: true,
         data: spec,
@@ -225,6 +241,21 @@ export function createSpecsRouter(db: Database.Database): Router {
       // Broadcast spec update to WebSocket clients
       broadcastSpecUpdate(spec.id, "updated", spec);
 
+      // Publish to federation subscribers
+      publishEvent(
+        db,
+        {
+          entity_type: "spec",
+          entity_id: spec.id,
+          entity_uuid: spec.uuid,
+          event_type: "updated",
+          payload: spec,
+        },
+        localRepo
+      ).catch((error) => {
+        console.error(`Failed to publish federation event for spec ${spec.id}:`, error);
+      });
+
       res.json({
         success: true,
         data: spec,
@@ -269,6 +300,9 @@ export function createSpecsRouter(db: Database.Database): Router {
         return;
       }
 
+      // Store UUID before deletion for federation event
+      const specUuid = existingSpec.uuid;
+
       // Delete spec using CLI operation
       const deleted = deleteExistingSpec(db, id);
 
@@ -278,6 +312,21 @@ export function createSpecsRouter(db: Database.Database): Router {
 
         // Broadcast spec deletion to WebSocket clients
         broadcastSpecUpdate(id, "deleted", { id });
+
+        // Publish to federation subscribers
+        publishEvent(
+          db,
+          {
+            entity_type: "spec",
+            entity_id: id,
+            entity_uuid: specUuid,
+            event_type: "deleted",
+            payload: { id, uuid: specUuid },
+          },
+          localRepo
+        ).catch((error) => {
+          console.error(`Failed to publish federation event for spec ${id}:`, error);
+        });
 
         res.json({
           success: true,

@@ -1,6 +1,13 @@
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import * as http from "http";
 import { randomUUID } from "crypto";
+import type Database from "better-sqlite3";
+import {
+  wsManager as federationWsManager,
+  handleSubscribe as handleFederationSubscribe,
+  handleUnsubscribe as handleFederationUnsubscribe,
+  cleanupConnection as cleanupFederationConnection,
+} from "./subscriptions.js";
 
 const LOG_CONNECTIONS = false;
 
@@ -19,9 +26,12 @@ interface Client {
  * Message types that clients can send to the server
  */
 interface ClientMessage {
-  type: "subscribe" | "unsubscribe" | "ping";
-  entity_type?: "issue" | "spec" | "all";
+  type: "subscribe" | "unsubscribe" | "ping" | "federation_subscribe" | "federation_unsubscribe";
+  entity_type?: "issue" | "spec" | "all" | "*";
   entity_id?: string;
+  // Federation-specific fields
+  remote_repo?: string;
+  events?: string[];
 }
 
 /**
@@ -57,11 +67,15 @@ class WebSocketManager {
   private clients: Map<string, Client> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private db: Database.Database | null = null;
+  private localRepo: string = "local";
 
   /**
    * Initialize the WebSocket server
    */
-  init(server: http.Server, path: string = "/ws"): void {
+  init(server: http.Server, path: string = "/ws", db?: Database.Database, localRepo?: string): void {
+    this.db = db || null;
+    this.localRepo = localRepo || "local";
     if (this.wss) {
       console.warn("[websocket] WebSocket server already initialized");
       return;
@@ -88,6 +102,10 @@ class WebSocketManager {
     };
 
     this.clients.set(clientId, client);
+
+    // Register with federation WebSocket manager
+    federationWsManager.addConnection(ws, undefined);
+
     if (LOG_CONNECTIONS) {
       console.log(
         `[websocket] Client connected: ${clientId} (total: ${this.clients.size})`
@@ -113,6 +131,15 @@ class WebSocketManager {
   private handleDisconnection(clientId: string): void {
     const client = this.clients.get(clientId);
     if (client) {
+      // Clean up federation subscriptions if database is available
+      if (this.db) {
+        try {
+          cleanupFederationConnection(this.db, clientId);
+        } catch (error) {
+          console.error(`[websocket] Failed to cleanup federation subscriptions for ${clientId}:`, error);
+        }
+      }
+
       if (LOG_CONNECTIONS) {
         console.log(
           `[websocket] Client disconnected: ${clientId} (subscriptions: ${client.subscriptions.size})`
@@ -158,6 +185,14 @@ class WebSocketManager {
 
         case "unsubscribe":
           this.handleUnsubscribe(clientId, message);
+          break;
+
+        case "federation_subscribe":
+          this.handleFederationSubscribe(clientId, message);
+          break;
+
+        case "federation_unsubscribe":
+          this.handleFederationUnsubscribe(clientId, message);
           break;
 
         case "ping":
@@ -261,6 +296,112 @@ class WebSocketManager {
       subscription,
       message: `Unsubscribed from ${subscription}`,
     });
+  }
+
+  /**
+   * Handle cross-repo federation subscription request
+   */
+  private handleFederationSubscribe(clientId: string, message: ClientMessage): void {
+    if (!this.db) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Federation subscriptions not available (database not initialized)",
+      });
+      return;
+    }
+
+    if (!message.remote_repo || !message.entity_type || !message.events) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Federation subscription requires remote_repo, entity_type, and events",
+      });
+      return;
+    }
+
+    try {
+      const subscription = handleFederationSubscribe(
+        this.db,
+        clientId,
+        {
+          remote_repo: message.remote_repo,
+          entity_type: message.entity_type as "issue" | "spec" | "*",
+          entity_id: message.entity_id,
+          events: message.events,
+        },
+        this.localRepo
+      );
+
+      this.sendToClient(clientId, {
+        type: "subscribed",
+        subscription: subscription.subscription_id,
+        message: `Subscribed to ${message.remote_repo} ${message.entity_type} events`,
+        data: subscription,
+      });
+
+      if (LOG_CONNECTIONS) {
+        console.log(
+          `[websocket] Client ${clientId} subscribed to federation: ${subscription.subscription_id}`
+        );
+      }
+    } catch (error) {
+      console.error(`[websocket] Failed to create federation subscription:`, error);
+      this.sendToClient(clientId, {
+        type: "error",
+        message: `Failed to create subscription: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
+
+  /**
+   * Handle cross-repo federation unsubscription request
+   */
+  private handleFederationUnsubscribe(clientId: string, message: ClientMessage): void {
+    if (!this.db) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Federation subscriptions not available (database not initialized)",
+      });
+      return;
+    }
+
+    // The subscription field should contain the subscription_id
+    const subscriptionId = (message as any).subscription_id;
+    if (!subscriptionId) {
+      this.sendToClient(clientId, {
+        type: "error",
+        message: "Unsubscribe requires subscription_id",
+      });
+      return;
+    }
+
+    try {
+      const success = handleFederationUnsubscribe(this.db, clientId, subscriptionId);
+
+      if (success) {
+        this.sendToClient(clientId, {
+          type: "unsubscribed",
+          subscription: subscriptionId,
+          message: `Unsubscribed from ${subscriptionId}`,
+        });
+
+        if (LOG_CONNECTIONS) {
+          console.log(
+            `[websocket] Client ${clientId} unsubscribed from federation: ${subscriptionId}`
+          );
+        }
+      } else {
+        this.sendToClient(clientId, {
+          type: "error",
+          message: `Subscription not found or not owned by this connection: ${subscriptionId}`,
+        });
+      }
+    } catch (error) {
+      console.error(`[websocket] Failed to remove federation subscription:`, error);
+      this.sendToClient(clientId, {
+        type: "error",
+        message: `Failed to unsubscribe: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
 
   /**
@@ -460,8 +601,13 @@ export const websocketManager = new WebSocketManager();
 /**
  * Initialize the WebSocket server
  */
-export function initWebSocketServer(server: http.Server, path?: string): void {
-  websocketManager.init(server, path);
+export function initWebSocketServer(
+  server: http.Server,
+  path?: string,
+  db?: Database.Database,
+  localRepo?: string
+): void {
+  websocketManager.init(server, path, db, localRepo);
 }
 
 /**

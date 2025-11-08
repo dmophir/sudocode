@@ -202,9 +202,13 @@ if (WATCH_ENABLED) {
 app.use(cors());
 app.use(express.json());
 
+// Federation configuration - define early for use in routes
+const LOCAL_REPO_URL = process.env.SUDOCODE_REPO_URL || "local";
+const REST_ENDPOINT = process.env.SUDOCODE_REST_ENDPOINT || `http://localhost:${DEFAULT_PORT}/api/v1`;
+
 // API Routes
-app.use("/api/issues", createIssuesRouter(db));
-app.use("/api/specs", createSpecsRouter(db));
+app.use("/api/issues", createIssuesRouter(db, LOCAL_REPO_URL));
+app.use("/api/specs", createSpecsRouter(db, LOCAL_REPO_URL));
 app.use("/api/relationships", createRelationshipsRouter(db));
 app.use("/api/feedback", createFeedbackRouter(db));
 // Mount execution routes (must be before stream routes to avoid conflicts)
@@ -221,8 +225,6 @@ app.use(
 app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
 // Federation routes - cross-repo communication
-const LOCAL_REPO_URL = process.env.SUDOCODE_REPO_URL || "local";
-const REST_ENDPOINT = process.env.SUDOCODE_REST_ENDPOINT || `http://localhost:${DEFAULT_PORT}/api/v1`;
 app.use("/api/v1/federation", createFederationRouter(db, LOCAL_REPO_URL, REST_ENDPOINT));
 
 // Health check endpoint
@@ -386,7 +388,7 @@ const startPort = process.env.PORT
 const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 
 // Initialize WebSocket server AFTER successfully binding to a port
-initWebSocketServer(server, "/ws");
+initWebSocketServer(server, "/ws", db, LOCAL_REPO_URL);
 
 // Format URLs as clickable links with color
 const httpUrl = `http://localhost:${actualPort}`;

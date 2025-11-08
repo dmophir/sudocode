@@ -286,16 +286,16 @@ CREATE TABLE IF NOT EXISTS cross_repo_requests (
 export const CROSS_REPO_SUBSCRIPTIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS cross_repo_subscriptions (
     subscription_id TEXT PRIMARY KEY,
-    direction TEXT NOT NULL CHECK(direction IN ('outgoing', 'incoming')),
-    from_repo TEXT NOT NULL,
-    to_repo TEXT NOT NULL,
-    watch_config TEXT NOT NULL,
-    callback_url TEXT,
-    callback_auth TEXT,
-    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'cancelled')),
+    local_repo TEXT NOT NULL,
+    remote_repo TEXT NOT NULL,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('issue', 'spec', '*')),
+    entity_id TEXT,
+    events TEXT NOT NULL,
+    webhook_url TEXT,
+    ws_connection_id TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_event_at DATETIME,
-    event_count INTEGER DEFAULT 0
+    last_event_at DATETIME
 );
 `;
 
@@ -424,9 +424,10 @@ CREATE INDEX IF NOT EXISTS idx_cross_repo_requests_created_at ON cross_repo_requ
 `;
 
 export const CROSS_REPO_SUBSCRIPTIONS_INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_status ON cross_repo_subscriptions(status);
-CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_from_repo ON cross_repo_subscriptions(from_repo);
-CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_to_repo ON cross_repo_subscriptions(to_repo);
+CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_active ON cross_repo_subscriptions(active);
+CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_local_repo ON cross_repo_subscriptions(local_repo);
+CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_remote_repo ON cross_repo_subscriptions(remote_repo);
+CREATE INDEX IF NOT EXISTS idx_cross_repo_subs_ws_conn ON cross_repo_subscriptions(ws_connection_id);
 `;
 
 export const CROSS_REPO_AUDIT_LOG_INDEXES = `
