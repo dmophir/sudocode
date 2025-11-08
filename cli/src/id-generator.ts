@@ -257,6 +257,46 @@ export function generateSessionId(
 }
 
 /**
+ * Get next context bundle number from database
+ */
+function getNextBundleNumber(db: Database.Database): number {
+  const stmt = db.prepare(`
+    SELECT id FROM context_bundles
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+
+  const latest = stmt.get() as { id: string } | undefined;
+
+  if (latest) {
+    const match = latest.id.match(/(\d+)$/);
+    if (match) {
+      return parseInt(match[1], 10) + 1;
+    }
+  }
+
+  // Fallback: count + 1
+  const countStmt = db.prepare(`SELECT COUNT(*) as count FROM context_bundles`);
+  const result = countStmt.get() as { count: number };
+  return result.count + 1;
+}
+
+/**
+ * Generate context bundle ID and UUID
+ * Returns sequential ID in format BUNDLE-001
+ */
+export function generateBundleId(
+  db: Database.Database,
+  outputDir: string
+): { id: string; uuid: string } {
+  const uuid = crypto.randomUUID();
+  const number = getNextBundleNumber(db);
+  const id = `BUNDLE-${String(number).padStart(3, "0")}`;
+
+  return { id, uuid };
+}
+
+/**
  * Generate a UUID v4
  */
 export function generateUUID(): string {
