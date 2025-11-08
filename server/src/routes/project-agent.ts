@@ -21,6 +21,7 @@ import {
   destroyProjectAgentExecutor,
 } from "../services/project-agent-executor.js";
 import { getProgressReportingService } from "../services/progress-reporting.js";
+import { getCacheManager } from "../services/cache-manager.js";
 
 /**
  * Create project agent router
@@ -519,6 +520,54 @@ export function createProjectAgentRouter(
         success: false,
         error: error instanceof Error ? error.message : String(error),
         message: "Failed to generate report",
+      });
+    }
+  });
+
+  /**
+   * GET /api/project-agent/cache/stats
+   *
+   * Get cache statistics for performance monitoring
+   */
+  router.get("/cache/stats", async (req: Request, res: Response) => {
+    try {
+      const cache = getCacheManager();
+      const stats = cache.getStats();
+
+      res.json({
+        success: true,
+        data: stats,
+      });
+    } catch (error) {
+      console.error("[API Route] ERROR: Failed to get cache stats:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        message: "Failed to get cache stats",
+      });
+    }
+  });
+
+  /**
+   * POST /api/project-agent/cache/clear
+   *
+   * Clear all cache entries
+   */
+  router.post("/cache/clear", async (req: Request, res: Response) => {
+    try {
+      const cache = getCacheManager();
+      cache.clear();
+
+      res.json({
+        success: true,
+        message: "Cache cleared successfully",
+      });
+    } catch (error) {
+      console.error("[API Route] ERROR: Failed to clear cache:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        message: "Failed to clear cache",
       });
     }
   });

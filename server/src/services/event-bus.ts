@@ -9,6 +9,7 @@ import {
   startServerWatcher,
   type ServerWatcherControl,
 } from "./watcher.js";
+import { invalidateEntityCache } from "./cache-manager.js";
 
 /**
  * Event types emitted by the event bus
@@ -210,6 +211,7 @@ export class EventBus extends EventEmitter {
 
   /**
    * Emit an event
+   * Phase 6: Added cache invalidation for performance
    */
   emitEvent(eventType: EventType, payload: Omit<EventPayload, "type" | "timestamp">): void {
     const fullPayload: EventPayload = {
@@ -218,6 +220,9 @@ export class EventBus extends EventEmitter {
       timestamp: new Date().toISOString(),
     } as EventPayload;
 
+    // Phase 6: Invalidate relevant caches when entities change
+    this.invalidateCachesForEvent(eventType, fullPayload);
+
     // Emit to specific event type listeners
     this.emit(eventType, fullPayload);
 
@@ -225,6 +230,33 @@ export class EventBus extends EventEmitter {
     this.emit("*", eventType, fullPayload);
 
     console.log(`[event-bus] Emitted event: ${eventType}`, payload);
+  }
+
+  /**
+   * Phase 6: Invalidate caches based on event type
+   */
+  private invalidateCachesForEvent(eventType: EventType, payload: EventPayload): void {
+    if (eventType.startsWith("filesystem:spec")) {
+      const specPayload = payload as FilesystemEvent;
+      invalidateEntityCache("spec", specPayload.entityId);
+    } else if (eventType.startsWith("filesystem:issue")) {
+      const issuePayload = payload as FilesystemEvent;
+      invalidateEntityCache("issue", issuePayload.entityId);
+    } else if (eventType.startsWith("execution:")) {
+      const execPayload = payload as ExecutionEvent;
+      invalidateEntityCache("execution", execPayload.executionId);
+    } else if (eventType === "issue:status_changed") {
+      const issuePayload = payload as IssueEvent;
+      invalidateEntityCache("issue", issuePayload.issueId);
+    } else if (eventType === "relationship:created") {
+      const relPayload = payload as RelationshipEvent;
+      invalidateEntityCache("relationship", relPayload.fromId);
+      invalidateEntityCache("relationship", relPayload.toId);
+    } else if (eventType === "feedback:created") {
+      const feedPayload = payload as FeedbackEvent;
+      invalidateEntityCache("feedback", feedPayload.issueId);
+      invalidateEntityCache("feedback", feedPayload.specId);
+    }
   }
 
   /**
