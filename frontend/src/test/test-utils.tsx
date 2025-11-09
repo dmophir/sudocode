@@ -3,6 +3,16 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { WebSocketProvider } from '@/contexts/WebSocketContext'
+import { vi } from 'vitest'
+
+// Mock WebSocket for tests
+global.WebSocket = vi.fn().mockImplementation(() => ({
+  send: vi.fn(),
+  close: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  readyState: 1, // OPEN
+})) as any
 
 /**
  * Custom render function that includes all providers

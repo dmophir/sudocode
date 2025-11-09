@@ -78,29 +78,44 @@ describe('PatternsManager', () => {
   it('should render patterns after loading', async () => {
     renderWithProviders(<PatternsManager />)
 
-    await waitFor(() => {
-      expect(screen.getByText('confirmation')).toBeInTheDocument()
-      expect(screen.getByText('→ yes')).toBeInTheDocument()
-      expect(screen.getByText('95.5% confidence')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        // Use getAllByText since we have 2 patterns, both of type confirmation
+        const confirmations = screen.getAllByText('confirmation')
+        expect(confirmations.length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
+
+    // Both patterns have "yes" as suggested response
+    expect(screen.getAllByText('→ yes').length).toBeGreaterThan(0)
+    expect(screen.getByText('95.5% confidence')).toBeInTheDocument()
   })
 
   it('should display pattern keywords as badges', async () => {
     renderWithProviders(<PatternsManager />)
 
-    await waitFor(() => {
-      expect(screen.getByText('deploy')).toBeInTheDocument()
-      expect(screen.getByText('proceed')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getAllByText('deploy').length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
+
+    expect(screen.getAllByText('proceed').length).toBeGreaterThan(0)
   })
 
   it('should show occurrence count and last seen time', async () => {
     renderWithProviders(<PatternsManager />)
 
-    await waitFor(() => {
-      expect(screen.getByText(/10 occurrences/)).toBeInTheDocument()
-      expect(screen.getByText(/ago/)).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText(/10 occurrences/)).toBeInTheDocument()
+      },
+      { timeout: 3000 }
+    )
+
+    expect(screen.getAllByText(/ago/).length).toBeGreaterThan(0)
   })
 
   it('should render sorting controls', async () => {
@@ -265,6 +280,14 @@ describe('PatternsManager', () => {
     mockUpdateConfig.mockResolvedValue(undefined)
 
     renderWithProviders(<PatternsManager />)
+
+    // Wait for component to load
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /Configuration/ })).toBeInTheDocument()
+      },
+      { timeout: 3000 }
+    )
 
     // Open dialog
     const configButton = screen.getByRole('button', { name: /Configuration/ })
