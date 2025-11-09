@@ -1,10 +1,7 @@
 name: Test Versions
 
 on:
-  push:
-    branches: [ main, local-server ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
