@@ -28,6 +28,7 @@ import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
 import { createFederationRouter } from "./routes/federation.js";
+import { createFederationMetricsRouter } from "./routes/federation-metrics.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
 import { getSpecById } from "./services/specs.js";
@@ -226,6 +227,7 @@ app.use("/api/executions", createExecutionStreamRoutes(transportManager));
 
 // Federation routes - cross-repo communication
 app.use("/api/v1/federation", createFederationRouter(db, LOCAL_REPO_URL, REST_ENDPOINT));
+app.use("/api/v1/federation", createFederationMetricsRouter(db));
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {

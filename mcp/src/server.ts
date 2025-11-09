@@ -18,6 +18,7 @@ import * as specTools from "./tools/specs.js";
 import * as relationshipTools from "./tools/relationships.js";
 import * as feedbackTools from "./tools/feedback.js";
 import * as referenceTools from "./tools/references.js";
+import * as federationTools from "./tools/federation.js";
 import { SudocodeClientConfig } from "./types.js";
 import { existsSync } from "fs";
 import { join } from "path";
@@ -354,6 +355,243 @@ export class SudocodeMCPServer {
               },
             },
           },
+          {
+            name: "query_remote_repo",
+            description:
+              "Query a remote repository for issues or specs via federation",
+            inputSchema: {
+              type: "object",
+              properties: {
+                remote_url: {
+                  type: "string",
+                  description: "Remote repository URL (e.g., github.com/org/repo)",
+                },
+                query: {
+                  type: "object",
+                  properties: {
+                    entity_type: {
+                      type: "string",
+                      enum: ["issue", "spec"],
+                      description: "Type of entity to query",
+                    },
+                    filters: {
+                      type: "object",
+                      properties: {
+                        status: { type: "string" },
+                        priority: { type: "number" },
+                        archived: { type: "boolean" },
+                      },
+                    },
+                  },
+                  required: ["entity_type"],
+                },
+              },
+              required: ["remote_url", "query"],
+            },
+          },
+          {
+            name: "create_cross_repo_request",
+            description:
+              "Create a cross-repository request (e.g., create/update issue in another repo)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                remote_url: {
+                  type: "string",
+                  description: "Remote repository URL",
+                },
+                request_type: {
+                  type: "string",
+                  enum: [
+                    "query_issue",
+                    "query_spec",
+                    "create_issue",
+                    "update_issue",
+                    "create_spec",
+                    "update_spec",
+                  ],
+                  description: "Type of request",
+                },
+                payload: {
+                  type: "object",
+                  description: "Request payload (structure depends on request_type)",
+                },
+                metadata: {
+                  type: "object",
+                  properties: {
+                    requester: { type: "string" },
+                    priority: { type: "number" },
+                    reason: { type: "string" },
+                  },
+                },
+              },
+              required: ["remote_url", "request_type", "payload"],
+            },
+          },
+          {
+            name: "list_cross_repo_requests",
+            description: "List cross-repository requests (incoming or outgoing)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                direction: {
+                  type: "string",
+                  enum: ["outgoing", "incoming"],
+                  description: "Filter by direction (optional)",
+                },
+                status: {
+                  type: "string",
+                  enum: ["pending", "approved", "rejected", "completed", "failed"],
+                  description: "Filter by status (optional)",
+                },
+                limit: {
+                  type: "number",
+                  description: "Max results (optional)",
+                },
+              },
+            },
+          },
+          {
+            name: "approve_cross_repo_request",
+            description: "Approve an incoming cross-repository request",
+            inputSchema: {
+              type: "object",
+              properties: {
+                request_id: {
+                  type: "string",
+                  description: "Request ID to approve",
+                },
+                response_data: {
+                  type: "object",
+                  description: "Optional response data",
+                },
+              },
+              required: ["request_id"],
+            },
+          },
+          {
+            name: "reject_cross_repo_request",
+            description: "Reject an incoming cross-repository request",
+            inputSchema: {
+              type: "object",
+              properties: {
+                request_id: {
+                  type: "string",
+                  description: "Request ID to reject",
+                },
+                reason: {
+                  type: "string",
+                  description: "Reason for rejection (optional)",
+                },
+              },
+              required: ["request_id"],
+            },
+          },
+          {
+            name: "list_subscriptions",
+            description: "List active subscriptions to remote repositories",
+            inputSchema: {
+              type: "object",
+              properties: {
+                remote_repo: {
+                  type: "string",
+                  description: "Filter by remote repository (optional)",
+                },
+                active: {
+                  type: "boolean",
+                  description: "Filter by active status (optional)",
+                },
+              },
+            },
+          },
+          {
+            name: "create_subscription",
+            description:
+              "Create a subscription to receive events from a remote repository",
+            inputSchema: {
+              type: "object",
+              properties: {
+                remote_repo: {
+                  type: "string",
+                  description: "Remote repository URL",
+                },
+                entity_type: {
+                  type: "string",
+                  enum: ["issue", "spec", "*"],
+                  description: "Entity type to watch (* for all)",
+                },
+                entity_id: {
+                  type: "string",
+                  description: "Specific entity ID to watch (optional)",
+                },
+                events: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Events to subscribe to (e.g., ['created', 'updated'])",
+                },
+                webhook_url: {
+                  type: "string",
+                  description: "Webhook URL for delivery (optional)",
+                },
+              },
+              required: ["remote_repo", "entity_type", "events"],
+            },
+          },
+          {
+            name: "delete_subscription",
+            description: "Delete a subscription",
+            inputSchema: {
+              type: "object",
+              properties: {
+                subscription_id: {
+                  type: "string",
+                  description: "Subscription ID to delete",
+                },
+              },
+              required: ["subscription_id"],
+            },
+          },
+          {
+            name: "list_remote_repos",
+            description: "List configured remote repositories",
+            inputSchema: {
+              type: "object",
+              properties: {
+                trust_level: {
+                  type: "string",
+                  enum: ["trusted", "verified", "untrusted"],
+                  description: "Filter by trust level (optional)",
+                },
+              },
+            },
+          },
+          {
+            name: "add_remote_repo",
+            description: "Add a new remote repository for federation",
+            inputSchema: {
+              type: "object",
+              properties: {
+                url: {
+                  type: "string",
+                  description: "Repository URL (e.g., github.com/org/repo)",
+                },
+                display_name: {
+                  type: "string",
+                  description: "Display name for the repository",
+                },
+                trust_level: {
+                  type: "string",
+                  enum: ["trusted", "verified", "untrusted"],
+                  description: "Trust level (defaults to 'verified')",
+                },
+                auto_sync: {
+                  type: "boolean",
+                  description: "Enable auto-sync (optional)",
+                },
+              },
+              required: ["url", "display_name"],
+            },
+          },
         ],
       };
     });
@@ -420,6 +658,76 @@ export class SudocodeMCPServer {
 
           case "add_feedback":
             result = await feedbackTools.addFeedback(this.client, args as any);
+            break;
+
+          case "query_remote_repo":
+            result = await federationTools.queryRemoteRepo(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "create_cross_repo_request":
+            result = await federationTools.createCrossRepoRequest(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "list_cross_repo_requests":
+            result = await federationTools.listCrossRepoRequests(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "approve_cross_repo_request":
+            result = await federationTools.approveCrossRepoRequest(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "reject_cross_repo_request":
+            result = await federationTools.rejectCrossRepoRequest(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "list_subscriptions":
+            result = await federationTools.listSubscriptions(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "create_subscription":
+            result = await federationTools.createSubscription(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "delete_subscription":
+            result = await federationTools.deleteSubscription(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "list_remote_repos":
+            result = await federationTools.listRemoteRepos(
+              this.client,
+              args as any
+            );
+            break;
+
+          case "add_remote_repo":
+            result = await federationTools.addRemoteRepo(
+              this.client,
+              args as any
+            );
             break;
 
           default:
