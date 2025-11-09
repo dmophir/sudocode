@@ -3,12 +3,20 @@ import type {
   ApiResponse,
   Issue,
   Spec,
+  Session,
+  ContextBundle,
+  ContextBundleItem,
   Relationship,
   IssueFeedback,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateSpecRequest,
   UpdateSpecRequest,
+  CreateSessionRequest,
+  UpdateSessionRequest,
+  CreateBundleRequest,
+  UpdateBundleRequest,
+  AddBundleItemRequest,
   CreateRelationshipRequest,
   DeleteRelationshipRequest,
   CreateFeedbackRequest,
@@ -164,6 +172,49 @@ export const executionsApi = {
 
   // Delete worktree for execution
   deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
+}
+
+/**
+ * Sessions API
+ */
+export const sessionsApi = {
+  getAll: (options?: { agent_type?: string; archived?: boolean; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams()
+    if (options?.agent_type) params.append('agent_type', options.agent_type)
+    if (options?.archived !== undefined) params.append('archived', String(options.archived))
+    if (options?.limit) params.append('limit', String(options.limit))
+    if (options?.offset) params.append('offset', String(options.offset))
+    const queryString = params.toString()
+    return get<Session[]>(`/sessions${queryString ? '?' + queryString : ''}`)
+  },
+  getById: (id: string) => get<Session>(`/sessions/${id}`),
+  getBySessionId: (sessionId: string) => get<Session>(`/sessions/by-session-id/${sessionId}`),
+  create: (data: CreateSessionRequest) => post<Session>('/sessions', data),
+  update: (id: string, data: UpdateSessionRequest) => put<Session>(`/sessions/${id}`, data),
+  delete: (id: string) => del(`/sessions/${id}`),
+}
+
+/**
+ * Context Bundles API
+ */
+export const bundlesApi = {
+  getAll: (options?: { archived?: boolean; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams()
+    if (options?.archived !== undefined) params.append('archived', String(options.archived))
+    if (options?.limit) params.append('limit', String(options.limit))
+    if (options?.offset) params.append('offset', String(options.offset))
+    const queryString = params.toString()
+    return get<ContextBundle[]>(`/bundles${queryString ? '?' + queryString : ''}`)
+  },
+  getById: (id: string) => get<ContextBundle>(`/bundles/${id}`),
+  getItems: (bundleId: string) => get<ContextBundleItem[]>(`/bundles/${bundleId}/items`),
+  create: (data: CreateBundleRequest) => post<ContextBundle>('/bundles', data),
+  update: (id: string, data: UpdateBundleRequest) => put<ContextBundle>(`/bundles/${id}`, data),
+  delete: (id: string) => del(`/bundles/${id}`),
+  addItem: (bundleId: string, data: Omit<AddBundleItemRequest, 'bundle_id'>) =>
+    post<ContextBundleItem>(`/bundles/${bundleId}/items`, data),
+  removeItem: (bundleId: string, entityType: string, entityId: string) =>
+    del(`/bundles/${bundleId}/items/${entityType}/${entityId}`),
 }
 
 export default api

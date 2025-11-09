@@ -1,9 +1,13 @@
 import type {
   Issue,
   Spec,
+  Session,
+  ContextBundle,
+  ContextBundleItem,
   Relationship,
   IssueFeedback,
   IssueStatus,
+  AgentType,
   EntityType,
   RelationshipType,
   FeedbackType,
@@ -61,6 +65,44 @@ export interface UpdateSpecRequest {
   priority?: number
   parent_id?: string
   archived?: boolean
+}
+
+/**
+ * Session API types
+ */
+export interface CreateSessionRequest {
+  session_id: string
+  title: string
+  description?: string
+  agent_type: AgentType
+}
+
+export interface UpdateSessionRequest {
+  title?: string
+  description?: string
+  agent_type?: AgentType
+  archived?: boolean
+}
+
+/**
+ * Context Bundle API types
+ */
+export interface CreateBundleRequest {
+  name: string
+  description?: string
+}
+
+export interface UpdateBundleRequest {
+  name?: string
+  description?: string
+  archived?: boolean
+}
+
+export interface AddBundleItemRequest {
+  bundle_id: string
+  entity_type: 'session' | 'spec' | 'issue' | 'execution'
+  entity_id: string
+  order_index?: number
 }
 
 /**
@@ -132,9 +174,13 @@ export interface WebSocketSubscribeMessage {
 export type {
   Issue,
   Spec,
+  Session,
+  ContextBundle,
+  ContextBundleItem,
   Relationship,
   IssueFeedback,
   IssueStatus,
+  AgentType,
   EntityType,
   RelationshipType,
   FeedbackType,
