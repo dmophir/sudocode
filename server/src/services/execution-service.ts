@@ -27,6 +27,14 @@ import { createAgUiSystem } from "../execution/output/ag-ui-integration.js";
 import type { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
+import {
+  loadAgentPreset,
+  selectAgentForIssue,
+  executeAgentHooks,
+  recordExecutionMetrics,
+  buildPromptWithPreset,
+  type LoadedAgentPreset,
+} from "./agent-preset-integration.js";
 
 /**
  * Configuration for creating an execution
@@ -41,6 +49,11 @@ export interface ExecutionConfig {
   continueOnStepFailure?: boolean;
   captureFileChanges?: boolean;
   captureToolCalls?: boolean;
+
+  // Agent preset support
+  presetId?: string; // Use specific preset
+  workflowId?: string; // Use workflow instead of single agent
+  autoSelect?: boolean; // Use dynamic agent selection
 }
 
 /**
@@ -186,10 +199,10 @@ export class ExecutionService {
     }
 
     // 5. Render template
-    const renderedPrompt = this.templateEngine.render(template, context);
+    let renderedPrompt = this.templateEngine.render(template, context);
 
     // 6. Get default config
-    const defaultConfig: ExecutionConfig = {
+    let defaultConfig: ExecutionConfig = {
       mode: "worktree",
       model: "claude-sonnet-4",
       baseBranch: "main",
@@ -200,10 +213,44 @@ export class ExecutionService {
       ...options?.config,
     };
 
-    // 7. Validate
     const warnings: string[] = [];
     const errors: string[] = [];
 
+    // 7. Agent preset integration - auto-select or load preset
+    try {
+      if (options?.config?.autoSelect) {
+        // Use dynamic agent selection
+        const selection = selectAgentForIssue(this.repoPath, this.db, issueId);
+        if (selection.matched && selection.agent_id) {
+          defaultConfig.presetId = selection.agent_id;
+          warnings.push(
+            `Auto-selected agent: ${selection.agent_id} (confidence: ${(selection.confidence * 100).toFixed(0)}%)`
+          );
+        } else {
+          warnings.push("No agent matched for auto-selection");
+        }
+      }
+
+      // Load preset if specified (either manually or via auto-select)
+      if (defaultConfig.presetId) {
+        const loadedPreset = loadAgentPreset(this.repoPath, defaultConfig.presetId);
+
+        // Apply preset to config
+        defaultConfig.model = loadedPreset.model;
+
+        // Enhance prompt with system prompt
+        renderedPrompt = buildPromptWithPreset(loadedPreset, renderedPrompt);
+
+        warnings.push(`Using agent preset: ${loadedPreset.preset.name}`);
+      }
+    } catch (error) {
+      // Don't fail preparation if agent preset loading fails
+      warnings.push(
+        `Agent preset error: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    // 8. Validate
     if (!renderedPrompt.trim()) {
       errors.push("Rendered prompt is empty");
     }
@@ -252,7 +299,20 @@ export class ExecutionService {
       throw new Error(`Issue ${issueId} not found`);
     }
 
-    // 2. Determine execution mode and create execution with worktree
+    // 2. Load agent preset if specified
+    let loadedPreset: LoadedAgentPreset | undefined;
+    if (config.presetId) {
+      try {
+        loadedPreset = loadAgentPreset(this.repoPath, config.presetId);
+      } catch (error) {
+        console.error(`[ExecutionService] Failed to load agent preset:`, {
+          presetId: config.presetId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // 3. Determine execution mode and create execution with worktree
     const mode = config.mode || "worktree";
     let execution: Execution;
     let workDir: string;
@@ -286,6 +346,39 @@ export class ExecutionService {
         branch_name: config.baseBranch || "main",
       });
       workDir = this.repoPath;
+    }
+
+    // 4. Store agent preset info in execution record
+    if (config.presetId) {
+      updateExecution(this.db, execution.id, {
+        preset_id: config.presetId,
+        agent_config: loadedPreset
+          ? JSON.stringify(loadedPreset.preset.config)
+          : null,
+      });
+    }
+
+    // 5. Execute before_execution hooks
+    if (loadedPreset?.hooks?.before_execution) {
+      try {
+        await executeAgentHooks(this.repoPath, "before_execution", {
+          execution_id: execution.id,
+          issue_id: issueId,
+          agent_id: config.presetId,
+          work_dir: workDir,
+        });
+      } catch (error) {
+        console.error(`[ExecutionService] Before execution hooks failed:`, {
+          executionId: execution.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Mark execution as failed and return
+        updateExecution(this.db, execution.id, {
+          status: "failed",
+          error_message: `Before execution hooks failed: ${error instanceof Error ? error.message : String(error)}`,
+        });
+        throw error;
+      }
     }
 
     // Initialize empty logs for this execution
@@ -432,14 +525,19 @@ export class ExecutionService {
       }
     });
 
-    orchestrator.onWorkflowComplete(() => {
+    orchestrator.onWorkflowComplete(async () => {
       console.log("[ExecutionService] Workflow completed successfully", {
         executionId: execution.id,
       });
+
+      const completedAt = new Date().toISOString();
+      const startedAt = execution.started_at || execution.created_at;
+      const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+
       try {
         updateExecution(this.db, execution.id, {
           status: "completed",
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
         });
       } catch (error) {
         console.error(
@@ -451,20 +549,57 @@ export class ExecutionService {
           }
         );
       }
+
+      // Execute after_execution hooks
+      if (loadedPreset?.hooks?.after_execution) {
+        try {
+          await executeAgentHooks(this.repoPath, "after_execution", {
+            execution_id: execution.id,
+            issue_id: issueId,
+            agent_id: config.presetId,
+            work_dir: workDir,
+            status: "completed",
+          });
+        } catch (error) {
+          console.error(`[ExecutionService] After execution hooks failed:`, {
+            executionId: execution.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Record metrics
+      if (config.presetId) {
+        recordExecutionMetrics(this.repoPath, {
+          execution_id: execution.id,
+          agent_id: config.presetId,
+          issue_id: issueId,
+          started_at: startedAt,
+          completed_at: completedAt,
+          duration_ms: durationMs,
+          status: "success",
+        });
+      }
+
       // Remove orchestrator from active map
       this.activeOrchestrators.delete(execution.id);
     });
 
-    orchestrator.onWorkflowFailed((_executionId, error) => {
+    orchestrator.onWorkflowFailed(async (_executionId, error) => {
       console.error("[ExecutionService] Workflow failed", {
         executionId: execution.id,
         error: error.message,
         stack: error.stack,
       });
+
+      const completedAt = new Date().toISOString();
+      const startedAt = execution.started_at || execution.created_at;
+      const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+
       try {
         updateExecution(this.db, execution.id, {
           status: "failed",
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
           error_message: error.message,
         });
       } catch (updateError) {
@@ -480,6 +615,40 @@ export class ExecutionService {
           }
         );
       }
+
+      // Execute on_error hooks
+      if (loadedPreset?.hooks?.on_error) {
+        try {
+          await executeAgentHooks(this.repoPath, "on_error", {
+            execution_id: execution.id,
+            issue_id: issueId,
+            agent_id: config.presetId,
+            work_dir: workDir,
+            status: "failed",
+            error: error.message,
+          });
+        } catch (hookError) {
+          console.error(`[ExecutionService] On error hooks failed:`, {
+            executionId: execution.id,
+            error: hookError instanceof Error ? hookError.message : String(hookError),
+          });
+        }
+      }
+
+      // Record metrics
+      if (config.presetId) {
+        recordExecutionMetrics(this.repoPath, {
+          execution_id: execution.id,
+          agent_id: config.presetId,
+          issue_id: issueId,
+          started_at: startedAt,
+          completed_at: completedAt,
+          duration_ms: durationMs,
+          status: "failure",
+          error_message: error.message,
+        });
+      }
+
       // Remove orchestrator from active map
       this.activeOrchestrators.delete(execution.id);
     });

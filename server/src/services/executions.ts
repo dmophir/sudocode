@@ -35,6 +35,8 @@ export interface UpdateExecutionInput {
   worktree_path?: string | null;
   session_id?: string | null;
   summary?: string | null;
+  preset_id?: string | null;
+  agent_config?: string | null;
 }
 
 /**
@@ -194,6 +196,16 @@ export function updateExecution(
   if (input.summary !== undefined) {
     updates.push("summary = ?");
     values.push(input.summary);
+  }
+
+  if (input.preset_id !== undefined) {
+    updates.push("preset_id = ?");
+    values.push(input.preset_id);
+  }
+
+  if (input.agent_config !== undefined) {
+    updates.push("agent_config = ?");
+    values.push(input.agent_config);
   }
 
   // Always update updated_at
