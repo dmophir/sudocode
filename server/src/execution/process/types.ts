@@ -11,6 +11,29 @@ import type { ChildProcess } from 'child_process';
 import type { Readable, Writable } from 'stream';
 
 /**
+ * Execution mode for CLI tools
+ * - structured: Non-interactive, JSON-parseable output via stdio (existing behavior)
+ * - interactive: Full terminal emulation with user input via PTY
+ * - hybrid: Both terminal view and structured parsing simultaneously
+ */
+export type ExecutionMode = 'structured' | 'interactive' | 'hybrid';
+
+/**
+ * Terminal configuration for PTY processes
+ * Used in interactive and hybrid execution modes
+ */
+export interface TerminalConfig {
+  /** Terminal width in columns */
+  cols: number;
+  /** Terminal height in rows */
+  rows: number;
+  /** Working directory (defaults to ProcessConfig.workDir if not specified) */
+  cwd?: string;
+  /** Terminal type (default: xterm-256color) */
+  name?: string;
+}
+
+/**
  * Status of a managed process throughout its lifecycle
  */
 export type ProcessStatus =
@@ -51,6 +74,12 @@ export interface ProcessConfig {
     /** Initial backoff delay in milliseconds */
     backoffMs: number;
   };
+
+  /** Execution mode (defaults to 'structured' for backward compatibility) */
+  mode?: ExecutionMode;
+
+  /** Terminal configuration (required for interactive/hybrid modes) */
+  terminal?: TerminalConfig;
 }
 
 /**
@@ -76,11 +105,11 @@ export interface ManagedProcess {
   /** Signal that terminated the process if applicable */
   signal: string | null;
 
-  // Resources
-  /** Node.js ChildProcess handle */
-  process: ChildProcess;
-  /** Process I/O streams */
-  streams: {
+  // Resources (optional for PTY-based processes)
+  /** Node.js ChildProcess handle (not available for PTY processes) */
+  process?: ChildProcess;
+  /** Process I/O streams (not available for PTY processes) */
+  streams?: {
     stdout: Readable;
     stderr: Readable;
     stdin: Writable;
@@ -96,6 +125,27 @@ export interface ManagedProcess {
     /** Success rate (0-1) */
     successRate: number;
   };
+}
+
+/**
+ * PTY-specific process interface for interactive terminal execution
+ * Extends ManagedProcess with PTY-specific methods and properties
+ */
+export interface ManagedPtyProcess extends Omit<ManagedProcess, 'process' | 'streams'> {
+  /** PTY process instance */
+  ptyProcess: import('node-pty').IPty;
+
+  /** Write data to PTY */
+  write: (data: string) => void;
+
+  /** Resize terminal */
+  resize: (cols: number, rows: number) => void;
+
+  /** Listen to PTY output */
+  onData: (callback: (data: string) => void) => void;
+
+  /** Listen to PTY exit */
+  onExit: (callback: (exitCode: number, signal?: number) => void) => void;
 }
 
 /**
