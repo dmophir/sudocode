@@ -20,6 +20,21 @@ import * as os from "os";
 // Helper to ensure timestamps are different between operations
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper to manually set database timestamps (for testing sync direction logic)
+function setDatabaseTimestamp(
+  db: Database.Database,
+  entityType: "spec" | "issue",
+  entityId: string,
+  timestamp: Date
+) {
+  const table = entityType === "spec" ? "specs" : "issues";
+  const isoTimestamp = timestamp.toISOString();
+  db.prepare(`UPDATE ${table} SET updated_at = ? WHERE id = ?`).run(
+    isoTimestamp,
+    entityId
+  );
+}
+
 describe("Sync Commands - Auto Direction Detection", () => {
   let db: Database.Database;
   let tempDir: string;
@@ -127,12 +142,11 @@ describe("Sync Commands - Auto Direction Detection", () => {
         priority: 2,
       });
 
-      await exportToJSONL(db, { outputDir: tempDir });
-
-      // Make JSONL file older
+      // Make database timestamp older
       const oldTime = new Date(Date.now() - 10000);
-      fs.utimesSync(specsJsonl, oldTime, oldTime);
-      fs.utimesSync(issuesJsonl, oldTime, oldTime);
+      setDatabaseTimestamp(db, "spec", "SPEC-001", oldTime);
+
+      await exportToJSONL(db, { outputDir: tempDir });
 
       // Create newer markdown file
       const mdPath = path.join(specsDir, "test.md");
@@ -177,7 +191,7 @@ describe("Sync Commands - Auto Direction Detection", () => {
 
       const output = consoleLogSpy.mock.calls.flat().join(" ");
       expect(output).toContain("Syncing FROM markdown TO database");
-      expect(output).toContain("JSONL missing, markdown exists");
+      expect(output).toContain("database empty, markdown exists");
     });
 
     it("should sync TO markdown when only JSONL exists", async () => {
@@ -199,10 +213,10 @@ describe("Sync Commands - Auto Direction Detection", () => {
 
       const output = consoleLogSpy.mock.calls.flat().join(" ");
       expect(output).toContain("Syncing FROM database TO markdown");
-      expect(output).toContain("markdown files missing, JSONL exists");
+      expect(output).toContain("markdown files missing, database has entries");
     });
 
-    it("should prefer markdown when mixed timestamps exist", async () => {
+    it("should prefer database when mixed timestamps exist", async () => {
       // Create spec and issue in database
       createSpec(db, {
         id: "SPEC-001",
@@ -220,14 +234,14 @@ describe("Sync Commands - Auto Direction Detection", () => {
         priority: 2,
       });
 
+      // Make database timestamps old
+      const oldDbTime = new Date(Date.now() - 20000);
+      setDatabaseTimestamp(db, "spec", "SPEC-001", oldDbTime);
+      setDatabaseTimestamp(db, "issue", "ISSUE-001", oldDbTime);
+
       await exportToJSONL(db, { outputDir: tempDir });
 
-      // Make JSONL files old
-      const oldJsonlTime = new Date(Date.now() - 20000);
-      fs.utimesSync(specsJsonl, oldJsonlTime, oldJsonlTime);
-      fs.utimesSync(issuesJsonl, oldJsonlTime, oldJsonlTime);
-
-      // Create spec markdown (newer) and issue markdown (older than JSONL)
+      // Create spec markdown (newer than db) and issue markdown (older than db)
       const specMdPath = path.join(specsDir, "test-spec.md");
       fs.writeFileSync(
         specMdPath,
@@ -242,7 +256,7 @@ describe("Sync Commands - Auto Direction Detection", () => {
         "utf8"
       );
 
-      // Make issue markdown even older (older than JSONL)
+      // Make issue markdown even older (older than database)
       const veryOldTime = new Date(Date.now() - 30000);
       fs.utimesSync(issueMdPath, veryOldTime, veryOldTime);
 
@@ -250,12 +264,12 @@ describe("Sync Commands - Auto Direction Detection", () => {
 
       await handleSync(ctx, {});
 
-      // Should prefer markdown as source (safer for user edits)
-      // Spec markdown is newer than JSONL, issue markdown is older than JSONL
-      // This creates a mixed state - we prefer markdown
+      // Should prefer database as source of truth in mixed state
+      // Spec markdown is newer than database, issue markdown is older than database
+      // This creates a mixed state - we prefer database to avoid conflicts
       const output = consoleLogSpy.mock.calls.flat().join(" ");
-      expect(output).toContain("Syncing FROM markdown TO database");
-      expect(output).toContain("choosing markdown as source");
+      expect(output).toContain("Syncing FROM database TO markdown");
+      expect(output).toContain("using database as source of truth");
     });
   });
 
@@ -437,6 +451,10 @@ describe("Sync Commands - Auto Direction Detection", () => {
         content: "# Original content",
         priority: 2,
       });
+
+      // Make database timestamp older to simulate an earlier state
+      const oldTime = new Date(Date.now() - 5000);
+      setDatabaseTimestamp(db, "spec", "SPEC-001", oldTime);
 
       await exportToJSONL(db, { outputDir: tempDir });
 
