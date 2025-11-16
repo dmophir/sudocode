@@ -83,12 +83,13 @@ describe("CRDT Synchronization Integration", () => {
     // Initialize templates
     initializeDefaultTemplates(db);
 
-    // Initialize CRDT Coordinator
-    coordinator = new CRDTCoordinator(db, {
+    // Initialize CRDT Coordinator with port scanning
+    coordinator = await CRDTCoordinator.create(db, {
       port: 3002, // Use different port for tests
       host: "localhost",
       persistInterval: 100, // Fast persistence for tests
       gcInterval: 60000,
+      maxPortAttempts: 20,
     });
 
     // Initialize lifecycle service

@@ -142,6 +142,7 @@ export interface CRDTCoordinatorConfig {
   host?: string;
   persistInterval?: number;
   gcInterval?: number;
+  maxPortAttempts?: number;
 }
 
 /**
@@ -156,27 +157,109 @@ export class CRDTCoordinator {
   private persistTimer?: NodeJS.Timeout;
   private gcTimer?: NodeJS.Timeout;
   public lastPersistTime: number = 0;
+  public actualPort: number = 0;
 
-  constructor(
+  private constructor(
     private db: Database.Database,
     private config: CRDTCoordinatorConfig = {}
   ) {
-    const port = config.port || 3001;
-    const host = config.host || 'localhost';
-
     this.ydoc = new Y.Doc();
-    this.wss = new WebSocketServer({ port, host });
     this.clients = new Map();
+    // WebSocketServer will be initialized in startWithPortScanning
+    this.wss = null as any; // Temporary - will be set before use
+  }
 
-    console.log(`[CRDT Coordinator] Initializing on ${host}:${port}`);
+  /**
+   * Create and initialize CRDT Coordinator with port scanning
+   */
+  static async create(
+    db: Database.Database,
+    config: CRDTCoordinatorConfig = {}
+  ): Promise<CRDTCoordinator> {
+    const coordinator = new CRDTCoordinator(db, config);
+    await coordinator.startWithPortScanning();
+    return coordinator;
+  }
 
-    this.setupYjsMaps();
-    this.setupWebSocketServer();
-    this.setupPersistence();
-    this.loadInitialState();
-    this.startGarbageCollection();
+  /**
+   * Start WebSocket server with port scanning
+   */
+  private async startWithPortScanning(): Promise<void> {
+    const initialPort = this.config.port || 3001;
+    const host = this.config.host || 'localhost';
+    const maxAttempts = this.config.maxPortAttempts || 20;
 
-    console.log('[CRDT Coordinator] Initialized successfully');
+    // Check if explicit port was configured via env or config
+    const explicitPort = this.config.port !== undefined;
+    const shouldScan = !explicitPort;
+
+    console.log(`[CRDT Coordinator] Initializing on ${host}:${initialPort}`);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const port = initialPort + attempt;
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const wss = new WebSocketServer({ port, host });
+
+          const errorHandler = (err: Error) => {
+            wss.removeListener('error', errorHandler);
+            wss.removeListener('listening', listeningHandler);
+            wss.close();
+            reject(err);
+          };
+
+          const listeningHandler = () => {
+            wss.removeListener('error', errorHandler);
+            resolve();
+          };
+
+          wss.once('error', errorHandler);
+          wss.once('listening', listeningHandler);
+
+          // Store the successfully created server
+          this.wss = wss;
+          this.actualPort = port;
+        });
+
+        // Success! Setup the rest of the coordinator
+        this.setupYjsMaps();
+        this.setupWebSocketServer();
+        this.setupPersistence();
+        this.loadInitialState();
+        this.startGarbageCollection();
+
+        console.log(`[CRDT Coordinator] Initialized successfully on ${host}:${this.actualPort}`);
+        return;
+
+      } catch (err) {
+        const error = err as NodeJS.ErrnoException;
+
+        if (error.code === 'EADDRINUSE') {
+          if (!shouldScan) {
+            // Explicit port was specified and it's in use - fail immediately
+            throw new Error(
+              `[CRDT Coordinator] Port ${port} is already in use. Please specify a different CRDT_SERVER_PORT.`
+            );
+          }
+
+          // Port is in use, try next one if we have attempts left
+          if (attempt < maxAttempts - 1) {
+            console.log(`[CRDT Coordinator] Port ${port} is already in use, trying ${port + 1}...`);
+            continue;
+          } else {
+            throw new Error(
+              `[CRDT Coordinator] Could not find an available port after ${maxAttempts} attempts (${initialPort}-${port})`
+            );
+          }
+        } else {
+          // Some other error - fail immediately
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(`[CRDT Coordinator] Could not start server after ${maxAttempts} attempts`);
   }
 
   /**

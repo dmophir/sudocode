@@ -23,7 +23,7 @@ describe('CRDTAgent', () => {
   let testDir: string;
   let port: number;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create temporary directory
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sudocode-test-agent-'));
     testDbPath = path.join(testDir, 'cache.db');
@@ -35,11 +35,12 @@ describe('CRDTAgent', () => {
     port = 30000 + Math.floor(Math.random() * 1000);
 
     // Create coordinator
-    coordinator = new CRDTCoordinator(db, {
+    coordinator = await CRDTCoordinator.create(db, {
       port,
       host: 'localhost',
       persistInterval: 100,
-      gcInterval: 60000
+      gcInterval: 60000,
+      maxPortAttempts: 5
     });
   });
 

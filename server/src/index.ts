@@ -140,16 +140,16 @@ async function initialize() {
     // Initialize CRDT Coordinator if enabled
     if (CRDT_ENABLED) {
       try {
-
-        crdtCoordinator = new CRDTCoordinator(db, {
+        crdtCoordinator = await CRDTCoordinator.create(db, {
           port: crdtPort,
           host: crdtHost,
           persistInterval: crdtPersistInterval,
           gcInterval: crdtGcInterval,
+          maxPortAttempts: 20,
         });
 
         console.log(
-          `CRDT Coordinator initialized on ${crdtHost}:${crdtPort}`
+          `CRDT Coordinator initialized on ${crdtHost}:${crdtCoordinator.actualPort}`
         );
       } catch (error) {
         console.error("Failed to initialize CRDT Coordinator:", error);
@@ -273,6 +273,25 @@ app.get("/health", (_req: Request, res: Response) => {
       path: DB_PATH,
       tables: dbInfo.tables.length,
       hasCliTables: dbInfo.hasCliTables,
+    },
+  });
+});
+
+// Config endpoint - returns server configuration
+// TODO: Return sudocode config json contents.
+app.get("/api/config", (_req: Request, res: Response) => {
+  const CRDT_ENABLED = process.env.CRDT_ENABLED !== "false";
+  const crdtHost = process.env.CRDT_SERVER_HOST || "localhost";
+  const actualCrdtPort =
+    crdtCoordinator?.actualPort ||
+    parseInt(process.env.CRDT_SERVER_PORT || "3001", 10);
+
+  res.status(200).json({
+    crdt: {
+      enabled: CRDT_ENABLED,
+      host: crdtHost,
+      port: actualCrdtPort,
+      url: `ws://${crdtHost}:${actualCrdtPort}`,
     },
   });
 });
