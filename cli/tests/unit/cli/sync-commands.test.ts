@@ -1029,4 +1029,203 @@ describe("Export and Import Commands", () => {
       expect(output).toContain("Detecting sync direction");
     });
   });
+
+  describe("Database Timestamp-Based Sync Direction", () => {
+    it("should sync to-markdown when database is newer than markdown files", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const issuesDir = path.join(tempDir, "issues");
+      fs.mkdirSync(issuesDir, { recursive: true });
+
+      // Create an issue in the database
+      const issue = createIssue(db, {
+        id: "i-test1",
+        uuid: "test-uuid-1",
+        title: "Database Issue",
+        content: "Fresh from database",
+        status: "open",
+        priority: 2,
+      });
+
+      // Export to JSONL
+      await exportToJSONL(db, { outputDir: tempDir });
+
+      // Create a stale markdown file (older than database)
+      const mdPath = path.join(issuesDir, "i-test1.md");
+      const staleMdContent = `---
+id: i-test1
+title: Stale Title
+status: open
+priority: 2
+---
+
+Stale content from markdown`;
+      fs.writeFileSync(mdPath, staleMdContent, "utf8");
+
+      // Make the markdown file older by setting its mtime to the past
+      const pastTime = new Date(Date.now() - 10000); // 10 seconds ago
+      fs.utimesSync(mdPath, pastTime, pastTime);
+
+      // Wait a bit to ensure different timestamps
+      await sleep(100);
+
+      // Run sync - should detect database is newer and sync to-markdown
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).toContain("TO markdown");
+      expect(output).toContain("database is newer");
+
+      // Verify markdown file was updated with database content
+      const updatedMd = fs.readFileSync(mdPath, "utf8");
+      expect(updatedMd).toContain("title: Database Issue");
+    });
+
+    it("should sync from-markdown when markdown files are newer than database", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const issuesDir = path.join(tempDir, "issues");
+      fs.mkdirSync(issuesDir, { recursive: true });
+
+      // Create an issue in the database with an old timestamp
+      const pastTime = new Date(Date.now() - 10000); // 10 seconds ago
+      const issue = createIssue(db, {
+        id: "i-test2",
+        uuid: "test-uuid-2",
+        title: "Old Database Issue",
+        content: "Old database content",
+        status: "open",
+        priority: 2,
+        updated_at: pastTime.toISOString(),
+      });
+
+      // Export to JSONL
+      await exportToJSONL(db, { outputDir: tempDir });
+
+      // Wait a bit to ensure different timestamps
+      await sleep(100);
+
+      // Create a fresh markdown file (newer than database)
+      const mdPath = path.join(issuesDir, "i-test2.md");
+      const freshMdContent = `---
+id: i-test2
+title: Fresh Markdown Title
+status: in_progress
+priority: 1
+---
+
+Fresh content from markdown`;
+      fs.writeFileSync(mdPath, freshMdContent, "utf8");
+
+      // Run sync - should detect markdown is newer and sync from-markdown
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).toContain("FROM markdown");
+      expect(output).toContain("markdown files are newer");
+
+      // Verify database was updated with markdown content
+      const { getIssue } = await import("../../../src/operations/issues.js");
+      const updatedIssue = getIssue(db, "i-test2");
+      expect(updatedIssue?.title).toBe("Fresh Markdown Title");
+      expect(updatedIssue?.status).toBe("in_progress");
+    });
+
+    it("should prefer database (to-markdown) in mixed state conflicts", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const issuesDir = path.join(tempDir, "issues");
+      fs.mkdirSync(issuesDir, { recursive: true });
+
+      // Create two issues with different states
+      const pastTime = new Date(Date.now() - 10000);
+
+      // Issue 1: Database is newer
+      const issue1 = createIssue(db, {
+        id: "i-conf1",
+        uuid: "conf-uuid-1",
+        title: "Database Newer",
+        content: "DB is fresh",
+        status: "open",
+        priority: 2,
+      });
+
+      // Issue 2: Markdown will be newer (created with old timestamp in DB)
+      const issue2 = createIssue(db, {
+        id: "i-conf2",
+        uuid: "conf-uuid-2",
+        title: "Old in DB",
+        content: "DB is old",
+        status: "open",
+        priority: 2,
+        updated_at: pastTime.toISOString(),
+      });
+
+      await exportToJSONL(db, { outputDir: tempDir });
+
+      // Create stale markdown for issue1
+      const md1Path = path.join(issuesDir, "i-conf1.md");
+      fs.writeFileSync(md1Path, `---\nid: i-conf1\ntitle: Stale\n---\nStale`, "utf8");
+      fs.utimesSync(md1Path, pastTime, pastTime);
+
+      await sleep(100);
+
+      // Create fresh markdown for issue2
+      const md2Path = path.join(issuesDir, "i-conf2.md");
+      fs.writeFileSync(md2Path, `---\nid: i-conf2\ntitle: Fresh MD\n---\nFresh`, "utf8");
+
+      // Run sync - should prefer database as source of truth in conflict
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).toContain("TO markdown");
+      expect(output).toContain("database is newer");
+
+      // Verify issue1's markdown was updated from database
+      const md1Content = fs.readFileSync(md1Path, "utf8");
+      expect(md1Content).toContain("title: Database Newer");
+    });
+
+    it("should handle no-sync when everything is in sync", async () => {
+      const ctx = { db, outputDir: tempDir, jsonOutput: false };
+      const issuesDir = path.join(tempDir, "issues");
+      fs.mkdirSync(issuesDir, { recursive: true });
+
+      // Create issue and export
+      const issue = createIssue(db, {
+        id: "i-sync",
+        uuid: "sync-uuid",
+        title: "Synced Issue",
+        content: "Synced content",
+        status: "open",
+        priority: 2,
+      });
+
+      await exportToJSONL(db, { outputDir: tempDir });
+
+      // Create markdown matching database
+      const mdPath = path.join(issuesDir, "i-sync.md");
+      const { getIssue } = await import("../../../src/operations/issues.js");
+      const dbIssue = getIssue(db, "i-sync");
+
+      const mdContent = `---
+id: i-sync
+title: Synced Issue
+status: open
+priority: 2
+created_at: ${dbIssue?.created_at}
+updated_at: ${dbIssue?.updated_at}
+---
+
+Synced content`;
+      fs.writeFileSync(mdPath, mdContent, "utf8");
+
+      // Set markdown file time to match database updated_at
+      const dbTime = new Date(dbIssue!.updated_at);
+      fs.utimesSync(mdPath, dbTime, dbTime);
+
+      // Run sync - should detect no sync needed
+      await handleSync(ctx, {});
+
+      const output = consoleLogSpy.mock.calls.flat().join(" ");
+      expect(output).toContain("in sync");
+    });
+  });
 });
