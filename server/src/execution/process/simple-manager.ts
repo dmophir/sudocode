@@ -63,6 +63,13 @@ import { generateId } from "./utils.js";
 export class SimpleProcessManager implements IProcessManager {
   private _activeProcesses = new Map<string, ManagedProcess>();
   private _cleanupTimers = new Map<string, NodeJS.Timeout>();
+  private _outputBuffers = new Map<
+    string,
+    Array<{ data: Buffer; type: "stdout" | "stderr" }>
+  >();
+  private _outputBufferSizes = new Map<string, number>(); // Track total buffer size per process
+  private _outputHandlers = new Map<string, OutputHandler[]>();
+  private _maxBufferSize: number;
   private _metrics: ProcessMetrics = {
     totalSpawned: 0,
     currentlyActive: 0,
@@ -75,27 +82,124 @@ export class SimpleProcessManager implements IProcessManager {
    * Create a new SimpleProcessManager
    *
    * @param defaultConfig - Default configuration to merge with per-process config
+   * @param maxBufferSize - Maximum output buffer size per process in bytes (default: 1MB, use Infinity for no limit)
    */
-  constructor(private readonly _defaultConfig: Partial<ProcessConfig> = {}) {}
+  constructor(
+    private readonly _defaultConfig: Partial<ProcessConfig> = {},
+    maxBufferSize: number = 1024 * 1024
+  ) {
+    this._maxBufferSize = maxBufferSize;
+  }
 
   async acquireProcess(config: ProcessConfig): Promise<ManagedProcess> {
     // Merge with default config
     const mergedConfig = { ...this._defaultConfig, ...config };
 
+    // Generate unique ID for this process BEFORE spawning
+    const id = generateId("process");
+
+    // Initialize output buffer, buffer size tracker, and handler list BEFORE spawning
+    // This ensures we're ready to capture output as soon as the process starts
+    this._outputBuffers.set(id, []);
+    this._outputBufferSizes.set(id, 0);
+    this._outputHandlers.set(id, []);
+
     // Spawn the process
     const childProcess = this.spawnProcess(mergedConfig);
 
+    // We need to create a reference that the handlers can update
+    // This will be assigned to the real managedProcess once it's created
+    let managedProcessRef: ManagedProcess | null = null;
+
+    // Set up stdout/stderr data handlers IMMEDIATELY to capture early output
+    // This must happen before any async operations to avoid race conditions
+    childProcess.stdout?.on("data", (data: Buffer) => {
+      // Track activity
+      if (managedProcessRef) {
+        managedProcessRef.lastActivity = new Date();
+      }
+
+      const buffer = this._outputBuffers.get(id);
+      const bufferSize = this._outputBufferSizes.get(id);
+      if (buffer && bufferSize !== undefined) {
+        const dataSize = data.length;
+        let currentSize = bufferSize;
+
+        // If adding this data would exceed limit, remove oldest chunks
+        while (
+          buffer.length > 0 &&
+          currentSize + dataSize > this._maxBufferSize
+        ) {
+          const removed = buffer.shift();
+          if (removed) {
+            currentSize -= removed.data.length;
+          }
+        }
+
+        // Always add new data (even if it exceeds limit by itself)
+        buffer.push({ data, type: "stdout" });
+        this._outputBufferSizes.set(id, currentSize + dataSize);
+      }
+
+      // Notify all registered handlers
+      const handlers = this._outputHandlers.get(id);
+      if (handlers) {
+        for (const handler of handlers) {
+          handler(data, "stdout");
+        }
+      }
+    });
+
+    childProcess.stderr?.on("data", (data: Buffer) => {
+      // Track activity
+      if (managedProcessRef) {
+        managedProcessRef.lastActivity = new Date();
+      }
+
+      const buffer = this._outputBuffers.get(id);
+      const bufferSize = this._outputBufferSizes.get(id);
+      if (buffer && bufferSize !== undefined) {
+        const dataSize = data.length;
+        let currentSize = bufferSize;
+
+        // If adding this data would exceed limit, remove oldest chunks
+        while (
+          buffer.length > 0 &&
+          currentSize + dataSize > this._maxBufferSize
+        ) {
+          const removed = buffer.shift();
+          if (removed) {
+            currentSize -= removed.data.length;
+          }
+        }
+
+        // Always add new data (even if it exceeds limit by itself)
+        buffer.push({ data, type: "stderr" });
+        this._outputBufferSizes.set(id, currentSize + dataSize);
+      }
+
+      // Notify all registered handlers
+      const handlers = this._outputHandlers.get(id);
+      if (handlers) {
+        for (const handler of handlers) {
+          handler(data, "stderr");
+        }
+      }
+    });
+
     // Validate process spawned successfully
     if (!childProcess.pid) {
+      // Clean up the pre-initialized buffers
+      this._outputBuffers.delete(id);
+      this._outputBufferSizes.delete(id);
+      this._outputHandlers.delete(id);
+
       // Suppress error event to prevent uncaughtException
       childProcess.once("error", () => {
         // Error is expected when process fails to spawn
       });
       throw new Error("Failed to spawn process: no PID assigned");
     }
-
-    // Generate unique ID for this process
-    const id = generateId("process");
 
     // Create managed process object
     const managedProcess: ManagedProcess = {
@@ -119,6 +223,9 @@ export class SimpleProcessManager implements IProcessManager {
       },
     };
 
+    // Assign the reference so the early handlers can update lastActivity
+    managedProcessRef = managedProcess;
+
     // Track the process
     this._activeProcesses.set(id, managedProcess);
 
@@ -126,7 +233,7 @@ export class SimpleProcessManager implements IProcessManager {
     this._metrics.totalSpawned++;
     this._metrics.currentlyActive++;
 
-    // Set up event handlers for lifecycle management
+    // Set up remaining event handlers (exit, error, activity tracking)
     this.setupProcessHandlers(managedProcess, mergedConfig);
 
     return managedProcess;
@@ -223,6 +330,9 @@ export class SimpleProcessManager implements IProcessManager {
       // Schedule cleanup (delete from activeProcesses after 5s delay)
       const cleanupTimer = setTimeout(() => {
         this._activeProcesses.delete(id);
+        this._outputBuffers.delete(id);
+        this._outputBufferSizes.delete(id);
+        this._outputHandlers.delete(id);
         this._cleanupTimers.delete(id);
       }, 5000);
       this._cleanupTimers.set(id, cleanupTimer);
@@ -245,15 +355,9 @@ export class SimpleProcessManager implements IProcessManager {
       this._metrics.totalFailed++;
     });
 
-    // stdout data handler - track activity
-    childProcess.stdout?.on("data", () => {
-      managedProcess.lastActivity = new Date();
-    });
-
-    // stderr data handler - track activity
-    childProcess.stderr?.on("data", () => {
-      managedProcess.lastActivity = new Date();
-    });
+    // Note: stdout/stderr data handlers are now set up earlier in acquireProcess()
+    // to avoid race conditions with early output. This function only handles
+    // exit and error events.
   }
 
   async releaseProcess(processId: string): Promise<void> {
@@ -349,13 +453,24 @@ export class SimpleProcessManager implements IProcessManager {
       throw new Error(`Process ${processId} not found`);
     }
 
-    managed.streams.stdout.on("data", (data: Buffer) => {
-      handler(data, "stdout");
-    });
+    // Replay buffered output first, then add handler for future output
+    // This avoids duplicates but means we might miss output that arrives
+    // between replay and handler registration. However, since JavaScript
+    // is single-threaded and this is synchronous, we won't miss anything.
+    const buffer = this._outputBuffers.get(processId);
+    if (buffer) {
+      // Create a snapshot to avoid issues if buffer is modified during iteration
+      const snapshot = [...buffer];
+      for (const { data, type } of snapshot) {
+        handler(data, type);
+      }
+    }
 
-    managed.streams.stderr.on("data", (data: Buffer) => {
-      handler(data, "stderr");
-    });
+    // Add handler to the list for future output
+    const handlers = this._outputHandlers.get(processId);
+    if (handlers) {
+      handlers.push(handler);
+    }
   }
 
   onError(processId: string, handler: ErrorHandler): void {
@@ -394,5 +509,12 @@ export class SimpleProcessManager implements IProcessManager {
       clearTimeout(timer);
       this._cleanupTimers.delete(id);
     }
+
+    // Immediately clean up all remaining buffers and handlers
+    // This ensures complete cleanup between tests
+    this._outputBuffers.clear();
+    this._outputBufferSizes.clear();
+    this._outputHandlers.clear();
+    this._activeProcesses.clear();
   }
 }
