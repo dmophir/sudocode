@@ -18,7 +18,7 @@ import {
 } from "./executions.js";
 import { getDefaultTemplate, getTemplateById } from "./prompt-templates.js";
 import { randomUUID } from "crypto";
-import { SimpleProcessManager } from "../execution/process/simple-manager.js";
+import { createProcessManager } from "../execution/process/factory.js";
 import { SimpleExecutionEngine } from "../execution/engine/simple-engine.js";
 import { ResilientExecutor } from "../execution/resilience/resilient-executor.js";
 import { LinearOrchestrator } from "../execution/workflow/linear-orchestrator.js";
@@ -27,6 +27,7 @@ import { createAgUiSystem } from "../execution/output/ag-ui-integration.js";
 import type { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
+import { HybridOutputProcessor } from "../execution/output/hybrid-output-processor.js";
 
 /**
  * Configuration for creating an execution
@@ -43,6 +44,7 @@ export interface ExecutionConfig {
   captureToolCalls?: boolean;
   execution_mode?: ExecutionMode;
   terminal_enabled?: boolean;
+  terminal_config?: { cols: number; rows: number };
 }
 
 /**
@@ -70,6 +72,27 @@ export interface ExecutionPrepareResult {
   defaultConfig: ExecutionConfig;
   warnings?: string[];
   errors?: string[];
+}
+
+/**
+ * Build command-line arguments based on execution mode
+ *
+ * @param mode - Execution mode (structured, interactive, hybrid)
+ * @returns Array of CLI arguments for the claude executable
+ */
+function buildArgs(mode: ExecutionMode): string[] {
+  switch (mode) {
+    case 'structured':
+      // Non-interactive, JSON output via stdio pipes
+      return ['--print', '--output-format', 'stream-json', '--dangerously-skip-permissions'];
+    case 'interactive':
+      // Full interactive mode, no special flags
+      // PTY provides terminal emulation automatically
+      return ['--dangerously-skip-permissions'];
+    case 'hybrid':
+      // PTY + JSON output for dual-mode execution
+      return ['--output-format', 'stream-json', '--dangerously-skip-permissions'];
+  }
 }
 
 /**
@@ -332,15 +355,17 @@ export class ExecutionService {
       },
     };
 
-    // 4. Create execution engine stack
-    const processManager = new SimpleProcessManager({
+    // 4. Determine execution mode and build process config
+    const executionMode = config.execution_mode || 'structured';
+    const terminalConfig = config.terminal_config || { cols: 80, rows: 24 };
+
+    const processManager = createProcessManager({
       executablePath: "claude",
-      args: [
-        "--print",
-        "--output-format",
-        "stream-json",
-        "--dangerously-skip-permissions",
-      ],
+      args: buildArgs(executionMode),
+      workDir,
+      mode: executionMode,
+      terminal: executionMode !== 'structured' ? terminalConfig : undefined,
+      timeout: config.timeout || 30 * 60 * 1000,
     });
 
     let engine = new SimpleExecutionEngine(processManager, {
@@ -349,9 +374,14 @@ export class ExecutionService {
 
     let executor = new ResilientExecutor(engine);
 
-    // 5. Create AG-UI system (processor + adapter) if transport manager is available
+    // 5. Create output processor based on execution mode
+    // - structured: Use AG-UI system (legacy)
+    // - hybrid: Use HybridOutputProcessor
+    // - interactive: No processor (terminal only)
     let agUiAdapter: AgUiEventAdapter | undefined;
-    if (this.transportManager) {
+
+    if (executionMode === 'structured' && this.transportManager) {
+      // Legacy structured mode: Use AG-UI system
       const agUiSystem = createAgUiSystem(execution.id);
       agUiAdapter = agUiSystem.adapter;
 
@@ -407,7 +437,35 @@ export class ExecutionService {
         },
       });
       executor = new ResilientExecutor(engine);
+    } else if (executionMode === 'hybrid') {
+      // Hybrid mode: Use HybridOutputProcessor for PTY output
+      const hybridProcessor = new HybridOutputProcessor();
+
+      // Attach processor to process manager output
+      // Note: TerminalTransport will be connected separately by TerminalWebSocketService
+      engine = new SimpleExecutionEngine(processManager, {
+        maxConcurrent: 1,
+        onOutput: (data, type) => {
+          // Process output through hybrid processor
+          hybridProcessor.processOutput(data, type);
+
+          // Also persist raw logs
+          try {
+            this.logsStore.appendRawLog(execution.id, data.toString());
+          } catch (err) {
+            console.error(
+              "[ExecutionService] Failed to persist raw log (non-critical):",
+              {
+                executionId: execution.id,
+                error: err instanceof Error ? err.message : String(err),
+              }
+            );
+          }
+        },
+      });
+      executor = new ResilientExecutor(engine);
     }
+    // For interactive mode: No output processor needed (terminal only)
 
     // 6. Create LinearOrchestrator
     const orchestrator = new LinearOrchestrator(
@@ -616,15 +674,27 @@ Please continue working on this issue, taking into account the feedback above.`;
       },
     };
 
-    // 6. Create execution engine stack
-    const processManager = new SimpleProcessManager({
+    // 6. Determine execution mode from previous execution config
+    let executionMode: ExecutionMode = 'structured';
+    let terminalConfig = { cols: 80, rows: 24 };
+
+    if (prevExecution.config) {
+      try {
+        const prevConfig = JSON.parse(prevExecution.config) as ExecutionConfig;
+        executionMode = prevConfig.execution_mode || 'structured';
+        terminalConfig = prevConfig.terminal_config || terminalConfig;
+      } catch (error) {
+        console.warn('[ExecutionService] Failed to parse previous execution config, defaulting to structured mode');
+      }
+    }
+
+    const processManager = createProcessManager({
       executablePath: "claude",
-      args: [
-        "--print",
-        "--output-format",
-        "stream-json",
-        "--dangerously-skip-permissions",
-      ],
+      args: buildArgs(executionMode),
+      workDir: prevExecution.worktree_path,
+      mode: executionMode,
+      terminal: executionMode !== 'structured' ? terminalConfig : undefined,
+      timeout: 30 * 60 * 1000,
     });
 
     let engine = new SimpleExecutionEngine(processManager, {
@@ -633,9 +703,11 @@ Please continue working on this issue, taking into account the feedback above.`;
 
     let executor = new ResilientExecutor(engine);
 
-    // 7. Create AG-UI system (processor + adapter) if transport manager is available
+    // 7. Create output processor based on execution mode (same as original execution)
     let agUiAdapter: AgUiEventAdapter | undefined;
-    if (this.transportManager) {
+
+    if (executionMode === 'structured' && this.transportManager) {
+      // Legacy structured mode: Use AG-UI system
       const agUiSystem = createAgUiSystem(newExecution.id);
       agUiAdapter = agUiSystem.adapter;
       this.transportManager.connectAdapter(agUiAdapter, newExecution.id);
@@ -689,7 +761,33 @@ Please continue working on this issue, taking into account the feedback above.`;
         },
       });
       executor = new ResilientExecutor(engine);
+    } else if (executionMode === 'hybrid') {
+      // Hybrid mode: Use HybridOutputProcessor for PTY output
+      const hybridProcessor = new HybridOutputProcessor();
+
+      engine = new SimpleExecutionEngine(processManager, {
+        maxConcurrent: 1,
+        onOutput: (data, type) => {
+          // Process output through hybrid processor
+          hybridProcessor.processOutput(data, type);
+
+          // Also persist raw logs
+          try {
+            this.logsStore.appendRawLog(newExecution.id, data.toString());
+          } catch (err) {
+            console.error(
+              "[ExecutionService] Failed to persist raw log (non-critical):",
+              {
+                executionId: newExecution.id,
+                error: err instanceof Error ? err.message : String(err),
+              }
+            );
+          }
+        },
+      });
+      executor = new ResilientExecutor(engine);
     }
+    // For interactive mode: No output processor needed (terminal only)
 
     // 8. Create LinearOrchestrator
     const orchestrator = new LinearOrchestrator(
