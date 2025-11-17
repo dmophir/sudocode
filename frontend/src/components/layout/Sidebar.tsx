@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SettingsDialog } from './SettingsDialog'
 import { HelpDialog } from './HelpDialog'
+import { useCRDT } from '@/contexts/CRDTContext'
 
 interface SidebarProps {
   open: boolean
@@ -16,6 +17,7 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
   const location = useLocation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const { connected } = useCRDT()
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path)
@@ -111,8 +113,39 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
           })}
         </nav>
 
-        {/* Bottom section with help and settings */}
+        {/* Bottom section with CRDT status, help and settings */}
         <div>
+          {/* CRDT Connection Status */}
+          <div className={cn('p-2', collapsed ? 'px-2' : 'px-3')}>
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex justify-center py-2">
+                    <div
+                      className={cn(
+                        'h-2 w-2 rounded-full transition-colors',
+                        connected ? 'bg-green-600' : 'bg-gray-400'
+                      )}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {connected ? 'CRDT Connected' : 'CRDT Offline'}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    'h-2 w-2 rounded-full transition-colors',
+                    connected ? 'bg-green-600' : 'bg-gray-400'
+                  )}
+                />
+                <span>{connected ? 'Live sync' : 'Local mode'}</span>
+              </div>
+            )}
+          </div>
+
           <div className={cn('space-y-1 p-2', collapsed ? 'px-2' : 'px-3')}>
             {/* Help button */}
             {collapsed ? (

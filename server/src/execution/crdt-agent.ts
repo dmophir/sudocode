@@ -16,6 +16,9 @@ import type {
 } from '../services/crdt-coordinator.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as syncProtocol from 'y-protocols/sync';
+import * as encoding from 'lib0/encoding';
+import * as decoding from 'lib0/decoding';
 
 /**
  * CRDT Agent configuration
@@ -122,6 +125,9 @@ export class CRDTAgent {
         // Setup update listener
         this.setupUpdateListener();
 
+        // Send initial SyncStep1 to get current state
+        this.sendInitialSync();
+
         // Start heartbeat
         this.startHeartbeat();
 
@@ -154,25 +160,85 @@ export class CRDTAgent {
   }
 
   /**
-   * Setup message handler for incoming updates
+   * Send initial SyncStep1 to request current state from coordinator
+   */
+  private sendInitialSync(): void {
+    if (!this.ws) return;
+
+    try {
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, 0); // messageSync
+      syncProtocol.writeSyncStep1(encoder, this.ydoc);
+      this.ws.send(encoding.toUint8Array(encoder));
+      console.log(`[CRDT Agent ${this.config.agentId}] Sent initial SyncStep1`);
+    } catch (error) {
+      console.error(`[CRDT Agent ${this.config.agentId}] Failed to send initial sync:`, error);
+    }
+  }
+
+  /**
+   * Setup message handler for incoming updates using y-protocols
    */
   private setupMessageHandler(): void {
     if (!this.ws) return;
 
     this.ws.on('message', (data: Buffer) => {
       try {
-        const message = JSON.parse(data.toString());
+        const message = new Uint8Array(data);
+        const decoder = decoding.createDecoder(message);
+        const encoder = encoding.createEncoder();
+        const messageType = decoding.readVarUint(decoder);
 
-        if (message.type === 'sync-init') {
-          // Initial state sync from coordinator
-          const update = new Uint8Array(message.data);
-          Y.applyUpdate(this.ydoc, update, 'server');
-          console.log(`[CRDT Agent ${this.config.agentId}] Received initial sync (${update.length} bytes)`);
-        } else if (message.type === 'sync-update') {
-          // Incremental update from coordinator
-          const update = new Uint8Array(message.data);
-          Y.applyUpdate(this.ydoc, update, 'server');
-          console.log(`[CRDT Agent ${this.config.agentId}] Received update (${update.length} bytes)`);
+        // Handle y-websocket message types
+        switch (messageType) {
+          case 0: {
+            // messageSync - read sync protocol sub-type
+            const syncMessageType = decoding.readVarUint(decoder);
+
+            switch (syncMessageType) {
+              case syncProtocol.messageYjsSyncStep1: {
+                // Server sent SyncStep1, respond with SyncStep2
+                encoding.writeVarUint(encoder, 0); // messageSync
+                syncProtocol.readSyncStep1(decoder, encoder, this.ydoc);
+                if (this.ws) {
+                  this.ws.send(encoding.toUint8Array(encoder));
+                }
+                console.log(`[CRDT Agent ${this.config.agentId}] Received SyncStep1, sent SyncStep2`);
+                break;
+              }
+
+              case syncProtocol.messageYjsSyncStep2: {
+                // Server sent SyncStep2, apply update
+                syncProtocol.readSyncStep2(decoder, this.ydoc, 'server');
+                console.log(`[CRDT Agent ${this.config.agentId}] Received SyncStep2`);
+                break;
+              }
+
+              case syncProtocol.messageYjsUpdate: {
+                // Server sent update
+                syncProtocol.readUpdate(decoder, this.ydoc, 'server');
+                console.log(`[CRDT Agent ${this.config.agentId}] Received update`);
+                break;
+              }
+
+              default:
+                console.warn(`[CRDT Agent ${this.config.agentId}] Unknown sync message type: ${syncMessageType}`);
+            }
+            break;
+          }
+
+          case 1: {
+            // messageAwareness - ignore for now
+            break;
+          }
+
+          case 3: {
+            // messageQueryAwareness - ignore for now
+            break;
+          }
+
+          default:
+            console.warn(`[CRDT Agent ${this.config.agentId}] Unknown message type: ${messageType}`);
         }
       } catch (error) {
         console.error(`[CRDT Agent ${this.config.agentId}] Failed to handle message:`, error);
@@ -181,7 +247,7 @@ export class CRDTAgent {
   }
 
   /**
-   * Setup update listener for local changes
+   * Setup update listener for local changes using y-protocols
    */
   private setupUpdateListener(): void {
     this.ydoc.on('update', (update: Uint8Array, origin: any) => {
@@ -194,13 +260,13 @@ export class CRDTAgent {
         return;
       }
 
-      // Send update to coordinator
+      // Send update to coordinator using y-protocols binary format
       try {
-        const message = JSON.stringify({
-          type: 'sync-update',
-          data: Array.from(update)
-        });
-        this.ws.send(message);
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, 0); // messageSync
+        encoding.writeVarUint(encoder, syncProtocol.messageYjsUpdate);
+        encoding.writeVarUint8Array(encoder, update);
+        this.ws.send(encoding.toUint8Array(encoder));
         console.log(`[CRDT Agent ${this.config.agentId}] Sent update (${update.length} bytes)`);
       } catch (error) {
         console.error(`[CRDT Agent ${this.config.agentId}] Failed to send update:`, error);

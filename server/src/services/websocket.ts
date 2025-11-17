@@ -82,12 +82,31 @@ class WebSocketManager {
     }
 
     try {
-      this.wss = new WebSocketServer({ server, path });
+      // Use noServer mode to allow manual upgrade handling
+      // This allows multiple WebSocket servers to coexist on different paths
+      this.wss = new WebSocketServer({ noServer: true });
 
       // Verify the WebSocket server was created successfully
       if (!this.wss) {
         throw new Error("Failed to create WebSocket server");
       }
+
+      // Handle HTTP upgrade requests for this specific path
+      server.on('upgrade', (request, socket, head) => {
+        const url = request.url || '';
+        // Parse pathname without query string
+        const pathname = url.split('?')[0];
+
+        // Only handle exact path match for this WebSocket server
+        if (pathname === path) {
+          if (this.wss) {
+            this.wss.handleUpgrade(request, socket, head, (ws) => {
+              this.wss?.emit('connection', ws, request);
+            });
+          }
+        }
+        // Otherwise, let other handlers process this upgrade
+      });
 
       // Add error handler to catch initialization issues
       this.wss.on("error", (error) => {

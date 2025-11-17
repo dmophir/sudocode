@@ -33,7 +33,6 @@ import type { IssueFeedback, Relationship, EntityType, RelationshipType } from '
 import { relationshipsApi } from '@/lib/api'
 import { useCRDTSpec } from '@/contexts/CRDTContext'
 import { ProvisionalBadge } from '@/components/ui/ProvisionalBadge'
-import { CRDTConnectionStatus } from '@/components/ui/CRDTConnectionStatus'
 
 const PRIORITY_OPTIONS = [
   { value: '0', label: 'Critical (P0)' },
@@ -366,7 +365,6 @@ export default function SpecDetailPage() {
           <Button variant="ghost" size="sm" onClick={() => navigate('/specs')}>
             ← <span className="hidden sm:inline">Back to Specs</span>
           </Button>
-          <CRDTConnectionStatus showLabel />
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
           {/* View mode toggle */}

@@ -189,7 +189,9 @@ export class CRDTCoordinator {
 
     // Handle HTTP upgrade requests for CRDT paths
     server.on('upgrade', (request, socket, head) => {
-      const pathname = request.url || '';
+      const url = request.url || '';
+      // Parse pathname without query string
+      const pathname = url.split('?')[0];
 
       // Accept connections to /ws/crdt or /ws/crdt/<room>
       if (pathname === basePath || pathname.startsWith(`${basePath}/`)) {
@@ -220,6 +222,41 @@ export class CRDTCoordinator {
     this.ydoc.getMap("executionState");
     this.ydoc.getMap("agentMetadata");
     this.ydoc.getMap("feedbackUpdates");
+
+    // Set up update listener to broadcast local changes to connected clients
+    this.ydoc.on('update', (update: Uint8Array, origin: any) => {
+      // Don't broadcast updates that came from clients (they already have them)
+      if (origin && typeof origin === 'string') {
+        // Origin is a client ID, don't broadcast back to them
+        return;
+      }
+
+      // Broadcast local coordinator changes to all clients
+      this.broadcastCoordinatorUpdate(update);
+    });
+  }
+
+  /**
+   * Broadcast coordinator's local updates to all clients
+   */
+  private broadcastCoordinatorUpdate(update: Uint8Array): void {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 0); // messageSync
+    encoding.writeVarUint(encoder, syncProtocol.messageYjsUpdate);
+    encoding.writeVarUint8Array(encoder, update);
+    const message = encoding.toUint8Array(encoder);
+
+    let broadcastCount = 0;
+    this.clients.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+        broadcastCount++;
+      }
+    });
+
+    if (broadcastCount > 0) {
+      console.log(`[CRDT Coordinator] Broadcasted local update to ${broadcastCount} clients`);
+    }
   }
 
   /**

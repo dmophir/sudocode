@@ -3,15 +3,18 @@ import { render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { ThemeProvider } from '@/contexts/ThemeContext'
+import { CRDTProvider } from '@/contexts/CRDTContext'
 import Sidebar from '@/components/layout/Sidebar'
 
 const renderSidebar = (props = {}) => {
   return render(
-    <ThemeProvider>
-      <BrowserRouter>
-        <Sidebar open={false} collapsed={false} {...props} />
-      </BrowserRouter>
-    </ThemeProvider>
+    <CRDTProvider enabled={false}>
+      <ThemeProvider>
+        <BrowserRouter>
+          <Sidebar open={false} collapsed={false} {...props} />
+        </BrowserRouter>
+      </ThemeProvider>
+    </CRDTProvider>
   )
 }
 
