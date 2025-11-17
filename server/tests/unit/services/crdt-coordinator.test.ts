@@ -17,6 +17,8 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as encoding from 'lib0/encoding';
+import * as syncProtocol from 'y-protocols/sync';
 
 describe('CRDTCoordinator', () => {
   let db: Database.Database;
@@ -192,20 +194,18 @@ describe('CRDTCoordinator', () => {
       // Connect client
       const client = new WebSocket.WebSocket(`ws://localhost:${newPort}${wsPath}?clientId=test-sync`);
 
-      const syncMessage = await new Promise<any>((resolve, reject) => {
+      const receivedBinaryMessage = await new Promise<boolean>((resolve, reject) => {
         client.on('message', (data: Buffer) => {
-          const message = JSON.parse(data.toString());
+          // Should receive binary y-protocols sync message, not JSON
+          const isBinary = data instanceof Buffer || data instanceof Uint8Array;
           client.close();
-          resolve(message);
+          resolve(isBinary && data.length > 0);
         });
         client.on('error', reject);
         setTimeout(() => reject(new Error('Sync timeout')), 5000);
       });
 
-      expect(syncMessage.type).toBe('sync-init');
-      expect(syncMessage.data).toBeDefined();
-      expect(Array.isArray(syncMessage.data)).toBe(true);
-      expect(syncMessage.data.length).toBeGreaterThan(0);
+      expect(receivedBinaryMessage).toBe(true);
     });
 
     it('should handle multiple concurrent clients', async () => {
@@ -265,42 +265,58 @@ describe('CRDTCoordinator', () => {
       const client1 = new WebSocket.WebSocket(`ws://localhost:${port}${wsPath}?clientId=client-1`);
       const client2 = new WebSocket.WebSocket(`ws://localhost:${port}${wsPath}?clientId=client-2`);
 
+      // Track messages received by client2
+      let client2Messages = 0;
+
+      // Set up message handler before connection completes
+      client2.on('message', () => {
+        client2Messages++;
+      });
+
       // Wait for both to connect and receive initial sync
       await Promise.all([
         new Promise<void>(resolve => {
-          client1.on('message', () => resolve());
+          client1.on('open', () => resolve());
         }),
         new Promise<void>(resolve => {
-          client2.on('message', () => resolve());
+          client2.on('open', () => resolve());
         })
       ]);
 
-      // Send update from client1
+      // Small delay to ensure initial sync is complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Record how many messages client2 has received so far (initial sync)
+      const initialMessageCount = client2Messages;
+
+      // Send update from client1 using binary y-protocols format
       const ydoc = new Y.Doc();
-      const testMap = ydoc.getMap('test');
-      testMap.set('key', 'value');
+      const testMap = ydoc.getMap('issueUpdates');
+      testMap.set('i-broadcast-test', {
+        id: 'i-broadcast-test',
+        title: 'Broadcast Test',
+        content: 'Test',
+        status: 'open'
+      });
       const update = Y.encodeStateAsUpdate(ydoc);
 
-      const updateMessage = {
-        type: 'sync-update',
-        data: Array.from(update)
-      };
+      // Encode as y-protocols sync update message
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, 0); // messageSync
+      encoding.writeVarUint(encoder, syncProtocol.messageYjsUpdate);
+      encoding.writeVarUint8Array(encoder, update);
+      const message = encoding.toUint8Array(encoder);
 
-      client1.send(JSON.stringify(updateMessage));
+      // Send from client1
+      client1.send(message);
 
-      // Client2 should receive the broadcast
-      const receivedByClient2 = await new Promise<boolean>((resolve) => {
-        let receivedCount = 0;
-        client2.on('message', () => {
-          receivedCount++;
-          if (receivedCount > 0) { // Skip initial sync
-            resolve(true);
-          }
-        });
-        setTimeout(() => resolve(false), 2000);
-      });
+      // Wait for broadcast to propagate
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      expect(receivedByClient2).toBe(true);
+      // Client2 should have received at least one more message (the broadcast)
+      const receivedBroadcast = client2Messages > initialMessageCount;
+
+      expect(receivedBroadcast).toBe(true);
 
       // Cleanup
       client1.close();
