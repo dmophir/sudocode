@@ -75,6 +75,11 @@ export interface ClaudeCodeConfig {
     maxAttempts: number;
     backoffMs: number;
   };
+
+  /**
+   * Prompt to send to Claude Code
+   */
+  prompt?: string;
 }
 
 /**
@@ -121,6 +126,11 @@ export function buildClaudeConfig(config: ClaudeCodeConfig): ProcessConfig {
   // Add --permission-mode flag if specified
   if (config.permissionMode) {
     args.push('--permission-mode', config.permissionMode);
+  }
+
+  // Add prompt as the last argument (if provided)
+  if (config.prompt) {
+    args.push(config.prompt);
   }
 
   return {
