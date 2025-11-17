@@ -22,6 +22,7 @@ import { CRDTCoordinator } from "./services/crdt-coordinator.js";
 // } from "./services/execution-logs-cleanup.js";
 import { WorktreeManager } from "./execution/worktree/manager.js";
 import { getWorktreeConfig } from "./execution/worktree/config.js";
+import { getRepositoryInfo } from "./services/repo-info.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
@@ -316,6 +317,25 @@ app.get("/api/config", (_req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to read config" });
   }
 });
+
+// Repository info endpoint - returns git repository information
+app.get(
+  "/api/repo-info",
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const repoInfo = await getRepositoryInfo(REPO_ROOT);
+      res.status(200).json(repoInfo);
+    } catch (error) {
+      const err = error as Error;
+      if (err.message === "Not a git repository") {
+        res.status(404).json({ error: err.message });
+      } else {
+        console.error("Failed to get repository info:", error);
+        res.status(500).json({ error: "Failed to get repository info" });
+      }
+    }
+  }
+);
 
 // WebSocket stats endpoint
 app.get("/ws/stats", (_req: Request, res: Response) => {
