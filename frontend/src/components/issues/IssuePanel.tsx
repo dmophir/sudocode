@@ -572,7 +572,7 @@ export function IssuePanel({
         )}
 
         {/* Content */}
-        <div className={`flex-1 w-full overflow-y-auto ${hideTopControls ? 'py-4' : 'py-3'}`}>
+        <div className={`w-full flex-1 overflow-y-auto ${hideTopControls ? 'py-4' : 'py-3'}`}>
           <div className="mx-auto w-full max-w-7xl space-y-4 px-6">
             {/* Issue ID and Title */}
             <div className="space-y-2 pb-3">
@@ -828,11 +828,15 @@ export function IssuePanel({
         </div>
 
         {/* Fixed Footer - Agent Configuration Panel */}
-        <AgentConfigPanel
-          issueId={issue.id}
-          onStart={handleStartExecution}
-          disabled={issue.archived || isUpdating}
-        />
+        <div className="border-t border-border bg-muted/30">
+          <div className="mx-auto w-full max-w-7xl px-6">
+            <AgentConfigPanel
+              issueId={issue.id}
+              onStart={handleStartExecution}
+              disabled={issue.archived || isUpdating}
+            />
+          </div>
+        </div>
 
         <DeleteIssueDialog
           issue={issue}
