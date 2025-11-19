@@ -24,8 +24,6 @@ type ActivityItem =
 
 interface ActivityTimelineProps {
   items: ActivityItem[]
-  onDismissFeedback?: (id: string) => void
-  onDeleteFeedback?: (id: string) => void
   className?: string
 }
 
@@ -84,12 +82,7 @@ const STATUS_CONFIG: Record<
  * Shows feedback, executions, and other activity in chronological order
  * Designed to be inline with issue content, like GitHub/Linear
  */
-export function ActivityTimeline({
-  items,
-  onDismissFeedback,
-  onDeleteFeedback,
-  className = '',
-}: ActivityTimelineProps) {
+export function ActivityTimeline({ items, className = '' }: ActivityTimelineProps) {
   const navigate = useNavigate()
 
   // Sort items chronologically (oldest first)
@@ -132,7 +125,10 @@ export function ActivityTimeline({
                 {feedback.feedback_type}
               </Badge>
               <button onClick={() => navigate(`/issues/${feedback.from_id}`)}>
-                <Badge variant="issue" className="cursor-pointer font-mono text-xs hover:opacity-80">
+                <Badge
+                  variant="issue"
+                  className="cursor-pointer font-mono text-xs hover:opacity-80"
+                >
                   {feedback.from_id}
                 </Badge>
               </button>

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useIssue, useIssues, useIssueFeedback } from '@/hooks/useIssues'
-import { useFeedback } from '@/hooks/useFeedback'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { Button } from '@/components/ui/button'
 import { DeleteIssueDialog } from '@/components/issues/DeleteIssueDialog'
@@ -16,7 +15,6 @@ export default function IssueDetailPage() {
   const { feedback } = useIssueFeedback(id || '')
   const { updateIssue, deleteIssue, archiveIssue, unarchiveIssue, isUpdating, isDeleting } =
     useIssues()
-  const { updateFeedback, deleteFeedback } = useFeedback(id || '')
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [viewMode, setViewMode] = useState<'formatted' | 'markdown'>(() => {
@@ -49,20 +47,6 @@ export default function IssueDetailPage() {
   useEffect(() => {
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, JSON.stringify(viewMode))
   }, [viewMode])
-
-  const handleFeedbackDismiss = (feedbackId: string) => {
-    const fb = feedback.find((f) => f.id === feedbackId)
-    if (fb) {
-      updateFeedback({
-        id: feedbackId,
-        data: { dismissed: !fb.dismissed },
-      })
-    }
-  }
-
-  const handleFeedbackDelete = (feedbackId: string) => {
-    deleteFeedback(feedbackId)
-  }
 
   if (isLoading) {
     return (
@@ -157,18 +141,16 @@ export default function IssueDetailPage() {
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         <IssuePanel
-            issue={issue}
-            onUpdate={handleUpdate}
-            isUpdating={isUpdating}
-            isDeleting={isDeleting}
-            hideTopControls={true}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            showViewToggleInline={false}
-            feedback={feedback}
-            onDismissFeedback={handleFeedbackDismiss}
-            onDeleteFeedback={handleFeedbackDelete}
-          />
+          issue={issue}
+          onUpdate={handleUpdate}
+          isUpdating={isUpdating}
+          isDeleting={isDeleting}
+          hideTopControls={true}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          showViewToggleInline={false}
+          feedback={feedback}
+        />
       </div>
 
       {/* Delete Dialog */}

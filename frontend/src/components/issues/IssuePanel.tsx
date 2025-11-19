@@ -58,8 +58,6 @@ interface IssuePanelProps {
   onViewModeChange?: (mode: 'formatted' | 'markdown') => void
   showViewToggleInline?: boolean
   feedback?: IssueFeedback[]
-  onDismissFeedback?: (id: string) => void
-  onDeleteFeedback?: (id: string) => void
 }
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
@@ -93,8 +91,6 @@ export function IssuePanel({
   onViewModeChange,
   showViewToggleInline = true,
   feedback = [],
-  onDismissFeedback,
-  onDeleteFeedback,
 }: IssuePanelProps) {
   const navigate = useNavigate()
   const [title, setTitle] = useState(issue.title)
@@ -819,8 +815,6 @@ export function IssuePanel({
                     ...feedback.map((f) => ({ ...f, itemType: 'feedback' as const })),
                     ...executions.map((e) => ({ ...e, itemType: 'execution' as const })),
                   ]}
-                  onDismissFeedback={onDismissFeedback}
-                  onDeleteFeedback={onDeleteFeedback}
                 />
               )}
             </div>

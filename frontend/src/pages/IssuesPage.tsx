@@ -1,7 +1,6 @@
 import { useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useIssues, useUpdateIssueStatus, useIssueFeedback } from '@/hooks/useIssues'
-import { useFeedback } from '@/hooks/useFeedback'
 import { useRepositoryInfo } from '@/hooks/useRepositoryInfo'
 import type { Issue, IssueStatus } from '@/types/api'
 import type { DragEndEvent } from '@/components/ui/kanban'
@@ -55,7 +54,6 @@ export default function IssuesPage() {
   const { data: repoInfo } = useRepositoryInfo()
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
   const { feedback } = useIssueFeedback(selectedIssue?.id || '')
-  const { updateFeedback, deleteFeedback } = useFeedback(selectedIssue?.id || '')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [createDialogStatus, setCreateDialogStatus] = useState<IssueStatus | undefined>()
   const [showArchiveAllDialog, setShowArchiveAllDialog] = useState(false)
@@ -235,26 +233,6 @@ export default function IssuesPage() {
   const handleArchiveAllClosed = useCallback(() => {
     setShowArchiveAllDialog(true)
   }, [])
-
-  const handleFeedbackDismiss = useCallback(
-    (feedbackId: string) => {
-      const fb = feedback.find((f) => f.id === feedbackId)
-      if (fb) {
-        updateFeedback({
-          id: feedbackId,
-          data: { dismissed: !fb.dismissed },
-        })
-      }
-    },
-    [feedback, updateFeedback]
-  )
-
-  const handleFeedbackDelete = useCallback(
-    (feedbackId: string) => {
-      deleteFeedback(feedbackId)
-    },
-    [deleteFeedback]
-  )
 
   const confirmArchiveAllClosed = useCallback(() => {
     const closedIssues = groupedIssues.closed || []
@@ -449,8 +427,6 @@ export default function IssuesPage() {
                 isDeleting={isDeleting}
                 showOpenDetail={true}
                 feedback={feedback}
-                onDismissFeedback={handleFeedbackDismiss}
-                onDeleteFeedback={handleFeedbackDelete}
               />
             </Panel>
           </PanelGroup>
