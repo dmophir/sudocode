@@ -29,6 +29,7 @@ import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
+import { createHistoryRouter } from "./routes/history.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { getIssueById } from "./services/issues.js";
 import { getSpecById } from "./services/specs.js";
@@ -237,6 +238,10 @@ app.use("/api/issues", createIssuesRouter(db));
 app.use("/api/specs", createSpecsRouter(db));
 app.use("/api/relationships", createRelationshipsRouter(db));
 app.use("/api/feedback", createFeedbackRouter(db));
+// History API (only if CRDT is enabled)
+if (crdtCoordinator) {
+  app.use(createHistoryRouter(crdtCoordinator));
+}
 // Mount execution routes (must be before stream routes to avoid conflicts)
 app.use(
   "/api",

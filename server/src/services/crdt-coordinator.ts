@@ -252,11 +252,6 @@ export class CRDTCoordinator {
 
     // Set up update listener to broadcast local changes to connected clients
     this.ydoc.on('update', (update: Uint8Array, origin: any) => {
-      // Capture update to history (if it came from a client)
-      if (origin && typeof origin === 'string') {
-        this.captureUpdateToHistory(update, origin);
-      }
-
       // Don't broadcast updates that came from clients (they already have them)
       if (origin && typeof origin === 'string') {
         // Origin is a client ID, don't broadcast back to them
@@ -265,6 +260,44 @@ export class CRDTCoordinator {
 
       // Broadcast local coordinator changes to all clients
       this.broadcastCoordinatorUpdate(update);
+    });
+
+    // Set up observers on maps to capture history
+    const issueMap = this.ydoc.getMap<IssueState>('issueUpdates');
+    const specMap = this.ydoc.getMap<SpecState>('specUpdates');
+    const feedbackMap = this.ydoc.getMap<FeedbackState>('feedbackUpdates');
+
+    issueMap.observe((event, transaction) => {
+      const origin = transaction.origin;
+      if (origin && typeof origin === 'string') {
+        event.changes.keys.forEach((change, key) => {
+          if (change.action === 'add' || change.action === 'update') {
+            this.captureEntityChange('issue', key, origin);
+          }
+        });
+      }
+    });
+
+    specMap.observe((event, transaction) => {
+      const origin = transaction.origin;
+      if (origin && typeof origin === 'string') {
+        event.changes.keys.forEach((change, key) => {
+          if (change.action === 'add' || change.action === 'update') {
+            this.captureEntityChange('spec', key, origin);
+          }
+        });
+      }
+    });
+
+    feedbackMap.observe((event, transaction) => {
+      const origin = transaction.origin;
+      if (origin && typeof origin === 'string') {
+        event.changes.keys.forEach((change, key) => {
+          if (change.action === 'add' || change.action === 'update') {
+            this.captureEntityChange('feedback', key, origin);
+          }
+        });
+      }
     });
   }
 
@@ -802,91 +835,47 @@ export class CRDTCoordinator {
   }
 
   /**
-   * Capture CRDT update to in-memory history
+   * Capture entity change to in-memory history
    */
-  private captureUpdateToHistory(update: Uint8Array, clientId: string): void {
+  private captureEntityChange(
+    entityType: 'issue' | 'spec' | 'feedback',
+    entityId: string,
+    clientId: string
+  ): void {
     try {
-      // Decode update to determine which entities changed
-      const changes = this.decodeUpdateChanges(update);
+      // Get current state after this change
+      const currentState = this.getEntityState(entityType, entityId);
 
-      for (const change of changes) {
-        // Get current state after this update
-        const currentState = this.getEntityState(
-          change.entityType,
-          change.entityId
-        );
+      // Create update record
+      const record: CRDTUpdateRecord = {
+        id: this.generateUpdateId(),
+        entityType,
+        entityId,
+        updateData: new Uint8Array(0), // We don't store the actual Y.js update binary
+        clientId,
+        timestamp: Date.now(),
+        contentSnapshot: currentState
+      };
 
-        // Create update record
-        const record: CRDTUpdateRecord = {
-          id: this.generateUpdateId(),
-          entityType: change.entityType,
-          entityId: change.entityId,
-          updateData: update,
-          clientId,
-          timestamp: Date.now(),
-          contentSnapshot: currentState
-        };
+      // Add to history
+      const index = this.updateHistory.updates.length;
+      this.updateHistory.updates.push(record);
+      this.updateHistory.newestTimestamp = record.timestamp;
 
-        // Add to history
-        const index = this.updateHistory.updates.length;
-        this.updateHistory.updates.push(record);
-        this.updateHistory.newestTimestamp = record.timestamp;
-
-        // Update indices for fast lookup
-        const entityKey = `${change.entityType}:${change.entityId}`;
-        if (!this.updateHistory.entityIndex.has(entityKey)) {
-          this.updateHistory.entityIndex.set(entityKey, []);
-        }
-        this.updateHistory.entityIndex.get(entityKey)!.push(index);
-
-        if (!this.updateHistory.clientIndex.has(clientId)) {
-          this.updateHistory.clientIndex.set(clientId, []);
-        }
-        this.updateHistory.clientIndex.get(clientId)!.push(index);
+      // Update indices for fast lookup
+      const entityKey = `${entityType}:${entityId}`;
+      if (!this.updateHistory.entityIndex.has(entityKey)) {
+        this.updateHistory.entityIndex.set(entityKey, []);
       }
-    } catch (error) {
-      console.error('[CRDT History] Failed to capture update:', error);
-    }
-  }
+      this.updateHistory.entityIndex.get(entityKey)!.push(index);
 
-  /**
-   * Decode Y.js update to determine which entities changed
-   */
-  private decodeUpdateChanges(update: Uint8Array): Array<{
-    entityType: 'issue' | 'spec' | 'feedback';
-    entityId: string;
-  }> {
-    const changes: Array<{
-      entityType: 'issue' | 'spec' | 'feedback';
-      entityId: string;
-    }> = [];
-
-    try {
-      // Apply update to temporary doc to see what changed
-      const tempDoc = new Y.Doc();
-      Y.applyUpdate(tempDoc, update);
-
-      // Check each map type for changes
-      const mapTypes: Array<{
-        type: 'issue' | 'spec' | 'feedback';
-        mapName: string;
-      }> = [
-        { type: 'issue', mapName: 'issueUpdates' },
-        { type: 'spec', mapName: 'specUpdates' },
-        { type: 'feedback', mapName: 'feedbackUpdates' }
-      ];
-
-      for (const { type, mapName } of mapTypes) {
-        const map = tempDoc.getMap(mapName);
-        map.forEach((_, key) => {
-          changes.push({ entityType: type, entityId: key });
-        });
+      if (!this.updateHistory.clientIndex.has(clientId)) {
+        this.updateHistory.clientIndex.set(clientId, []);
       }
+      this.updateHistory.clientIndex.get(clientId)!.push(index);
     } catch (error) {
-      console.error('[CRDT History] Failed to decode update:', error);
+      console.error('[CRDT History] Failed to capture entity change:', error);
     }
-
-    return changes;
   }
 
   /**
@@ -1126,6 +1115,151 @@ export class CRDTCoordinator {
     });
 
     return states;
+  }
+
+  /**
+   * Query update history for a specific entity
+   *
+   * @param entityId - The entity ID to query (e.g., "i-test1", "s-test1")
+   * @param options - Optional filters for time range
+   * @returns Array of update records for the entity
+   */
+  public getEntityHistory(
+    entityId: string,
+    options?: {
+      startTime?: number;
+      endTime?: number;
+    }
+  ): CRDTUpdateRecord[] {
+    // Determine entity type from ID prefix
+    const entityType = entityId.startsWith('i-') ? 'issue' :
+                      entityId.startsWith('s-') ? 'spec' : 'feedback';
+    const entityKey = `${entityType}:${entityId}`;
+
+    const indices = this.updateHistory.entityIndex.get(entityKey);
+    if (!indices || indices.length === 0) {
+      return [];
+    }
+
+    let records = indices.map((i: number) => this.updateHistory.updates[i]);
+
+    // Apply time range filters
+    if (options?.startTime) {
+      records = records.filter((r: CRDTUpdateRecord) => r.timestamp >= options.startTime!);
+    }
+    if (options?.endTime) {
+      records = records.filter((r: CRDTUpdateRecord) => r.timestamp <= options.endTime!);
+    }
+
+    // Sort by timestamp (oldest first)
+    records.sort((a: CRDTUpdateRecord, b: CRDTUpdateRecord) => a.timestamp - b.timestamp);
+
+    return records;
+  }
+
+  /**
+   * Query update history for a specific client/agent
+   *
+   * @param clientId - The client/agent ID to query
+   * @param options - Optional filters for time range
+   * @returns Array of update records from the client
+   */
+  public getClientHistory(
+    clientId: string,
+    options?: {
+      startTime?: number;
+      endTime?: number;
+    }
+  ): CRDTUpdateRecord[] {
+    const indices = this.updateHistory.clientIndex.get(clientId);
+    if (!indices || indices.length === 0) {
+      return [];
+    }
+
+    let records = indices.map((i: number) => this.updateHistory.updates[i]);
+
+    // Apply time range filters
+    if (options?.startTime) {
+      records = records.filter((r: CRDTUpdateRecord) => r.timestamp >= options.startTime!);
+    }
+    if (options?.endTime) {
+      records = records.filter((r: CRDTUpdateRecord) => r.timestamp <= options.endTime!);
+    }
+
+    // Sort by timestamp (oldest first)
+    records.sort((a: CRDTUpdateRecord, b: CRDTUpdateRecord) => a.timestamp - b.timestamp);
+
+    return records;
+  }
+
+  /**
+   * Reconstruct entity state at a specific timestamp
+   *
+   * Uses content snapshots from the update history to find the version
+   * closest to the requested timestamp.
+   *
+   * @param entityId - The entity ID to reconstruct
+   * @param timestamp - The target timestamp
+   * @returns The entity state at that time, or undefined if not found
+   */
+  public reconstructVersionAtTime(
+    entityId: string,
+    timestamp: number
+  ): VersionInfo | undefined {
+    const history = this.getEntityHistory(entityId);
+    if (history.length === 0) {
+      return undefined;
+    }
+
+    // Find the last update before or at the timestamp
+    let closestUpdate: CRDTUpdateRecord | undefined;
+    for (const update of history) {
+      if (update.timestamp <= timestamp) {
+        closestUpdate = update;
+      } else {
+        break; // History is sorted, so we can stop
+      }
+    }
+
+    if (!closestUpdate || !closestUpdate.contentSnapshot) {
+      return undefined;
+    }
+
+    return {
+      timestamp: closestUpdate.timestamp,
+      title: closestUpdate.contentSnapshot.title,
+      content: closestUpdate.contentSnapshot.content,
+      lastModifiedBy: closestUpdate.clientId,
+      ...closestUpdate.contentSnapshot
+    };
+  }
+
+  /**
+   * Get metadata about the current history state
+   *
+   * @returns Metadata about available history
+   */
+  public getHistoryMetadata(): HistoryMetadata {
+    // Calculate memory usage estimate
+    const bytesPerUpdate = this.updateHistory.updates.reduce(
+      (sum: number, u: CRDTUpdateRecord) => sum + u.updateData.byteLength,
+      0
+    );
+    const metadataBytes = this.updateHistory.updates.length * 200; // Rough estimate
+    const indexBytes = (this.updateHistory.entityIndex.size + this.updateHistory.clientIndex.size) * 100;
+    const totalBytes = bytesPerUpdate + metadataBytes + indexBytes;
+
+    // Count unique entities
+    const entitiesTracked = this.updateHistory.entityIndex.size;
+
+    return {
+      oldestTimestamp: this.updateHistory.oldestTimestamp,
+      newestTimestamp: this.updateHistory.newestTimestamp,
+      totalUpdates: this.updateHistory.updates.length,
+      retentionWindowMs: this.retentionWindowMs,
+      entitiesTracked,
+      memoryUsageMB: totalBytes / (1024 * 1024)
+    };
   }
 
   /**
