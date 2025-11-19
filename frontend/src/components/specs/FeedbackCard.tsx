@@ -107,10 +107,10 @@ export function FeedbackCard({
                 className="text-xs font-medium text-foreground hover:text-primary hover:underline"
                 onClick={(e) => {
                   e.stopPropagation()
-                  navigate(`/issues/${feedback.issue_id}`)
+                  navigate(`/issues/${feedback.from_id}`)
                 }}
               >
-                {feedback.issue_id}
+                {feedback.from_id}
               </button>
             </div>
 

@@ -503,7 +503,7 @@ function syncIssueFeedback(
   feedbackJSONL: IssueJSONL["feedback"]
 ): void {
   // Delete all existing feedback for this issue
-  const existingFeedback = listFeedback(db, { issue_id: issueId });
+  const existingFeedback = listFeedback(db, { from_id: issueId });
   for (const fb of existingFeedback) {
     deleteFeedback(db, fb.id);
   }
@@ -511,10 +511,19 @@ function syncIssueFeedback(
   // Create new feedback from JSONL
   if (feedbackJSONL && feedbackJSONL.length > 0) {
     for (const fb of feedbackJSONL) {
+      // Support legacy JSONL format (issue_id/spec_id) for backward compatibility
+      const fromId = (fb as any).from_id || (fb as any).issue_id;
+      const toId = (fb as any).to_id || (fb as any).spec_id;
+
+      if (!fromId || !toId) {
+        console.warn(`Skipping feedback ${fb.id}: missing from_id/to_id or issue_id/spec_id`);
+        continue;
+      }
+
       createFeedback(db, {
         id: fb.id,
-        issue_id: fb.issue_id,
-        spec_id: fb.spec_id,
+        from_id: fromId,
+        to_id: toId,
         feedback_type: fb.feedback_type,
         content: fb.content,
         agent: fb.agent,
@@ -690,19 +699,59 @@ export async function importFromJSONL(
     // Use UUID to identify the correct entity to rename (in case of duplicate IDs)
     for (const collision of resolvedCollisions) {
       if (collision.resolution === "renumber" && collision.newId) {
+        const oldId = collision.id;
+        const newId = collision.newId;
+
         if (collision.type === "spec") {
           const spec = incomingSpecs.find(
-            (s) => s.id === collision.id && s.uuid === collision.uuid
+            (s) => s.id === oldId && s.uuid === collision.uuid
           );
           if (spec) {
-            spec.id = collision.newId;
+            spec.id = newId;
+          }
+
+          // Update feedback references to this spec (to_id)
+          for (const issue of incomingIssues) {
+            if (issue.feedback) {
+              for (const fb of issue.feedback) {
+                const feedbackToId = (fb as any).to_id || (fb as any).spec_id;
+                if (feedbackToId === oldId) {
+                  // Update both old and new field names for safety
+                  if ((fb as any).to_id) (fb as any).to_id = newId;
+                  if ((fb as any).spec_id) (fb as any).spec_id = newId;
+                }
+              }
+            }
           }
         } else if (collision.type === "issue") {
           const issue = incomingIssues.find(
-            (i) => i.id === collision.id && i.uuid === collision.uuid
+            (i) => i.id === oldId && i.uuid === collision.uuid
           );
           if (issue) {
-            issue.id = collision.newId;
+            issue.id = newId;
+
+            // Update feedback within this issue (from_id)
+            if (issue.feedback) {
+              for (const fb of issue.feedback) {
+                // Update both old and new field names for safety
+                if ((fb as any).from_id) (fb as any).from_id = newId;
+                if ((fb as any).issue_id) (fb as any).issue_id = newId;
+              }
+            }
+          }
+
+          // Update feedback references FROM this issue in other issues' feedback
+          for (const otherIssue of incomingIssues) {
+            if (otherIssue.feedback) {
+              for (const fb of otherIssue.feedback) {
+                const feedbackFromId = (fb as any).from_id || (fb as any).issue_id;
+                if (feedbackFromId === oldId) {
+                  // Update both old and new field names for safety
+                  if ((fb as any).from_id) (fb as any).from_id = newId;
+                  if ((fb as any).issue_id) (fb as any).issue_id = newId;
+                }
+              }
+            }
           }
         }
       }

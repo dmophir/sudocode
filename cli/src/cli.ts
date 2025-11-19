@@ -411,8 +411,8 @@ feedback
   .command("dismiss <id>")
   .description("Dismiss feedback")
   .option("-c, --comment <text>", "Optional comment")
-  .action(async (id, options) => {
-    await handleFeedbackDismiss(getContext(), id, options);
+  .action(async (id) => {
+    await handleFeedbackDismiss(getContext(), id);
   });
 
 feedback

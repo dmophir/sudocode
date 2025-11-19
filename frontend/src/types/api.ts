@@ -96,7 +96,7 @@ export interface DeleteRelationshipRequest {
  */
 export interface CreateFeedbackRequest {
   issue_id: string
-  spec_id: string
+  to_id: string
   feedback_type: FeedbackType
   content: string
   anchor?: FeedbackAnchor

@@ -297,7 +297,7 @@ export default function SpecDetailPage() {
     }
 
     await createFeedback({
-      spec_id: id,
+      to_id: id,
       issue_id: data.issueId,
       feedback_type: data.type,
       content: data.content,
