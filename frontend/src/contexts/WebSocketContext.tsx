@@ -4,7 +4,6 @@ import { useProjectContext } from './ProjectContext'
 
 interface WebSocketContextValue {
   connected: boolean
-  lastMessage: WebSocketMessage | null
   subscribe: (entityType: WebSocketSubscribeMessage['entity_type'], entityId?: string) => void
   unsubscribe: (entityType: WebSocketSubscribeMessage['entity_type'], entityId?: string) => void
   addMessageHandler: (id: string, handler: (message: WebSocketMessage) => void) => void
@@ -36,7 +35,6 @@ export function WebSocketProvider({
   const pendingSubscriptions = useRef<Set<string>>(new Set())
 
   const [connected, setConnected] = useState(false)
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
 
   // Get current project from context
   const { currentProjectId } = useProjectContext()
@@ -98,8 +96,6 @@ export function WebSocketProvider({
             console.log('[WebSocket] Ignoring message from different project:', message.projectId)
             return
           }
-
-          setLastMessage(message)
 
           // Notify all registered handlers
           messageHandlers.current.forEach((handler) => {
@@ -279,7 +275,6 @@ export function WebSocketProvider({
 
   const value: WebSocketContextValue = {
     connected,
-    lastMessage,
     subscribe,
     unsubscribe,
     addMessageHandler,
