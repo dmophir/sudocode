@@ -23,9 +23,15 @@ interface AgentConfigPanelProps {
   issueId: string
   onStart: (config: ExecutionConfig, prompt: string) => void
   disabled?: boolean
+  onSelectOpenChange?: (isOpen: boolean) => void
 }
 
-export function AgentConfigPanel({ issueId, onStart, disabled = false }: AgentConfigPanelProps) {
+export function AgentConfigPanel({
+  issueId,
+  onStart,
+  disabled = false,
+  onSelectOpenChange,
+}: AgentConfigPanelProps) {
   const [loading, setLoading] = useState(true)
   const [prepareResult, setPrepareResult] = useState<ExecutionPrepareResult | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -165,6 +171,7 @@ export function AgentConfigPanel({ issueId, onStart, disabled = false }: AgentCo
           <Select
             value={config.model}
             onValueChange={(value) => updateConfig({ model: value })}
+            onOpenChange={onSelectOpenChange}
             disabled={loading}
           >
             <SelectTrigger className="h-8 w-[140px] text-xs">
@@ -184,6 +191,7 @@ export function AgentConfigPanel({ issueId, onStart, disabled = false }: AgentCo
         <Select
           value={config.mode}
           onValueChange={(value) => updateConfig({ mode: value as ExecutionMode })}
+          onOpenChange={onSelectOpenChange}
           disabled={loading}
         >
           <SelectTrigger className="h-8 w-[140px] text-xs">
@@ -204,6 +212,7 @@ export function AgentConfigPanel({ issueId, onStart, disabled = false }: AgentCo
           <Select
             value={config.baseBranch}
             onValueChange={(value) => updateConfig({ baseBranch: value })}
+            onOpenChange={onSelectOpenChange}
             disabled={loading}
           >
             <SelectTrigger className="h-8 w-[120px] text-xs">
@@ -223,6 +232,7 @@ export function AgentConfigPanel({ issueId, onStart, disabled = false }: AgentCo
         <Select
           value={config.cleanupMode}
           onValueChange={(value) => updateConfig({ cleanupMode: value as CleanupMode })}
+          onOpenChange={onSelectOpenChange}
           disabled={loading}
         >
           <SelectTrigger className="h-8 w-[120px] text-xs">

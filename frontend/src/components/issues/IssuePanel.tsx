@@ -127,6 +127,8 @@ export function IssuePanel({
   const [hasChanges, setHasChanges] = useState(false)
   const [executions, setExecutions] = useState<Execution[]>([])
   const [isCopied, setIsCopied] = useState(false)
+  const isAgentPanelSelectOpenRef = useRef(false)
+  const selectCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -277,6 +279,15 @@ export function IssuePanel({
 
       const target = event.target as Node
       const clickedElement = target as HTMLElement
+
+      // Don't close panel if agent panel Select was open (it's being dismissed)
+      if (isAgentPanelSelectOpenRef.current) {
+        // Reset the ref after a short delay
+        setTimeout(() => {
+          isAgentPanelSelectOpenRef.current = false
+        }, 100)
+        return
+      }
 
       // Don't close if clicking on an issue card (to prevent flicker when switching issues)
       const issueCard = clickedElement.closest('[data-issue-id]')
@@ -912,12 +923,37 @@ export function IssuePanel({
         </div>
 
         {/* Fixed Footer - Agent Configuration Panel */}
-        <div className="border-t border-border bg-muted/30">
+        <div
+          className="border-t border-border bg-muted/30"
+          onMouseDown={(e) => {
+            // Prevent clicks inside the agent config panel from bubbling up and closing the panel
+            e.stopPropagation()
+          }}
+        >
           <div className="mx-auto w-full max-w-7xl px-6">
             <AgentConfigPanel
               issueId={issue.id}
               onStart={handleStartExecution}
               disabled={issue.archived || isUpdating}
+              onSelectOpenChange={(open) => {
+                // Clear any pending timeout
+                if (selectCloseTimeoutRef.current) {
+                  clearTimeout(selectCloseTimeoutRef.current)
+                  selectCloseTimeoutRef.current = null
+                }
+
+                if (open) {
+                  // Immediately set to true when opening
+                  isAgentPanelSelectOpenRef.current = true
+                } else {
+                  // Keep ref as true for a bit longer so mousedown handler can see it
+                  // This handles the case where Radix closes the Select before mousedown fires
+                  selectCloseTimeoutRef.current = setTimeout(() => {
+                    isAgentPanelSelectOpenRef.current = false
+                    selectCloseTimeoutRef.current = null
+                  }, 50)
+                }
+              }}
             />
           </div>
         </div>
