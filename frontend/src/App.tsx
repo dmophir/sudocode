@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ProjectProvider } from '@/contexts/ProjectContext'
 import { WebSocketProvider } from '@/contexts/WebSocketContext'
+import { Toaster } from '@/components/ui/sonner'
 import MainLayout from '@/components/layout/MainLayout'
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute'
 import { DefaultRoute } from '@/components/routing/DefaultRoute'
@@ -97,6 +98,7 @@ function App() {
                 </Route>
               </Routes>
             </BrowserRouter>
+            <Toaster />
           </ThemeProvider>
         </WebSocketProvider>
       </ProjectProvider>
