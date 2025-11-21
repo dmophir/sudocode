@@ -29,6 +29,7 @@ import { createAgUiSystem } from "../execution/output/ag-ui-integration.js";
 import type { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
+import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { broadcastExecutionUpdate } from "./websocket.js";
 
 /**
@@ -90,6 +91,7 @@ export class ExecutionService {
   private repoPath: string;
   private transportManager?: TransportManager;
   private logsStore: ExecutionLogsStore;
+  private workerPool?: ExecutionWorkerPool;
   private activeOrchestrators = new Map<string, LinearOrchestrator>();
 
   /**
@@ -101,6 +103,7 @@ export class ExecutionService {
    * @param lifecycleService - Optional execution lifecycle service (creates one if not provided)
    * @param transportManager - Optional transport manager for SSE streaming
    * @param logsStore - Optional execution logs store (creates one if not provided)
+   * @param workerPool - Optional worker pool for isolated execution processes
    */
   constructor(
     db: Database.Database,
@@ -108,7 +111,8 @@ export class ExecutionService {
     repoPath: string,
     lifecycleService?: ExecutionLifecycleService,
     transportManager?: TransportManager,
-    logsStore?: ExecutionLogsStore
+    logsStore?: ExecutionLogsStore,
+    workerPool?: ExecutionWorkerPool
   ) {
     this.db = db;
     this.projectId = projectId;
@@ -118,6 +122,7 @@ export class ExecutionService {
       lifecycleService || new ExecutionLifecycleService(db, repoPath);
     this.transportManager = transportManager;
     this.logsStore = logsStore || new ExecutionLogsStore(db);
+    this.workerPool = workerPool;
   }
 
   /**
@@ -309,7 +314,26 @@ export class ExecutionService {
       // Don't fail execution creation - logs are nice-to-have
     }
 
-    // 3. Build WorkflowDefinition
+    // 3. Start execution (use worker pool if available, otherwise fall back to in-process)
+    if (this.workerPool) {
+      // Worker pool handles all execution logic in isolated process
+      const dbPath = this.db.name as string;
+      await this.workerPool.startExecution(execution, this.repoPath, dbPath);
+
+      // Broadcast execution creation
+      broadcastExecutionUpdate(
+        this.projectId,
+        execution.id,
+        "created",
+        execution,
+        execution.issue_id || undefined
+      );
+
+      return execution;
+    }
+
+    // Legacy in-process execution (fallback when no worker pool)
+    // 4. Build WorkflowDefinition
     const workflow: WorkflowDefinition = {
       id: `workflow-${execution.id}`,
       steps: [
@@ -337,7 +361,7 @@ export class ExecutionService {
       },
     };
 
-    // 4. Create execution engine stack
+    // 5. Create execution engine stack
     const processManager = new SimpleProcessManager();
 
     let engine = new SimpleExecutionEngine(processManager, {
@@ -356,7 +380,7 @@ export class ExecutionService {
 
     let executor = new ResilientExecutor(engine);
 
-    // 5. Create AG-UI system (processor + adapter) if transport manager is available
+    // 6. Create AG-UI system (processor + adapter) if transport manager is available
     let agUiAdapter: AgUiEventAdapter | undefined;
     if (this.transportManager) {
       const agUiSystem = createAgUiSystem(execution.id);
@@ -426,7 +450,7 @@ export class ExecutionService {
       executor = new ResilientExecutor(engine);
     }
 
-    // 6. Create LinearOrchestrator
+    // 7. Create LinearOrchestrator
     const orchestrator = new LinearOrchestrator(
       executor,
       undefined, // No storage/checkpointing for now
@@ -434,7 +458,7 @@ export class ExecutionService {
       this.lifecycleService
     );
 
-    // 7. Register event handlers to update execution status in database
+    // 8. Register event handlers to update execution status in database
     orchestrator.onWorkflowStart(() => {
       try {
         updateExecution(this.db, execution.id, {
@@ -536,16 +560,16 @@ export class ExecutionService {
       this.activeOrchestrators.delete(execution.id);
     });
 
-    // 8. Start workflow execution (non-blocking)
+    // 9. Start workflow execution (non-blocking)
     orchestrator.startWorkflow(workflow, workDir, {
       checkpointInterval: config.checkpointInterval,
       executionId: execution.id,
     });
 
-    // 9. Store orchestrator for later cancellation
+    // 10. Store orchestrator for later cancellation
     this.activeOrchestrators.set(execution.id, orchestrator);
 
-    // 10. Broadcast execution creation
+    // 11. Broadcast execution creation
     broadcastExecutionUpdate(
       this.projectId,
       execution.id,
@@ -899,6 +923,13 @@ Please continue working on this issue, taking into account the feedback above.`;
       throw new Error(`Cannot cancel execution in ${execution.status} state`);
     }
 
+    // Use worker pool cancellation if available
+    if (this.workerPool && this.workerPool.hasWorker(executionId)) {
+      await this.workerPool.cancelExecution(executionId);
+      return; // Worker pool handles DB updates and broadcasts
+    }
+
+    // Legacy in-process cancellation
     // Get orchestrator from active map
     const orchestrator = this.activeOrchestrators.get(executionId);
     if (orchestrator) {

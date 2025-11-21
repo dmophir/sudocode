@@ -4,6 +4,7 @@ import type { ExecutionService } from "./execution-service.js";
 import type { ExecutionLogsStore } from "./execution-logs-store.js";
 import type { ServerWatcherControl } from "./watcher.js";
 import type { WorktreeManager } from "../execution/worktree/manager.js";
+import type { ExecutionWorkerPool } from "./execution-worker-pool.js";
 
 /**
  * ProjectContext encapsulates all services and resources for a single open project.
@@ -43,6 +44,9 @@ export class ProjectContext {
   /** Worktree manager for execution isolation */
   readonly worktreeManager: WorktreeManager;
 
+  /** Worker pool for isolated execution processes */
+  readonly workerPool: ExecutionWorkerPool;
+
   /** File watcher for detecting changes */
   watcher: ServerWatcherControl | null = null;
 
@@ -57,7 +61,8 @@ export class ProjectContext {
     transportManager: TransportManager,
     executionService: ExecutionService,
     logsStore: ExecutionLogsStore,
-    worktreeManager: WorktreeManager
+    worktreeManager: WorktreeManager,
+    workerPool: ExecutionWorkerPool
   ) {
     this.id = id;
     this.path = path;
@@ -67,6 +72,7 @@ export class ProjectContext {
     this.executionService = executionService;
     this.logsStore = logsStore;
     this.worktreeManager = worktreeManager;
+    this.workerPool = workerPool;
     this.openedAt = new Date();
   }
 
@@ -86,23 +92,28 @@ export class ProjectContext {
     console.log(`Shutting down project context: ${this.id}`);
 
     try {
-      // 1. Cancel active executions
+      // 1. Shutdown worker pool (kill all workers)
+      if (this.workerPool) {
+        await this.workerPool.shutdown();
+      }
+
+      // 2. Cancel active executions (non-worker based)
       if (this.executionService) {
         await this.executionService.shutdown();
       }
 
-      // 2. Stop file watcher
+      // 3. Stop file watcher
       if (this.watcher) {
         this.watcher.stop();
         this.watcher = null;
       }
 
-      // 3. Close transport streams
+      // 4. Close transport streams
       if (this.transportManager) {
         this.transportManager.shutdown();
       }
 
-      // 4. Database will be closed by ProjectManager (it manages the cache)
+      // 5. Database will be closed by ProjectManager (it manages the cache)
 
       console.log(`Project context shutdown complete: ${this.id}`);
     } catch (error) {
@@ -115,8 +126,7 @@ export class ProjectContext {
    * Check if the project context is active (has active executions)
    */
   hasActiveExecutions(): boolean {
-    // TODO: Implement this by checking execution service state
-    return false;
+    return this.workerPool.getActiveWorkerCount() > 0;
   }
 
   /**

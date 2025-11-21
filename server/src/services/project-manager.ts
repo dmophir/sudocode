@@ -10,6 +10,7 @@ import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { WorktreeManager } from "../execution/worktree/manager.js";
 import { getWorktreeConfig } from "../execution/worktree/config.js";
 import { ExecutionLifecycleService } from "./execution-lifecycle.js";
+import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { startServerWatcher } from "./watcher.js";
 import type { ProjectError, Result } from "../types/project.js";
 import { Ok, Err } from "../types/project.js";
@@ -88,13 +89,44 @@ export class ProjectManager {
       const worktreeConfig = getWorktreeConfig(projectPath);
       const worktreeManager = new WorktreeManager(worktreeConfig);
 
+      // Create worker pool for isolated execution processes
+      const workerPool = new ExecutionWorkerPool(
+        projectId,
+        {
+          maxConcurrentWorkers: 3,
+          maxMemoryMB: 512,
+          verbose: process.env.NODE_ENV !== 'production',
+        },
+        {
+          onLog: (executionId, event) => {
+            // Logs are already persisted by the worker
+            // Just forward to transport for real-time streaming
+            logsStore.appendRawLog(executionId, event.data);
+          },
+          onStatusChange: (_executionId, _status) => {
+            // Status changes are handled by worker
+            // Transport manager will forward via SSE
+          },
+          onComplete: (_executionId, _result) => {
+            // Completion is handled by worker
+            // Transport manager will forward via SSE
+          },
+          onError: (executionId, error, _fatal) => {
+            // Errors are already persisted by the worker
+            logsStore.appendRawLog(executionId, error);
+          },
+        }
+      );
+
+      // Create execution service with worker pool
       const executionService = new ExecutionService(
         db,
         projectId,
         projectPath,
         undefined,
         transportManager,
-        logsStore
+        logsStore,
+        workerPool
       );
 
       // 6. Create project context
@@ -106,7 +138,8 @@ export class ProjectManager {
         transportManager,
         executionService,
         logsStore,
-        worktreeManager
+        worktreeManager,
+        workerPool
       );
 
       await context.initialize();
