@@ -34,13 +34,19 @@ export function WebSocketProvider({
   const messageHandlers = useRef<Map<string, (message: WebSocketMessage) => void>>(new Map())
   const subscriptions = useRef<Set<string>>(new Set())
   const pendingSubscriptions = useRef<Set<string>>(new Set())
-  const currentProjectIdRef = useRef<string | null>(null)
 
   const [connected, setConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
 
   // Get current project from context
   const { currentProjectId } = useProjectContext()
+
+  // Track current project ID in a ref (always up-to-date for subscribe/unsubscribe)
+  const currentProjectIdRef = useRef<string | null>(currentProjectId)
+  currentProjectIdRef.current = currentProjectId
+
+  // Track previous project ID for detecting changes
+  const prevProjectIdRef = useRef<string | null>(currentProjectId)
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
@@ -229,11 +235,8 @@ export function WebSocketProvider({
 
   // Handle project switching: unsubscribe from old project, subscribe to new project
   useEffect(() => {
-    const oldProjectId = currentProjectIdRef.current
+    const oldProjectId = prevProjectIdRef.current
     const newProjectId = currentProjectId
-
-    // Update ref
-    currentProjectIdRef.current = newProjectId
 
     // If project changed and we're connected
     if (oldProjectId !== newProjectId && ws.current?.readyState === WebSocket.OPEN) {
@@ -261,6 +264,9 @@ export function WebSocketProvider({
 
       console.log('[WebSocket] Ready for new project subscriptions')
     }
+
+    // Update previous project ID
+    prevProjectIdRef.current = newProjectId
   }, [currentProjectId])
 
   // Connect on mount

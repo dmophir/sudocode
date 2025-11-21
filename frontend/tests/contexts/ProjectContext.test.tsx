@@ -58,9 +58,11 @@ describe('ProjectContext', () => {
   })
 
   it('should provide null as default currentProjectId', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     expect(result.current.currentProjectId).toBeNull()
     expect(result.current.currentProject).toBeNull()
@@ -69,16 +71,18 @@ describe('ProjectContext', () => {
   it('should load currentProjectId from localStorage', () => {
     localStorageMock.setItem('sudocode:currentProjectId', 'test-project-123')
 
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     expect(result.current.currentProjectId).toBe('test-project-123')
   })
 
   it('should accept defaultProjectId prop', () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <ProjectProvider defaultProjectId="default-project">{children}</ProjectProvider>
+      <ProjectProvider defaultProjectId="default-project" skipValidation={true}>{children}</ProjectProvider>
     )
 
     const { result } = renderHook(() => useProjectContext(), { wrapper })
@@ -87,9 +91,11 @@ describe('ProjectContext', () => {
   })
 
   it('should set currentProjectId and persist to localStorage', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-abc')
@@ -100,9 +106,11 @@ describe('ProjectContext', () => {
   })
 
   it('should call API setCurrentProjectId when project changes', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-xyz')
@@ -114,9 +122,11 @@ describe('ProjectContext', () => {
   it('should clear currentProjectId and remove from localStorage', () => {
     localStorageMock.setItem('sudocode:currentProjectId', 'old-project')
 
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId(null)
@@ -127,9 +137,11 @@ describe('ProjectContext', () => {
   })
 
   it('should call API setCurrentProjectId with null when clearing project', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-123')
@@ -145,9 +157,11 @@ describe('ProjectContext', () => {
   })
 
   it('should clear currentProject when switching projects', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     // Set initial project
     act(() => {
@@ -177,9 +191,11 @@ describe('ProjectContext', () => {
   })
 
   it('should not clear currentProject when setting same projectId', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     const projectInfo = {
       id: 'project-1',
@@ -209,9 +225,11 @@ describe('ProjectContext', () => {
   })
 
   it('should clear both projectId and project with clearProject', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-1')
@@ -247,9 +265,11 @@ describe('ProjectContext', () => {
       throw new Error('Storage quota exceeded')
     }
 
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     // Should not throw, just log error
     act(() => {
@@ -264,9 +284,11 @@ describe('ProjectContext', () => {
   })
 
   it('should persist projectId changes across multiple updates', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-1')
@@ -285,9 +307,11 @@ describe('ProjectContext', () => {
   })
 
   it('should call API setCurrentProjectId on each projectId change', () => {
-    const { result } = renderHook(() => useProjectContext(), {
-      wrapper: ProjectProvider,
-    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ProjectProvider skipValidation={true}>{children}</ProjectProvider>
+    )
+
+    const { result } = renderHook(() => useProjectContext(), { wrapper })
 
     act(() => {
       result.current.setCurrentProjectId('project-1')

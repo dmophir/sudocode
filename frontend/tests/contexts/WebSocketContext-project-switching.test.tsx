@@ -89,7 +89,7 @@ describe('WebSocketContext - Project Switching', () => {
 
   const createWrapper = (projectId: string | null = 'project-1') => {
     return ({ children }: { children: React.ReactNode }) => (
-      <ProjectProvider defaultProjectId={projectId}>
+      <ProjectProvider defaultProjectId={projectId} skipValidation={true}>
         <WebSocketProvider>{children}</WebSocketProvider>
       </ProjectProvider>
     )

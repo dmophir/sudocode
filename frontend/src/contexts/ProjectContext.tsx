@@ -27,9 +27,11 @@ export interface ProjectProviderProps {
   children: ReactNode
   /** Default project ID (for testing or SSR) */
   defaultProjectId?: string | null
+  /** Skip project validation (for testing) */
+  skipValidation?: boolean
 }
 
-export function ProjectProvider({ children, defaultProjectId }: ProjectProviderProps) {
+export function ProjectProvider({ children, defaultProjectId, skipValidation = false }: ProjectProviderProps) {
   // Initialize from localStorage or default
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(() => {
     if (defaultProjectId !== undefined) {
@@ -51,6 +53,11 @@ export function ProjectProvider({ children, defaultProjectId }: ProjectProviderP
   // Validate and auto-open last selected project on mount
   useEffect(() => {
     const validateStoredProject = async () => {
+      // Skip if validation disabled (tests)
+      if (skipValidation) {
+        return
+      }
+
       // Skip if no stored project ID or already validated
       if (!currentProjectId || isValidatingProject) {
         return

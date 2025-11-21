@@ -48,7 +48,7 @@ describe('ProjectSwitcher', () => {
   const renderWithProviders = (projectId: string | null = null) => {
     return render(
       <QueryClientProvider client={queryClient}>
-        <ProjectProvider defaultProjectId={projectId}>
+        <ProjectProvider defaultProjectId={projectId} skipValidation={true}>
           <BrowserRouter>
             <ProjectSwitcher />
           </BrowserRouter>
