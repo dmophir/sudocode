@@ -9,11 +9,18 @@ import {
   useDeleteProject,
   useInitProject,
   useValidateProject,
+  useUpdateProject,
 } from '@/hooks/useProjects'
 import { useProject } from '@/hooks/useProject'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed } from 'lucide-react'
+import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed, Pencil } from 'lucide-react'
 import type { ProjectInfo } from '@/types/project'
 
 export default function ProjectsPage() {
@@ -419,22 +426,135 @@ interface ProjectCardProps {
 }
 
 function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: ProjectCardProps) {
+  const updateProject = useUpdateProject()
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedName, setEditedName] = useState(project.name)
+  const [validationError, setValidationError] = useState<string | null>(null)
+
   const handleCardClick = () => {
-    // If it's the current project, don't do anything
-    if (isCurrent) return
+    // If it's the current project or editing, don't do anything
+    if (isCurrent || isEditing) return
 
     // Otherwise, open/switch to this project
     onOpen(project)
   }
 
+  const validateName = (name: string): string | null => {
+    const trimmedName = name.trim()
+
+    if (trimmedName === '') {
+      return 'Name cannot be empty'
+    }
+
+    if (trimmedName.length > 100) {
+      return 'Name must be 100 characters or less'
+    }
+
+    // Check for invalid characters (basic filesystem safety)
+    const invalidChars = /[<>:"|?*\x00-\x1F]/
+    if (invalidChars.test(trimmedName)) {
+      return 'Name contains invalid characters (< > : " | ? *)'
+    }
+
+    return null
+  }
+
+  const handleRename = async () => {
+    const trimmedName = editedName.trim()
+
+    // No change, just cancel editing
+    if (trimmedName === project.name) {
+      setIsEditing(false)
+      setValidationError(null)
+      return
+    }
+
+    // Validate name
+    const error = validateName(editedName)
+    if (error) {
+      setValidationError(error)
+      return
+    }
+
+    try {
+      await updateProject.mutateAsync({
+        projectId: project.id,
+        data: { name: trimmedName },
+      })
+      setIsEditing(false)
+      setValidationError(null)
+    } catch (error) {
+      console.error('Failed to rename project:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to rename project'
+      setValidationError(errorMessage)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleRename()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+      setEditedName(project.name)
+      setValidationError(null)
+    }
+  }
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditedName(e.target.value)
+    // Clear validation error when user starts typing
+    if (validationError) {
+      setValidationError(null)
+    }
+  }
+
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/50">
+    <div className="group flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/50">
       <div
         className="flex-1 min-w-0 cursor-pointer"
         onClick={handleCardClick}
       >
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="font-semibold truncate">{project.name}</h3>
+          {isEditing ? (
+            <div className="flex flex-col gap-1">
+              <Input
+                value={editedName}
+                onChange={handleNameChange}
+                onBlur={handleRename}
+                onKeyDown={handleKeyDown}
+                className={`h-8 w-64 ${validationError ? 'border-destructive' : ''}`}
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+              {validationError && (
+                <p className="text-xs text-destructive">{validationError}</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold truncate">{project.name}</h3>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsEditing(true)
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Rename</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
           {isCurrent && (
             <Badge variant="default" className="text-xs">
               <Check className="mr-1 h-3 w-3" />

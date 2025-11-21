@@ -103,6 +103,25 @@ export function useCloseProject() {
 }
 
 /**
+ * Hook to update project metadata (name, favorite status)
+ */
+export function useUpdateProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ projectId, data }: { projectId: string; data: { name?: string; favorite?: boolean } }) =>
+      projectsApi.update(projectId, data),
+    onSuccess: (updatedProject) => {
+      // Update cache for this specific project
+      queryClient.setQueryData(projectKeys.detail(updatedProject.id), updatedProject)
+
+      // Invalidate all project queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
+    },
+  })
+}
+
+/**
  * Hook to delete (unregister) a project
  */
 export function useDeleteProject() {

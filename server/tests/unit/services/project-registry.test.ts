@@ -320,6 +320,93 @@ describe('ProjectRegistry', () => {
     })
   })
 
+  describe('updateProject', () => {
+    it('should update project name', async () => {
+      await registry.load()
+
+      const project = registry.registerProject('/Users/alex/repos/test-project')
+      expect(project.name).toBe('test-project')
+
+      const updated = registry.updateProject(project.id, { name: 'My Awesome Project' })
+      expect(updated).toBe(true)
+
+      const retrieved = registry.getProject(project.id)
+      expect(retrieved?.name).toBe('My Awesome Project')
+    })
+
+    it('should update project name with special characters', async () => {
+      await registry.load()
+
+      const project = registry.registerProject('/Users/alex/repos/test-project')
+
+      // Valid special characters that should work
+      const validNames = [
+        'Project-Name',
+        'My_Project',
+        'Project (v2)',
+        'Project [2024]',
+        'Project.Name',
+        'Project & Co',
+      ]
+
+      for (const name of validNames) {
+        const updated = registry.updateProject(project.id, { name })
+        expect(updated).toBe(true)
+        const retrieved = registry.getProject(project.id)
+        expect(retrieved?.name).toBe(name)
+      }
+    })
+
+    it('should update favorite status', async () => {
+      await registry.load()
+
+      const project = registry.registerProject('/Users/alex/repos/test-project')
+      expect(project.favorite).toBe(false)
+
+      const updated = registry.updateProject(project.id, { favorite: true })
+      expect(updated).toBe(true)
+
+      const retrieved = registry.getProject(project.id)
+      expect(retrieved?.favorite).toBe(true)
+    })
+
+    it('should update both name and favorite', async () => {
+      await registry.load()
+
+      const project = registry.registerProject('/Users/alex/repos/test-project')
+
+      const updated = registry.updateProject(project.id, {
+        name: 'Renamed Project',
+        favorite: true,
+      })
+      expect(updated).toBe(true)
+
+      const retrieved = registry.getProject(project.id)
+      expect(retrieved?.name).toBe('Renamed Project')
+      expect(retrieved?.favorite).toBe(true)
+    })
+
+    it('should return false for non-existent project', async () => {
+      await registry.load()
+
+      const updated = registry.updateProject('non-existent-id', { name: 'Test' })
+      expect(updated).toBe(false)
+    })
+
+    it('should handle empty updates object', async () => {
+      await registry.load()
+
+      const project = registry.registerProject('/Users/alex/repos/test-project')
+      const originalName = project.name
+
+      const updated = registry.updateProject(project.id, {})
+      expect(updated).toBe(true)
+
+      const retrieved = registry.getProject(project.id)
+      expect(retrieved?.name).toBe(originalName)
+    })
+  })
+
   describe('favorites', () => {
     it('should toggle favorite status', async () => {
       await registry.load()

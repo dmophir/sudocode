@@ -264,6 +264,29 @@ export class ProjectRegistry {
   }
 
   /**
+   * Update project metadata
+   * @param projectId - Project ID to update
+   * @param updates - Partial project info to update
+   * @returns true if project was updated, false if not found
+   */
+  updateProject(projectId: string, updates: Partial<Pick<ProjectInfo, 'name' | 'favorite'>>): boolean {
+    const project = this.config.projects[projectId]
+    if (!project) {
+      return false
+    }
+
+    // Only allow updating name and favorite fields
+    if (updates.name !== undefined) {
+      project.name = updates.name
+    }
+    if (updates.favorite !== undefined) {
+      project.favorite = updates.favorite
+    }
+
+    return true
+  }
+
+  /**
    * Toggle favorite status for a project
    */
   toggleFavorite(projectId: string): boolean {

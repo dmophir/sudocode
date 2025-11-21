@@ -246,6 +246,103 @@ export function createProjectsRouter(
   })
 
   /**
+   * PATCH /api/projects/:projectId
+   * Update project metadata (name, favorite status)
+   *
+   * Body: { name?: string, favorite?: boolean }
+   * Response: { project: ProjectInfo }
+   */
+  router.patch('/:projectId', async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params
+      const { name, favorite } = req.body
+
+      // Validate that at least one field is provided
+      if (name === undefined && favorite === undefined) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error_data: 'At least one field (name or favorite) must be provided',
+          message: 'At least one field (name or favorite) must be provided',
+        })
+      }
+
+      // Validate name if provided
+      if (name !== undefined) {
+        if (typeof name !== 'string') {
+          return res.status(400).json({
+            success: false,
+            data: null,
+            error_data: 'Name must be a string',
+            message: 'Name must be a string',
+          })
+        }
+
+        const trimmedName = name.trim()
+
+        if (trimmedName === '') {
+          return res.status(400).json({
+            success: false,
+            data: null,
+            error_data: 'Name cannot be empty',
+            message: 'Name cannot be empty',
+          })
+        }
+
+        if (trimmedName.length > 100) {
+          return res.status(400).json({
+            success: false,
+            data: null,
+            error_data: 'Name must be 100 characters or less',
+            message: 'Name must be 100 characters or less',
+          })
+        }
+
+        // Check for invalid characters (basic filesystem safety)
+        const invalidChars = /[<>:"|?*\x00-\x1F]/
+        if (invalidChars.test(trimmedName)) {
+          return res.status(400).json({
+            success: false,
+            data: null,
+            error_data: 'Name contains invalid characters',
+            message: 'Name contains invalid characters (< > : " | ? * or control characters)',
+          })
+        }
+      }
+
+      const updated = registry.updateProject(projectId, { name, favorite })
+
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          error_data: `Project not found: ${projectId}`,
+          message: `Project not found: ${projectId}`,
+        })
+      }
+
+      // Save registry
+      await registry.save()
+
+      // Return updated project info
+      const projectInfo = registry.getProject(projectId)
+
+      return res.json({
+        success: true,
+        data: projectInfo,
+      })
+    } catch (error: any) {
+      console.error(`Error updating project ${req.params.projectId}:`, error)
+      return res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to update project',
+      })
+    }
+  })
+
+  /**
    * DELETE /api/projects/:projectId
    * Unregister a project from the registry
    *

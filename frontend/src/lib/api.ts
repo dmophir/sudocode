@@ -234,6 +234,10 @@ export const projectsApi = {
   // Close a project
   close: (projectId: string) => post<void>(`/projects/${projectId}/close`),
 
+  // Update project metadata (name, favorite status)
+  update: (projectId: string, data: { name?: string; favorite?: boolean }) =>
+    api.patch<ProjectInfo, ProjectInfo>(`/projects/${projectId}`, data),
+
   // Unregister a project
   delete: (projectId: string) => del(`/projects/${projectId}`),
 
