@@ -27,29 +27,97 @@ jobs:
       - name: Test install
         run: npm install -g sudocode && sudocode --version
 
-  # Expected: FAIL (broken SDK) - demonstrates the error users see
-  macos-broken-sdk:
-    name: "macOS (broken Xcode SDK)"
+  # Hypothesis 1: Bad SDKROOT environment variable
+  macos-bad-sdkroot:
+    name: "macOS (bad SDKROOT env var)"
     runs-on: macos-latest
     continue-on-error: true
     steps:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Show environment before
+      - name: Show environment
         run: |
-          echo "Node version: $(node --version)"
+          echo "Node: $(node --version)"
           echo "SDK path: $(xcrun --show-sdk-path)"
-      - name: Break SDK
-        run: sudo mv /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak
-      - name: Test install (expected to fail)
-        run: npm install -g sudocode 2>&1 || true
-      - name: Restore SDK
-        if: always()
+      - name: Test with bad SDKROOT
         run: |
-          if [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak" ]; then
-            sudo mv /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-          fi
+          export SDKROOT=/nonexistent/sdk
+          npm install -g sudocode 2>&1 || true
+
+  # Hypothesis 2: Homebrew clang instead of Apple clang
+  macos-homebrew-llvm:
+    name: "macOS (Homebrew LLVM/clang)"
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Homebrew LLVM
+        run: brew install llvm
+      - name: Test with Homebrew clang in PATH
+        run: |
+          export PATH="$(brew --prefix llvm)/bin:$PATH"
+          echo "Using clang: $(which clang++)"
+          clang++ --version
+          npm install -g sudocode 2>&1 || true
+
+  # Hypothesis 3: Switch to CommandLineTools only (remove Xcode)
+  macos-clt-only:
+    name: "macOS (CommandLineTools only, no Xcode)"
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Switch to CommandLineTools
+        run: |
+          sudo xcode-select --switch /Library/Developer/CommandLineTools
+          echo "Now using: $(xcode-select -p)"
+          echo "SDK path: $(xcrun --show-sdk-path)"
+      - name: Test install
+        run: npm install -g sudocode 2>&1 || true
+
+  # Hypothesis 4: macOS 15 specific - use macos-15 runner
+  macos-15-sequoia:
+    name: "macOS 15 Sequoia"
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Show environment
+        run: |
+          sw_vers
+          echo "---"
+          echo "Xcode path: $(xcode-select -p)"
+          echo "SDK path: $(xcrun --show-sdk-path)"
+          clang++ --version
+      - name: Test install
+        run: npm install -g sudocode && sudocode --version
+
+  # Hypothesis 5: Use Volta like the user
+  macos-volta:
+    name: "macOS with Volta"
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - name: Install Volta
+        run: curl https://get.volta.sh | bash
+      - name: Install Node via Volta
+        run: |
+          export VOLTA_HOME="$HOME/.volta"
+          export PATH="$VOLTA_HOME/bin:$PATH"
+          volta install node@22
+          node --version
+      - name: Test install
+        run: |
+          export VOLTA_HOME="$HOME/.volta"
+          export PATH="$VOLTA_HOME/bin:$PATH"
+          npm install -g sudocode 2>&1 || true
 
   # Expected: PASS (has build tools)
   docker-full:
