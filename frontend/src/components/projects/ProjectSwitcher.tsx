@@ -86,7 +86,7 @@ export function ProjectSwitcher({ className, collapsed = false }: ProjectSwitche
         className={cn('w-full', collapsed && 'aspect-square', className)}
         title="Open Project"
       >
-        <FolderOpen className="h-4 w-4" />
+        <FolderOpen className="h-5 w-5" />
         {!collapsed && <span className="ml-2">Open Project</span>}
       </Button>
     )
@@ -103,18 +103,18 @@ export function ProjectSwitcher({ className, collapsed = false }: ProjectSwitche
           className={cn(
             'w-full',
             !collapsed && 'justify-between',
-            collapsed && 'aspect-square px-0 justify-center',
+            collapsed && 'aspect-square justify-center px-0',
             switching && 'opacity-50',
             className
           )}
           disabled={switching}
         >
           {collapsed ? (
-            <FolderOpen className="h-4 w-4" />
+            <FolderOpen className="h-5 w-5" />
           ) : (
             <>
               <div className="flex items-center gap-2 overflow-hidden">
-                <FolderOpen className="h-4 w-4 flex-shrink-0" />
+                <FolderOpen className="h-5 w-5 flex-shrink-0" />
                 <span className="truncate text-sm font-medium">{displayProject.name}</span>
               </div>
               <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />

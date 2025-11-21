@@ -419,9 +419,20 @@ interface ProjectCardProps {
 }
 
 function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: ProjectCardProps) {
+  const handleCardClick = () => {
+    // If it's the current project, don't do anything
+    if (isCurrent) return
+
+    // Otherwise, open/switch to this project
+    onOpen(project)
+  }
+
   return (
     <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/50">
-      <div className="flex-1 min-w-0">
+      <div
+        className="flex-1 min-w-0 cursor-pointer"
+        onClick={handleCardClick}
+      >
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="font-semibold truncate">{project.name}</h3>
           {isCurrent && (
@@ -448,7 +459,7 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
           Last opened: {new Date(project.lastOpenedAt).toLocaleDateString()}
         </p>
       </div>
-      <div className="flex items-center gap-2 ml-4">
+      <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
         {!isOpen && (
           <Button variant="outline" size="sm" onClick={() => onOpen(project)}>
             <FolderOpen className="mr-2 h-4 w-4" />
