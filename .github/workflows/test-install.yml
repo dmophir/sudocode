@@ -1,0 +1,112 @@
+# .github/workflows/test-install.yml
+# Document installation results across various environments
+# Related to issue i-4o90: Reproduce and document node-pty build failures
+
+name: Document Installation Results
+
+on:
+  workflow_dispatch: # Manual trigger for documentation purposes
+  push:
+    branches: [main, fix-setup-issue]
+
+jobs:
+  # Expected: PASS (has build tools)
+  macos-working:
+    name: "macOS (working Xcode)"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Show environment
+        run: |
+          echo "Node version: $(node --version)"
+          echo "npm version: $(npm --version)"
+          echo "Xcode path: $(xcode-select -p)"
+          echo "SDK path: $(xcrun --show-sdk-path)"
+      - name: Test install
+        run: npm install -g sudocode && sudocode --version
+
+  # Expected: FAIL (broken SDK) - demonstrates the error users see
+  macos-broken-sdk:
+    name: "macOS (broken Xcode SDK)"
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Show environment before
+        run: |
+          echo "Node version: $(node --version)"
+          echo "SDK path: $(xcrun --show-sdk-path)"
+      - name: Break SDK
+        run: sudo mv /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak
+      - name: Test install (expected to fail)
+        run: npm install -g sudocode 2>&1 || true
+      - name: Restore SDK
+        if: always()
+        run: |
+          if [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak" ]; then
+            sudo mv /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk.bak /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          fi
+
+  # Expected: PASS (has build tools)
+  docker-full:
+    name: "Docker node:22 (full image)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test install
+        run: docker run --rm node:22 sh -c "npm install -g sudocode && sudocode --version"
+
+  # Expected: FAIL (missing Python/make/g++)
+  docker-slim:
+    name: "Docker node:22-slim"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Test install (expected to fail)
+        run: docker run --rm node:22-slim sh -c "npm install -g sudocode && sudocode --version" 2>&1 || true
+
+  # Expected: FAIL (missing build tools)
+  docker-alpine:
+    name: "Docker node:22-alpine"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Test install (expected to fail)
+        run: docker run --rm node:22-alpine sh -c "npm install -g sudocode && sudocode --version" 2>&1 || true
+
+  # Expected: PASS (has build tools)
+  ubuntu:
+    name: "Ubuntu (GitHub Actions runner)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Show environment
+        run: |
+          echo "Node version: $(node --version)"
+          echo "npm version: $(npm --version)"
+          echo "Python version: $(python3 --version)"
+          echo "g++ version: $(g++ --version | head -1)"
+      - name: Test install
+        run: npm install -g sudocode && sudocode --version
+
+  # Expected: PASS (Windows has build tools via npm)
+  windows:
+    name: "Windows (GitHub Actions runner)"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Show environment
+        run: |
+          echo "Node version: $(node --version)"
+          echo "npm version: $(npm --version)"
+        shell: bash
+      - name: Test install
+        run: npm install -g sudocode && sudocode --version
+        shell: bash
