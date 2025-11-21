@@ -22,6 +22,14 @@ import type {
   CreateExecutionRequest,
   CreateFollowUpRequest,
 } from '@/types/execution'
+import type {
+  ProjectInfo,
+  OpenProjectInfo,
+  ValidateProjectRequest,
+  ValidateProjectResponse,
+  OpenProjectRequest,
+  InitProjectRequest,
+} from '@/types/project'
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
@@ -31,6 +39,42 @@ const api: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+/**
+ * Current project ID for injecting into requests
+ * Updated by setCurrentProjectId function
+ */
+let currentProjectId: string | null = null
+
+/**
+ * Set the current project ID for API requests
+ * This will be automatically injected as X-Project-ID header
+ */
+export function setCurrentProjectId(projectId: string | null) {
+  currentProjectId = projectId
+}
+
+/**
+ * Get the current project ID
+ */
+export function getCurrentProjectId(): string | null {
+  return currentProjectId
+}
+
+// Request interceptor to inject X-Project-ID header
+api.interceptors.request.use(
+  (config) => {
+    // Inject X-Project-ID header if we have a current project
+    // Skip for /projects endpoints which don't require project context
+    if (currentProjectId && !config.url?.startsWith('/projects')) {
+      config.headers['X-Project-ID'] = currentProjectId
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
 
 // Response interceptor to unwrap ApiResponse
 api.interceptors.response.use(
@@ -162,7 +206,39 @@ export const executionsApi = {
  * Repository API
  */
 export const repositoryApi = {
-  getInfo: () => axios.get<RepositoryInfo>('/api/repo-info').then((res) => res.data),
+  getInfo: () => get<RepositoryInfo>('/repo-info'),
+}
+
+/**
+ * Projects API
+ */
+export const projectsApi = {
+  // List all registered projects
+  getAll: () => get<ProjectInfo[]>('/projects'),
+
+  // List currently open projects
+  getOpen: () => get<OpenProjectInfo[]>('/projects/open'),
+
+  // Get recent projects
+  getRecent: () => get<ProjectInfo[]>('/projects/recent'),
+
+  // Get project by ID
+  getById: (projectId: string) => get<ProjectInfo | OpenProjectInfo>(`/projects/${projectId}`),
+
+  // Validate a project path
+  validate: (data: ValidateProjectRequest) => post<ValidateProjectResponse>('/projects/validate', data),
+
+  // Open a project by path
+  open: (data: OpenProjectRequest) => post<ProjectInfo>('/projects/open', data),
+
+  // Close a project
+  close: (projectId: string) => post<void>(`/projects/${projectId}/close`),
+
+  // Unregister a project
+  delete: (projectId: string) => del(`/projects/${projectId}`),
+
+  // Initialize a new project
+  init: (data: InitProjectRequest) => post<ProjectInfo>('/projects/init', data),
 }
 
 export default api

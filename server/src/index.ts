@@ -240,12 +240,13 @@ app.get("/api/config", (_req: Request, res: Response) => {
   }
 });
 
-// Repository info endpoint - returns git repository information
+// Repository info endpoint - returns git repository information for current project
 app.get(
   "/api/repo-info",
-  async (_req: Request, res: Response): Promise<void> => {
+  requireProject(projectManager),
+  async (req: Request, res: Response): Promise<void> => {
     try {
-      const repoInfo = await getRepositoryInfo(REPO_ROOT);
+      const repoInfo = await getRepositoryInfo(req.project!.path);
       res.status(200).json(repoInfo);
     } catch (error) {
       const err = error as Error;

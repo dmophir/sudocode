@@ -22,12 +22,17 @@ export function createProjectsRouter(
   router.get('/', async (_req: Request, res: Response) => {
     try {
       const projects = registry.getAllProjects()
-      res.json({ projects })
+      res.json({
+        success: true,
+        data: projects,
+      })
     } catch (error: any) {
       console.error('Error fetching projects:', error)
       res.status(500).json({
-        error: 'Failed to fetch projects',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to fetch projects',
       })
     }
   })
@@ -47,12 +52,17 @@ export function createProjectsRouter(
         }
       })
 
-      res.json({ projects: projectInfos })
+      res.json({
+        success: true,
+        data: projectInfos,
+      })
     } catch (error: any) {
       console.error('Error fetching open projects:', error)
       res.status(500).json({
-        error: 'Failed to fetch open projects',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to fetch open projects',
       })
     }
   })
@@ -64,12 +74,17 @@ export function createProjectsRouter(
   router.get('/recent', async (_req: Request, res: Response) => {
     try {
       const recentProjects = registry.getRecentProjects()
-      res.json({ projects: recentProjects })
+      res.json({
+        success: true,
+        data: recentProjects,
+      })
     } catch (error: any) {
       console.error('Error fetching recent projects:', error)
       res.status(500).json({
-        error: 'Failed to fetch recent projects',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to fetch recent projects',
       })
     }
   })
@@ -87,8 +102,11 @@ export function createProjectsRouter(
 
       if (!path) {
         return res.status(400).json({
-          valid: false,
-          error: 'Path is required',
+          success: true,
+          data: {
+            valid: false,
+            error: 'Path is required',
+          },
         })
       }
 
@@ -100,22 +118,31 @@ export function createProjectsRouter(
         const errorMessage =
           'message' in result.error! ? result.error!.message : `Invalid project: ${result.error!.type}`
         return res.json({
-          valid: false,
-          error: errorMessage,
-          errorType: result.error!.type,
+          success: true,
+          data: {
+            valid: false,
+            error: errorMessage,
+            errorType: result.error!.type,
+          },
         })
       }
 
       // If it opened successfully, immediately close it (we were just validating)
       await projectManager.closeProject(result.value!.id, false)
 
-      return res.json({ valid: true })
+      return res.json({
+        success: true,
+        data: {
+          valid: true,
+        },
+      })
     } catch (error: any) {
       console.error('Error validating project:', error)
       return res.status(500).json({
-        valid: false,
-        error: 'Validation failed',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Validation failed',
       })
     }
   })
@@ -133,7 +160,10 @@ export function createProjectsRouter(
 
       if (!path) {
         return res.status(400).json({
-          error: 'Path is required',
+          success: false,
+          data: null,
+          error_data: 'Path is required',
+          message: 'Path is required',
         })
       }
 
@@ -151,8 +181,10 @@ export function createProjectsRouter(
           'message' in result.error! ? result.error!.message : `Failed to open project: ${result.error!.type}`
 
         return res.status(statusCode).json({
-          error: errorMessage,
-          errorType: result.error!.type,
+          success: false,
+          data: null,
+          error_data: result.error!.type,
+          message: errorMessage,
         })
       }
 
@@ -160,7 +192,8 @@ export function createProjectsRouter(
       const summary = result.value!.getSummary()
 
       return res.json({
-        project: {
+        success: true,
+        data: {
           ...projectInfo,
           ...summary,
         },
@@ -168,8 +201,10 @@ export function createProjectsRouter(
     } catch (error: any) {
       console.error('Error opening project:', error)
       return res.status(500).json({
-        error: 'Failed to open project',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to open project',
       })
     }
   })
@@ -186,18 +221,26 @@ export function createProjectsRouter(
 
       if (!projectManager.isProjectOpen(projectId)) {
         return res.status(404).json({
-          error: `Project not open: ${projectId}`,
+          success: false,
+          data: null,
+          error_data: `Project not open: ${projectId}`,
+          message: `Project not open: ${projectId}`,
         })
       }
 
       await projectManager.closeProject(projectId)
 
-      return res.json({ success: true })
+      return res.json({
+        success: true,
+        data: null,
+      })
     } catch (error: any) {
       console.error(`Error closing project ${req.params.projectId}:`, error)
       return res.status(500).json({
-        error: 'Failed to close project',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to close project',
       })
     }
   })
@@ -222,19 +265,27 @@ export function createProjectsRouter(
 
       if (!removed) {
         return res.status(404).json({
-          error: `Project not found: ${projectId}`,
+          success: false,
+          data: null,
+          error_data: `Project not found: ${projectId}`,
+          message: `Project not found: ${projectId}`,
         })
       }
 
       // Save registry
       await registry.save()
 
-      return res.json({ success: true })
+      return res.json({
+        success: true,
+        data: null,
+      })
     } catch (error: any) {
       console.error(`Error deleting project ${req.params.projectId}:`, error)
       return res.status(500).json({
-        error: 'Failed to delete project',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to delete project',
       })
     }
   })
@@ -252,7 +303,10 @@ export function createProjectsRouter(
       const projectInfo = registry.getProject(projectId)
       if (!projectInfo) {
         return res.status(404).json({
-          error: `Project not found: ${projectId}`,
+          success: false,
+          data: null,
+          error_data: `Project not found: ${projectId}`,
+          message: `Project not found: ${projectId}`,
         })
       }
 
@@ -260,7 +314,8 @@ export function createProjectsRouter(
       const summary = context?.getSummary()
 
       return res.json({
-        project: {
+        success: true,
+        data: {
           ...projectInfo,
           ...(summary || { isOpen: false }),
         },
@@ -268,8 +323,10 @@ export function createProjectsRouter(
     } catch (error: any) {
       console.error(`Error fetching project ${req.params.projectId}:`, error)
       return res.status(500).json({
-        error: 'Failed to fetch project',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to fetch project',
       })
     }
   })
@@ -289,7 +346,10 @@ export function createProjectsRouter(
 
       if (!path) {
         return res.status(400).json({
-          error: 'Path is required',
+          success: false,
+          data: null,
+          error_data: 'Path is required',
+          message: 'Path is required',
         })
       }
 
@@ -302,14 +362,18 @@ export function createProjectsRouter(
       // For now, return not implemented
 
       return res.status(501).json({
-        error: 'Project initialization not yet implemented',
+        success: false,
+        data: null,
+        error_data: 'Project initialization not yet implemented',
         message: 'Please use the CLI command: sudocode sync',
       })
     } catch (error: any) {
       console.error('Error initializing project:', error)
       return res.status(500).json({
-        error: 'Failed to initialize project',
-        message: error.message,
+        success: false,
+        data: null,
+        error_data: error.message,
+        message: 'Failed to initialize project',
       })
     }
   })
