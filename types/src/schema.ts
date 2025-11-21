@@ -215,6 +215,21 @@ CREATE TABLE IF NOT EXISTS execution_logs (
 );
 `;
 
+// Execution normalized logs table - stores structured normalized output
+// For direct runner pattern (agent-execution-engine)
+export const EXECUTION_NORMALIZED_LOGS_TABLE = `
+CREATE TABLE IF NOT EXISTS execution_normalized_logs (
+    id TEXT PRIMARY KEY,
+    execution_id TEXT NOT NULL,
+    entry_index INTEGER NOT NULL,
+    entry_kind TEXT NOT NULL,
+    entry_data TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
+);
+`;
+
 /**
  * Index definitions
  */
@@ -299,6 +314,12 @@ CREATE INDEX IF NOT EXISTS idx_execution_logs_byte_size ON execution_logs(byte_s
 CREATE INDEX IF NOT EXISTS idx_execution_logs_line_count ON execution_logs(line_count);
 `;
 
+export const EXECUTION_NORMALIZED_LOGS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_normalized_logs_execution ON execution_normalized_logs(execution_id, entry_index);
+CREATE INDEX IF NOT EXISTS idx_normalized_logs_kind ON execution_normalized_logs(execution_id, entry_kind);
+CREATE INDEX IF NOT EXISTS idx_normalized_logs_timestamp ON execution_normalized_logs(execution_id, timestamp);
+`;
+
 /**
  * View definitions
  */
@@ -357,6 +378,7 @@ export const ALL_TABLES = [
   EXECUTIONS_TABLE,
   PROMPT_TEMPLATES_TABLE,
   EXECUTION_LOGS_TABLE,
+  EXECUTION_NORMALIZED_LOGS_TABLE,
 ];
 
 export const ALL_INDEXES = [
@@ -369,6 +391,7 @@ export const ALL_INDEXES = [
   EXECUTIONS_INDEXES,
   PROMPT_TEMPLATES_INDEXES,
   EXECUTION_LOGS_INDEXES,
+  EXECUTION_NORMALIZED_LOGS_INDEXES,
 ];
 
 export const ALL_VIEWS = [READY_ISSUES_VIEW, BLOCKED_ISSUES_VIEW];

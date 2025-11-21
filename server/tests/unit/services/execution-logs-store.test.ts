@@ -12,7 +12,10 @@ import {
   EXECUTIONS_TABLE,
   EXECUTION_LOGS_TABLE,
   EXECUTION_LOGS_INDEXES,
+  EXECUTION_NORMALIZED_LOGS_TABLE,
+  EXECUTION_NORMALIZED_LOGS_INDEXES,
 } from "@sudocode-ai/types/schema";
+import type { NormalizedEntry } from "agent-execution-engine/agents";
 
 describe("ExecutionLogsStore", () => {
   let db: Database.Database;
@@ -27,6 +30,8 @@ describe("ExecutionLogsStore", () => {
     db.exec(EXECUTIONS_TABLE);
     db.exec(EXECUTION_LOGS_TABLE);
     db.exec(EXECUTION_LOGS_INDEXES);
+    db.exec(EXECUTION_NORMALIZED_LOGS_TABLE);
+    db.exec(EXECUTION_NORMALIZED_LOGS_INDEXES);
 
     // Create test execution
     db.prepare(`
@@ -452,6 +457,375 @@ describe("ExecutionLogsStore", () => {
 
       expect(duration).toBeLessThan(100);
       expect(logs).toHaveLength(500);
+    });
+  });
+
+  // ============================================================================
+  // Normalized Logs Tests (Direct Runner Pattern)
+  // ============================================================================
+
+  describe("Normalized Logs", () => {
+    describe("appendNormalizedLog", () => {
+      it("should store normalized entry", () => {
+        const entry: NormalizedEntry = {
+          index: 0,
+          timestamp: new Date("2025-01-21T10:00:00Z"),
+          type: { kind: "assistant_message" },
+          content: "Hello, world!",
+        };
+
+        store.appendNormalizedLog("exec-test-1", entry);
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toHaveLength(1);
+        expect(logs[0].index).toBe(0);
+        expect(logs[0].content).toBe("Hello, world!");
+        expect(logs[0].type.kind).toBe("assistant_message");
+        // Timestamp is serialized to ISO string
+        expect(logs[0].timestamp).toBe("2025-01-21T10:00:00.000Z");
+      });
+
+      it("should maintain index ordering", () => {
+        const entries: NormalizedEntry[] = [
+          { index: 0, type: { kind: "assistant_message" }, content: "First" },
+          { index: 2, type: { kind: "assistant_message" }, content: "Third" },
+          { index: 1, type: { kind: "assistant_message" }, content: "Second" },
+        ];
+
+        // Insert out of order
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs.map((l) => l.content)).toEqual(["First", "Second", "Third"]);
+      });
+
+      it("should handle entries without timestamp", () => {
+        const entry: NormalizedEntry = {
+          index: 0,
+          type: { kind: "assistant_message" },
+          content: "No timestamp",
+        };
+
+        store.appendNormalizedLog("exec-test-1", entry);
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toHaveLength(1);
+      });
+
+      it("should handle tool use entries", () => {
+        const entry: NormalizedEntry = {
+          index: 0,
+          type: {
+            kind: "tool_use",
+            tool: {
+              toolName: "Read",
+              action: { kind: "file_read", path: "/test.txt" },
+              status: "success",
+              result: { success: true, data: "file contents" },
+            },
+          },
+          content: "Reading file",
+        };
+
+        store.appendNormalizedLog("exec-test-1", entry);
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toHaveLength(1);
+        expect(logs[0].type.kind).toBe("tool_use");
+      });
+    });
+
+    describe("getNormalizedLogs", () => {
+      it("should return empty array for execution with no logs", () => {
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toEqual([]);
+      });
+
+      it("should return logs in order by index", () => {
+        const entries: NormalizedEntry[] = [
+          { index: 0, type: { kind: "system_message" }, content: "Start" },
+          { index: 1, type: { kind: "assistant_message" }, content: "Msg 1" },
+          { index: 2, type: { kind: "assistant_message" }, content: "Msg 2" },
+        ];
+
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toHaveLength(3);
+        expect(logs[0].index).toBe(0);
+        expect(logs[1].index).toBe(1);
+        expect(logs[2].index).toBe(2);
+      });
+
+      it("should handle malformed JSON gracefully", () => {
+        // Manually insert invalid JSON
+        db.prepare(`
+          INSERT INTO execution_normalized_logs (id, execution_id, entry_index, entry_kind, entry_data, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run("log-1", "exec-test-1", 0, "assistant_message", "{invalid", Date.now());
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toEqual([]); // Should skip malformed entries
+      });
+    });
+
+    describe("getNormalizedLogsByKind", () => {
+      beforeEach(() => {
+        const entries: NormalizedEntry[] = [
+          {
+            index: 0,
+            type: { kind: "assistant_message" },
+            content: "Text 1",
+          },
+          {
+            index: 1,
+            type: {
+              kind: "tool_use",
+              tool: {
+                toolName: "Bash",
+                action: { kind: "command_run", command: "ls" },
+                status: "success",
+              },
+            },
+            content: "Tool",
+          },
+          {
+            index: 2,
+            type: { kind: "assistant_message" },
+            content: "Text 2",
+          },
+          {
+            index: 3,
+            type: { kind: "thinking", reasoning: "Analyzing" },
+            content: "Thinking",
+          },
+        ];
+
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+      });
+
+      it("should filter by entry kind", () => {
+        const assistantLogs = store.getNormalizedLogsByKind(
+          "exec-test-1",
+          "assistant_message"
+        );
+        expect(assistantLogs).toHaveLength(2);
+        expect(assistantLogs[0].content).toBe("Text 1");
+        expect(assistantLogs[1].content).toBe("Text 2");
+      });
+
+      it("should return tool_use entries only", () => {
+        const toolLogs = store.getNormalizedLogsByKind("exec-test-1", "tool_use");
+        expect(toolLogs).toHaveLength(1);
+        expect(toolLogs[0].type.kind).toBe("tool_use");
+      });
+
+      it("should return thinking entries only", () => {
+        const thinkingLogs = store.getNormalizedLogsByKind(
+          "exec-test-1",
+          "thinking"
+        );
+        expect(thinkingLogs).toHaveLength(1);
+        expect(thinkingLogs[0].type.kind).toBe("thinking");
+      });
+
+      it("should return empty array for non-existent kind", () => {
+        const logs = store.getNormalizedLogsByKind(
+          "exec-test-1",
+          "nonexistent_kind"
+        );
+        expect(logs).toEqual([]);
+      });
+    });
+
+    describe("getNormalizedLogsInRange", () => {
+      it("should filter by timestamp range", () => {
+        const baseTime = Date.now();
+        const entries: NormalizedEntry[] = [
+          {
+            index: 0,
+            timestamp: new Date(baseTime),
+            type: { kind: "assistant_message" },
+            content: "Entry 0",
+          },
+          {
+            index: 1,
+            timestamp: new Date(baseTime + 5000),
+            type: { kind: "assistant_message" },
+            content: "Entry 1",
+          },
+          {
+            index: 2,
+            timestamp: new Date(baseTime + 10000),
+            type: { kind: "assistant_message" },
+            content: "Entry 2",
+          },
+        ];
+
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+
+        // Get entries in middle range
+        const logs = store.getNormalizedLogsInRange(
+          "exec-test-1",
+          baseTime + 3000,
+          baseTime + 7000
+        );
+
+        expect(logs).toHaveLength(1);
+        expect(logs[0].content).toBe("Entry 1");
+      });
+
+      it("should include boundaries (inclusive range)", () => {
+        const baseTime = Date.now();
+        const entries: NormalizedEntry[] = [
+          {
+            index: 0,
+            timestamp: new Date(baseTime),
+            type: { kind: "assistant_message" },
+            content: "Start",
+          },
+          {
+            index: 1,
+            timestamp: new Date(baseTime + 5000),
+            type: { kind: "assistant_message" },
+            content: "End",
+          },
+        ];
+
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+
+        // Query exact boundaries
+        const logs = store.getNormalizedLogsInRange(
+          "exec-test-1",
+          baseTime,
+          baseTime + 5000
+        );
+
+        expect(logs).toHaveLength(2);
+      });
+    });
+
+    describe("getLogCounts", () => {
+      it("should return counts for both formats", () => {
+        // Add raw logs
+        store.initializeLogs("exec-test-1");
+        store.appendRawLog("exec-test-1", "raw line 1");
+        store.appendRawLog("exec-test-1", "raw line 2");
+
+        // Add normalized logs
+        store.appendNormalizedLog("exec-test-1", {
+          index: 0,
+          type: { kind: "assistant_message" },
+          content: "Normalized",
+        });
+
+        const counts = store.getLogCounts("exec-test-1");
+        expect(counts.raw).toBe(1); // Raw logs stored as single row
+        expect(counts.normalized).toBe(1);
+      });
+
+      it("should return zero for execution with no logs", () => {
+        const counts = store.getLogCounts("exec-test-1");
+        expect(counts).toEqual({ raw: 0, normalized: 0 });
+      });
+
+      it("should handle only raw logs", () => {
+        store.initializeLogs("exec-test-1");
+        store.appendRawLog("exec-test-1", "line 1");
+
+        const counts = store.getLogCounts("exec-test-1");
+        expect(counts.raw).toBe(1);
+        expect(counts.normalized).toBe(0);
+      });
+
+      it("should handle only normalized logs", () => {
+        store.appendNormalizedLog("exec-test-1", {
+          index: 0,
+          type: { kind: "assistant_message" },
+          content: "Test",
+        });
+
+        const counts = store.getLogCounts("exec-test-1");
+        expect(counts.raw).toBe(0);
+        expect(counts.normalized).toBe(1);
+      });
+    });
+
+    describe("deleteLogs", () => {
+      it("should delete both raw and normalized logs", () => {
+        // Add both types of logs
+        store.initializeLogs("exec-test-1");
+        store.appendRawLog("exec-test-1", "raw line");
+        store.appendNormalizedLog("exec-test-1", {
+          index: 0,
+          type: { kind: "assistant_message" },
+          content: "Normalized",
+        });
+
+        // Delete all logs
+        store.deleteLogs("exec-test-1");
+
+        // Verify both are deleted
+        const rawLogs = store.getRawLogs("exec-test-1");
+        const normalizedLogs = store.getNormalizedLogs("exec-test-1");
+
+        expect(rawLogs).toEqual([]);
+        expect(normalizedLogs).toEqual([]);
+      });
+    });
+
+    describe("performance", () => {
+      it("should handle 1000 normalized entries efficiently", () => {
+        const entries: NormalizedEntry[] = Array.from(
+          { length: 1000 },
+          (_, i) => ({
+            index: i,
+            type: { kind: "assistant_message" },
+            content: `Message ${i}`,
+          })
+        );
+
+        const start = Date.now();
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+        const duration = Date.now() - start;
+
+        // Should complete in reasonable time (< 2 seconds)
+        expect(duration).toBeLessThan(2000);
+
+        const logs = store.getNormalizedLogs("exec-test-1");
+        expect(logs).toHaveLength(1000);
+      });
+
+      it("should retrieve normalized logs efficiently", () => {
+        const entries: NormalizedEntry[] = Array.from({ length: 500 }, (_, i) => ({
+          index: i,
+          type: { kind: "assistant_message" },
+          content: `Entry ${i}`,
+        }));
+
+        entries.forEach((entry) =>
+          store.appendNormalizedLog("exec-test-1", entry)
+        );
+
+        const start = Date.now();
+        const logs = store.getNormalizedLogs("exec-test-1");
+        const duration = Date.now() - start;
+
+        expect(duration).toBeLessThan(200);
+        expect(logs).toHaveLength(500);
+      });
     });
   });
 });

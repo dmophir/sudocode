@@ -1,13 +1,15 @@
 /**
  * ExecutionLogsStore Service
  *
- * Manages persistence of raw execution logs to the database.
- * Provides CRUD operations for execution_logs table.
+ * Manages persistence of raw execution logs and normalized logs to the database.
+ * Provides CRUD operations for execution_logs and execution_normalized_logs tables.
  *
  * @module services/execution-logs-store
  */
 
 import type Database from "better-sqlite3";
+import type { NormalizedEntry } from "agent-execution-engine/agents";
+import { randomUUID } from "crypto";
 
 /**
  * Metadata for execution logs (without the full logs text)
@@ -29,6 +31,14 @@ export interface LogStats {
   totalLines: number;
   avgLinesPerExecution: number;
   avgBytesPerExecution: number;
+}
+
+/**
+ * Log counts for both raw and normalized formats
+ */
+export interface LogCounts {
+  raw: number;
+  normalized: number;
 }
 
 /**
@@ -187,7 +197,7 @@ export class ExecutionLogsStore {
   /**
    * Delete logs for an execution
    *
-   * Removes the entire log entry from the database.
+   * Removes the entire log entry from the database (both raw and normalized).
    * Foreign key constraint ensures execution must exist.
    *
    * @param executionId - Unique execution identifier
@@ -198,10 +208,17 @@ export class ExecutionLogsStore {
    * ```
    */
   deleteLogs(executionId: string): void {
-    const stmt = this.db.prepare(`
+    // Delete raw logs
+    const stmt1 = this.db.prepare(`
       DELETE FROM execution_logs WHERE execution_id = ?
     `);
-    stmt.run(executionId);
+    stmt1.run(executionId);
+
+    // Delete normalized logs
+    const stmt2 = this.db.prepare(`
+      DELETE FROM execution_normalized_logs WHERE execution_id = ?
+    `);
+    stmt2.run(executionId);
   }
 
   /**
@@ -281,5 +298,273 @@ export class ExecutionLogsStore {
           ? result.totalBytes / result.totalExecutions
           : 0,
     };
+  }
+
+  // ============================================================================
+  // Normalized Logs Methods (Direct Runner Pattern)
+  // ============================================================================
+
+  /**
+   * Append a normalized log entry
+   *
+   * Stores a NormalizedEntry from direct runner execution.
+   * Used by DirectRunnerAdapter to persist agent-execution-engine output.
+   *
+   * @param executionId - Execution ID
+   * @param entry - Normalized entry from agent executor
+   *
+   * @example
+   * ```typescript
+   * const entry: NormalizedEntry = {
+   *   index: 0,
+   *   type: { kind: 'assistant_message' },
+   *   content: 'Hello',
+   * };
+   * store.appendNormalizedLog('exec-123', entry);
+   * ```
+   */
+  appendNormalizedLog(executionId: string, entry: NormalizedEntry): void {
+    const logId = randomUUID();
+    const entryKind = entry.type.kind;
+    const timestamp = entry.timestamp?.getTime() || Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO execution_normalized_logs
+        (id, execution_id, entry_index, entry_kind, entry_data, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    try {
+      stmt.run(
+        logId,
+        executionId,
+        entry.index,
+        entryKind,
+        JSON.stringify(entry),
+        timestamp
+      );
+    } catch (error) {
+      console.error("[ExecutionLogsStore] Failed to append normalized log:", {
+        executionId,
+        entryIndex: entry.index,
+        entryKind,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get all normalized logs for an execution
+   *
+   * Returns normalized entries ordered by index.
+   * Used for log replay and historical viewing.
+   *
+   * @param executionId - Execution ID
+   * @returns Array of normalized entries
+   *
+   * @example
+   * ```typescript
+   * const logs = store.getNormalizedLogs('exec-123');
+   * logs.forEach(entry => {
+   *   console.log(entry.type.kind, entry.content);
+   * });
+   * ```
+   */
+  getNormalizedLogs(executionId: string): NormalizedEntry[] {
+    const stmt = this.db.prepare(`
+      SELECT entry_data
+      FROM execution_normalized_logs
+      WHERE execution_id = ?
+      ORDER BY entry_index ASC
+    `);
+
+    const rows = stmt.all(executionId) as Array<{ entry_data: string }>;
+
+    return rows
+      .map((row) => {
+        try {
+          return JSON.parse(row.entry_data) as NormalizedEntry;
+        } catch (error) {
+          console.error(
+            "[ExecutionLogsStore] Failed to parse normalized log:",
+            {
+              executionId,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          // Skip malformed entries
+          return null;
+        }
+      })
+      .filter((entry): entry is NormalizedEntry => entry !== null);
+  }
+
+  /**
+   * Get normalized logs filtered by entry kind
+   *
+   * Useful for querying specific types of entries (e.g., only tool_use entries).
+   *
+   * @param executionId - Execution ID
+   * @param entryKind - Entry type to filter by
+   * @returns Array of normalized entries matching the kind
+   *
+   * @example
+   * ```typescript
+   * // Get only tool use entries
+   * const toolLogs = store.getNormalizedLogsByKind('exec-123', 'tool_use');
+   * ```
+   */
+  getNormalizedLogsByKind(
+    executionId: string,
+    entryKind: string
+  ): NormalizedEntry[] {
+    const stmt = this.db.prepare(`
+      SELECT entry_data
+      FROM execution_normalized_logs
+      WHERE execution_id = ? AND entry_kind = ?
+      ORDER BY entry_index ASC
+    `);
+
+    const rows = stmt.all(executionId, entryKind) as Array<{
+      entry_data: string;
+    }>;
+
+    return rows
+      .map((row) => {
+        try {
+          return JSON.parse(row.entry_data) as NormalizedEntry;
+        } catch (error) {
+          console.error(
+            "[ExecutionLogsStore] Failed to parse normalized log:",
+            {
+              executionId,
+              entryKind,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          return null;
+        }
+      })
+      .filter((entry): entry is NormalizedEntry => entry !== null);
+  }
+
+  /**
+   * Get normalized logs within a time range
+   *
+   * @param executionId - Execution ID
+   * @param startTime - Start timestamp (inclusive)
+   * @param endTime - End timestamp (inclusive)
+   * @returns Array of normalized entries in the time range
+   *
+   * @example
+   * ```typescript
+   * const start = Date.now() - 60000; // Last minute
+   * const end = Date.now();
+   * const recentLogs = store.getNormalizedLogsInRange('exec-123', start, end);
+   * ```
+   */
+  getNormalizedLogsInRange(
+    executionId: string,
+    startTime: number,
+    endTime: number
+  ): NormalizedEntry[] {
+    const stmt = this.db.prepare(`
+      SELECT entry_data
+      FROM execution_normalized_logs
+      WHERE execution_id = ?
+        AND timestamp >= ?
+        AND timestamp <= ?
+      ORDER BY entry_index ASC
+    `);
+
+    const rows = stmt.all(executionId, startTime, endTime) as Array<{
+      entry_data: string;
+    }>;
+
+    return rows
+      .map((row) => {
+        try {
+          return JSON.parse(row.entry_data) as NormalizedEntry;
+        } catch (error) {
+          console.error(
+            "[ExecutionLogsStore] Failed to parse normalized log:",
+            {
+              executionId,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          return null;
+        }
+      })
+      .filter((entry): entry is NormalizedEntry => entry !== null);
+  }
+
+  /**
+   * Get log count for an execution
+   *
+   * Returns counts for both raw and normalized logs.
+   * Useful for determining which format is available.
+   *
+   * @param executionId - Execution ID
+   * @returns Object with raw and normalized log counts
+   *
+   * @example
+   * ```typescript
+   * const counts = store.getLogCounts('exec-123');
+   * if (counts.normalized > 0) {
+   *   console.log('Using normalized logs');
+   * } else {
+   *   console.log('Using raw logs');
+   * }
+   * ```
+   */
+  getLogCounts(executionId: string): LogCounts {
+    const rawCount =
+      (
+        this.db
+          .prepare(
+            `
+      SELECT COUNT(*) as count
+      FROM execution_logs
+      WHERE execution_id = ?
+    `
+          )
+          .get(executionId) as { count: number } | undefined
+      )?.count || 0;
+
+    const normalizedCount =
+      (
+        this.db
+          .prepare(
+            `
+      SELECT COUNT(*) as count
+      FROM execution_normalized_logs
+      WHERE execution_id = ?
+    `
+          )
+          .get(executionId) as { count: number } | undefined
+      )?.count || 0;
+
+    return {
+      raw: rawCount > 0 ? 1 : 0, // Raw logs are stored as single row
+      normalized: normalizedCount,
+    };
+  }
+
+  /**
+   * Initialize normalized logs for a new execution
+   *
+   * No-op for now since we create logs on-demand.
+   * Kept for API consistency and future metadata tracking.
+   *
+   * @param executionId - Execution ID
+   */
+  initializeNormalizedLogs(executionId: string): void {
+    // No-op - logs are created on demand with appendNormalizedLog
+    console.log(
+      "[ExecutionLogsStore] Initialized normalized logs for execution:",
+      executionId
+    );
   }
 }

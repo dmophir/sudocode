@@ -117,6 +117,64 @@ const MIGRATIONS: Migration[] = [
       db.exec(`ALTER TABLE issue_feedback_old RENAME TO issue_feedback;`);
     },
   },
+  {
+    version: 2,
+    name: "add-normalized-logs-table",
+    up: (db: Database.Database) => {
+      // Check if table already exists
+      const tables = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_normalized_logs'"
+        )
+        .all() as Array<{ name: string }>;
+
+      if (tables.length > 0) {
+        // Already migrated
+        return;
+      }
+
+      // Create normalized logs table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS execution_normalized_logs (
+          id TEXT PRIMARY KEY,
+          execution_id TEXT NOT NULL,
+          entry_index INTEGER NOT NULL,
+          entry_kind TEXT NOT NULL,
+          entry_data TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Create indexes for efficient querying
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_normalized_logs_execution
+          ON execution_normalized_logs(execution_id, entry_index);
+
+        CREATE INDEX IF NOT EXISTS idx_normalized_logs_kind
+          ON execution_normalized_logs(execution_id, entry_kind);
+
+        CREATE INDEX IF NOT EXISTS idx_normalized_logs_timestamp
+          ON execution_normalized_logs(execution_id, timestamp);
+      `);
+
+      console.log("  ✓ Created execution_normalized_logs table with indexes");
+    },
+    down: (db: Database.Database) => {
+      // Drop indexes first
+      db.exec(`
+        DROP INDEX IF EXISTS idx_normalized_logs_execution;
+        DROP INDEX IF EXISTS idx_normalized_logs_kind;
+        DROP INDEX IF EXISTS idx_normalized_logs_timestamp;
+      `);
+
+      // Drop table
+      db.exec(`DROP TABLE IF EXISTS execution_normalized_logs;`);
+
+      console.log("  ✓ Dropped execution_normalized_logs table");
+    },
+  },
 ];
 
 /**
