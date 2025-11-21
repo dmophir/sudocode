@@ -6,11 +6,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ProjectProvider } from '@/contexts/ProjectContext'
 import { ProjectSwitcher } from '@/components/projects/ProjectSwitcher'
 import * as useProjectsHooks from '@/hooks/useProjects'
+import * as api from '@/lib/api'
 
 // Mock the hooks
 vi.mock('@/hooks/useProjects', () => ({
   useRecentProjects: vi.fn(),
   useProjectById: vi.fn(),
+}))
+
+// Mock API
+vi.mock('@/lib/api', () => ({
+  projectsApi: {
+    getOpen: vi.fn(),
+    open: vi.fn(),
+  },
+  setCurrentProjectId: vi.fn(),
 }))
 
 // Mock router navigate
@@ -249,5 +259,126 @@ describe('ProjectSwitcher', () => {
 
     // In collapsed mode, project name should not be visible (only icon)
     expect(screen.queryByText('My Project')).not.toBeInTheDocument()
+  })
+
+  it('should open closed project before switching', async () => {
+    const recentProjects = [
+      {
+        id: 'project-1',
+        name: 'Project One',
+        path: '/path/to/project1',
+        sudocodeDir: '/path/to/project1/.sudocode',
+        registeredAt: '2025-01-01T00:00:00Z',
+        lastOpenedAt: '2025-01-01T00:00:00Z',
+        favorite: false,
+      },
+      {
+        id: 'project-2',
+        name: 'Project Two',
+        path: '/path/to/project2',
+        sudocodeDir: '/path/to/project2/.sudocode',
+        registeredAt: '2025-01-01T00:00:00Z',
+        lastOpenedAt: '2025-01-01T00:00:00Z',
+        favorite: false,
+      },
+    ]
+
+    vi.mocked(useProjectsHooks.useRecentProjects).mockReturnValue({
+      data: recentProjects,
+      isLoading: false,
+    } as any)
+
+    vi.mocked(useProjectsHooks.useProjectById).mockReturnValue({
+      data: recentProjects[0],
+    } as any)
+
+    // Mock getOpen to return only project-1 is open
+    vi.mocked(api.projectsApi.getOpen).mockResolvedValue([
+      {
+        ...recentProjects[0],
+        isOpen: true,
+      },
+    ] as any)
+
+    // Mock open to succeed
+    vi.mocked(api.projectsApi.open).mockResolvedValue(recentProjects[1] as any)
+
+    const user = userEvent.setup()
+    renderWithProviders('project-1')
+
+    // Open the dropdown
+    const trigger = screen.getByRole('combobox', { name: /select project/i })
+    await user.click(trigger)
+
+    // Click on Project Two (which is closed)
+    const projectTwo = await screen.findByText('Project Two')
+    await user.click(projectTwo)
+
+    // Verify that the project was opened before switching
+    await waitFor(() => {
+      expect(api.projectsApi.getOpen).toHaveBeenCalled()
+      expect(api.projectsApi.open).toHaveBeenCalledWith({ path: '/path/to/project2' })
+    })
+  })
+
+  it('should not open project if already open', async () => {
+    const recentProjects = [
+      {
+        id: 'project-1',
+        name: 'Project One',
+        path: '/path/to/project1',
+        sudocodeDir: '/path/to/project1/.sudocode',
+        registeredAt: '2025-01-01T00:00:00Z',
+        lastOpenedAt: '2025-01-01T00:00:00Z',
+        favorite: false,
+      },
+      {
+        id: 'project-2',
+        name: 'Project Two',
+        path: '/path/to/project2',
+        sudocodeDir: '/path/to/project2/.sudocode',
+        registeredAt: '2025-01-01T00:00:00Z',
+        lastOpenedAt: '2025-01-01T00:00:00Z',
+        favorite: false,
+      },
+    ]
+
+    vi.mocked(useProjectsHooks.useRecentProjects).mockReturnValue({
+      data: recentProjects,
+      isLoading: false,
+    } as any)
+
+    vi.mocked(useProjectsHooks.useProjectById).mockReturnValue({
+      data: recentProjects[0],
+    } as any)
+
+    // Mock getOpen to return both projects are open
+    vi.mocked(api.projectsApi.getOpen).mockResolvedValue([
+      {
+        ...recentProjects[0],
+        isOpen: true,
+      },
+      {
+        ...recentProjects[1],
+        isOpen: true,
+      },
+    ] as any)
+
+    const user = userEvent.setup()
+    renderWithProviders('project-1')
+
+    // Open the dropdown
+    const trigger = screen.getByRole('combobox', { name: /select project/i })
+    await user.click(trigger)
+
+    // Click on Project Two (which is already open)
+    const projectTwo = await screen.findByText('Project Two')
+    await user.click(projectTwo)
+
+    // Verify that the project was NOT opened (already open)
+    await waitFor(() => {
+      expect(api.projectsApi.getOpen).toHaveBeenCalled()
+      expect(api.projectsApi.open).not.toHaveBeenCalled()
+    })
   })
 })

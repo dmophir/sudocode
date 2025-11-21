@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Check, FolderOpen, Settings as SettingsIcon } from 'lucide-react'
 import { useProject } from '@/hooks/useProject'
 import { useRecentProjects, useProjectById } from '@/hooks/useProjects'
+import { projectsApi } from '@/lib/api'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +55,20 @@ export function ProjectSwitcher({ className, collapsed = false }: ProjectSwitche
     setSwitching(true)
 
     try {
+      // Get the project we're switching to
+      const targetProject = recentProjects?.find((p) => p.id === projectId)
+
+      if (targetProject) {
+        // Check if the project is already open
+        const openProjects = await projectsApi.getOpen()
+        const isOpen = openProjects.some((p) => p.id === projectId)
+
+        // If not open, open it before switching
+        if (!isOpen) {
+          await projectsApi.open({ path: targetProject.path })
+        }
+      }
+
       // Update current project (this also updates the API client synchronously)
       setCurrentProjectId(projectId)
 
