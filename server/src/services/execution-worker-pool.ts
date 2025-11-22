@@ -53,6 +53,9 @@ export interface WorkerPoolConfig {
 
   /** Enable verbose worker logging (default: false) */
   verbose?: boolean;
+
+  /** Custom worker script path (for testing) */
+  workerScriptPath?: string;
 }
 
 /**
@@ -107,6 +110,7 @@ export class ExecutionWorkerPool {
       maxMemoryMB: config.maxMemoryMB ?? 512,
       workerIdleTimeout: config.workerIdleTimeout ?? 30000,
       verbose: config.verbose ?? false,
+      workerScriptPath: config.workerScriptPath ?? '',
     };
     this.eventHandlers = eventHandlers;
   }
@@ -150,12 +154,24 @@ export class ExecutionWorkerPool {
     };
 
     // Determine worker script path
-    // In development: src/workers/execution-worker.ts (via tsx)
-    // In production: dist/workers/execution-worker.js
+    // Priority: custom script path > development > production
     const isDev = process.env.NODE_ENV !== "production";
-    const workerScript = isDev
-      ? join(__dirname, "../workers/execution-worker.ts")
-      : join(__dirname, "../workers/execution-worker.js");
+    let workerScript: string;
+    let useTypeScript: boolean;
+
+    if (this.config.workerScriptPath) {
+      // Use custom worker script (for testing)
+      workerScript = this.config.workerScriptPath;
+      // Assume custom scripts are TypeScript if they end in .ts
+      useTypeScript = workerScript.endsWith('.ts');
+    } else {
+      // In development: src/workers/execution-worker.ts (via tsx)
+      // In production: dist/workers/execution-worker.js
+      workerScript = isDev
+        ? join(__dirname, "../workers/execution-worker.ts")
+        : join(__dirname, "../workers/execution-worker.js");
+      useTypeScript = isDev;
+    }
 
     // Spawn worker process
     // In dev: Use tsx to run TypeScript directly via --import (Node.js 20.6+)
@@ -168,7 +184,7 @@ export class ExecutionWorkerPool {
       },
       stdio: ["pipe", "pipe", "pipe", "ipc"],
       detached: false,
-      execArgv: isDev ? ["--import", "tsx"] : [],
+      execArgv: useTypeScript ? ["--import", "tsx"] : [],
     });
 
     const worker: WorkerProcess = {

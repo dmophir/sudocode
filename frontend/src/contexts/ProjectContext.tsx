@@ -31,7 +31,11 @@ export interface ProjectProviderProps {
   skipValidation?: boolean
 }
 
-export function ProjectProvider({ children, defaultProjectId, skipValidation = false }: ProjectProviderProps) {
+export function ProjectProvider({
+  children,
+  defaultProjectId,
+  skipValidation = false,
+}: ProjectProviderProps) {
   // Initialize from localStorage or default
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(() => {
     if (defaultProjectId !== undefined) {

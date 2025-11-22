@@ -5,21 +5,10 @@ import * as path from "path";
 import * as http from "http";
 import { fileURLToPath } from "url";
 import { readFileSync, existsSync } from "fs";
-import type Database from "better-sqlite3";
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import { initDatabase, getDatabaseInfo } from "./services/db.js";
-import { ExecutionLifecycleService } from "./services/execution-lifecycle.js";
-// import {
-//   ExecutionLogsCleanup,
-//   DEFAULT_CLEANUP_CONFIG,
-//   type CleanupConfig,
-// } from "./services/execution-logs-cleanup.js";
-import { WorktreeManager } from "./execution/worktree/manager.js";
-import { getWorktreeConfig } from "./execution/worktree/config.js";
-import { getRepositoryInfo } from "./services/repo-info.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createSpecsRouter } from "./routes/specs.js";
 import { createRelationshipsRouter } from "./routes/relationships.js";
@@ -27,6 +16,8 @@ import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
 import { createProjectsRouter } from "./routes/projects.js";
+import { createConfigRouter } from "./routes/config.js";
+import { createRepoInfoRouter } from "./routes/repo-info.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { ProjectRegistry } from "./services/project-registry.js";
 import { ProjectManager } from "./services/project-manager.js";
@@ -45,20 +36,8 @@ const app = express();
 const DEFAULT_PORT = 3000;
 const MAX_PORT_ATTEMPTS = 20;
 
-// Falls back to current directory for development/testing
-const SUDOCODE_DIR =
-  process.env.SUDOCODE_DIR || path.join(process.cwd(), ".sudocode");
-const DB_PATH = path.join(SUDOCODE_DIR, "cache.db");
-// TODO: Include sudocode install package for serving static files.
-
-// Derive repo root from SUDOCODE_DIR (which is <repo>/.sudocode)
-// This ensures consistency across database and execution paths
-const REPO_ROOT = path.dirname(SUDOCODE_DIR);
-
-// Initialize database and transport manager
-let db!: Database.Database;
+// Initialize transport manager
 let transportManager!: TransportManager;
-// let logsCleanup: ExecutionLogsCleanup | null = null;
 
 // Multi-project infrastructure
 let projectRegistry!: ProjectRegistry;
@@ -70,17 +49,6 @@ const WATCH_ENABLED = process.env.WATCH !== "false";
 // Async initialization function
 async function initialize() {
   try {
-    console.log(`Initializing database at: ${DB_PATH}`);
-    db = initDatabase({ path: DB_PATH });
-    const info = getDatabaseInfo(db);
-    console.log(`Database initialized with ${info.tables.length} tables`);
-    if (!info.hasCliTables) {
-      // TODO: Automatically import and sync.
-      console.warn(
-        "Warning: CLI tables not found. Run 'sudocode sync' to initialize the database."
-      );
-    }
-
     // Initialize ProjectRegistry and ProjectManager for multi-project support
     projectRegistry = new ProjectRegistry();
     await projectRegistry.load();
@@ -92,63 +60,54 @@ async function initialize() {
       watchEnabled: WATCH_ENABLED,
     });
 
-    // Auto-open the current project (REPO_ROOT) for backward compatibility
-    console.log(`Opening default project at: ${REPO_ROOT}`);
-    const openResult = await projectManager.openProject(REPO_ROOT);
-    if (!openResult.ok) {
-      const errorMsg =
-        "message" in openResult.error!
-          ? openResult.error!.message
-          : `${openResult.error!.type}`;
-      throw new Error(`Failed to open default project: ${errorMsg}`);
+    // Auto-open strategy:
+    // 1. If current directory has .sudocode, open it (highest priority)
+    // 2. Otherwise, open the most recently opened project (if available)
+    const currentDir = process.cwd();
+    const sudocodeDir = path.join(currentDir, ".sudocode");
+    const hasLocalProject = existsSync(sudocodeDir);
+
+    if (hasLocalProject) {
+      console.log(`Found .sudocode in current directory, opening: ${currentDir}`);
+      const openResult = await projectManager.openProject(currentDir);
+      if (!openResult.ok) {
+        const errorMsg =
+          "message" in openResult.error!
+            ? openResult.error!.message
+            : `${openResult.error!.type}`;
+        console.warn(`Failed to open local project: ${errorMsg}`);
+        console.log("Server will start with no projects open");
+      } else {
+        const projectInfo = projectRegistry.getProject(openResult.value!.id);
+        console.log(`Auto-opened local project: ${projectInfo?.name || path.basename(currentDir)}`);
+      }
+    } else {
+      // No local project, try most recent
+      const recentProjects = projectRegistry.getRecentProjects();
+      if (recentProjects.length > 0) {
+        const mostRecent = recentProjects[0];
+        console.log(`Auto-opening most recent project: ${mostRecent.name} (${mostRecent.path})`);
+        const openResult = await projectManager.openProject(mostRecent.path);
+        if (!openResult.ok) {
+          const errorMsg =
+            "message" in openResult.error!
+              ? openResult.error!.message
+              : `${openResult.error!.type}`;
+          console.warn(`Failed to auto-open most recent project: ${errorMsg}`);
+          console.log("Server will start with no projects open");
+        } else {
+          console.log(`Auto-opened project: ${mostRecent.name}`);
+        }
+      } else {
+        console.log("No recent projects found. Server will start with no projects open");
+      }
     }
-    // Default project opened successfully
 
     // Initialize transport manager for SSE streaming
     transportManager = new TransportManager();
     console.log("Transport manager initialized");
-
-    // Note: ExecutionLogsStore is now initialized per-project in ProjectManager
-
-    // Initialize execution logs cleanup service
-    // TODO: Enable auto-cleanup config via .sudocode/config.json
-    // const cleanupConfig: CleanupConfig = {
-    //   enabled: process.env.CLEANUP_ENABLED !== "false",
-    //   intervalMs: parseInt(
-    //     process.env.CLEANUP_INTERVAL_MS ||
-    //       String(DEFAULT_CLEANUP_CONFIG.intervalMs),
-    //     10
-    //   ),
-    //   retentionMs: parseInt(
-    //     process.env.CLEANUP_RETENTION_MS ||
-    //       String(DEFAULT_CLEANUP_CONFIG.retentionMs),
-    //     10
-    //   ),
-    // };
-    // logsCleanup = new ExecutionLogsCleanup(logsStore, cleanupConfig);
-    // logsCleanup.start();
-
-    // Cleanup orphaned worktrees on startup (if configured)
-    const worktreeConfig = getWorktreeConfig(REPO_ROOT);
-    if (worktreeConfig.cleanupOrphanedWorktreesOnStartup) {
-      try {
-        // TODO: Log if there are worktrees to cleanup
-        const worktreeManager = new WorktreeManager(worktreeConfig);
-        const lifecycleService = new ExecutionLifecycleService(
-          db,
-          REPO_ROOT,
-          worktreeManager
-        );
-        console.log("Cleaning up orphaned worktrees...");
-        await lifecycleService.cleanupOrphanedWorktrees();
-        console.log("Orphaned worktree cleanup complete");
-      } catch (error) {
-        console.error("Failed to cleanup orphaned worktrees:", error);
-        // Don't exit - this is best-effort cleanup
-      }
-    }
   } catch (error) {
-    console.error("Failed to initialize database:", error);
+    console.error("Failed to initialize server:", error);
     process.exit(1);
   }
 }
@@ -178,6 +137,8 @@ app.use(
   requireProject(projectManager),
   createFeedbackRouter()
 );
+app.use("/api/config", requireProject(projectManager), createConfigRouter());
+app.use("/api/repo-info", requireProject(projectManager), createRepoInfoRouter());
 
 // Mount execution routes (must be before stream routes to avoid conflicts)
 app.use("/api", requireProject(projectManager), createExecutionsRouter());
@@ -189,15 +150,21 @@ app.use(
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
-  const dbInfo = getDatabaseInfo(db);
+  const openProjects = projectManager.getAllOpenProjects();
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    database: {
-      path: DB_PATH,
-      tables: dbInfo.tables.length,
-      hasCliTables: dbInfo.hasCliTables,
+    projects: {
+      totalOpen: openProjects.length,
+      openProjects: openProjects.map((p) => {
+        const projectInfo = projectRegistry.getProject(p.id);
+        return {
+          id: p.id,
+          name: projectInfo?.name || path.basename(p.path),
+          path: p.path,
+        };
+      }),
     },
   });
 });
@@ -234,49 +201,6 @@ app.get("/api/version", (_req: Request, res: Response) => {
     });
   }
 });
-
-// Config endpoint - returns sudocode configuration
-app.get("/api/config", (_req: Request, res: Response) => {
-  try {
-    const configPath = path.join(SUDOCODE_DIR, "config.json");
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
-    res.status(200).json(config);
-  } catch (error) {
-    console.error("Failed to read config:", error);
-    res.status(500).json({ error: "Failed to read config" });
-  }
-});
-
-// Repository info endpoint - returns git repository information for current project
-app.get(
-  "/api/repo-info",
-  requireProject(projectManager),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const repoInfo = await getRepositoryInfo(req.project!.path);
-      res.status(200).json({
-        success: true,
-        data: repoInfo,
-      });
-    } catch (error) {
-      const err = error as Error;
-      if (err.message === "Not a git repository") {
-        res.status(404).json({
-          success: false,
-          data: null,
-          message: err.message,
-        });
-      } else {
-        console.error("Failed to get repository info:", error);
-        res.status(500).json({
-          success: false,
-          data: null,
-          message: "Failed to get repository info",
-        });
-      }
-    }
-  }
-);
 
 // WebSocket stats endpoint
 app.get("/ws/stats", (_req: Request, res: Response) => {
@@ -485,14 +409,8 @@ process.on("unhandledRejection", (reason, promise) => {
 process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
 
-  // Stop logs cleanup service
-  // TODO: Re-enable when logs cleanup is supported
-  // if (logsCleanup) {
-  //   logsCleanup.stop();
-  // }
-
   // Shutdown ProjectManager (closes all projects and their watchers)
-  // This will shutdown all per-project ExecutionServices
+  // This will shutdown all per-project ExecutionServices and close all databases
   if (projectManager) {
     await projectManager.shutdown();
   }
@@ -505,9 +423,6 @@ process.on("SIGINT", async () => {
     transportManager.shutdown();
     console.log("Transport manager shutdown complete");
   }
-
-  // Close database
-  db.close();
 
   // Close HTTP server
   server.close(() => {
@@ -525,14 +440,8 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
   console.log("\nShutting down server...");
 
-  // Stop logs cleanup service
-  // TODO: Re-enable when logs cleanup is supported
-  // if (logsCleanup) {
-  //   logsCleanup.stop();
-  // }
-
   // Shutdown ProjectManager (closes all projects and their watchers)
-  // This will shutdown all per-project ExecutionServices
+  // This will shutdown all per-project ExecutionServices and close all databases
   if (projectManager) {
     await projectManager.shutdown();
   }
@@ -546,9 +455,6 @@ process.on("SIGTERM", async () => {
     console.log("Transport manager shutdown complete");
   }
 
-  // Close database
-  db.close();
-
   // Close HTTP server
   server.close(() => {
     console.log("Server closed");
@@ -557,4 +463,4 @@ process.on("SIGTERM", async () => {
 });
 
 export default app;
-export { db, transportManager };
+export { transportManager };

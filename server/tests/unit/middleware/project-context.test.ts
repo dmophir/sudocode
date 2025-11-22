@@ -67,7 +67,7 @@ describe('Project Context Middleware', () => {
       const response = await request(app).get('/api/test')
 
       expect(response.status).toBe(400)
-      expect(response.body.error).toBe('Missing X-Project-ID header')
+      expect(response.body.error).toBe('Missing X-Project-ID header or projectId query parameter')
       expect(response.body.message).toContain('X-Project-ID')
     })
 
@@ -294,7 +294,7 @@ describe('Project Context Middleware', () => {
       const middleware = requireProject(manager)
 
       // Create mock req/res
-      const mockReq = { get: vi.fn(() => null), headers: {} } as any
+      const mockReq = { get: vi.fn(() => null), headers: {}, query: {} } as any
       const mockRes = {
         status: vi.fn().mockReturnThis(),
         json: vi.fn(),
@@ -317,6 +317,7 @@ describe('Project Context Middleware', () => {
       const mockReq = {
         get: vi.fn((header: string) => (header === 'X-Project-ID' ? testProjectId : null)),
         headers: {},
+        query: {},
       } as any
       const mockRes = {} as any
 

@@ -56,7 +56,7 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects')
 
       expect(response.status).toBe(200)
-      expect(response.body).toEqual({ projects: [] })
+      expect(response.body).toEqual({ success: true, data: [] })
     })
 
     it('should return all registered projects', async () => {
@@ -67,10 +67,11 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects')
 
       expect(response.status).toBe(200)
-      expect(response.body.projects).toHaveLength(2)
-      expect(response.body.projects[0]).toHaveProperty('id')
-      expect(response.body.projects[0]).toHaveProperty('path')
-      expect(response.body.projects[0]).toHaveProperty('name')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data).toHaveLength(2)
+      expect(response.body.data[0]).toHaveProperty('id')
+      expect(response.body.data[0]).toHaveProperty('path')
+      expect(response.body.data[0]).toHaveProperty('name')
     })
   })
 
@@ -79,7 +80,7 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects/open')
 
       expect(response.status).toBe(200)
-      expect(response.body).toEqual({ projects: [] })
+      expect(response.body).toEqual({ success: true, data: [] })
     })
 
     it('should return all open projects with context', async () => {
@@ -89,11 +90,12 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects/open')
 
       expect(response.status).toBe(200)
-      expect(response.body.projects).toHaveLength(1)
-      expect(response.body.projects[0]).toHaveProperty('id')
-      expect(response.body.projects[0]).toHaveProperty('path')
-      expect(response.body.projects[0]).toHaveProperty('openedAt')
-      expect(response.body.projects[0]).toHaveProperty('hasWatcher')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data).toHaveLength(1)
+      expect(response.body.data[0]).toHaveProperty('id')
+      expect(response.body.data[0]).toHaveProperty('path')
+      expect(response.body.data[0]).toHaveProperty('openedAt')
+      expect(response.body.data[0]).toHaveProperty('hasWatcher')
     })
   })
 
@@ -102,7 +104,7 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects/recent')
 
       expect(response.status).toBe(200)
-      expect(response.body).toEqual({ projects: [] })
+      expect(response.body).toEqual({ success: true, data: [] })
     })
 
     it('should return recent projects in order', async () => {
@@ -114,10 +116,11 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects/recent')
 
       expect(response.status).toBe(200)
-      expect(response.body.projects).toHaveLength(2)
+      expect(response.body.success).toBe(true)
+      expect(response.body.data).toHaveLength(2)
       // Most recent should be first
-      expect(response.body.projects[0].path).toBe(testProjectPath2)
-      expect(response.body.projects[1].path).toBe(testProjectPath1)
+      expect(response.body.data[0].path).toBe(testProjectPath2)
+      expect(response.body.data[1].path).toBe(testProjectPath1)
     })
   })
 
@@ -126,8 +129,9 @@ describe('Projects API Routes', () => {
       const response = await request(app).post('/api/projects/validate').send({})
 
       expect(response.status).toBe(400)
-      expect(response.body.valid).toBe(false)
-      expect(response.body.error).toBe('Path is required')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data.valid).toBe(false)
+      expect(response.body.data.error).toBe('Path is required')
     })
 
     it('should return invalid for non-existent path', async () => {
@@ -136,8 +140,9 @@ describe('Projects API Routes', () => {
         .send({ path: '/non/existent/path' })
 
       expect(response.status).toBe(200)
-      expect(response.body.valid).toBe(false)
-      expect(response.body.errorType).toBe('PATH_NOT_FOUND')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data.valid).toBe(false)
+      expect(response.body.data.errorType).toBe('PATH_NOT_FOUND')
     })
 
     it('should return invalid for path without .sudocode', async () => {
@@ -149,8 +154,9 @@ describe('Projects API Routes', () => {
         .send({ path: invalidPath })
 
       expect(response.status).toBe(200)
-      expect(response.body.valid).toBe(false)
-      expect(response.body.errorType).toBe('INVALID_PROJECT')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data.valid).toBe(false)
+      expect(response.body.data.errorType).toBe('INVALID_PROJECT')
     })
 
     it('should return valid for valid project path', async () => {
@@ -159,8 +165,9 @@ describe('Projects API Routes', () => {
         .send({ path: testProjectPath1 })
 
       expect(response.status).toBe(200)
-      expect(response.body.valid).toBe(true)
-      expect(response.body).not.toHaveProperty('error')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data.valid).toBe(true)
+      expect(response.body.data).not.toHaveProperty('error')
     })
 
     it('should not keep project open after validation', async () => {
@@ -176,7 +183,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).post('/api/projects/open').send({})
 
       expect(response.status).toBe(400)
-      expect(response.body.error).toBe('Path is required')
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toBe('Path is required')
     })
 
     it('should return 404 for non-existent path', async () => {
@@ -185,7 +193,8 @@ describe('Projects API Routes', () => {
         .send({ path: '/non/existent/path' })
 
       expect(response.status).toBe(404)
-      expect(response.body.errorType).toBe('PATH_NOT_FOUND')
+      expect(response.body.success).toBe(false)
+      expect(response.body.error_data).toBe('PATH_NOT_FOUND')
     })
 
     it('should return 400 for invalid project', async () => {
@@ -195,7 +204,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).post('/api/projects/open').send({ path: invalidPath })
 
       expect(response.status).toBe(400)
-      expect(response.body.errorType).toBe('INVALID_PROJECT')
+      expect(response.body.success).toBe(false)
+      expect(response.body.error_data).toBe('INVALID_PROJECT')
     })
 
     it('should successfully open valid project', async () => {
@@ -204,11 +214,12 @@ describe('Projects API Routes', () => {
         .send({ path: testProjectPath1 })
 
       expect(response.status).toBe(200)
-      expect(response.body.project).toHaveProperty('id')
-      expect(response.body.project).toHaveProperty('path', testProjectPath1)
-      expect(response.body.project).toHaveProperty('openedAt')
-      expect(response.body.project).toHaveProperty('hasWatcher')
-      expect(response.body.project).toHaveProperty('hasActiveExecutions')
+      expect(response.body.success).toBe(true)
+      expect(response.body.data).toHaveProperty('id')
+      expect(response.body.data).toHaveProperty('path', testProjectPath1)
+      expect(response.body.data).toHaveProperty('openedAt')
+      expect(response.body.data).toHaveProperty('hasWatcher')
+      expect(response.body.data).toHaveProperty('hasActiveExecutions')
     })
 
     it('should register project in registry', async () => {
@@ -218,7 +229,7 @@ describe('Projects API Routes', () => {
 
       expect(response.status).toBe(200)
 
-      const projectId = response.body.project.id
+      const projectId = response.body.data.id
       const projectInfo = registry.getProject(projectId)
       expect(projectInfo).not.toBeNull()
     })
@@ -230,7 +241,7 @@ describe('Projects API Routes', () => {
 
       expect(response.status).toBe(200)
 
-      const projectId = response.body.project.id
+      const projectId = response.body.data.id
       expect(manager.isProjectOpen(projectId)).toBe(true)
     })
   })
@@ -240,7 +251,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).post('/api/projects/non-existent-id/close')
 
       expect(response.status).toBe(404)
-      expect(response.body.error).toContain('not open')
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toContain('not open')
     })
 
     it('should successfully close open project', async () => {
@@ -265,7 +277,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).delete('/api/projects/non-existent-id')
 
       expect(response.status).toBe(404)
-      expect(response.body.error).toContain('not found')
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toContain('not found')
     })
 
     it('should successfully unregister project', async () => {
@@ -304,7 +317,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).get('/api/projects/non-existent-id')
 
       expect(response.status).toBe(404)
-      expect(response.body.error).toContain('not found')
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toContain('not found')
     })
 
     it('should return project info for registered project', async () => {
@@ -313,10 +327,11 @@ describe('Projects API Routes', () => {
       const response = await request(app).get(`/api/projects/${projectInfo.id}`)
 
       expect(response.status).toBe(200)
-      expect(response.body.project).toHaveProperty('id', projectInfo.id)
-      expect(response.body.project).toHaveProperty('path', testProjectPath1)
+      expect(response.body.success).toBe(true)
+      expect(response.body.data).toHaveProperty('id', projectInfo.id)
+      expect(response.body.data).toHaveProperty('path', testProjectPath1)
       // When not open, the route returns { isOpen: false } via the GET endpoint logic
-      expect(response.body.project.isOpen).toBe(false)
+      expect(response.body.data.isOpen).toBe(false)
     })
 
     it('should include context summary for open project', async () => {
@@ -329,9 +344,10 @@ describe('Projects API Routes', () => {
         const response = await request(app).get(`/api/projects/${projectId}`)
 
         expect(response.status).toBe(200)
-        expect(response.body.project).toHaveProperty('id', projectId)
-        expect(response.body.project).toHaveProperty('openedAt')
-        expect(response.body.project).toHaveProperty('hasWatcher')
+        expect(response.body.success).toBe(true)
+        expect(response.body.data).toHaveProperty('id', projectId)
+        expect(response.body.data).toHaveProperty('openedAt')
+        expect(response.body.data).toHaveProperty('hasWatcher')
       }
     })
   })
@@ -341,7 +357,8 @@ describe('Projects API Routes', () => {
       const response = await request(app).post('/api/projects/init').send({})
 
       expect(response.status).toBe(400)
-      expect(response.body.error).toBe('Path is required')
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toBe('Path is required')
     })
 
     it('should return 501 not implemented', async () => {
@@ -350,7 +367,8 @@ describe('Projects API Routes', () => {
         .send({ path: '/some/path' })
 
       expect(response.status).toBe(501)
-      expect(response.body.error).toContain('not yet implemented')
+      expect(response.body.success).toBe(false)
+      expect(response.body.error_data).toContain('not yet implemented')
       expect(response.body.message).toContain('sudocode sync')
     })
   })

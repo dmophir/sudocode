@@ -14,7 +14,7 @@
  * Run with: npm test -- --run tests/integration/worker-isolation.test.ts
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { ExecutionWorkerPool } from '../../src/services/execution-worker-pool.js'
 import type { Execution } from '@sudocode-ai/types'
 import Database from 'better-sqlite3'
@@ -88,6 +88,19 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
     // Create test repository directory
     repoPath = join(testDir, 'repo')
     mkdirSync(repoPath, { recursive: true })
+  })
+
+  afterEach(async () => {
+    // Shutdown pool if it exists
+    if (pool) {
+      await pool.shutdown()
+    }
+
+    // Clear all data from tables (but keep schema)
+    if (db) {
+      db.prepare('DELETE FROM execution_logs').run()
+      db.prepare('DELETE FROM executions').run()
+    }
   })
 
   afterAll(() => {
@@ -196,8 +209,6 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
 
       // All workers should have crashed independently
       expect(pool.getActiveWorkerCount()).toBe(0)
-
-      await pool.shutdown()
     }, 20000)
   })
 
@@ -254,8 +265,6 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
       await expect(
         pool.startExecution(exec3, repoPath, dbPath)
       ).rejects.toThrow('Maximum concurrent workers')
-
-      await pool.shutdown()
     }, 15000)
   })
 
@@ -395,9 +404,14 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
         logs.push(event.data)
       })
 
+      // Use mock worker that doesn't require Claude CLI
+      const mockWorkerPath = join(__dirname, 'fixtures/mock-worker.ts')
       pool = new ExecutionWorkerPool(
         'test-project',
-        { maxConcurrentWorkers: 1 },
+        {
+          maxConcurrentWorkers: 1,
+          workerScriptPath: mockWorkerPath,
+        },
         { onLog }
       )
 
@@ -420,12 +434,10 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
       await pool.startExecution(execution, repoPath, dbPath)
 
       // Wait for worker to emit logs
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       // Should have received log events
       expect(onLog).toHaveBeenCalled()
-
-      await pool.shutdown()
     }, 15000)
 
     it('should forward completion events from worker to main process', async () => {
@@ -434,9 +446,14 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
         completionCalled = true
       })
 
+      // Use mock worker that doesn't require Claude CLI
+      const mockWorkerPath = join(__dirname, 'fixtures/mock-worker.ts')
       pool = new ExecutionWorkerPool(
         'test-project',
-        { maxConcurrentWorkers: 1 },
+        {
+          maxConcurrentWorkers: 1,
+          workerScriptPath: mockWorkerPath,
+        },
         { onComplete }
       )
 
@@ -459,12 +476,10 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
       await pool.startExecution(execution, repoPath, dbPath)
 
       // Wait for worker to complete
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       // Should have received completion event
       expect(completionCalled).toBe(true)
-
-      await pool.shutdown()
     }, 15000)
   })
 
@@ -501,8 +516,6 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
       // Worker should be removed
       expect(pool.hasWorker(execution.id)).toBe(false)
       expect(pool.getActiveWorkerCount()).toBe(0)
-
-      await pool.shutdown()
     }, 15000)
   })
 })

@@ -26,6 +26,7 @@ describe('ProjectContext', () => {
 
     mockExecutionService = {
       shutdown: vi.fn(),
+      hasActiveExecutions: vi.fn(() => false),
     } as any
 
     mockLogsStore = {} as any
