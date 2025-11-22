@@ -31,6 +31,7 @@ import type { TransportManager } from "../execution/transport/transport-manager.
 import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { broadcastExecutionUpdate } from "./websocket.js";
+import { GitCli } from "../execution/worktree/git-cli.js";
 
 /**
  * Configuration for creating an execution
@@ -200,11 +201,24 @@ export class ExecutionService {
     // 5. Render template
     const renderedPrompt = this.templateEngine.render(template, context);
 
-    // 6. Get default config
+    // 6. Get current branch as default base branch
+    let currentBranch = "main"; // Fallback default
+    try {
+      const gitCli = new GitCli();
+      currentBranch = await gitCli.getCurrentBranch(this.repoPath);
+      // If detached HEAD, try to use 'main' as fallback
+      if (currentBranch === "(detached)") {
+        currentBranch = "main";
+      }
+    } catch (error) {
+      console.warn("Failed to get current branch, using 'main' as fallback:", error);
+    }
+
+    // 7. Get default config
     const defaultConfig: ExecutionConfig = {
       mode: "worktree",
       model: "claude-sonnet-4",
-      baseBranch: "main",
+      baseBranch: currentBranch,
       checkpointInterval: 1,
       continueOnStepFailure: false,
       captureFileChanges: true,
@@ -212,7 +226,7 @@ export class ExecutionService {
       ...options?.config,
     };
 
-    // 7. Validate
+    // 8. Validate
     const warnings: string[] = [];
     const errors: string[] = [];
 
