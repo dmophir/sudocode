@@ -23,7 +23,8 @@ import type { TransportManager } from "../execution/transport/transport-manager.
 import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { broadcastExecutionUpdate } from "./websocket.js";
-import { ClaudeExecutorWrapper } from "../execution/executors/claude-executor-wrapper.js";
+import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
+import type { AgentType } from "@sudocode-ai/types/agents";
 
 /**
  * Configuration for creating an execution
@@ -236,12 +237,14 @@ export class ExecutionService {
    * @param issueId - ID of issue to execute
    * @param config - Execution configuration
    * @param prompt - Rendered prompt to execute
+   * @param agentType - Type of agent to use (defaults to 'claude-code')
    * @returns Created execution record
    */
   async createExecution(
     issueId: string,
     config: ExecutionConfig,
-    prompt: string
+    prompt: string,
+    agentType: AgentType = 'claude-code'
   ): Promise<Execution> {
     // 1. Validate
     if (!prompt.trim()) {
@@ -266,7 +269,7 @@ export class ExecutionService {
       const result = await this.lifecycleService.createExecutionWithWorktree({
         issueId,
         issueTitle: issue.title,
-        agentType: "claude-code",
+        agentType: agentType,
         targetBranch: config.baseBranch || "main",
         repoPath: this.repoPath,
         mode: mode,
@@ -282,7 +285,7 @@ export class ExecutionService {
       execution = createExecution(this.db, {
         id: executionId,
         issue_id: issueId,
-        agent_type: "claude-code",
+        agent_type: agentType,
         mode: mode,
         prompt: prompt,
         config: JSON.stringify(config),
@@ -324,15 +327,19 @@ export class ExecutionService {
       return execution;
     }
 
-    // 4. In-process execution with ClaudeExecutorWrapper (fallback when no worker pool)
-    const wrapper = new ClaudeExecutorWrapper({
-      workDir: this.repoPath,
-      lifecycleService: this.lifecycleService,
-      logsStore: this.logsStore,
-      projectId: this.projectId,
-      db: this.db,
-      transportManager: this.transportManager,
-    });
+    // 4. In-process execution with executor wrapper (fallback when no worker pool)
+    const wrapper = createExecutorForAgent(
+      agentType,
+      { workDir: this.repoPath }, // Agent-specific config (minimal for now)
+      {
+        workDir: this.repoPath,
+        lifecycleService: this.lifecycleService,
+        logsStore: this.logsStore,
+        projectId: this.projectId,
+        db: this.db,
+        transportManager: this.transportManager,
+      }
+    );
 
     // Build execution task
     const task: ExecutionTask = {
@@ -442,11 +449,14 @@ ${feedback}
 Please continue working on this issue, taking into account the feedback above.`;
 
     // 5. Create new execution record that references previous execution
+    // Default to 'claude-code' if agent_type is null (for backwards compatibility)
+    const agentType = (prevExecution.agent_type || 'claude-code') as AgentType;
+
     const newExecutionId = randomUUID();
     const newExecution = createExecution(this.db, {
       id: newExecutionId,
       issue_id: prevExecution.issue_id,
-      agent_type: "claude-code",
+      agent_type: agentType, // Use same agent as previous execution
       target_branch: prevExecution.target_branch,
       branch_name: prevExecution.branch_name,
       // TODO: Handle case where worktree has been deleted.
@@ -468,15 +478,19 @@ Please continue working on this issue, taking into account the feedback above.`;
       // Don't fail execution creation - logs are nice-to-have
     }
 
-    // 5. Use ClaudeExecutorWrapper with session resumption
-    const wrapper = new ClaudeExecutorWrapper({
-      workDir: this.repoPath,
-      lifecycleService: this.lifecycleService,
-      logsStore: this.logsStore,
-      projectId: this.projectId,
-      db: this.db,
-      transportManager: this.transportManager,
-    });
+    // 5. Use executor wrapper with session resumption
+    const wrapper = createExecutorForAgent(
+      agentType,
+      { workDir: this.repoPath },
+      {
+        workDir: this.repoPath,
+        lifecycleService: this.lifecycleService,
+        logsStore: this.logsStore,
+        projectId: this.projectId,
+        db: this.db,
+        transportManager: this.transportManager,
+      }
+    );
 
     // Extract session ID (use previous execution ID as session ID)
     const sessionId = prevExecution.id;

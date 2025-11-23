@@ -414,6 +414,222 @@ describe("Database Migrations", () => {
     });
   });
 
+  describe("Migration 3: remove-agent-type-constraints", () => {
+    beforeEach(() => {
+      // Create old schema with agent_type constraints
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS executions (
+          id TEXT PRIMARY KEY,
+          issue_id TEXT,
+          issue_uuid TEXT,
+          mode TEXT CHECK(mode IN ('worktree', 'local')),
+          prompt TEXT,
+          config TEXT,
+          agent_type TEXT CHECK(agent_type IN ('claude-code', 'codex')),
+          session_id TEXT,
+          workflow_execution_id TEXT,
+          target_branch TEXT NOT NULL,
+          branch_name TEXT NOT NULL,
+          before_commit TEXT,
+          after_commit TEXT,
+          worktree_path TEXT,
+          status TEXT NOT NULL CHECK(status IN (
+            'preparing', 'pending', 'running', 'paused',
+            'completed', 'failed', 'cancelled', 'stopped'
+          )),
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          started_at DATETIME,
+          completed_at DATETIME,
+          cancelled_at DATETIME,
+          exit_code INTEGER,
+          error_message TEXT,
+          error TEXT,
+          model TEXT,
+          summary TEXT,
+          files_changed TEXT,
+          parent_execution_id TEXT,
+          step_type TEXT,
+          step_index INTEGER,
+          step_config TEXT
+        )
+      `);
+
+      // Insert test data with various agent_type values
+      db.prepare(`
+        INSERT INTO executions (
+          id, target_branch, branch_name, status, agent_type
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run("exec-1", "main", "test-branch-1", "running", "claude-code");
+
+      db.prepare(`
+        INSERT INTO executions (
+          id, target_branch, branch_name, status, agent_type
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run("exec-2", "main", "test-branch-2", "completed", null);
+    });
+
+    it("should make agent_type nullable", () => {
+      runMigrations(db);
+
+      const tableInfo = db.pragma("table_info(executions)") as Array<{
+        name: string;
+        notnull: number;
+      }>;
+
+      const agentTypeColumn = tableInfo.find((col) => col.name === "agent_type");
+      expect(agentTypeColumn).toBeDefined();
+      expect(agentTypeColumn!.notnull).toBe(0); // 0 means nullable
+    });
+
+    it("should remove default value from agent_type", () => {
+      runMigrations(db);
+
+      const tableInfo = db.pragma("table_info(executions)") as Array<{
+        name: string;
+        dflt_value: string | null;
+      }>;
+
+      const agentTypeColumn = tableInfo.find((col) => col.name === "agent_type");
+      expect(agentTypeColumn).toBeDefined();
+      expect(agentTypeColumn!.dflt_value).toBeNull();
+    });
+
+    it("should preserve existing agent_type values including NULL", () => {
+      runMigrations(db);
+
+      const exec1 = db
+        .prepare("SELECT * FROM executions WHERE id = ?")
+        .get("exec-1") as {
+        id: string;
+        agent_type: string | null;
+        status: string;
+      };
+
+      const exec2 = db
+        .prepare("SELECT * FROM executions WHERE id = ?")
+        .get("exec-2") as {
+        id: string;
+        agent_type: string | null;
+        status: string;
+      };
+
+      expect(exec1).toBeDefined();
+      expect(exec1.agent_type).toBe("claude-code");
+      expect(exec1.status).toBe("running");
+
+      expect(exec2).toBeDefined();
+      expect(exec2.agent_type).toBeNull();
+      expect(exec2.status).toBe("completed");
+    });
+
+    it("should allow any string value for agent_type after migration", () => {
+      runMigrations(db);
+
+      // Disable foreign keys for testing (since issues table doesn't exist)
+      db.exec("PRAGMA foreign_keys = OFF");
+
+      // Should allow inserting with custom agent types
+      expect(() => {
+        db.prepare(`
+          INSERT INTO executions (
+            id, target_branch, branch_name, status, agent_type
+          ) VALUES (?, ?, ?, ?, ?)
+        `).run("exec-3", "main", "test-branch-3", "running", "custom-agent");
+      }).not.toThrow();
+
+      // Should allow NULL
+      expect(() => {
+        db.prepare(`
+          INSERT INTO executions (
+            id, target_branch, branch_name, status, agent_type
+          ) VALUES (?, ?, ?, ?, ?)
+        `).run("exec-4", "main", "test-branch-4", "running", null);
+      }).not.toThrow();
+
+      // Verify the custom agent type was stored
+      const exec3 = db
+        .prepare("SELECT agent_type FROM executions WHERE id = ?")
+        .get("exec-3") as { agent_type: string };
+
+      expect(exec3.agent_type).toBe("custom-agent");
+    });
+
+    it("should recreate indexes", () => {
+      runMigrations(db);
+
+      const indexes = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='executions'"
+        )
+        .all() as Array<{ name: string }>;
+
+      const indexNames = indexes.map((idx) => idx.name);
+      expect(indexNames).toContain("idx_executions_issue_id");
+      expect(indexNames).toContain("idx_executions_issue_uuid");
+      expect(indexNames).toContain("idx_executions_status");
+      expect(indexNames).toContain("idx_executions_session_id");
+      expect(indexNames).toContain("idx_executions_parent");
+      expect(indexNames).toContain("idx_executions_created_at");
+      expect(indexNames).toContain("idx_executions_workflow");
+      expect(indexNames).toContain("idx_executions_workflow_step");
+      expect(indexNames).toContain("idx_executions_step_type");
+    });
+
+    it("should be idempotent (safe to run multiple times)", () => {
+      runMigrations(db);
+      runMigrations(db); // Run again
+
+      // Should not throw and data should still be intact
+      const exec1 = db
+        .prepare("SELECT * FROM executions WHERE id = ?")
+        .get("exec-1") as { id: string; agent_type: string };
+
+      expect(exec1).toBeDefined();
+      expect(exec1.id).toBe("exec-1");
+      expect(exec1.agent_type).toBe("claude-code");
+    });
+
+    it("should handle new databases without executions table", () => {
+      // Create a new database without executions table
+      const newDb = new Database(":memory:");
+
+      // Should not throw when running migration on database without table
+      expect(() => runMigrations(newDb)).not.toThrow();
+
+      newDb.close();
+    });
+
+    it("should handle databases that already have nullable agent_type", () => {
+      // Create database with new schema already in place
+      const newDb = new Database(":memory:");
+
+      newDb.exec(`
+        CREATE TABLE IF NOT EXISTS executions (
+          id TEXT PRIMARY KEY,
+          issue_id TEXT,
+          issue_uuid TEXT,
+          mode TEXT CHECK(mode IN ('worktree', 'local')),
+          prompt TEXT,
+          config TEXT,
+          agent_type TEXT,
+          session_id TEXT,
+          workflow_execution_id TEXT,
+          target_branch TEXT NOT NULL,
+          branch_name TEXT NOT NULL,
+          status TEXT NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Should not throw when running migration on already-migrated database
+      expect(() => runMigrations(newDb)).not.toThrow();
+
+      newDb.close();
+    });
+  });
+
   describe("runMigrations", () => {
     it("should run all pending migrations in order", () => {
       // Create old schema for both migrations
@@ -475,19 +691,21 @@ describe("Database Migrations", () => {
 
       runMigrations(db);
 
-      // Should have run both migrations
-      expect(getCurrentMigrationVersion(db)).toBe(2);
+      // Should have run all three migrations
+      expect(getCurrentMigrationVersion(db)).toBe(3);
 
-      // Verify both migrations were applied
+      // Verify all migrations were applied
       const migrations = db
         .prepare("SELECT * FROM migrations ORDER BY version")
         .all() as Array<{ version: number; name: string }>;
 
-      expect(migrations).toHaveLength(2);
+      expect(migrations).toHaveLength(3);
       expect(migrations[0].version).toBe(1);
       expect(migrations[0].name).toBe("generalize-feedback-table");
       expect(migrations[1].version).toBe(2);
       expect(migrations[1].name).toBe("add-normalized-entry-support");
+      expect(migrations[2].version).toBe(3);
+      expect(migrations[2].name).toBe("remove-agent-type-constraints");
     });
 
     it("should skip already-applied migrations", () => {
@@ -528,19 +746,20 @@ describe("Database Migrations", () => {
 
       runMigrations(db);
 
-      // Should only run migration 2
-      expect(getCurrentMigrationVersion(db)).toBe(2);
+      // Should run migrations 2 and 3
+      expect(getCurrentMigrationVersion(db)).toBe(3);
 
       const migrations = db
         .prepare("SELECT * FROM migrations ORDER BY version")
         .all() as Array<{ version: number; name: string }>;
 
-      expect(migrations).toHaveLength(2);
+      expect(migrations).toHaveLength(3);
       expect(migrations[1].version).toBe(2);
+      expect(migrations[2].version).toBe(3);
     });
 
     it("should not run if no pending migrations", () => {
-      // Manually record both migrations as applied
+      // Manually record all migrations as applied
       db.exec(`
         CREATE TABLE IF NOT EXISTS migrations (
           version INTEGER PRIMARY KEY,
@@ -557,13 +776,17 @@ describe("Database Migrations", () => {
         2,
         "add-normalized-entry-support"
       );
+      db.prepare("INSERT INTO migrations (version, name) VALUES (?, ?)").run(
+        3,
+        "remove-agent-type-constraints"
+      );
 
-      expect(getCurrentMigrationVersion(db)).toBe(2);
+      expect(getCurrentMigrationVersion(db)).toBe(3);
 
       // Should not throw, just skip
       expect(() => runMigrations(db)).not.toThrow();
 
-      expect(getCurrentMigrationVersion(db)).toBe(2);
+      expect(getCurrentMigrationVersion(db)).toBe(3);
     });
   });
 });

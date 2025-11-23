@@ -9,6 +9,10 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.d.ts"
     },
+    "./agents": {
+      "types": "./src/agents.d.ts",
+      "default": "./src/agents.d.ts"
+    },
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./dist/schema.js"
@@ -44,6 +48,7 @@
   },
   "files": [
     "src/index.d.ts",
+    "src/agents.d.ts",
     "dist"
   ],
   "devDependencies": {

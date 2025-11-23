@@ -63,7 +63,7 @@ export function createExecutionsRouter(): Router {
     async (req: Request, res: Response) => {
       try {
         const { issueId } = req.params;
-        const { config, prompt } = req.body;
+        const { config, prompt, agentType } = req.body;
 
         // Validate required fields
         if (!prompt) {
@@ -78,7 +78,8 @@ export function createExecutionsRouter(): Router {
         const execution = await req.project!.executionService!.createExecution(
           issueId,
           config || {},
-          prompt
+          prompt,
+          agentType // Optional, defaults to 'claude-code' in service
         );
 
         res.status(201).json({

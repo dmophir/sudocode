@@ -933,7 +933,7 @@ describe('ExecutionMonitor', () => {
         },
       })
 
-      const { container } = render(
+      render(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
       )
 
@@ -971,16 +971,31 @@ describe('ExecutionMonitor', () => {
         events: [
           // First message
           { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-1', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1001, messageId: 'msg-1', delta: 'First message' },
+          {
+            type: 'TEXT_MESSAGE_CONTENT',
+            timestamp: 1001,
+            messageId: 'msg-1',
+            delta: 'First message',
+          },
           { type: 'TEXT_MESSAGE_END', timestamp: 1002, messageId: 'msg-1' },
           // Tool call
           { type: 'TOOL_CALL_START', timestamp: 2000, toolCallId: 'tool-1', toolCallName: 'Write' },
-          { type: 'TOOL_CALL_ARGS', timestamp: 2001, toolCallId: 'tool-1', delta: '{"file":"test.txt"}' },
+          {
+            type: 'TOOL_CALL_ARGS',
+            timestamp: 2001,
+            toolCallId: 'tool-1',
+            delta: '{"file":"test.txt"}',
+          },
           { type: 'TOOL_CALL_END', timestamp: 2002, toolCallId: 'tool-1' },
           { type: 'TOOL_CALL_RESULT', timestamp: 2003, toolCallId: 'tool-1', result: 'Success' },
           // Second message
           { type: 'TEXT_MESSAGE_START', timestamp: 3000, messageId: 'msg-2', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 3001, messageId: 'msg-2', delta: 'Second message' },
+          {
+            type: 'TEXT_MESSAGE_CONTENT',
+            timestamp: 3001,
+            messageId: 'msg-2',
+            delta: 'Second message',
+          },
           { type: 'TEXT_MESSAGE_END', timestamp: 3002, messageId: 'msg-2' },
         ],
         loading: false,

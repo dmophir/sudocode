@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS executions (
     config TEXT,
 
     -- Process information (legacy + new)
-    agent_type TEXT CHECK(agent_type IN ('claude-code', 'codex')),
+    agent_type TEXT,
     session_id TEXT,
     workflow_execution_id TEXT,
 

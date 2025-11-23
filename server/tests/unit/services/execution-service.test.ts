@@ -332,6 +332,90 @@ describe("ExecutionService", () => {
         )
       ).rejects.toThrow(/Issue ISSUE-999 not found/);
     });
+
+    it("should default to claude-code agent when agentType not specified", { skip: SKIP_E2E }, async () => {
+      const prepareResult = await service.prepareExecution(testIssueId);
+      const execution = await service.createExecution(
+        testIssueId,
+        prepareResult.defaultConfig,
+        prepareResult.renderedPrompt
+        // agentType not specified, should default to 'claude-code'
+      );
+
+      expect(execution.agent_type).toBe("claude-code");
+    });
+
+    it("should create execution with specified agent type", { skip: SKIP_E2E }, async () => {
+      const prepareResult = await service.prepareExecution(testIssueId);
+      const execution = await service.createExecution(
+        testIssueId,
+        prepareResult.defaultConfig,
+        prepareResult.renderedPrompt,
+        "claude-code" // Explicitly specify claude-code
+      );
+
+      expect(execution.agent_type).toBe("claude-code");
+    });
+
+    it("should throw error for codex stub agent", async () => {
+      const prepareResult = await service.prepareExecution(testIssueId);
+
+      // Codex is a stub agent, should throw AgentNotImplementedError
+      await expect(
+        service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "codex"
+        )
+      ).rejects.toThrow(/Agent 'codex' is not yet implemented/);
+    });
+
+    it("should throw error for copilot stub agent", async () => {
+      // Create a separate issue for this test to avoid "active execution" conflict
+      const { id: codexIssueId, uuid: codexIssueUuid } = generateIssueId(db, testDir);
+      createIssue(db, {
+        id: codexIssueId,
+        uuid: codexIssueUuid,
+        title: "Test copilot",
+        content: "Test copilot agent",
+      });
+
+      const prepareResult = await service.prepareExecution(codexIssueId);
+
+      // Copilot is a stub agent
+      await expect(
+        service.createExecution(
+          codexIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "copilot"
+        )
+      ).rejects.toThrow(/Agent 'copilot' is not yet implemented/);
+    });
+
+    it("should throw error for cursor stub agent", async () => {
+      // Create a separate issue for this test to avoid "active execution" conflict
+      const { id: cursorIssueId, uuid: cursorIssueUuid } = generateIssueId(db, testDir);
+      createIssue(db, {
+        id: cursorIssueId,
+        uuid: cursorIssueUuid,
+        title: "Test cursor",
+        content: "Test cursor agent",
+      });
+
+      const prepareResult = await service.prepareExecution(cursorIssueId);
+
+      // Cursor is a stub agent
+      await expect(
+        service.createExecution(
+          cursorIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "cursor"
+        )
+      ).rejects.toThrow(/Agent 'cursor' is not yet implemented/);
+    });
   });
 
   describe("createFollowUp", () => {
@@ -363,6 +447,32 @@ describe("ExecutionService", () => {
         expect(followUpExecution.branch_name).toBe(
           initialExecution.branch_name
         );
+      }
+    );
+
+    it(
+      "should preserve agent type from parent execution",
+      { skip: SKIP_E2E },
+      async () => {
+        // Create initial execution with explicit agent type
+        const prepareResult = await service.prepareExecution(testIssueId);
+        const initialExecution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "claude-code"
+        );
+
+        expect(initialExecution.agent_type).toBe("claude-code");
+
+        // Create follow-up
+        const followUpExecution = await service.createFollowUp(
+          initialExecution.id,
+          "Please add unit tests"
+        );
+
+        // Follow-up should preserve agent type from parent
+        expect(followUpExecution.agent_type).toBe("claude-code");
       }
     );
 
