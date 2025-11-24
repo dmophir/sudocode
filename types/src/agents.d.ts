@@ -139,11 +139,24 @@ export interface CopilotConfig extends BaseAgentConfig {
 }
 
 /**
- * Cursor specific configuration
+ * Cursor specific configuration (cursor-agent CLI)
  */
 export interface CursorConfig extends BaseAgentConfig {
-  /** Cursor-specific settings (TBD based on research) */
-  settings?: Record<string, unknown>;
+  /** Path to cursor-agent CLI executable */
+  cursorPath?: string;
+  /** Auto-approve all tool executions (adds --force flag) */
+  force?: boolean;
+  /** Model to use for code generation */
+  model?: string;
+  /** Additional text to append to user prompts */
+  appendPrompt?: string;
+  /** Maximum idle time before cleanup */
+  idleTimeout?: number;
+  /** Retry configuration for failed spawns */
+  retry?: {
+    maxAttempts: number;
+    backoffMs: number;
+  };
   /** Prompt to send to Cursor */
   prompt?: string;
 }

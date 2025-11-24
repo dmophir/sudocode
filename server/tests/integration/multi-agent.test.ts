@@ -288,11 +288,11 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
     it("should identify implemented agents", () => {
       expect(agentRegistryService.isAgentImplemented("claude-code")).toBe(true);
       expect(agentRegistryService.isAgentImplemented("codex")).toBe(true);
+      expect(agentRegistryService.isAgentImplemented("cursor")).toBe(true);
     });
 
     it("should identify stub agents as not implemented", () => {
       expect(agentRegistryService.isAgentImplemented("copilot")).toBe(false);
-      expect(agentRegistryService.isAgentImplemented("cursor")).toBe(false);
     });
 
     it("should throw for unknown agent types", () => {

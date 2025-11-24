@@ -66,19 +66,12 @@ describe("Agents API Routes", () => {
       const response = await request(app).get("/api/agents");
 
       expect(response.status).toBe(200);
-
-      const codexAgent = response.body.agents.find(
-        (a: any) => a.type === "codex"
-      );
       const copilotAgent = response.body.agents.find(
         (a: any) => a.type === "copilot"
       );
-      const cursorAgent = response.body.agents.find(
-        (a: any) => a.type === "cursor"
-      );
 
+      // Copilot is still a stub
       expect(copilotAgent.implemented).toBe(false);
-      expect(cursorAgent.implemented).toBe(false);
     });
 
     it("should include supportedModes for each agent", async () => {

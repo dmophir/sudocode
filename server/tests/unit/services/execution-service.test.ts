@@ -430,7 +430,7 @@ describe("ExecutionService", () => {
       ).rejects.toThrow(/Agent 'copilot' is not yet implemented/);
     });
 
-    it("should throw error for cursor stub agent", async () => {
+    it("should create execution for cursor agent", { skip: SKIP_E2E }, async () => {
       // Create a separate issue for this test to avoid "active execution" conflict
       const { id: cursorIssueId, uuid: cursorIssueUuid } = generateIssueId(
         db,
@@ -445,15 +445,16 @@ describe("ExecutionService", () => {
 
       const prepareResult = await service.prepareExecution(cursorIssueId);
 
-      // Cursor is a stub agent
-      await expect(
-        service.createExecution(
-          cursorIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "cursor"
-        )
-      ).rejects.toThrow(/Agent 'cursor' is not yet implemented/);
+      const execution = await service.createExecution(
+        cursorIssueId,
+        prepareResult.defaultConfig,
+        prepareResult.renderedPrompt,
+        "cursor"
+      );
+
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("cursor");
+      expect(execution.status).toBe("running");
     });
   });
 

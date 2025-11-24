@@ -59,15 +59,15 @@ describe("AgentRegistryService", () => {
       expect(claudeCode?.implemented).toBe(true);
     });
 
-    it("should mark Codex as implemented and stub agents as not implemented", () => {
+    it("should mark Codex and Cursor as implemented, Copilot as stub", () => {
       const agents = service.getAvailableAgents();
       const codex = agents.find((a) => a.name === "codex");
       const copilot = agents.find((a) => a.name === "copilot");
       const cursor = agents.find((a) => a.name === "cursor");
 
       expect(codex?.implemented).toBe(true);
+      expect(cursor?.implemented).toBe(true);
       expect(copilot?.implemented).toBe(false);
-      expect(cursor?.implemented).toBe(false);
     });
 
     it("should return agents with correct metadata", () => {
@@ -130,9 +130,12 @@ describe("AgentRegistryService", () => {
       expect(service.isAgentImplemented("codex")).toBe(true);
     });
 
+    it("should return true for Cursor", () => {
+      expect(service.isAgentImplemented("cursor")).toBe(true);
+    });
+
     it("should return false for stub agents", () => {
       expect(service.isAgentImplemented("copilot")).toBe(false);
-      expect(service.isAgentImplemented("cursor")).toBe(false);
     });
   });
 
@@ -169,13 +172,13 @@ describe("AgentRegistryService", () => {
       }).toThrow(AgentNotImplementedError);
     });
 
-    it("should throw AgentNotImplementedError when using Cursor adapter", () => {
+    it("should have working Cursor adapter", () => {
       const adapter = service.getAdapter("cursor");
-      expect(() => {
-        adapter.buildProcessConfig({
-          workDir: "/tmp",
-        });
-      }).toThrow(AgentNotImplementedError);
+      const config = adapter.buildProcessConfig({
+        workDir: "/tmp",
+      });
+      expect(config.executablePath).toBe("cursor-agent");
+      expect(config.workDir).toBe("/tmp");
     });
   });
 

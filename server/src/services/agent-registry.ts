@@ -14,12 +14,9 @@ import type {
   AgentMetadata,
 } from "agent-execution-engine/agents";
 import type { ProcessConfig } from "agent-execution-engine/process";
-import type {
-  AgentType,
-  CopilotConfig,
-  CursorConfig,
-} from "@sudocode-ai/types/agents";
+import type { AgentType, CopilotConfig } from "@sudocode-ai/types/agents";
 import { CodexAdapter } from "../execution/adapters/codex-adapter.js";
+import { CursorAdapter } from "../execution/adapters/cursor-adapter.js";
 
 /**
  * Error thrown when an agent is not found in the registry
@@ -68,32 +65,6 @@ class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
 }
 
 /**
- * Stub adapter for Cursor
- * Registered in the registry but throws error when used
- */
-class CursorAdapter implements IAgentAdapter<CursorConfig> {
-  readonly metadata: AgentMetadata = {
-    name: "cursor",
-    displayName: "Cursor",
-    supportedModes: ["interactive"],
-    supportsStreaming: true,
-    supportsStructuredOutput: false,
-  };
-
-  buildProcessConfig(_config: CursorConfig): ProcessConfig {
-    throw new AgentNotImplementedError("cursor");
-  }
-
-  validateConfig(_config: CursorConfig): string[] {
-    throw new AgentNotImplementedError("cursor");
-  }
-
-  getDefaultConfig(): Partial<CursorConfig> {
-    throw new AgentNotImplementedError("cursor");
-  }
-}
-
-/**
  * Agent metadata with implementation status
  */
 export interface AgentInfo extends AgentMetadata {
@@ -109,7 +80,11 @@ export interface AgentInfo extends AgentMetadata {
  */
 export class AgentRegistryService {
   private registry: AgentRegistry;
-  private implementedAgents = new Set<string>(["claude-code", "codex"]);
+  private implementedAgents = new Set<string>([
+    "claude-code",
+    "codex",
+    "cursor",
+  ]);
   private initialized = false;
 
   constructor() {
@@ -128,10 +103,10 @@ export class AgentRegistryService {
     // Register fully implemented adapters
     this.registry.register(new ClaudeCodeAdapter());
     this.registry.register(new CodexAdapter());
+    this.registry.register(new CursorAdapter());
 
     // Register stub adapters
     this.registry.register(new CopilotAdapter());
-    this.registry.register(new CursorAdapter());
 
     this.initialized = true;
   }

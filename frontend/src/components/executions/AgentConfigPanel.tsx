@@ -31,9 +31,12 @@ const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
     search: true,
     json: true,
   } as CodexConfig,
+  cursor: {
+    force: true,
+    model: 'auto',
+  },
   // Future agents can add their default configs here
   // 'copilot': { /* copilot-specific defaults */ },
-  // 'cursor': { /* cursor-specific defaults */ },
 }
 
 export function AgentConfigPanel({

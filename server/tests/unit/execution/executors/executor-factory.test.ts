@@ -65,9 +65,9 @@ describe("ExecutorFactory", () => {
       }).toThrow(AgentNotFoundError);
     });
 
-    it("should throw AgentNotImplementedError for stub agents (copilot, cursor)", () => {
-      // Codex now has an adapter and should not throw
-      // (it will be tested separately)
+    it("should throw AgentNotImplementedError for stub agents (copilot)", () => {
+      // Codex and Cursor now have adapters and should not throw
+      // (they will be tested separately)
 
       expect(() => {
         createExecutorForAgent(
@@ -76,14 +76,17 @@ describe("ExecutorFactory", () => {
           factoryConfig
         );
       }).toThrow(AgentNotImplementedError);
+    });
 
-      expect(() => {
-        createExecutorForAgent(
-          "cursor",
-          { workDir: "/tmp/test" },
-          factoryConfig
-        );
-      }).toThrow(AgentNotImplementedError);
+    it("should create AgentExecutorWrapper for cursor", () => {
+      const wrapper = createExecutorForAgent(
+        "cursor",
+        { workDir: "/tmp/test", force: true },
+        factoryConfig
+      );
+
+      expect(wrapper).toBeDefined();
+      expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
     });
 
     it("should validate config before creating executor", () => {

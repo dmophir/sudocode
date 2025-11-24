@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import type { ExecutionConfig, CleanupMode } from '@/types/execution'
 import { CodexConfigForm, type CodexConfig } from './CodexConfigForm'
+import { CursorConfigForm, type CursorConfig } from './CursorConfigForm'
 import { Separator } from '@/components/ui/separator'
 
 interface AgentSettingsDialogProps {
@@ -54,6 +55,21 @@ export function AgentSettingsDialog({
               <h3 className="mb-3 text-sm font-medium">Codex Configuration</h3>
               <CodexConfigForm
                 config={(config.agentConfig ?? {}) as CodexConfig}
+                onChange={(newAgentConfig) => {
+                  onConfigChange({ agentConfig: newAgentConfig })
+                }}
+              />
+            </div>
+            <Separator />
+          </>
+        )
+      case 'cursor':
+        return (
+          <>
+            <div>
+              <h3 className="mb-3 text-sm font-medium">Cursor Configuration</h3>
+              <CursorConfigForm
+                config={(config.agentConfig ?? {}) as CursorConfig}
                 onChange={(newAgentConfig) => {
                   onConfigChange({ agentConfig: newAgentConfig })
                 }}
