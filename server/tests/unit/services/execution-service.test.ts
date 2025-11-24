@@ -5,7 +5,16 @@
  * template rendering, worktree management, and workflow execution.
  */
 
-import { describe, it, afterEach, expect, beforeAll, afterAll, vi, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  afterEach,
+  expect,
+  beforeAll,
+  afterAll,
+  vi,
+  beforeEach,
+} from "vitest";
 import type Database from "better-sqlite3";
 import { initDatabase as initCliDatabase } from "@sudocode-ai/cli/dist/db.js";
 import {
@@ -44,9 +53,27 @@ vi.mock("../../../src/services/websocket.js", () => {
   };
 });
 
-// Skip tests that spawn real Claude processes unless E2E tests are enabled
-const SKIP_E2E =
-  process.env.SKIP_E2E_TESTS === "true" || process.env.RUN_E2E_TESTS !== "true";
+// Mock the executor factory to avoid spawning real processes
+vi.mock("../../../src/execution/executors/executor-factory.js", () => {
+  return {
+    createExecutorForAgent: vi.fn(() => {
+      // Return a mock executor wrapper that mimics AgentExecutorWrapper interface
+      return {
+        executeWithLifecycle: vi.fn(async () => {
+          // Return a promise that resolves immediately (non-blocking execution)
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => {
+          // Return a promise that resolves immediately (non-blocking follow-up execution)
+          return Promise.resolve();
+        }),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      };
+    }),
+    validateAgentConfig: vi.fn(() => []),
+  };
+});
 
 describe("ExecutionService", () => {
   let db: Database.Database;
@@ -128,7 +155,12 @@ describe("ExecutionService", () => {
     );
 
     // Create execution service
-    service = new ExecutionService(db, "test-project", testDir, lifecycleService);
+    service = new ExecutionService(
+      db,
+      "test-project",
+      testDir,
+      lifecycleService
+    );
   });
 
   afterAll(() => {
@@ -200,7 +232,10 @@ describe("ExecutionService", () => {
 
     it("should handle issue without related specs", async () => {
       // Create issue without relationships
-      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(db, testDir);
+      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(
+        db,
+        testDir
+      );
       createIssue(db, {
         id: isolatedIssueId,
         uuid: isolatedIssueUuid,
@@ -227,7 +262,10 @@ describe("ExecutionService", () => {
 
     it("should render template even with empty issue content", async () => {
       // Create issue with empty content
-      const { id: emptyIssueId, uuid: emptyIssueUuid } = generateIssueId(db, testDir);
+      const { id: emptyIssueId, uuid: emptyIssueUuid } = generateIssueId(
+        db,
+        testDir
+      );
       createIssue(db, {
         id: emptyIssueId,
         uuid: emptyIssueUuid,
@@ -260,10 +298,7 @@ describe("ExecutionService", () => {
   });
 
   describe("createExecution", () => {
-    it(
-      "should create execution in worktree mode",
-      { skip: SKIP_E2E },
-      async () => {
+    it("should create execution in worktree mode", async () => {
         const prepareResult = await service.prepareExecution(testIssueId);
         const execution = await service.createExecution(
           testIssueId,
@@ -287,13 +322,9 @@ describe("ExecutionService", () => {
         expect(
           execution.branch_name.includes("implement-user-authentication")
         ).toBeTruthy();
-      }
-    );
+      });
 
-    it(
-      "should create execution in local mode",
-      { skip: SKIP_E2E },
-      async () => {
+    it("should create execution in local mode", async () => {
         const prepareResult = await service.prepareExecution(testIssueId, {
           config: { mode: "local" },
         });
@@ -310,8 +341,7 @@ describe("ExecutionService", () => {
         expect(execution.status).toBe("running");
         // In local mode, worktree_path should be null
         expect(execution.worktree_path).toBe(null);
-      }
-    );
+      });
 
     it("should throw error for empty prompt", async () => {
       await expect(
@@ -332,12 +362,126 @@ describe("ExecutionService", () => {
         )
       ).rejects.toThrow(/Issue ISSUE-999 not found/);
     });
+
+    it(
+      "should default to claude-code agent when agentType not specified",
+      
+      async () => {
+        const prepareResult = await service.prepareExecution(testIssueId);
+        const execution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt
+          // agentType not specified, should default to 'claude-code'
+        );
+
+        expect(execution.agent_type).toBe("claude-code");
+      }
+    );
+
+    it(
+      "should create execution with specified agent type",
+      
+      async () => {
+        const prepareResult = await service.prepareExecution(testIssueId);
+        const execution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "claude-code" // Explicitly specify claude-code
+        );
+
+        expect(execution.agent_type).toBe("claude-code");
+      }
+    );
+
+    it(
+      "should create execution for codex agent",
+      
+      async () => {
+        const prepareResult = await service.prepareExecution(testIssueId);
+
+        const execution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "codex"
+        );
+
+        expect(execution).toBeDefined();
+        expect(execution.agent_type).toBe("codex");
+        expect(execution.status).toBe("running");
+      }
+    );
+
+    it(
+      "should create execution for copilot agent",
+      
+      async () => {
+        // Create a separate issue for this test to avoid "active execution" conflict
+        const { id: copilotIssueId, uuid: copilotIssueUuid } = generateIssueId(
+          db,
+          testDir
+        );
+        createIssue(db, {
+          id: copilotIssueId,
+          uuid: copilotIssueUuid,
+          title: "Test copilot",
+          content: "Test copilot agent",
+        });
+
+        const prepareResult = await service.prepareExecution(copilotIssueId);
+
+        // Copilot is now implemented
+        const execution = await service.createExecution(
+          copilotIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "copilot"
+        );
+
+        expect(execution).toBeDefined();
+        expect(execution.agent_type).toBe("copilot");
+        expect(execution.status).toBe("running");
+      }
+    );
+
+    it(
+      "should create execution for cursor agent",
+      
+      async () => {
+        // Create a separate issue for this test to avoid "active execution" conflict
+        const { id: cursorIssueId, uuid: cursorIssueUuid } = generateIssueId(
+          db,
+          testDir
+        );
+        createIssue(db, {
+          id: cursorIssueId,
+          uuid: cursorIssueUuid,
+          title: "Test cursor",
+          content: "Test cursor agent",
+        });
+
+        const prepareResult = await service.prepareExecution(cursorIssueId);
+
+        const execution = await service.createExecution(
+          cursorIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "cursor"
+        );
+
+        expect(execution).toBeDefined();
+        expect(execution.agent_type).toBe("cursor");
+        expect(execution.status).toBe("running");
+      }
+    );
   });
 
   describe("createFollowUp", () => {
     it(
       "should create follow-up execution reusing worktree",
-      { skip: SKIP_E2E },
+      
       async () => {
         // Create initial execution
         const prepareResult = await service.prepareExecution(testIssueId);
@@ -366,6 +510,32 @@ describe("ExecutionService", () => {
       }
     );
 
+    it(
+      "should preserve agent type from parent execution",
+      
+      async () => {
+        // Create initial execution with explicit agent type
+        const prepareResult = await service.prepareExecution(testIssueId);
+        const initialExecution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt,
+          "claude-code"
+        );
+
+        expect(initialExecution.agent_type).toBe("claude-code");
+
+        // Create follow-up
+        const followUpExecution = await service.createFollowUp(
+          initialExecution.id,
+          "Please add unit tests"
+        );
+
+        // Follow-up should preserve agent type from parent
+        expect(followUpExecution.agent_type).toBe("claude-code");
+      }
+    );
+
     it("should throw error for non-existent execution", async () => {
       await expect(
         service.createFollowUp("non-existent-id", "feedback")
@@ -374,7 +544,7 @@ describe("ExecutionService", () => {
 
     it(
       "should throw error for execution without worktree",
-      { skip: SKIP_E2E },
+      
       async () => {
         // Create local execution (no worktree)
         const prepareResult = await service.prepareExecution(testIssueId, {
@@ -394,7 +564,7 @@ describe("ExecutionService", () => {
   });
 
   describe("cancelExecution", () => {
-    it("should cancel running execution", { skip: SKIP_E2E }, async () => {
+    it("should cancel running execution", async () => {
       // Create execution
       const prepareResult = await service.prepareExecution(testIssueId);
       const execution = await service.createExecution(
@@ -426,7 +596,7 @@ describe("ExecutionService", () => {
 
     it(
       "should throw error for non-running execution",
-      { skip: SKIP_E2E },
+      
       async () => {
         // Create and immediately cancel
         const prepareResult = await service.prepareExecution(testIssueId);
@@ -447,7 +617,7 @@ describe("ExecutionService", () => {
   });
 
   describe("cleanupExecution", () => {
-    it("should cleanup execution resources", { skip: SKIP_E2E }, async () => {
+    it("should cleanup execution resources", async () => {
       // Create execution
       const prepareResult = await service.prepareExecution(testIssueId);
       const execution = await service.createExecution(
@@ -498,7 +668,10 @@ describe("ExecutionService", () => {
       ).toBeTruthy();
 
       // Issue without related specs should not show section
-      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(db, testDir);
+      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(
+        db,
+        testDir
+      );
       createIssue(db, {
         id: isolatedIssueId,
         uuid: isolatedIssueUuid,
@@ -546,9 +719,11 @@ describe("ExecutionService", () => {
   describe("WebSocket broadcasting", () => {
     it(
       "should broadcast execution_created when creating execution with issue",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         const prepareResult = await service.prepareExecution(testIssueId);
         const execution = await service.createExecution(
@@ -570,9 +745,11 @@ describe("ExecutionService", () => {
 
     it(
       "should broadcast execution_status_changed on workflow completion",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         const prepareResult = await service.prepareExecution(testIssueId);
         const execution = await service.createExecution(
@@ -601,7 +778,9 @@ describe("ExecutionService", () => {
           if (statusChangedCall) {
             expect(statusChangedCall[0]).toBe("test-project");
             expect(statusChangedCall[1]).toBe(execution.id);
-            expect(statusChangedCall[3]?.status).toMatch(/running|completed|failed|stopped/);
+            expect(statusChangedCall[3]?.status).toMatch(
+              /running|completed|failed|stopped/
+            );
             expect(statusChangedCall[4]).toBe(testIssueId);
           }
         }
@@ -610,9 +789,11 @@ describe("ExecutionService", () => {
 
     it(
       "should broadcast execution_status_changed when canceling execution",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         const prepareResult = await service.prepareExecution(testIssueId);
         const execution = await service.createExecution(
@@ -643,9 +824,11 @@ describe("ExecutionService", () => {
 
     it(
       "should broadcast with issue_id for issue-linked executions",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         const prepareResult = await service.prepareExecution(testIssueId);
         await service.createExecution(
@@ -662,9 +845,11 @@ describe("ExecutionService", () => {
 
     it(
       "should broadcast execution_created when creating follow-up execution",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         // Create initial execution
         const prepareResult = await service.prepareExecution(testIssueId);
@@ -696,9 +881,11 @@ describe("ExecutionService", () => {
 
     it(
       "should include projectId in all broadcasts",
-      { skip: SKIP_E2E },
+      
       async () => {
-        const { broadcastExecutionUpdate } = await import("../../../src/services/websocket.js");
+        const { broadcastExecutionUpdate } = await import(
+          "../../../src/services/websocket.js"
+        );
 
         const prepareResult = await service.prepareExecution(testIssueId);
         await service.createExecution(
