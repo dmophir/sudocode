@@ -14,12 +14,26 @@ import type { ExecutionConfig, ExecutionPrepareResult, ExecutionMode } from '@/t
 import { AgentSettingsDialog } from './AgentSettingsDialog'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
+import type { CodexConfig } from './CodexConfigForm'
 
 interface AgentConfigPanelProps {
   issueId: string
   onStart: (config: ExecutionConfig, prompt: string, agentType?: string) => void
   disabled?: boolean
   onSelectOpenChange?: (isOpen: boolean) => void
+}
+
+// TODO: Move this somewhere more central.
+// Map of default agent-specific configurations
+const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
+  codex: {
+    fullAuto: true,
+    search: true,
+    json: true,
+  } as CodexConfig,
+  // Future agents can add their default configs here
+  // 'copilot': { /* copilot-specific defaults */ },
+  // 'cursor': { /* cursor-specific defaults */ },
 }
 
 export function AgentConfigPanel({
@@ -88,6 +102,16 @@ export function AgentConfigPanel({
   const updateConfig = (updates: Partial<ExecutionConfig>) => {
     setConfig({ ...config, ...updates })
   }
+
+  // When agent type changes, initialize agentConfig with defaults if not present
+  useEffect(() => {
+    if (selectedAgentType && !config.agentConfig) {
+      const defaultAgentConfig = DEFAULT_AGENT_CONFIGS[selectedAgentType]
+      if (defaultAgentConfig) {
+        updateConfig({ agentConfig: defaultAgentConfig })
+      }
+    }
+  }, [selectedAgentType])
 
   const handleStart = () => {
     onStart(config, prompt, selectedAgentType)
@@ -180,15 +204,13 @@ export function AgentConfigPanel({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {agents?.filter(agent => agent.implemented).map((agent) => (
-                <SelectItem
-                  key={agent.type}
-                  value={agent.type}
-                  className="text-xs"
-                >
-                  {agent.displayName}
-                </SelectItem>
-              ))}
+              {agents
+                ?.filter((agent) => agent.implemented)
+                .map((agent) => (
+                  <SelectItem key={agent.type} value={agent.type} className="text-xs">
+                    {agent.displayName}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
 
@@ -270,6 +292,7 @@ export function AgentConfigPanel({
         config={config}
         onConfigChange={updateConfig}
         onClose={() => setShowSettingsDialog(false)}
+        agentType={selectedAgentType}
       />
     </div>
   )

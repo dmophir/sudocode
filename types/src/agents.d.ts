@@ -80,19 +80,48 @@ export interface ClaudeCodeConfig extends BaseAgentConfig {
 }
 
 /**
- * OpenAI Codex specific configuration
+ * OpenAI Codex specific configuration (CLI-based)
  */
 export interface CodexConfig extends BaseAgentConfig {
-  /** OpenAI API key */
-  apiKey?: string;
-  /** Model to use (e.g., 'code-davinci-002') */
+  /** Path to Codex CLI executable */
+  codexPath?: string;
+  /** Use 'codex exec' for non-interactive execution */
+  exec?: boolean;
+  /** Emit newline-delimited JSON events */
+  json?: boolean;
+  /** Use experimental JSON output format */
+  experimentalJson?: boolean;
+  /** Write final assistant message to file */
+  outputLastMessage?: string;
+  /** Override configured model (e.g., 'gpt-5-codex', 'gpt-5') */
   model?: string;
-  /** Temperature for generation (0-2) */
-  temperature?: number;
-  /** Maximum tokens to generate */
-  maxTokens?: number;
-  /** Number of completions to generate */
-  n?: number;
+  /** Sandbox policy */
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  /** Approval policy */
+  askForApproval?: "untrusted" | "on-failure" | "on-request" | "never";
+  /** Shortcut combining workspace-write sandbox + on-failure approvals */
+  fullAuto?: boolean;
+  /** Allow execution outside Git repositories */
+  skipGitRepoCheck?: boolean;
+  /** Control ANSI color output */
+  color?: "always" | "never" | "auto";
+  /** Enable web browsing capability */
+  search?: boolean;
+  /** Attach image files to the prompt */
+  image?: string[];
+  /** Load configuration profile from config.toml */
+  profile?: string;
+  /** Additional directories to grant write access */
+  addDir?: string[];
+  /** Disable all safety checks (isolated environments only) */
+  yolo?: boolean;
+  /** Maximum idle time before cleanup */
+  idleTimeout?: number;
+  /** Retry configuration for failed spawns */
+  retry?: {
+    maxAttempts: number;
+    backoffMs: number;
+  };
   /** Prompt to send to Codex */
   prompt?: string;
 }

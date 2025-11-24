@@ -43,6 +43,18 @@ describe("ExecutorFactory", () => {
       expect(executor).toBeInstanceOf(ClaudeExecutorWrapper);
     });
 
+    it("should create AgentExecutorWrapper for codex agent", () => {
+      const executor = createExecutorForAgent(
+        "codex",
+        { workDir: "/tmp/test" },
+        factoryConfig
+      );
+
+      // Codex uses the generic AgentExecutorWrapper
+      expect(executor).toBeDefined();
+      expect(executor).not.toBeInstanceOf(ClaudeExecutorWrapper);
+    });
+
     it("should throw AgentNotFoundError for unknown agent type", () => {
       expect(() => {
         createExecutorForAgent(
@@ -53,14 +65,9 @@ describe("ExecutorFactory", () => {
       }).toThrow(AgentNotFoundError);
     });
 
-    it("should throw AgentNotImplementedError for stub agents", () => {
-      expect(() => {
-        createExecutorForAgent(
-          "codex",
-          { workDir: "/tmp/test" },
-          factoryConfig
-        );
-      }).toThrow(AgentNotImplementedError);
+    it("should throw AgentNotImplementedError for stub agents (copilot, cursor)", () => {
+      // Codex now has an adapter and should not throw
+      // (it will be tested separately)
 
       expect(() => {
         createExecutorForAgent(

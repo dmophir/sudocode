@@ -106,6 +106,47 @@ vi.mock("../../src/execution/executors/claude-executor-wrapper.js", () => {
   };
 });
 
+// Mock AgentExecutorWrapper to prevent actual Codex process spawning
+vi.mock("../../src/execution/executors/agent-executor-wrapper.js", () => {
+  return {
+    AgentExecutorWrapper: class AgentExecutorWrapper {
+      private config: any;
+
+      constructor(config: any) {
+        // Store config for inspection if needed
+        this.config = config;
+      }
+
+      async executeWithLifecycle(
+        executionId: string,
+        task: any,
+        workDir: string
+      ): Promise<void> {
+        // Don't actually spawn Codex - just resolve immediately
+        // The ExecutionService already created the execution with status 'running'
+        // We simulate successful execution by just resolving
+        return Promise.resolve();
+      }
+
+      async resumeWithLifecycle(
+        executionId: string,
+        sessionId: string,
+        task: any,
+        workDir: string
+      ): Promise<void> {
+        // Don't actually spawn Codex - just resolve immediately
+        // Simulates resuming an existing session
+        return Promise.resolve();
+      }
+
+      async cancel(executionId: string): Promise<void> {
+        // Mock cancel - do nothing
+        return Promise.resolve();
+      }
+    },
+  };
+});
+
 describe("Multi-Agent Support - Phase 1 Integration", () => {
   let db: Database.Database;
   let testDbPath: string;
@@ -244,12 +285,12 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(agentNames).toContain("cursor");
     });
 
-    it("should identify Claude Code as implemented", () => {
+    it("should identify implemented agents", () => {
       expect(agentRegistryService.isAgentImplemented("claude-code")).toBe(true);
+      expect(agentRegistryService.isAgentImplemented("codex")).toBe(true);
     });
 
     it("should identify stub agents as not implemented", () => {
-      expect(agentRegistryService.isAgentImplemented("codex")).toBe(false);
       expect(agentRegistryService.isAgentImplemented("copilot")).toBe(false);
       expect(agentRegistryService.isAgentImplemented("cursor")).toBe(false);
     });
@@ -279,11 +320,29 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(wrapper.constructor.name).toBe("ClaudeExecutorWrapper");
     });
 
-    it("should create AgentExecutorWrapper for other agents", () => {
-      // For stub agents, factory should create wrapper but throw when executing
+    it("should create AgentExecutorWrapper for codex", () => {
+      // Codex is now implemented and should create an executor
+      const wrapper = createExecutorForAgent(
+        "codex",
+        { workDir: testDir },
+        {
+          workDir: testDir,
+          lifecycleService: executionService["lifecycleService"],
+          logsStore: executionService["logsStore"],
+          projectId: "test-project",
+          db,
+        }
+      );
+
+      expect(wrapper).toBeDefined();
+      expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
+    });
+
+    it("should throw for unimplemented agents (copilot, cursor)", () => {
+      // Stub agents should still throw
       expect(() => {
         createExecutorForAgent(
-          "codex",
+          "copilot",
           { workDir: testDir },
           {
             workDir: testDir,
@@ -293,7 +352,7 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
             db,
           }
         );
-      }).toThrow(/Agent 'codex' is not yet implemented/);
+      }).toThrow(/Agent 'copilot' is not yet implemented/);
     });
 
     it("should validate agent configuration", () => {
@@ -364,7 +423,22 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(execution.agent_type).toBe("claude-code");
     });
 
-    it("should fail gracefully for unimplemented agents", async () => {
+    it("should create execution with codex agent", async () => {
+      const prepareResult =
+        await executionService.prepareExecution(testIssueId);
+
+      const execution = await executionService.createExecution(
+        testIssueId,
+        prepareResult.defaultConfig,
+        prepareResult.renderedPrompt,
+        "codex"
+      );
+
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("codex");
+    });
+
+    it("should fail gracefully for unimplemented agents (copilot, cursor)", async () => {
       const prepareResult =
         await executionService.prepareExecution(testIssueId);
 
@@ -373,9 +447,9 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
           testIssueId,
           prepareResult.defaultConfig,
           prepareResult.renderedPrompt,
-          "codex"
+          "copilot"
         )
-      ).rejects.toThrow(/Agent 'codex' is not yet implemented/);
+      ).rejects.toThrow(/Agent 'copilot' is not yet implemented/);
     });
 
     it("should persist agent_type to database", async () => {
@@ -569,18 +643,20 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
 
       // Verify in database
       const dbExecutions = db
-        .prepare("SELECT id, agent_type, prompt FROM executions WHERE id IN (?, ?, ?)")
+        .prepare(
+          "SELECT id, agent_type, prompt FROM executions WHERE id IN (?, ?, ?)"
+        )
         .all(...executionIds) as Array<{
-          id: string;
-          agent_type: string;
-          prompt: string;
-        }>;
+        id: string;
+        agent_type: string;
+        prompt: string;
+      }>;
 
       expect(dbExecutions).toHaveLength(3);
 
       // Sort database results to match the order of executionIds
-      const sortedDbExecutions = executionIds.map(id =>
-        dbExecutions.find(exec => exec.id === id)!
+      const sortedDbExecutions = executionIds.map(
+        (id) => dbExecutions.find((exec) => exec.id === id)!
       );
 
       sortedDbExecutions.forEach((exec, index) => {
@@ -618,9 +694,7 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
 
       // Verify they can be listed together
       const listedExecutions = executionService.listExecutions(testIssueId);
-      const ourExecutions = listedExecutions.filter((e) =>
-        ids.includes(e.id)
-      );
+      const ourExecutions = listedExecutions.filter((e) => ids.includes(e.id));
       expect(ourExecutions).toHaveLength(3);
     });
 
@@ -663,9 +737,7 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
 
       // Verify all are in database
       const dbExecutions = db
-        .prepare(
-          "SELECT id, agent_type FROM executions WHERE id IN (?, ?, ?)"
-        )
+        .prepare("SELECT id, agent_type FROM executions WHERE id IN (?, ?, ?)")
         .all(...ids) as Array<{ id: string; agent_type: string }>;
 
       expect(dbExecutions).toHaveLength(3);
@@ -731,8 +803,8 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       const dbFollowUp = db
         .prepare("SELECT agent_type FROM executions WHERE id = ?")
         .get(followUpExec.id) as {
-          agent_type: string;
-        };
+        agent_type: string;
+      };
 
       expect(dbFollowUp.agent_type).toBe("claude-code");
     });

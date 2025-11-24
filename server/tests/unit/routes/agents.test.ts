@@ -77,7 +77,6 @@ describe("Agents API Routes", () => {
         (a: any) => a.type === "cursor"
       );
 
-      expect(codexAgent.implemented).toBe(false);
       expect(copilotAgent.implemented).toBe(false);
       expect(cursorAgent.implemented).toBe(false);
     });

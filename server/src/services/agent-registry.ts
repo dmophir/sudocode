@@ -5,15 +5,21 @@
  * Wraps the agent-execution-engine's AgentRegistry with sudocode-specific logic.
  */
 
-import { AgentRegistry, ClaudeCodeAdapter } from 'agent-execution-engine/agents';
-import type { IAgentAdapter, AgentMetadata } from 'agent-execution-engine/agents';
-import type { ProcessConfig } from 'agent-execution-engine/process';
+import {
+  AgentRegistry,
+  ClaudeCodeAdapter,
+} from "agent-execution-engine/agents";
+import type {
+  IAgentAdapter,
+  AgentMetadata,
+} from "agent-execution-engine/agents";
+import type { ProcessConfig } from "agent-execution-engine/process";
 import type {
   AgentType,
-  CodexConfig,
   CopilotConfig,
   CursorConfig,
-} from '@sudocode-ai/types/agents';
+} from "@sudocode-ai/types/agents";
+import { CodexAdapter } from "../execution/adapters/codex-adapter.js";
 
 /**
  * Error thrown when an agent is not found in the registry
@@ -21,7 +27,7 @@ import type {
 export class AgentNotFoundError extends Error {
   constructor(agentType: string) {
     super(`Agent '${agentType}' not found in registry`);
-    this.name = 'AgentNotFoundError';
+    this.name = "AgentNotFoundError";
   }
 }
 
@@ -31,33 +37,7 @@ export class AgentNotFoundError extends Error {
 export class AgentNotImplementedError extends Error {
   constructor(agentType: string) {
     super(`Agent '${agentType}' is not yet implemented`);
-    this.name = 'AgentNotImplementedError';
-  }
-}
-
-/**
- * Stub adapter for Codex
- * Registered in the registry but throws error when used
- */
-class CodexAdapter implements IAgentAdapter<CodexConfig> {
-  readonly metadata: AgentMetadata = {
-    name: 'codex',
-    displayName: 'OpenAI Codex',
-    supportedModes: ['structured'],
-    supportsStreaming: false,
-    supportsStructuredOutput: true,
-  };
-
-  buildProcessConfig(_config: CodexConfig): ProcessConfig {
-    throw new AgentNotImplementedError('codex');
-  }
-
-  validateConfig(_config: CodexConfig): string[] {
-    throw new AgentNotImplementedError('codex');
-  }
-
-  getDefaultConfig(): Partial<CodexConfig> {
-    throw new AgentNotImplementedError('codex');
+    this.name = "AgentNotImplementedError";
   }
 }
 
@@ -67,23 +47,23 @@ class CodexAdapter implements IAgentAdapter<CodexConfig> {
  */
 class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
   readonly metadata: AgentMetadata = {
-    name: 'copilot',
-    displayName: 'GitHub Copilot',
-    supportedModes: ['interactive'],
+    name: "copilot",
+    displayName: "GitHub Copilot",
+    supportedModes: ["interactive"],
     supportsStreaming: true,
     supportsStructuredOutput: false,
   };
 
   buildProcessConfig(_config: CopilotConfig): ProcessConfig {
-    throw new AgentNotImplementedError('copilot');
+    throw new AgentNotImplementedError("copilot");
   }
 
   validateConfig(_config: CopilotConfig): string[] {
-    throw new AgentNotImplementedError('copilot');
+    throw new AgentNotImplementedError("copilot");
   }
 
   getDefaultConfig(): Partial<CopilotConfig> {
-    throw new AgentNotImplementedError('copilot');
+    throw new AgentNotImplementedError("copilot");
   }
 }
 
@@ -93,23 +73,23 @@ class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
  */
 class CursorAdapter implements IAgentAdapter<CursorConfig> {
   readonly metadata: AgentMetadata = {
-    name: 'cursor',
-    displayName: 'Cursor',
-    supportedModes: ['interactive'],
+    name: "cursor",
+    displayName: "Cursor",
+    supportedModes: ["interactive"],
     supportsStreaming: true,
     supportsStructuredOutput: false,
   };
 
   buildProcessConfig(_config: CursorConfig): ProcessConfig {
-    throw new AgentNotImplementedError('cursor');
+    throw new AgentNotImplementedError("cursor");
   }
 
   validateConfig(_config: CursorConfig): string[] {
-    throw new AgentNotImplementedError('cursor');
+    throw new AgentNotImplementedError("cursor");
   }
 
   getDefaultConfig(): Partial<CursorConfig> {
-    throw new AgentNotImplementedError('cursor');
+    throw new AgentNotImplementedError("cursor");
   }
 }
 
@@ -129,7 +109,7 @@ export interface AgentInfo extends AgentMetadata {
  */
 export class AgentRegistryService {
   private registry: AgentRegistry;
-  private implementedAgents = new Set<string>(['claude-code']);
+  private implementedAgents = new Set<string>(["claude-code", "codex"]);
   private initialized = false;
 
   constructor() {
@@ -145,11 +125,11 @@ export class AgentRegistryService {
       return;
     }
 
-    // Register Claude Code adapter (fully implemented)
+    // Register fully implemented adapters
     this.registry.register(new ClaudeCodeAdapter());
+    this.registry.register(new CodexAdapter());
 
     // Register stub adapters
-    this.registry.register(new CodexAdapter());
     this.registry.register(new CopilotAdapter());
     this.registry.register(new CursorAdapter());
 
