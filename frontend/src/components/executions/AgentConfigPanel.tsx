@@ -12,13 +12,34 @@ import {
 import { executionsApi } from '@/lib/api'
 import type { ExecutionConfig, ExecutionPrepareResult, ExecutionMode } from '@/types/execution'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
+import { useAgents } from '@/hooks/useAgents'
+import type { CodexConfig } from './CodexConfigForm'
+import type { CopilotConfig } from './CopilotConfigForm'
 
 interface AgentConfigPanelProps {
   issueId: string
-  onStart: (config: ExecutionConfig, prompt: string) => void
+  onStart: (config: ExecutionConfig, prompt: string, agentType?: string) => void
   disabled?: boolean
   onSelectOpenChange?: (isOpen: boolean) => void
+}
+
+// TODO: Move this somewhere more central.
+// Map of default agent-specific configurations
+const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
+  codex: {
+    fullAuto: true,
+    search: true,
+    json: true,
+  } as CodexConfig,
+  cursor: {
+    force: true,
+    model: 'auto',
+  },
+  copilot: {
+    allowAllTools: true,
+    model: 'claude-sonnet-4.5',
+  } as CopilotConfig,
 }
 
 export function AgentConfigPanel({
@@ -35,7 +56,11 @@ export function AgentConfigPanel({
     cleanupMode: 'manual',
   })
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
+  const [selectedAgentType, setSelectedAgentType] = useState<string>('claude-code')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Fetch available agents
+  const { agents, loading: agentsLoading } = useAgents()
 
   // Load template preview on mount
   useEffect(() => {
@@ -84,8 +109,18 @@ export function AgentConfigPanel({
     setConfig({ ...config, ...updates })
   }
 
+  // When agent type changes, initialize agentConfig with defaults if not present
+  useEffect(() => {
+    if (selectedAgentType && !config.agentConfig) {
+      const defaultAgentConfig = DEFAULT_AGENT_CONFIGS[selectedAgentType]
+      if (defaultAgentConfig) {
+        updateConfig({ agentConfig: defaultAgentConfig })
+      }
+    }
+  }, [selectedAgentType])
+
   const handleStart = () => {
-    onStart(config, prompt)
+    onStart(config, prompt, selectedAgentType)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,98 +207,102 @@ export function AgentConfigPanel({
       </div>
 
       {/* Configuration Row */}
-      <div className="flex items-center gap-2">
-        {/* Model Selection */}
-        {prepareResult?.availableModels && (
+      <TooltipProvider>
+        <div className="flex items-center gap-2">
+          {/* Agent Selection */}
           <Select
-            value={config.model}
-            onValueChange={(value) => updateConfig({ model: value })}
+            value={selectedAgentType}
+            onValueChange={setSelectedAgentType}
+            onOpenChange={onSelectOpenChange}
+            disabled={loading || agentsLoading}
+          >
+            <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectValue placeholder={agentsLoading ? 'Loading...' : 'Agent'}>
+                {agents?.find((a) => a.type === selectedAgentType)?.displayName || 'Select agent'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {agents
+                ?.filter((agent) => agent.implemented)
+                .map((agent) => (
+                  <SelectItem key={agent.type} value={agent.type} className="text-xs">
+                    {agent.displayName}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+
+          {/* Execution Mode */}
+          <Select
+            value={config.mode}
+            onValueChange={(value) => updateConfig({ mode: value as ExecutionMode })}
             onOpenChange={onSelectOpenChange}
             disabled={loading}
           >
             <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Model" />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {prepareResult.availableModels.map((model) => (
-                <SelectItem key={model} value={model} className="text-xs">
-                  {model}
-                </SelectItem>
-              ))}
+              <SelectItem value="worktree" className="text-xs">
+                Run in worktree
+              </SelectItem>
+              <SelectItem value="local" className="text-xs">
+                Run directly
+              </SelectItem>
             </SelectContent>
           </Select>
-        )}
 
-        {/* Execution Mode */}
-        <Select
-          value={config.mode}
-          onValueChange={(value) => updateConfig({ mode: value as ExecutionMode })}
-          onOpenChange={onSelectOpenChange}
-          disabled={loading}
-        >
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="worktree" className="text-xs">
-              Run in worktree
-            </SelectItem>
-            <SelectItem value="local" className="text-xs">
-              Run directly
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Base Branch (only for worktree mode) */}
-        {config.mode === 'worktree' && prepareResult?.availableBranches && (
-          <Select
-            value={config.baseBranch}
-            onValueChange={(value) => updateConfig({ baseBranch: value })}
-            onOpenChange={onSelectOpenChange}
-            disabled={loading}
-          >
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue placeholder="Branch" />
-            </SelectTrigger>
-            <SelectContent>
-              {prepareResult.availableBranches.map((branch) => (
-                <SelectItem key={branch} value={branch} className="text-xs">
-                  {branch}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        <div className="ml-auto" />
-
-        {/* Settings Button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettingsDialog(true)}
+          {/* Base Branch (only for worktree mode) */}
+          {config.mode === 'worktree' && prepareResult?.availableBranches && (
+            <Select
+              value={config.baseBranch}
+              onValueChange={(value) => updateConfig({ baseBranch: value })}
+              onOpenChange={onSelectOpenChange}
               disabled={loading}
-              className="h-8 px-2"
             >
-              <Settings className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Advanced settings</TooltipContent>
-        </Tooltip>
+              <SelectTrigger className="h-8 w-[120px] text-xs">
+                <SelectValue placeholder="Branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {prepareResult.availableBranches.map((branch) => (
+                  <SelectItem key={branch} value={branch} className="text-xs">
+                    {branch}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
-        {/* Run Button */}
-        <Button
-          onClick={handleStart}
-          disabled={!canStart}
-          size="sm"
-          className="h-8 gap-2 font-semibold"
-        >
-          <Play className="h-4 w-4" />
-          Run
-        </Button>
-      </div>
+          <div className="ml-auto" />
+
+          {/* Settings Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSettingsDialog(true)}
+                disabled={loading}
+                className="h-8 px-2"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Advanced settings</TooltipContent>
+          </Tooltip>
+
+          {/* Run Button */}
+          <Button
+            onClick={handleStart}
+            disabled={!canStart}
+            size="sm"
+            className="h-8 gap-2 font-semibold"
+          >
+            <Play className="h-4 w-4" />
+            Run
+          </Button>
+        </div>
+      </TooltipProvider>
 
       {/* Settings Dialog */}
       <AgentSettingsDialog
@@ -271,6 +310,7 @@ export function AgentConfigPanel({
         config={config}
         onConfigChange={updateConfig}
         onClose={() => setShowSettingsDialog(false)}
+        agentType={selectedAgentType}
       />
     </div>
   )
