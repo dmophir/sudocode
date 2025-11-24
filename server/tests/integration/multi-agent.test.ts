@@ -537,6 +537,206 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(result.defaultConfig.mode).toBe("worktree");
     });
   });
+
+  describe("Multiple and Concurrent Executions", () => {
+    it("should handle multiple sequential executions with same agent", async () => {
+      const prompts = [
+        "First execution prompt",
+        "Second execution prompt",
+        "Third execution prompt",
+      ];
+
+      const executionIds: string[] = [];
+
+      // Create executions sequentially
+      for (const prompt of prompts) {
+        const execution = await executionService.createExecution(
+          testIssueId,
+          { mode: "local" },
+          prompt,
+          "claude-code"
+        );
+
+        expect(execution).toBeDefined();
+        expect(execution.agent_type).toBe("claude-code");
+        expect(execution.prompt).toBe(prompt);
+        executionIds.push(execution.id);
+      }
+
+      // Verify all executions were created
+      expect(executionIds).toHaveLength(3);
+      expect(new Set(executionIds).size).toBe(3); // All unique IDs
+
+      // Verify in database
+      const dbExecutions = db
+        .prepare("SELECT id, agent_type, prompt FROM executions WHERE id IN (?, ?, ?)")
+        .all(...executionIds) as Array<{
+          id: string;
+          agent_type: string;
+          prompt: string;
+        }>;
+
+      expect(dbExecutions).toHaveLength(3);
+
+      // Sort database results to match the order of executionIds
+      const sortedDbExecutions = executionIds.map(id =>
+        dbExecutions.find(exec => exec.id === id)!
+      );
+
+      sortedDbExecutions.forEach((exec, index) => {
+        expect(exec.agent_type).toBe("claude-code");
+        expect(exec.prompt).toBe(prompts[index]);
+      });
+    });
+
+    it("should handle multiple executions with explicit agent types", async () => {
+      const executions: Array<{ prompt: string; agentType: string }> = [
+        { prompt: "Execution 1 with claude-code", agentType: "claude-code" },
+        { prompt: "Execution 2 with claude-code", agentType: "claude-code" },
+        { prompt: "Execution 3 with claude-code", agentType: "claude-code" },
+      ];
+
+      const createdExecutions = [];
+
+      for (const { prompt, agentType } of executions) {
+        const execution = await executionService.createExecution(
+          testIssueId,
+          { mode: "local" },
+          prompt,
+          agentType as any
+        );
+
+        expect(execution.agent_type).toBe(agentType);
+        expect(execution.prompt).toBe(prompt);
+        createdExecutions.push(execution);
+      }
+
+      // Verify all executions are independent
+      expect(createdExecutions).toHaveLength(3);
+      const ids = createdExecutions.map((e) => e.id);
+      expect(new Set(ids).size).toBe(3); // All unique
+
+      // Verify they can be listed together
+      const listedExecutions = executionService.listExecutions(testIssueId);
+      const ourExecutions = listedExecutions.filter((e) =>
+        ids.includes(e.id)
+      );
+      expect(ourExecutions).toHaveLength(3);
+    });
+
+    it("should handle concurrent execution creation without conflicts", async () => {
+      // Create multiple executions concurrently
+      const promises = [
+        executionService.createExecution(
+          testIssueId,
+          { mode: "local" },
+          "Concurrent execution 1",
+          "claude-code"
+        ),
+        executionService.createExecution(
+          testIssueId,
+          { mode: "local" },
+          "Concurrent execution 2",
+          "claude-code"
+        ),
+        executionService.createExecution(
+          testIssueId,
+          { mode: "local" },
+          "Concurrent execution 3",
+          "claude-code"
+        ),
+      ];
+
+      const results = await Promise.all(promises);
+
+      // Verify all completed successfully
+      expect(results).toHaveLength(3);
+      results.forEach((execution) => {
+        expect(execution).toBeDefined();
+        expect(execution.id).toBeTruthy();
+        expect(execution.agent_type).toBe("claude-code");
+      });
+
+      // Verify unique IDs
+      const ids = results.map((e) => e.id);
+      expect(new Set(ids).size).toBe(3);
+
+      // Verify all are in database
+      const dbExecutions = db
+        .prepare(
+          "SELECT id, agent_type FROM executions WHERE id IN (?, ?, ?)"
+        )
+        .all(...ids) as Array<{ id: string; agent_type: string }>;
+
+      expect(dbExecutions).toHaveLength(3);
+      dbExecutions.forEach((exec) => {
+        expect(exec.agent_type).toBe("claude-code");
+      });
+    });
+
+    it("should isolate executions from each other", async () => {
+      // Create first execution
+      const exec1 = await executionService.createExecution(
+        testIssueId,
+        { mode: "local" },
+        "Isolated execution 1",
+        "claude-code"
+      );
+
+      // Create second execution
+      const exec2 = await executionService.createExecution(
+        testIssueId,
+        { mode: "local" },
+        "Isolated execution 2",
+        "claude-code"
+      );
+
+      // Cancel first execution
+      await executionService.cancelExecution(exec1.id);
+
+      // Second execution should still be running
+      const exec2After = executionService.getExecution(exec2.id);
+      expect(exec2After?.status).toBe("running");
+
+      // First execution should be cancelled/stopped (not running)
+      const exec1After = executionService.getExecution(exec1.id);
+      expect(exec1After?.status).not.toBe("running");
+      expect(["cancelled", "stopped"]).toContain(exec1After?.status);
+    });
+
+    it("should track agent type correctly across follow-up executions", async () => {
+      // Create initial execution with worktree mode (required for follow-ups)
+      const initialExec = await executionService.createExecution(
+        testIssueId,
+        { mode: "worktree" },
+        "Initial execution for follow-up test",
+        "claude-code"
+      );
+
+      expect(initialExec.agent_type).toBe("claude-code");
+      expect(initialExec.worktree_path).toBeTruthy(); // Must have worktree for follow-ups
+
+      // Create follow-up - should inherit agent type from parent
+      const followUpExec = await executionService.createFollowUp(
+        initialExec.id,
+        "Follow-up feedback"
+      );
+
+      // Verify follow-up execution inherited the agent type
+      expect(followUpExec.agent_type).toBe("claude-code");
+      expect(followUpExec.id).toBeTruthy();
+      expect(followUpExec.id).not.toBe(initialExec.id); // Different execution
+
+      // Verify in database that agent_type was persisted
+      const dbFollowUp = db
+        .prepare("SELECT agent_type FROM executions WHERE id = ?")
+        .get(followUpExec.id) as {
+          agent_type: string;
+        };
+
+      expect(dbFollowUp.agent_type).toBe("claude-code");
+    });
+  });
 });
 
 /**

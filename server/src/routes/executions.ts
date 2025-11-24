@@ -9,6 +9,12 @@
 import { Router, Request, Response } from "express";
 import { NormalizedEntryToAgUiAdapter } from "../execution/output/normalized-to-ag-ui-adapter.js";
 import { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
+import { agentRegistryService } from "../services/agent-registry.js";
+import {
+  AgentNotFoundError,
+  AgentNotImplementedError,
+  AgentError,
+} from "../errors/agent-errors.js";
 
 /**
  * Create executions router
@@ -75,6 +81,22 @@ export function createExecutionsRouter(): Router {
           return;
         }
 
+        // Validate agentType if provided
+        if (agentType) {
+          // Check if agent exists in registry
+          if (!agentRegistryService.hasAgent(agentType)) {
+            const availableAgents = agentRegistryService
+              .getAvailableAgents()
+              .map((a) => a.name);
+            throw new AgentNotFoundError(agentType, availableAgents);
+          }
+
+          // Check if agent is implemented
+          if (!agentRegistryService.isAgentImplemented(agentType)) {
+            throw new AgentNotImplementedError(agentType);
+          }
+        }
+
         const execution = await req.project!.executionService!.createExecution(
           issueId,
           config || {},
@@ -89,7 +111,42 @@ export function createExecutionsRouter(): Router {
       } catch (error) {
         console.error("[API Route] ERROR: Failed to create execution:", error);
 
-        // Handle specific error cases
+        // Handle agent-specific errors with enhanced error responses
+        if (error instanceof AgentNotFoundError) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            error: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          return;
+        }
+
+        if (error instanceof AgentNotImplementedError) {
+          res.status(501).json({
+            success: false,
+            data: null,
+            error: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          return;
+        }
+
+        if (error instanceof AgentError) {
+          // Generic agent error (400 by default)
+          res.status(400).json({
+            success: false,
+            data: null,
+            error: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          return;
+        }
+
+        // Handle other errors (backwards compatibility)
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         const statusCode = errorMessage.includes("not found") ? 404 : 500;
