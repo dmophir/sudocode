@@ -62,7 +62,7 @@ describe("Agents API Routes", () => {
       expect(claudeAgent.implemented).toBe(true);
     });
 
-    it("should identify stub agents as not implemented", async () => {
+    it("should identify copilot as implemented", async () => {
       const response = await request(app).get("/api/agents");
 
       expect(response.status).toBe(200);
@@ -70,8 +70,8 @@ describe("Agents API Routes", () => {
         (a: any) => a.type === "copilot"
       );
 
-      // Copilot is still a stub
-      expect(copilotAgent.implemented).toBe(false);
+      // Copilot is now implemented
+      expect(copilotAgent.implemented).toBe(true);
     });
 
     it("should include supportedModes for each agent", async () => {

@@ -18,6 +18,7 @@ import {
 import type { ExecutionConfig, CleanupMode } from '@/types/execution'
 import { CodexConfigForm, type CodexConfig } from './CodexConfigForm'
 import { CursorConfigForm, type CursorConfig } from './CursorConfigForm'
+import { CopilotConfigForm, type CopilotConfig } from './CopilotConfigForm'
 import { Separator } from '@/components/ui/separator'
 
 interface AgentSettingsDialogProps {
@@ -78,22 +79,21 @@ export function AgentSettingsDialog({
             <Separator />
           </>
         )
-      // Future agents can add their config forms here
-      // case 'copilot':
-      //   return (
-      //     <>
-      //       <div>
-      //         <h3 className="mb-3 text-sm font-medium">Copilot Configuration</h3>
-      //         <CopilotConfigForm
-      //           config={(config.agentConfig ?? {}) as CopilotConfig}
-      //           onChange={(newAgentConfig) => {
-      //             onConfigChange({ agentConfig: newAgentConfig })
-      //           }}
-      //         />
-      //       </div>
-      //       <Separator />
-      //     </>
-      //   )
+      case 'copilot':
+        return (
+          <>
+            <div>
+              <h3 className="mb-3 text-sm font-medium">Copilot Configuration</h3>
+              <CopilotConfigForm
+                config={(config.agentConfig ?? {}) as CopilotConfig}
+                onChange={(newAgentConfig) => {
+                  onConfigChange({ agentConfig: newAgentConfig })
+                }}
+              />
+            </div>
+            <Separator />
+          </>
+        )
       default:
         return null
     }

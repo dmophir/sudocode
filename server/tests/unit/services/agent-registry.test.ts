@@ -59,7 +59,7 @@ describe("AgentRegistryService", () => {
       expect(claudeCode?.implemented).toBe(true);
     });
 
-    it("should mark Codex and Cursor as implemented, Copilot as stub", () => {
+    it("should mark all agents as implemented", () => {
       const agents = service.getAvailableAgents();
       const codex = agents.find((a) => a.name === "codex");
       const copilot = agents.find((a) => a.name === "copilot");
@@ -67,7 +67,7 @@ describe("AgentRegistryService", () => {
 
       expect(codex?.implemented).toBe(true);
       expect(cursor?.implemented).toBe(true);
-      expect(copilot?.implemented).toBe(false);
+      expect(copilot?.implemented).toBe(true);
     });
 
     it("should return agents with correct metadata", () => {
@@ -134,8 +134,8 @@ describe("AgentRegistryService", () => {
       expect(service.isAgentImplemented("cursor")).toBe(true);
     });
 
-    it("should return false for stub agents", () => {
-      expect(service.isAgentImplemented("copilot")).toBe(false);
+    it("should return true for Copilot", () => {
+      expect(service.isAgentImplemented("copilot")).toBe(true);
     });
   });
 
@@ -152,8 +152,8 @@ describe("AgentRegistryService", () => {
     });
   });
 
-  describe("stub adapters", () => {
-    it("should work correctly with Codex adapter (now implemented)", () => {
+  describe("implemented adapters", () => {
+    it("should work correctly with Codex adapter", () => {
       const adapter = service.getAdapter("codex");
       const processConfig = adapter.buildProcessConfig({
         workDir: "/tmp",
@@ -163,13 +163,14 @@ describe("AgentRegistryService", () => {
       expect(processConfig.executablePath).toBe("codex");
     });
 
-    it("should throw AgentNotImplementedError when using Copilot adapter", () => {
+    it("should work correctly with Copilot adapter", () => {
       const adapter = service.getAdapter("copilot");
-      expect(() => {
-        adapter.buildProcessConfig({
-          workDir: "/tmp",
-        });
-      }).toThrow(AgentNotImplementedError);
+      const processConfig = adapter.buildProcessConfig({
+        workDir: "/tmp",
+      });
+      expect(processConfig).toBeDefined();
+      expect(processConfig.workDir).toBe("/tmp");
+      expect(processConfig.executablePath).toBe("copilot");
     });
 
     it("should have working Cursor adapter", () => {
@@ -183,19 +184,6 @@ describe("AgentRegistryService", () => {
   });
 
   describe("markAsImplemented", () => {
-    it("should mark a stub agent as implemented", () => {
-      // Use copilot instead since codex is already implemented
-      expect(service.isAgentImplemented("copilot")).toBe(false);
-
-      service.markAsImplemented("copilot");
-
-      expect(service.isAgentImplemented("copilot")).toBe(true);
-
-      const agents = service.getAvailableAgents();
-      const copilot = agents.find((a) => a.name === "copilot");
-      expect(copilot?.implemented).toBe(true);
-    });
-
     it("should throw AgentNotFoundError for unknown agent", () => {
       expect(() => {
         service.markAsImplemented("unknown" as AgentType);

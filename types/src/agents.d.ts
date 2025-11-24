@@ -127,15 +127,38 @@ export interface CodexConfig extends BaseAgentConfig {
 }
 
 /**
- * GitHub Copilot specific configuration
+ * GitHub Copilot CLI specific configuration
+ *
+ * @see https://github.com/github/copilot
  */
 export interface CopilotConfig extends BaseAgentConfig {
-  /** GitHub token for authentication */
-  githubToken?: string;
-  /** Model variant (if applicable) */
-  modelVariant?: string;
+  /** Path to Copilot CLI executable (default: 'copilot') */
+  copilotPath?: string;
+  /** Copilot CLI version to use (only with npx, default: 'latest') */
+  copilotVersion?: string;
+  /** Model to use (e.g., 'gpt-4o', 'gpt-5', 'claude-sonnet-4.5') */
+  model?: string;
+  /** Allow all tools without prompting */
+  allowAllTools?: boolean;
+  /** Comma-separated list of allowed tools */
+  allowTool?: string;
+  /** Comma-separated list of denied tools */
+  denyTool?: string;
+  /** Additional directories to include in context */
+  addDir?: string[];
+  /** MCP servers to disable for this execution */
+  disableMcpServer?: string[];
+  /** System prompt to prepend to user prompt */
+  systemPrompt?: string;
   /** Prompt to send to Copilot */
   prompt?: string;
+  /** Maximum idle time before cleanup */
+  idleTimeout?: number;
+  /** Retry configuration for failed spawns */
+  retry?: {
+    maxAttempts: number;
+    backoffMs: number;
+  };
 }
 
 /**

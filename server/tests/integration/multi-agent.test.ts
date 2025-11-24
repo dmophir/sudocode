@@ -291,8 +291,8 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(agentRegistryService.isAgentImplemented("cursor")).toBe(true);
     });
 
-    it("should identify stub agents as not implemented", () => {
-      expect(agentRegistryService.isAgentImplemented("copilot")).toBe(false);
+    it("should identify copilot as implemented", () => {
+      expect(agentRegistryService.isAgentImplemented("copilot")).toBe(true);
     });
 
     it("should throw for unknown agent types", () => {
@@ -338,21 +338,20 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
     });
 
-    it("should throw for unimplemented agents (copilot, cursor)", () => {
-      // Stub agents should still throw
-      expect(() => {
-        createExecutorForAgent(
-          "copilot",
-          { workDir: testDir },
-          {
-            workDir: testDir,
-            lifecycleService: executionService["lifecycleService"],
-            logsStore: executionService["logsStore"],
-            projectId: "test-project",
-            db,
-          }
-        );
-      }).toThrow(/Agent 'copilot' is not yet implemented/);
+    it("should create executor for copilot agent", () => {
+      // Copilot is now implemented
+      const wrapper = createExecutorForAgent(
+        "copilot",
+        { workDir: testDir },
+        {
+          workDir: testDir,
+          lifecycleService: executionService["lifecycleService"],
+          logsStore: executionService["logsStore"],
+          projectId: "test-project",
+          db,
+        }
+      );
+      expect(wrapper).toBeDefined();
     });
 
     it("should validate agent configuration", () => {
@@ -438,18 +437,20 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(execution.agent_type).toBe("codex");
     });
 
-    it("should fail gracefully for unimplemented agents (copilot, cursor)", async () => {
+    it("should create execution for copilot agent", async () => {
       const prepareResult =
         await executionService.prepareExecution(testIssueId);
 
-      await expect(
-        executionService.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "copilot"
-        )
-      ).rejects.toThrow(/Agent 'copilot' is not yet implemented/);
+      const execution = await executionService.createExecution(
+        testIssueId,
+        prepareResult.defaultConfig,
+        prepareResult.renderedPrompt,
+        "copilot"
+      );
+
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("copilot");
+      expect(execution.status).toBe("running");
     });
 
     it("should persist agent_type to database", async () => {

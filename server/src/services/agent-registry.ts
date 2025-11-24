@@ -13,10 +13,10 @@ import type {
   IAgentAdapter,
   AgentMetadata,
 } from "agent-execution-engine/agents";
-import type { ProcessConfig } from "agent-execution-engine/process";
-import type { AgentType, CopilotConfig } from "@sudocode-ai/types/agents";
+import type { AgentType } from "@sudocode-ai/types/agents";
 import { CodexAdapter } from "../execution/adapters/codex-adapter.js";
 import { CursorAdapter } from "../execution/adapters/cursor-adapter.js";
+import { copilotAdapter } from "../execution/adapters/copilot-adapter.js";
 
 /**
  * Error thrown when an agent is not found in the registry
@@ -38,31 +38,6 @@ export class AgentNotImplementedError extends Error {
   }
 }
 
-/**
- * Stub adapter for GitHub Copilot
- * Registered in the registry but throws error when used
- */
-class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
-  readonly metadata: AgentMetadata = {
-    name: "copilot",
-    displayName: "GitHub Copilot",
-    supportedModes: ["interactive"],
-    supportsStreaming: true,
-    supportsStructuredOutput: false,
-  };
-
-  buildProcessConfig(_config: CopilotConfig): ProcessConfig {
-    throw new AgentNotImplementedError("copilot");
-  }
-
-  validateConfig(_config: CopilotConfig): string[] {
-    throw new AgentNotImplementedError("copilot");
-  }
-
-  getDefaultConfig(): Partial<CopilotConfig> {
-    throw new AgentNotImplementedError("copilot");
-  }
-}
 
 /**
  * Agent metadata with implementation status
@@ -84,6 +59,7 @@ export class AgentRegistryService {
     "claude-code",
     "codex",
     "cursor",
+    "copilot",
   ]);
   private initialized = false;
 
@@ -104,9 +80,7 @@ export class AgentRegistryService {
     this.registry.register(new ClaudeCodeAdapter());
     this.registry.register(new CodexAdapter());
     this.registry.register(new CursorAdapter());
-
-    // Register stub adapters
-    this.registry.register(new CopilotAdapter());
+    this.registry.register(copilotAdapter);
 
     this.initialized = true;
   }

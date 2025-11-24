@@ -15,6 +15,7 @@ import { AgentSettingsDialog } from './AgentSettingsDialog'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
 import type { CodexConfig } from './CodexConfigForm'
+import type { CopilotConfig } from './CopilotConfigForm'
 
 interface AgentConfigPanelProps {
   issueId: string
@@ -35,8 +36,10 @@ const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
     force: true,
     model: 'auto',
   },
-  // Future agents can add their default configs here
-  // 'copilot': { /* copilot-specific defaults */ },
+  copilot: {
+    allowAllTools: true,
+    model: 'claude-sonnet-4.5',
+  } as CopilotConfig,
 }
 
 export function AgentConfigPanel({
