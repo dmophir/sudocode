@@ -1259,4 +1259,135 @@ describe('ExecutionMonitor', () => {
       expect(screen.queryByText('SSE message')).not.toBeInTheDocument()
     })
   })
+
+  describe('Agent-Specific Rendering', () => {
+    it('should use ClaudeCodeTrajectory for claude-code agent type', () => {
+      const messages = new Map()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: 'Let me think about this problem...',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      const { container } = render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{ status: 'running', agent_type: 'claude-code' } as any}
+        />
+      )
+
+      // ClaudeCodeTrajectory should render with terminal-style dots
+      expect(container.textContent).toContain('⏺')
+      expect(screen.getByText(/Let me think/)).toBeInTheDocument()
+    })
+
+    it('should use AgentTrajectory for non-claude-code agent types', () => {
+      const messages = new Map()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: 'Let me think about this problem...',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{ status: 'running', agent_type: 'codex' } as any}
+        />
+      )
+
+      // AgentTrajectory should show standard "assistant" badge (not "thinking")
+      expect(screen.getByText('assistant')).toBeInTheDocument()
+      expect(screen.queryByText('thinking')).not.toBeInTheDocument()
+    })
+
+    it('should use AgentTrajectory when agent_type is not specified', () => {
+      const messages = new Map()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: 'Test message',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'running' } as any} />
+      )
+
+      // Should default to AgentTrajectory (standard rendering)
+      expect(screen.getByText('assistant')).toBeInTheDocument()
+      expect(screen.getByText('Test message')).toBeInTheDocument()
+    })
+  })
 })

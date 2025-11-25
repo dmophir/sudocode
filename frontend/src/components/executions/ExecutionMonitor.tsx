@@ -8,12 +8,13 @@
  * Shows execution progress, metrics, messages, and tool calls.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useAgUiStream } from '@/hooks/useAgUiStream'
 import { useExecutionLogs } from '@/hooks/useExecutionLogs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AgentTrajectory } from './AgentTrajectory'
+import { ClaudeCodeTrajectory } from './ClaudeCodeTrajectory'
 import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import type { Execution } from '@/types/execution'
 
@@ -255,11 +256,29 @@ export function ExecutionMonitor({
     }
   }, [isActive, sseStream, logsResult, processedLogs, executionId, executionProp])
 
-  // Trigger callbacks when execution status changes
+  // Track whether onComplete has already been called to prevent infinite loops
+  // When an execution is already 'completed' on mount, we should not call onComplete
+  // (it's only for when the status transitions TO completed during streaming)
+  const hasCalledOnComplete = useRef(false)
+  const previousStatus = useRef<string | undefined>(undefined)
+
+  // Trigger callbacks when execution status changes TO completed (not when already completed)
   useEffect(() => {
-    if (execution.status === 'completed' && onComplete) {
+    // Only call onComplete if:
+    // 1. Status is now 'completed'
+    // 2. We haven't already called it
+    // 3. Previous status was something other than 'completed' (i.e., a transition happened)
+    if (
+      execution.status === 'completed' &&
+      onComplete &&
+      !hasCalledOnComplete.current &&
+      previousStatus.current !== undefined &&
+      previousStatus.current !== 'completed'
+    ) {
+      hasCalledOnComplete.current = true
       onComplete()
     }
+    previousStatus.current = execution.status
   }, [execution.status, onComplete])
 
   useEffect(() => {
@@ -400,8 +419,15 @@ export function ExecutionMonitor({
         )}
 
         {/* Agent Trajectory - unified messages and tool calls */}
+        {/* Use Claude Code-specific rendering for claude-code agent type */}
         {(messageCount > 0 || toolCallCount > 0) && (
-          <AgentTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
+          <>
+            {executionProp?.agent_type === 'claude-code' ? (
+              <ClaudeCodeTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
+            ) : (
+              <AgentTrajectory messages={messages} toolCalls={toolCalls} renderMarkdown />
+            )}
+          </>
         )}
 
         {/* Empty state */}
