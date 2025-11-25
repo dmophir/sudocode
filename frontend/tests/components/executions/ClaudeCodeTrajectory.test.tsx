@@ -305,12 +305,356 @@ describe('ClaudeCodeTrajectory', () => {
       <ClaudeCodeTrajectory messages={messages} toolCalls={new Map()} />
     )
 
-    // Both messages should have dot indicators
-    const dots = container.querySelectorAll('.text-primary')
-    expect(dots.length).toBeGreaterThanOrEqual(2)
+    // Both messages should have dot indicators (⏺)
+    expect(container.textContent?.match(/⏺/g)?.length).toBeGreaterThanOrEqual(2)
 
     // Both message contents should be present
     expect(screen.getByText(/Let me think/)).toBeInTheDocument()
     expect(screen.getByText(/I'll start by checking/)).toBeInTheDocument()
+  })
+
+  it('should show Read tool result summary', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Read',
+          args: JSON.stringify({ file_path: '/test.ts' }),
+          status: 'completed',
+          result: 'line 1\nline 2\nline 3\nline 4\nline 5',
+          startTime: 1000,
+          endTime: 1500,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show "Read N lines" summary
+    expect(screen.getByText(/Read 5 lines/)).toBeInTheDocument()
+  })
+
+  it('should show Search tool result summary', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Search',
+          args: JSON.stringify({ pattern: 'test', path: '/src', output_mode: 'files' }),
+          status: 'completed',
+          result: 'file1.ts\nfile2.ts\nfile3.ts',
+          startTime: 1000,
+          endTime: 1500,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show Search args inline
+    expect(screen.getByText(/pattern: "test"/)).toBeInTheDocument()
+
+    // Should show "Found N matches" summary
+    expect(screen.getByText(/Found 3 matches/)).toBeInTheDocument()
+  })
+
+  it('should show Grep tool result summary', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Grep',
+          args: JSON.stringify({ pattern: 'function', path: '/src/app.ts', output_mode: 'content' }),
+          status: 'completed',
+          result: 'function foo() {}\nfunction bar() {}',
+          startTime: 1000,
+          endTime: 1500,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show Grep args inline with all fields
+    expect(screen.getByText(/pattern: "function"/)).toBeInTheDocument()
+    expect(screen.getByText(/path: "\/src\/app\.ts"/)).toBeInTheDocument()
+    expect(screen.getByText(/output_mode: "content"/)).toBeInTheDocument()
+
+    // Should show "Found N matches" summary
+    expect(screen.getByText(/Found 2 matches/)).toBeInTheDocument()
+  })
+
+  it('should show Bash success indicators in results', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Bash',
+          args: JSON.stringify({ command: 'npm test' }),
+          status: 'completed',
+          result: 'Running tests...\n✓ All tests passed\nTests:  10 passed, 10 total',
+          startTime: 1000,
+          endTime: 2000,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show the success line with checkmark
+    expect(screen.getByText(/✓ All tests passed/)).toBeInTheDocument()
+  })
+
+  it('should show Write tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Write',
+          args: JSON.stringify({ file_path: '/src/app.ts', content: 'console.log("hello")' }),
+          status: 'completed',
+          result: 'File written successfully',
+          startTime: 1000,
+          endTime: 1200,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show file path inline (appears in both the inline summary and args preview)
+    const filePathElements = screen.getAllByText(/\/src\/app\.ts/)
+    expect(filePathElements.length).toBeGreaterThan(0)
+    // Should show success summary
+    expect(screen.getByText(/File written successfully/)).toBeInTheDocument()
+  })
+
+  it('should show Edit tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Edit',
+          args: JSON.stringify({ file_path: '/src/utils.ts', old_string: 'foo', new_string: 'bar' }),
+          status: 'completed',
+          result: 'File edited successfully',
+          startTime: 1000,
+          endTime: 1200,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show file path inline (appears in both the inline summary and args preview)
+    const filePathElements = screen.getAllByText(/\/src\/utils\.ts/)
+    expect(filePathElements.length).toBeGreaterThan(0)
+    // Should show success summary
+    expect(screen.getByText(/File edited successfully/)).toBeInTheDocument()
+  })
+
+  it('should show Glob tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'Glob',
+          args: JSON.stringify({ pattern: '**/*.ts', path: '/src' }),
+          status: 'completed',
+          result: 'file1.ts\nfile2.ts\nfile3.ts\nfile4.ts\nfile5.ts',
+          startTime: 1000,
+          endTime: 1200,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show pattern inline
+    expect(screen.getByText(/pattern: "\*\*\/\*\.ts"/)).toBeInTheDocument()
+    // Should show file count summary
+    expect(screen.getByText(/Found 5 files/)).toBeInTheDocument()
+  })
+
+  it('should show WebSearch tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'WebSearch',
+          args: JSON.stringify({ query: 'TypeScript best practices' }),
+          status: 'completed',
+          result: 'Search result 1\nSearch result 2\nSearch result 3',
+          startTime: 1000,
+          endTime: 2000,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show query inline
+    expect(screen.getByText(/query: "TypeScript best practices"/)).toBeInTheDocument()
+    // Should show search completed
+    expect(screen.getByText(/Search completed/)).toBeInTheDocument()
+  })
+
+  it('should show TodoWrite tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'TodoWrite',
+          args: JSON.stringify({
+            todos: [
+              { content: 'Task 1', status: 'pending', activeForm: 'Task 1' },
+              { content: 'Task 2', status: 'in_progress', activeForm: 'Task 2' },
+              { content: 'Task 3', status: 'completed', activeForm: 'Task 3' },
+            ],
+          }),
+          status: 'completed',
+          result: JSON.stringify({
+            todos: [
+              { content: 'Task 1', status: 'pending' },
+              { content: 'Task 2', status: 'in_progress' },
+              { content: 'Task 3', status: 'completed' },
+            ],
+          }),
+          startTime: 1000,
+          endTime: 1200,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show todo count inline
+    expect(screen.getByText(/3 todos, 1 in progress, 1 completed/)).toBeInTheDocument()
+    // Should show update confirmation
+    expect(screen.getByText(/Updated 3 todos/)).toBeInTheDocument()
+  })
+
+  it('should show TodoRead tool formatting', () => {
+    const toolCalls = new Map<string, ToolCallTracking>([
+      [
+        'tool-1',
+        {
+          toolCallId: 'tool-1',
+          toolCallName: 'TodoRead',
+          args: JSON.stringify({}),
+          status: 'completed',
+          result: JSON.stringify({
+            todos: [
+              { content: 'Task 1', status: 'pending' },
+              { content: 'Task 2', status: 'in_progress' },
+              { content: 'Task 3', status: 'in_progress' },
+              { content: 'Task 4', status: 'completed' },
+            ],
+          }),
+          startTime: 1000,
+          endTime: 1100,
+          index: 0,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={new Map()} toolCalls={toolCalls} />)
+
+    // Should show reading todo list
+    expect(screen.getByText(/reading todo list/)).toBeInTheDocument()
+    // Should show todo breakdown
+    expect(screen.getByText(/1 pending, 2 in progress, 1 completed/)).toBeInTheDocument()
+  })
+
+  it('should hide system messages by default', () => {
+    const messages = new Map<string, MessageBuffer>([
+      [
+        'msg-1',
+        {
+          messageId: 'msg-1',
+          role: 'assistant',
+          content: '[System] This is a system message',
+          complete: true,
+          timestamp: 1000,
+          index: 0,
+        },
+      ],
+      [
+        'msg-2',
+        {
+          messageId: 'msg-2',
+          role: 'assistant',
+          content: 'This is a regular message',
+          complete: true,
+          timestamp: 2000,
+          index: 1,
+        },
+      ],
+    ])
+
+    render(<ClaudeCodeTrajectory messages={messages} toolCalls={new Map()} />)
+
+    // Should not show system message
+    expect(screen.queryByText(/This is a system message/)).not.toBeInTheDocument()
+    // Should show regular message
+    expect(screen.getByText(/This is a regular message/)).toBeInTheDocument()
+  })
+
+  it('should show system messages when hideSystemMessages is false', () => {
+    const messages = new Map<string, MessageBuffer>([
+      [
+        'msg-1',
+        {
+          messageId: 'msg-1',
+          role: 'assistant',
+          content: '[System] This is a system message',
+          complete: true,
+          timestamp: 1000,
+          index: 0,
+        },
+      ],
+      [
+        'msg-2',
+        {
+          messageId: 'msg-2',
+          role: 'assistant',
+          content: 'This is a regular message',
+          complete: true,
+          timestamp: 2000,
+          index: 1,
+        },
+      ],
+    ])
+
+    render(
+      <ClaudeCodeTrajectory
+        messages={messages}
+        toolCalls={new Map()}
+        hideSystemMessages={false}
+      />
+    )
+
+    // Should show system message
+    expect(screen.getByText(/This is a system message/)).toBeInTheDocument()
+    // Should show regular message
+    expect(screen.getByText(/This is a regular message/)).toBeInTheDocument()
   })
 })

@@ -33,6 +33,8 @@ describe("Executions API Routes - Agent Type Validation", () => {
   let app: Express;
   let mockExecutionService: Partial<ExecutionService>;
   let mockLogsStore: Partial<ExecutionLogsStore>;
+  let mockDbPrepare: ReturnType<typeof vi.fn>;
+  let mockDbAll: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     // Setup mock execution service
@@ -50,6 +52,8 @@ describe("Executions API Routes - Agent Type Validation", () => {
       } as Execution),
       getExecution: vi.fn(),
       listExecutions: vi.fn().mockReturnValue([]),
+      getExecutionChain: vi.fn().mockReturnValue([]),
+      createFollowUp: vi.fn().mockResolvedValue({} as Execution),
     };
 
     mockLogsStore = {
@@ -61,11 +65,21 @@ describe("Executions API Routes - Agent Type Validation", () => {
     app = express();
     app.use(express.json());
 
+    // Mock database with prepare method for chain queries
+    mockDbAll = vi.fn().mockReturnValue([]);
+    mockDbPrepare = vi.fn().mockReturnValue({
+      all: mockDbAll,
+    });
+    const mockDb = {
+      prepare: mockDbPrepare,
+    };
+
     // Mock the project middleware by injecting project object
     app.use((req, _res, next) => {
       (req as any).project = {
         executionService: mockExecutionService,
         logsStore: mockLogsStore,
+        db: mockDb,
       };
       next();
     });
@@ -347,6 +361,232 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual(mockExecutions);
       expect(mockExecutionService.listExecutions).toHaveBeenCalledWith("i-abc");
+    });
+  });
+
+  describe("GET /api/executions/:executionId/chain", () => {
+    it("should return execution chain for a root execution", async () => {
+      const mockRootExecution = {
+        id: "exec-root",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "completed",
+        parent_execution_id: null,
+        created_at: "2025-01-01T00:00:00.000Z",
+      } as Execution;
+
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockRootExecution);
+      // Mock the database chain query to return just the root
+      mockDbAll.mockReturnValue([mockRootExecution]);
+
+      const response = await request(app).get("/api/executions/exec-root/chain");
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toEqual({
+        rootId: "exec-root",
+        executions: [mockRootExecution],
+      });
+    });
+
+    it("should return execution chain for a follow-up execution", async () => {
+      const mockRootExecution = {
+        id: "exec-root",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "completed",
+        parent_execution_id: null,
+        created_at: "2025-01-01T00:00:00.000Z",
+      } as Execution;
+
+      const mockFollowUpExecution = {
+        id: "exec-followup",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "completed",
+        parent_execution_id: "exec-root",
+        created_at: "2025-01-01T00:01:00.000Z",
+      } as Execution;
+
+      // When getting the follow-up, return it
+      // When getting the root (via parent_execution_id), return root
+      mockExecutionService.getExecution = vi.fn().mockImplementation((id: string) => {
+        if (id === "exec-followup") return mockFollowUpExecution;
+        if (id === "exec-root") return mockRootExecution;
+        return null;
+      });
+
+      // Mock the database chain query to return the full chain
+      mockDbAll.mockReturnValue([mockRootExecution, mockFollowUpExecution]);
+
+      const response = await request(app).get("/api/executions/exec-followup/chain");
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.rootId).toBe("exec-root");
+      expect(response.body.data.executions).toHaveLength(2);
+      expect(response.body.data.executions[0].id).toBe("exec-root");
+      expect(response.body.data.executions[1].id).toBe("exec-followup");
+    });
+
+    it("should return execution chain with multiple follow-ups", async () => {
+      const mockChain = [
+        {
+          id: "exec-root",
+          issue_id: "i-abc",
+          parent_execution_id: null,
+          created_at: "2025-01-01T00:00:00.000Z",
+        },
+        {
+          id: "exec-followup-1",
+          issue_id: "i-abc",
+          parent_execution_id: "exec-root",
+          created_at: "2025-01-01T00:01:00.000Z",
+        },
+        {
+          id: "exec-followup-2",
+          issue_id: "i-abc",
+          parent_execution_id: "exec-followup-1",
+          created_at: "2025-01-01T00:02:00.000Z",
+        },
+      ] as Execution[];
+
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockChain[0]);
+      // Mock the database chain query to return the full chain
+      mockDbAll.mockReturnValue(mockChain);
+
+      const response = await request(app).get("/api/executions/exec-root/chain");
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.rootId).toBe("exec-root");
+      expect(response.body.data.executions).toHaveLength(3);
+      expect(response.body.data.executions[0].id).toBe("exec-root");
+      expect(response.body.data.executions[1].id).toBe("exec-followup-1");
+      expect(response.body.data.executions[2].id).toBe("exec-followup-2");
+    });
+
+    it("should return 404 when execution not found", async () => {
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(null);
+
+      const response = await request(app).get("/api/executions/exec-999/chain");
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain("Execution not found");
+    });
+  });
+
+  describe("POST /api/executions/:executionId/follow-up", () => {
+    it("should create a follow-up execution", async () => {
+      const mockPreviousExecution = {
+        id: "exec-root",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "completed",
+        session_id: "session-123",
+        mode: "worktree",
+        config: JSON.stringify({ baseBranch: "main" }),
+      } as Execution;
+
+      const mockFollowUpExecution = {
+        id: "exec-followup",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "running",
+        parent_execution_id: "exec-root",
+        session_id: "session-123",
+        mode: "worktree",
+      } as Execution;
+
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
+      mockExecutionService.createFollowUp = vi.fn().mockResolvedValue(mockFollowUpExecution);
+
+      const response = await request(app)
+        .post("/api/executions/exec-root/follow-up")
+        .send({
+          feedback: "Please fix the test failures",
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toEqual(mockFollowUpExecution);
+      expect(mockExecutionService.createFollowUp).toHaveBeenCalledWith(
+        "exec-root",
+        "Please fix the test failures"
+      );
+    });
+
+    it("should inherit agent type from previous execution", async () => {
+      const mockPreviousExecution = {
+        id: "exec-root",
+        issue_id: "i-abc",
+        agent_type: "claude-code",
+        status: "completed",
+        session_id: "session-123",
+      } as Execution;
+
+      const mockFollowUpExecution = {
+        id: "exec-followup",
+        issue_id: "i-abc",
+        agent_type: "claude-code", // Inherited from parent
+        status: "running",
+        parent_execution_id: "exec-root",
+      } as Execution;
+
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
+      mockExecutionService.createFollowUp = vi.fn().mockResolvedValue(mockFollowUpExecution);
+
+      const response = await request(app)
+        .post("/api/executions/exec-root/follow-up")
+        .send({
+          feedback: "Continue with this task",
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.agent_type).toBe("claude-code");
+      expect(mockExecutionService.createFollowUp).toHaveBeenCalledWith(
+        "exec-root",
+        "Continue with this task"
+      );
+    });
+
+    it("should return 404 when previous execution not found", async () => {
+      // The service throws an error which is caught and converted to 404
+      mockExecutionService.createFollowUp = vi
+        .fn()
+        .mockRejectedValue(new Error("Execution exec-999 not found"));
+
+      const response = await request(app)
+        .post("/api/executions/exec-999/follow-up")
+        .send({
+          feedback: "Please continue",
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe("Failed to create follow-up execution");
+      expect(response.body.error_data).toContain("not found");
+    });
+
+    it("should return 400 when feedback is missing", async () => {
+      const mockPreviousExecution = {
+        id: "exec-root",
+        issue_id: "i-abc",
+        status: "completed",
+      } as Execution;
+
+      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
+
+      const response = await request(app)
+        .post("/api/executions/exec-root/follow-up")
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe("Feedback is required");
+      expect(mockExecutionService.createFollowUp).not.toHaveBeenCalled();
     });
   });
 });

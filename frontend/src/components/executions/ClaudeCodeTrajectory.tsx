@@ -34,6 +34,12 @@ export interface ClaudeCodeTrajectoryProps {
   renderMarkdown?: boolean
 
   /**
+   * Whether to hide system messages (default: true)
+   * System messages are those that start with [System]
+   */
+  hideSystemMessages?: boolean
+
+  /**
    * Custom class name
    */
   className?: string
@@ -73,9 +79,54 @@ function formatToolArgs(toolName: string, args: string): string {
       return parsed.file_path
     }
 
-    // For Write/Edit, show file path
-    if ((toolName === 'Write' || toolName === 'Edit') && parsed.file_path) {
+    // For Write, show file path
+    if (toolName === 'Write' && parsed.file_path) {
       return parsed.file_path
+    }
+
+    // For Edit, show file path
+    if (toolName === 'Edit' && parsed.file_path) {
+      return parsed.file_path
+    }
+
+    // For Glob, show pattern and optional path
+    if (toolName === 'Glob') {
+      const parts: string[] = []
+      if (parsed.pattern) parts.push(`pattern: "${parsed.pattern}"`)
+      if (parsed.path) parts.push(`path: "${parsed.path}"`)
+      return parts.join(', ')
+    }
+
+    // For Search/Grep, show pattern and path
+    if ((toolName === 'Search' || toolName === 'Grep') && parsed.pattern) {
+      const parts: string[] = []
+      parts.push(`pattern: "${parsed.pattern}"`)
+      if (parsed.path) parts.push(`path: "${parsed.path}"`)
+      if (parsed.output_mode) parts.push(`output_mode: "${parsed.output_mode}"`)
+      return parts.join(', ')
+    }
+
+    // For WebSearch, show query
+    if (toolName === 'WebSearch' && parsed.query) {
+      return `query: "${parsed.query}"`
+    }
+
+    // For TodoWrite, show summary of todos
+    if (toolName === 'TodoWrite' && parsed.todos && Array.isArray(parsed.todos)) {
+      const count = parsed.todos.length
+      const statuses = parsed.todos.reduce((acc: any, todo: any) => {
+        acc[todo.status] = (acc[todo.status] || 0) + 1
+        return acc
+      }, {})
+      const parts: string[] = [`${count} todo${count !== 1 ? 's' : ''}`]
+      if (statuses.in_progress) parts.push(`${statuses.in_progress} in progress`)
+      if (statuses.completed) parts.push(`${statuses.completed} completed`)
+      return parts.join(', ')
+    }
+
+    // For TodoRead, show that it's reading the list
+    if (toolName === 'TodoRead') {
+      return 'reading todo list'
     }
 
     // For other tools, show first key-value pair
@@ -91,6 +142,115 @@ function formatToolArgs(toolName: string, args: string): string {
     return JSON.stringify(parsed)
   } catch {
     return args.length > 60 ? args.slice(0, 60) + '...' : args
+  }
+}
+
+/**
+ * Format tool result summary for collapsed view
+ * Provides context-aware summaries for different tool types
+ */
+function formatResultSummary(toolName: string, result: string): string | null {
+  try {
+    // For Bash, extract key info from output
+    if (toolName === 'Bash') {
+      const lines = result.split('\n').filter(line => line.trim())
+      if (lines.length === 0) return null
+
+      // Look for success indicators
+      if (result.includes('✓') || result.includes('✔')) {
+        const successLine = lines.find(l => l.includes('✓') || l.includes('✔'))
+        if (successLine) return successLine.trim()
+      }
+
+      // Show first meaningful line
+      return null // Let default truncation handle it
+    }
+
+    // For Read, show line count if available
+    if (toolName === 'Read') {
+      const lines = result.split('\n')
+      return `Read ${lines.length} lines`
+    }
+
+    // For Write, show success message
+    if (toolName === 'Write') {
+      // Typically Write returns success confirmation or file path
+      if (result.includes('success') || result.includes('written') || result.includes('created')) {
+        return 'File written successfully'
+      }
+      return 'File created'
+    }
+
+    // For Edit, show success message
+    if (toolName === 'Edit') {
+      // Typically Edit returns success confirmation
+      if (result.includes('success') || result.includes('updated') || result.includes('modified')) {
+        return 'File edited successfully'
+      }
+      return 'File updated'
+    }
+
+    // For Glob, show file count
+    if (toolName === 'Glob') {
+      const lines = result.split('\n').filter(line => line.trim())
+      return `Found ${lines.length} file${lines.length !== 1 ? 's' : ''}`
+    }
+
+    // For Search/Grep, show match count
+    if (toolName === 'Search' || toolName === 'Grep') {
+      const lines = result.split('\n').filter(line => line.trim())
+      return `Found ${lines.length} match${lines.length !== 1 ? 'es' : ''}`
+    }
+
+    // For WebSearch, show result count
+    if (toolName === 'WebSearch') {
+      // Try to extract number of results if mentioned
+      const resultMatch = result.match(/(\d+)\s+result/i)
+      if (resultMatch) {
+        return `Found ${resultMatch[1]} results`
+      }
+      return `Search completed`
+    }
+
+    // For TodoWrite, show confirmation
+    if (toolName === 'TodoWrite') {
+      // Parse the result to see how many todos were written
+      try {
+        const parsed = JSON.parse(result)
+        if (parsed.todos && Array.isArray(parsed.todos)) {
+          return `Updated ${parsed.todos.length} todo${parsed.todos.length !== 1 ? 's' : ''}`
+        }
+      } catch {
+        // Fallback to generic message
+      }
+      return 'Todo list updated'
+    }
+
+    // For TodoRead, show todo count
+    if (toolName === 'TodoRead') {
+      // Parse the result to count todos
+      try {
+        const parsed = JSON.parse(result)
+        if (parsed.todos && Array.isArray(parsed.todos)) {
+          const pending = parsed.todos.filter((t: any) => t.status === 'pending').length
+          const inProgress = parsed.todos.filter((t: any) => t.status === 'in_progress').length
+          const completed = parsed.todos.filter((t: any) => t.status === 'completed').length
+          const parts: string[] = []
+          if (pending) parts.push(`${pending} pending`)
+          if (inProgress) parts.push(`${inProgress} in progress`)
+          if (completed) parts.push(`${completed} completed`)
+          return parts.length > 0 ? parts.join(', ') : `${parsed.todos.length} todos`
+        }
+      } catch {
+        // Fallback to line count
+      }
+      const lines = result.split('\n').filter(line => line.trim())
+      return `${lines.length} todos`
+    }
+
+    return null
+  } catch {
+    return null
   }
 }
 
@@ -156,14 +316,20 @@ export function ClaudeCodeTrajectory({
   messages,
   toolCalls,
   renderMarkdown = true,
+  hideSystemMessages = true,
   className = '',
 }: ClaudeCodeTrajectoryProps) {
   // Merge messages and tool calls into a chronological timeline
   const trajectory = useMemo(() => {
     const items: TrajectoryItem[] = []
 
-    // Add messages
+    // Add messages (filtering out system messages if requested)
     messages.forEach((message) => {
+      // Skip system messages if hideSystemMessages is true
+      if (hideSystemMessages && message.content.trim().startsWith('[System]')) {
+        return
+      }
+
       items.push({
         type: 'message',
         timestamp: message.timestamp,
@@ -192,7 +358,7 @@ export function ClaudeCodeTrajectory({
       }
       return 0
     })
-  }, [messages, toolCalls])
+  }, [messages, toolCalls, hideSystemMessages])
 
   if (trajectory.length === 0) {
     return null
@@ -349,7 +515,7 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallTracking }) {
             </div>
           )}
 
-          {/* Tool result - show first 2 lines when collapsed */}
+          {/* Tool result - show summary or first 2 lines when collapsed */}
           {(toolCall.result || toolCall.error) && (
             <div className="mt-0.5 flex items-start gap-2">
               <span className="select-none text-muted-foreground">∟</span>
@@ -358,12 +524,18 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallTracking }) {
                   <div className="text-red-600">{toolCall.error}</div>
                 ) : resultData ? (
                   <div className="text-muted-foreground">
-                    {/* Preview of first 2 lines when collapsed */}
-                    {!showFullResult && (
-                      <pre className="whitespace-pre-wrap text-xs leading-relaxed">
-                        {resultData.truncated}
-                      </pre>
-                    )}
+                    {/* Show tool-specific summary or preview */}
+                    {!showFullResult && (() => {
+                      const summary = formatResultSummary(toolCall.toolCallName, toolCall.result || '')
+                      if (summary) {
+                        return <div className="text-xs leading-relaxed">{summary}</div>
+                      }
+                      return (
+                        <pre className="whitespace-pre-wrap text-xs leading-relaxed">
+                          {resultData.truncated}
+                        </pre>
+                      )
+                    })()}
                     {/* Full result when expanded */}
                     {showFullResult && (
                       <pre className="whitespace-pre-wrap text-xs leading-relaxed">
@@ -387,7 +559,7 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCallTracking }) {
                         ) : resultData.lineCount > 2 ? (
                           <>{'> +' + (resultData.lineCount - 2) + ' more lines'}</>
                         ) : (
-                          <>{'> +' + (resultData.charCount - 500) + ' more chars'}</>
+                          <>{'> +' + (resultData.charCount - 250) + ' more chars'}</>
                         )}
                       </button>
                     )}

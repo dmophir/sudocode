@@ -940,7 +940,11 @@ export function IssuePanel({
               <ActivityTimeline
                 items={[
                   ...feedback.map((f) => ({ ...f, itemType: 'feedback' as const })),
-                  ...executions.map((e) => ({ ...e, itemType: 'execution' as const })),
+                  // Only show parent-level executions (no parent_execution_id)
+                  // Follow-up executions are displayed inline on the parent's execution page
+                  ...executions
+                    .filter((e) => !e.parent_execution_id)
+                    .map((e) => ({ ...e, itemType: 'execution' as const })),
                 ]}
                 currentEntityId={issue.id}
               />

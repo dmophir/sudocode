@@ -1390,4 +1390,353 @@ describe('ExecutionMonitor', () => {
       expect(screen.getByText('Test message')).toBeInTheDocument()
     })
   })
+
+  describe('TodoTracker Integration', () => {
+    it('should display TodoTracker when there are todo tool calls', () => {
+      const toolCalls = new Map()
+      toolCalls.set('tool-1', {
+        toolCallId: 'tool-1',
+        toolCallName: 'TodoWrite',
+        args: JSON.stringify({
+          todos: [
+            { content: 'Task 1', status: 'pending', activeForm: 'Task 1' },
+            { content: 'Task 2', status: 'in_progress', activeForm: 'Task 2' },
+            { content: 'Task 3', status: 'completed', activeForm: 'Task 3' },
+          ],
+        }),
+        status: 'completed',
+        result: 'Updated',
+        startTime: 1000,
+        endTime: 1100,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls,
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{ status: 'running', agent_type: 'claude-code' } as any}
+        />
+      )
+
+      // Should display TodoTracker
+      expect(screen.getByText(/Todo Progress/i)).toBeInTheDocument()
+      expect(screen.getByText('Task 1')).toBeInTheDocument()
+      expect(screen.getByText('Task 2')).toBeInTheDocument()
+      expect(screen.getByText('Task 3')).toBeInTheDocument()
+      // Should show summary stats
+      expect(screen.getByText(/1 \/ 3 completed/)).toBeInTheDocument()
+    })
+
+    it('should not display TodoTracker when there are no todo tool calls', () => {
+      const toolCalls = new Map()
+      toolCalls.set('tool-1', {
+        toolCallId: 'tool-1',
+        toolCallName: 'Bash',
+        args: JSON.stringify({ command: 'npm test' }),
+        status: 'completed',
+        result: 'Tests passed',
+        startTime: 1000,
+        endTime: 2000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls,
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{ status: 'running', agent_type: 'claude-code' } as any}
+        />
+      )
+
+      // Should not display TodoTracker
+      expect(screen.queryByText(/Todo Progress/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Compact Mode', () => {
+    it('should render without card wrapper in compact mode', () => {
+      const messages = new Map()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: 'Test message',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'completed',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: Date.now() + 1000,
+        },
+        messages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: false,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{ status: 'completed' } as any}
+          compact
+        />
+      )
+
+      // Should not have card wrapper (no "Execution Monitor" header)
+      expect(screen.queryByText('Execution Monitor')).not.toBeInTheDocument()
+      // Should still display content
+      expect(screen.getByText('Test message')).toBeInTheDocument()
+      // Should not have footer metrics in compact mode
+      expect(screen.queryByText('tool calls')).not.toBeInTheDocument()
+    })
+
+    it('should render with card wrapper when not in compact mode', () => {
+      const messages = new Map()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: 'Test message',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'completed',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: Date.now() + 1000,
+        },
+        messages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: false,
+      })
+
+      render(
+        <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
+      )
+
+      // Should have card wrapper with "Execution Monitor" header
+      expect(screen.getByText('Execution Monitor')).toBeInTheDocument()
+      // Should still display content
+      expect(screen.getByText('Test message')).toBeInTheDocument()
+    })
+
+    it('should display user prompt in compact mode when prompt is provided', () => {
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{
+            status: 'running',
+            prompt: 'Please implement the login feature',
+          } as any}
+          compact
+        />
+      )
+
+      // Should display the user prompt
+      expect(screen.getByText('Please implement the login feature')).toBeInTheDocument()
+    })
+
+    it('should display follow-up prompt in compact mode', () => {
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-2"
+          execution={{
+            status: 'running',
+            prompt: 'Can you also add error handling?',
+            parent_execution_id: 'test-exec-1',
+          } as any}
+          compact
+        />
+      )
+
+      // Should display the follow-up prompt
+      expect(screen.getByText('Can you also add error handling?')).toBeInTheDocument()
+    })
+
+    it('should not display user prompt in compact mode when prompt is null', () => {
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{
+            status: 'running',
+            prompt: null,
+          } as any}
+          compact
+        />
+      )
+
+      // Should not display user prompt section
+      const promptElement = screen.queryByText(/Please|implement|login/)
+      expect(promptElement).not.toBeInTheDocument()
+    })
+
+    it('should preserve whitespace in user prompt', () => {
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'connected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'running',
+          currentStep: null,
+          error: null,
+          startTime: Date.now(),
+          endTime: null,
+        },
+        messages: new Map(),
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: true,
+      })
+
+      const multilinePrompt = 'Please:\n1. Add tests\n2. Update docs\n3. Fix bugs'
+
+      const { container } = render(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          execution={{
+            status: 'running',
+            prompt: multilinePrompt,
+          } as any}
+          compact
+        />
+      )
+
+      // Should display the prompt with whitespace preserved
+      // Use textContent to check the full text with preserved newlines
+      const promptElement = container.querySelector('.whitespace-pre-wrap')
+      expect(promptElement?.textContent).toBe(multilinePrompt)
+    })
+  })
 })

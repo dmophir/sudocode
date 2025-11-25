@@ -193,6 +193,14 @@ export const feedbackApi = {
 /**
  * Executions API
  */
+/**
+ * Execution chain response from /executions/:id/chain
+ */
+export interface ExecutionChainResponse {
+  rootId: string
+  executions: Execution[]
+}
+
 export const executionsApi = {
   // Prepare execution (preview template and gather context)
   prepare: (issueId: string, request?: PrepareExecutionRequest) =>
@@ -204,6 +212,9 @@ export const executionsApi = {
 
   // Get execution by ID
   getById: (executionId: string) => get<Execution>(`/executions/${executionId}`),
+
+  // Get execution chain (root + all follow-ups)
+  getChain: (executionId: string) => get<ExecutionChainResponse>(`/executions/${executionId}/chain`),
 
   // List executions for issue
   list: (issueId: string) => get<Execution[]>(`/issues/${issueId}/executions`),

@@ -376,4 +376,62 @@ describe('AgentTrajectory', () => {
       expect(screen.getByText('Write')).toBeInTheDocument()
     })
   })
+
+  describe('System Message Filtering', () => {
+    it('should hide system messages by default', () => {
+      const messages = new Map<string, MessageBuffer>()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: '[System] This is a system message',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+      messages.set('msg-2', {
+        messageId: 'msg-2',
+        role: 'assistant',
+        content: 'This is a regular message',
+        complete: true,
+        timestamp: 2000,
+        index: 1,
+      })
+
+      render(<AgentTrajectory messages={messages} toolCalls={new Map()} />)
+
+      // Should not show system message
+      expect(screen.queryByText(/This is a system message/)).not.toBeInTheDocument()
+      // Should show regular message
+      expect(screen.getByText(/This is a regular message/)).toBeInTheDocument()
+    })
+
+    it('should show system messages when hideSystemMessages is false', () => {
+      const messages = new Map<string, MessageBuffer>()
+      messages.set('msg-1', {
+        messageId: 'msg-1',
+        role: 'assistant',
+        content: '[System] This is a system message',
+        complete: true,
+        timestamp: 1000,
+        index: 0,
+      })
+      messages.set('msg-2', {
+        messageId: 'msg-2',
+        role: 'assistant',
+        content: 'This is a regular message',
+        complete: true,
+        timestamp: 2000,
+        index: 1,
+      })
+
+      render(
+        <AgentTrajectory messages={messages} toolCalls={new Map()} hideSystemMessages={false} />
+      )
+
+      // Should show system message
+      expect(screen.getByText(/This is a system message/)).toBeInTheDocument()
+      // Should show regular message
+      expect(screen.getByText(/This is a regular message/)).toBeInTheDocument()
+    })
+  })
 })

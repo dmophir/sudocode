@@ -488,4 +488,202 @@ describe('AgentConfigPanel', () => {
       expect(triggers[0]).toBeDisabled()
     })
   })
+
+  describe('Follow-up Mode', () => {
+    const parentExecution = {
+      id: 'exec-parent-123',
+      mode: 'worktree',
+      model: 'claude-sonnet-4',
+      target_branch: 'main',
+      agent_type: 'claude-code',
+      config: {
+        mode: 'worktree' as const,
+        baseBranch: 'main',
+        cleanupMode: 'manual' as const,
+      },
+    }
+
+    it('should show follow-up placeholder text', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Enter feedback to continue the execution...')
+        ).toBeInTheDocument()
+      })
+    })
+
+    it('should not call prepare API in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      // Wait a tick for any potential API calls
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      expect(executionsApi.prepare).not.toHaveBeenCalled()
+    })
+
+    it('should disable agent selector in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        const triggers = screen.getAllByRole('combobox')
+        // Agent selector should be disabled
+        expect(triggers[0]).toBeDisabled()
+      })
+    })
+
+    it('should disable mode selector in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        const triggers = screen.getAllByRole('combobox')
+        // Mode selector should be disabled
+        expect(triggers[1]).toBeDisabled()
+      })
+    })
+
+    it('should disable settings button in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        // Find settings button by looking for all buttons and finding the one with Settings icon
+        const buttons = screen.getAllByRole('button')
+        const settingsButton = buttons.find((btn) => btn.className.includes('border-input'))
+        expect(settingsButton).toBeDisabled()
+      })
+    })
+
+    it('should show "Continue" as run button label in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Continue/i })).toBeInTheDocument()
+      })
+    })
+
+    it('should inherit agent type from parent execution', async () => {
+      const user = userEvent.setup()
+
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      // Enter feedback prompt
+      const textarea = await screen.findByPlaceholderText(
+        'Enter feedback to continue the execution...'
+      )
+      await user.type(textarea, 'Continue with this feedback')
+
+      // Click continue
+      const continueButton = screen.getByRole('button', { name: /Continue/i })
+      await user.click(continueButton)
+
+      // Should be called with inherited agent type
+      expect(mockOnStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'worktree',
+          baseBranch: 'main',
+        }),
+        'Continue with this feedback',
+        'claude-code'
+      )
+    })
+
+    it('should allow custom run button label', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+          runButtonLabel="Send"
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Send/i })).toBeInTheDocument()
+      })
+    })
+
+    it('should allow custom placeholder', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+          promptPlaceholder="Type your message..."
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument()
+      })
+    })
+
+    it('should show inherited values in disabled selectors', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        // Should show inherited agent type
+        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        // Should show inherited mode
+        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+      })
+    })
+  })
 })

@@ -402,10 +402,10 @@ export class ExecutionService {
   }
 
   /**
-   * Create follow-up execution - reuse worktree from previous execution
+   * Create follow-up execution
    *
-   * Creates a new execution that reuses the worktree from a previous execution,
-   * appending feedback or additional context to the prompt.
+   * For worktree-based executions: reuses the worktree and resumes the session.
+   * For local/non-worktree executions: creates a new execution with feedback context.
    *
    * @param executionId - ID of previous execution to follow up on
    * @param feedback - Additional feedback/context to append to prompt
@@ -421,16 +421,12 @@ export class ExecutionService {
       throw new Error(`Execution ${executionId} not found`);
     }
 
-    if (!prevExecution.worktree_path) {
-      throw new Error(
-        `Cannot create follow-up: execution ${executionId} has no worktree`
-      );
-    }
+    const hasWorktree = !!prevExecution.worktree_path;
 
-    // Check if worktree still exists on filesystem, recreate if needed
-    if (this.lifecycleService) {
+    // For worktree executions, check if worktree still exists on filesystem, recreate if needed
+    if (hasWorktree && this.lifecycleService) {
       const fs = await import("fs");
-      const worktreeExists = fs.existsSync(prevExecution.worktree_path);
+      const worktreeExists = fs.existsSync(prevExecution.worktree_path!);
 
       if (!worktreeExists) {
         console.log(
@@ -469,6 +465,9 @@ Please continue working on this issue, taking into account the feedback above.`;
     // Default to 'claude-code' if agent_type is null (for backwards compatibility)
     const agentType = (prevExecution.agent_type || "claude-code") as AgentType;
 
+    // Determine working directory: worktree path if available, otherwise repo path (local mode)
+    const workDir = hasWorktree ? prevExecution.worktree_path! : this.repoPath;
+
     const newExecutionId = randomUUID();
     const newExecution = createExecution(this.db, {
       id: newExecutionId,
@@ -476,9 +475,10 @@ Please continue working on this issue, taking into account the feedback above.`;
       agent_type: agentType, // Use same agent as previous execution
       target_branch: prevExecution.target_branch,
       branch_name: prevExecution.branch_name,
-      // TODO: Handle case where worktree has been deleted.
-      worktree_path: prevExecution.worktree_path, // Reuse same worktree
+      worktree_path: prevExecution.worktree_path || undefined, // Reuse same worktree (undefined for local)
       config: prevExecution.config || undefined, // Preserve config (including cleanupMode) from previous execution
+      parent_execution_id: executionId, // Link to parent execution for follow-up chain
+      prompt: feedback, // Store the user's follow-up feedback as the prompt
     });
 
     // Initialize empty logs for this execution
@@ -495,7 +495,7 @@ Please continue working on this issue, taking into account the feedback above.`;
       // Don't fail execution creation - logs are nice-to-have
     }
 
-    // 5. Use executor wrapper with session resumption
+    // 6. Use executor wrapper with session resumption
     const wrapper = createExecutorForAgent(
       agentType,
       { workDir: this.repoPath },
@@ -509,8 +509,15 @@ Please continue working on this issue, taking into account the feedback above.`;
       }
     );
 
-    // Extract session ID (use previous execution ID as session ID)
-    const sessionId = prevExecution.id;
+    // Use previous execution's session_id (the actual Claude UUID) if available
+    // This enables proper session resumption with Claude Code's --resume-session flag
+    // If no session_id was captured, we can't resume - this would start a new session
+    const sessionId = prevExecution.session_id;
+    if (!sessionId) {
+      console.warn(
+        `[ExecutionService] No session_id found for execution ${executionId}, follow-up will start a new session`
+      );
+    }
 
     // Parse config to get model and other settings
     const parsedConfig = prevExecution.config
@@ -523,7 +530,7 @@ Please continue working on this issue, taking into account the feedback above.`;
       type: "issue",
       entityId: prevExecution.issue_id,
       prompt: followUpPrompt,
-      workDir: prevExecution.worktree_path,
+      workDir: workDir,
       config: {
         timeout: parsedConfig.timeout,
       },
@@ -540,21 +547,29 @@ Please continue working on this issue, taking into account the feedback above.`;
       createdAt: new Date(),
     };
 
-    // Resume with session ID (non-blocking)
-    wrapper
-      .resumeWithLifecycle(
-        newExecution.id,
-        sessionId,
-        task,
-        prevExecution.worktree_path
-      )
-      .catch((error) => {
-        console.error(
-          `[ExecutionService] Follow-up execution ${newExecution.id} failed:`,
-          error
-        );
-        // Error is already handled by wrapper (status updated, broadcasts sent)
-      });
+    // Execute follow-up (non-blocking)
+    // If we have a session ID, resume the session; otherwise start a new one
+    if (sessionId) {
+      wrapper
+        .resumeWithLifecycle(newExecution.id, sessionId, task, workDir)
+        .catch((error) => {
+          console.error(
+            `[ExecutionService] Follow-up execution ${newExecution.id} failed:`,
+            error
+          );
+          // Error is already handled by wrapper (status updated, broadcasts sent)
+        });
+    } else {
+      // No session to resume, start a new execution with the follow-up prompt
+      wrapper
+        .executeWithLifecycle(newExecution.id, task, workDir)
+        .catch((error) => {
+          console.error(
+            `[ExecutionService] Follow-up execution ${newExecution.id} failed:`,
+            error
+          );
+        });
+    }
 
     // Broadcast execution creation
     broadcastExecutionUpdate(

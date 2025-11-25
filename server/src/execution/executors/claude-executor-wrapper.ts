@@ -17,10 +17,7 @@ import type { ExecutionLogsStore } from "../../services/execution-logs-store.js"
 import type { TransportManager } from "../transport/transport-manager.js";
 import { NormalizedEntryToAgUiAdapter } from "../output/normalized-to-ag-ui-adapter.js";
 import { AgUiEventAdapter } from "../output/ag-ui-adapter.js";
-import {
-  updateExecution,
-  getExecution,
-} from "../../services/executions.js";
+import { updateExecution, getExecution } from "../../services/executions.js";
 import { broadcastExecutionUpdate } from "../../services/websocket.js";
 
 /**
@@ -139,7 +136,7 @@ export class ClaudeExecutorWrapper {
         timestamp: new Date().toISOString(),
       });
 
-      // 4. Update execution status to running
+      // 4. Update execution status to running (session_id will be captured from Claude's output)
       updateExecution(this.db, executionId, { status: "running" });
       const execution = getExecution(this.db, executionId);
       if (execution) {
@@ -186,7 +183,7 @@ export class ClaudeExecutorWrapper {
       // not from stdout directly (the peer consumes stdout internally)
       const peer = (spawned.process as any).peer;
       if (!peer) {
-        throw new Error('No peer attached to spawned process');
+        throw new Error("No peer attached to spawned process");
       }
 
       // Track completion state
@@ -202,11 +199,15 @@ export class ClaudeExecutorWrapper {
         // Register message handler
         peer.onMessage((message: any) => {
           messageQueue.push(message);
+
           // Detect completion
-          if (message.type === 'result' && (message.subtype === 'success' || message.subtype === 'failure')) {
+          if (
+            message.type === "result" &&
+            (message.subtype === "success" || message.subtype === "failure")
+          ) {
             exitDetected = true;
             executionCompleted = true;
-            completionExitCode = message.subtype === 'success' ? 0 : 1;
+            completionExitCode = message.subtype === "success" ? 0 : 1;
           }
         });
 
@@ -224,16 +225,19 @@ export class ClaudeExecutorWrapper {
 
           // Convert message to stream-json line format
           const message = messageQueue.shift();
-          const line = JSON.stringify(message) + '\n';
+          const line = JSON.stringify(message) + "\n";
           yield {
-            type: 'stdout' as const,
-            data: Buffer.from(line, 'utf-8'),
+            type: "stdout" as const,
+            data: Buffer.from(line, "utf-8"),
             timestamp: new Date(),
           };
         }
       }
 
-      const normalized = this.executor.normalizeOutput(peerMessagesToOutputChunks(), workDir);
+      const normalized = this.executor.normalizeOutput(
+        peerMessagesToOutputChunks(),
+        workDir
+      );
 
       // 8. Process normalized output (runs concurrently with process)
       const processOutputPromise = this.processNormalizedOutput(
@@ -245,11 +249,14 @@ export class ClaudeExecutorWrapper {
       // 9. Capture stderr for debugging
       const childProcess = spawned.process.process;
       if (childProcess && childProcess.stderr) {
-        let stderrOutput = '';
-        childProcess.stderr.on('data', (data: Buffer) => {
+        let stderrOutput = "";
+        childProcess.stderr.on("data", (data: Buffer) => {
           const chunk = data.toString();
           stderrOutput += chunk;
-          console.error(`[ClaudeExecutorWrapper] Claude stderr for ${executionId}:`, chunk);
+          console.error(
+            `[ClaudeExecutorWrapper] Claude stderr for ${executionId}:`,
+            chunk
+          );
         });
       }
 
@@ -302,7 +309,7 @@ export class ClaudeExecutorWrapper {
             );
             // Kill the process if it hasn't exited
             if (childProcess && !childProcess.killed) {
-              childProcess.kill('SIGTERM');
+              childProcess.kill("SIGTERM");
             }
             resolve(completionExitCode);
           }, 5000);
@@ -361,7 +368,7 @@ export class ClaudeExecutorWrapper {
       `[ClaudeExecutorWrapper] Resuming session ${sessionId} for ${executionId}`
     );
 
-    // Similar to executeWithLifecycle but use resumeTask()
+    // Use resumeTask from agent-execution-engine@0.0.12+ which uses correct --resume flag
     const { agUiAdapter, normalizedAdapter } =
       this.setupAgUiSystem(executionId);
 
@@ -376,7 +383,11 @@ export class ClaudeExecutorWrapper {
         resumed: true,
       } as any);
 
-      updateExecution(this.db, executionId, { status: "running" });
+      // Update status and session_id (sessionId is the path used for resumption)
+      updateExecution(this.db, executionId, {
+        status: "running",
+        session_id: sessionId, // Store for manual session resumption
+      });
       const execution = getExecution(this.db, executionId);
       if (execution) {
         broadcastExecutionUpdate(
@@ -388,8 +399,16 @@ export class ClaudeExecutorWrapper {
         );
       }
 
-      // Use resumeTask instead of executeTask
+      // Use resumeTask from the library (fixed in @0.0.12)
       const spawned = await this.executor.resumeTask(task, sessionId);
+
+      console.log(`[ClaudeExecutorWrapper] Spawned resume process for ${executionId}`, {
+        pid: spawned.process.process?.pid,
+        hasStdout: !!spawned.process.streams?.stdout,
+        hasStderr: !!spawned.process.streams?.stderr,
+        hasStdin: !!spawned.process.streams?.stdin,
+        hasPeer: !!(spawned.process as any).peer,
+      });
 
       this.activeExecutions.set(executionId, {
         cancel: () => {
@@ -399,9 +418,65 @@ export class ClaudeExecutorWrapper {
         },
       });
 
-      // Create output streams (same as executeWithLifecycle)
-      const outputChunks = (this.executor as any).createOutputChunks(spawned.process);
-      const normalized = this.executor.normalizeOutput(outputChunks, workDir);
+      // IMPORTANT: When using resumeTask, the library creates a ProtocolPeer that consumes stdout.
+      // We cannot use createOutputChunks because it would try to read from an already-consumed stdout.
+      // Instead, we need to get messages from the peer and convert them to output chunks.
+      const peer = (spawned.process as any).peer;
+
+      if (!peer) {
+        throw new Error("No peer attached to resumed process - cannot read output");
+      }
+
+      console.log(`[ClaudeExecutorWrapper] Creating output chunks from peer for ${executionId}`);
+
+      // Create an async generator that converts peer messages to output chunks
+      async function* peerMessagesToOutputChunks() {
+        const messageQueue: any[] = [];
+        let streamEnded = false;
+        let exitDetected = false;
+
+        // Listen to peer messages
+        peer.onMessage((message: any) => {
+          console.log(`[ClaudeExecutorWrapper] Peer message for ${executionId}:`, {
+            type: message.type,
+            subtype: message.subtype,
+          });
+          messageQueue.push(message);
+
+          // Detect completion
+          if (
+            message.type === "result" &&
+            (message.subtype === "success" || message.subtype === "failure")
+          ) {
+            exitDetected = true;
+          }
+        });
+
+        // Process messages until completion
+        while (!streamEnded || messageQueue.length > 0) {
+          if (messageQueue.length === 0) {
+            if (exitDetected) {
+              streamEnded = true;
+              break;
+            }
+            // Wait for more messages
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            continue;
+          }
+
+          // Convert message to stream-json line format
+          const message = messageQueue.shift();
+          const line = JSON.stringify(message) + "\n";
+          yield {
+            type: "stdout" as const,
+            data: Buffer.from(line, "utf-8"),
+            timestamp: new Date(),
+          };
+        }
+      }
+
+      console.log(`[ClaudeExecutorWrapper] Normalizing output for ${executionId}`);
+      const normalized = this.executor.normalizeOutput(peerMessagesToOutputChunks(), workDir);
 
       const processOutputPromise = this.processNormalizedOutput(
         executionId,
@@ -409,18 +484,45 @@ export class ClaudeExecutorWrapper {
         normalizedAdapter
       );
 
+      console.log(`[ClaudeExecutorWrapper] Waiting for output processing to complete for ${executionId}`);
+      await processOutputPromise;
+      console.log(`[ClaudeExecutorWrapper] Output processing completed for ${executionId}`);
+
+      // Close stdin to signal the process to exit (only after output processing is done)
+      console.log(`[ClaudeExecutorWrapper] Closing stdin for ${executionId}`);
+      const childProcess = spawned.process.process;
+      if (childProcess && childProcess.stdin) {
+        try {
+          childProcess.stdin.end();
+        } catch (error) {
+          console.error(`[ClaudeExecutorWrapper] Error closing stdin:`, error);
+        }
+      }
+
+      // Wait for the process to exit
+      console.log(`[ClaudeExecutorWrapper] Waiting for process to exit for ${executionId}`);
       const exitCode = await new Promise<number>((resolve, reject) => {
-        const childProcess = spawned.process.process;
         if (!childProcess) {
           reject(new Error("No child process available"));
           return;
         }
 
-        childProcess.on("exit", (code: number | null) => resolve(code || 0));
-        childProcess.on("error", (error: Error) => reject(error));
-      });
+        // If already exited, resolve immediately
+        if (childProcess.exitCode !== null) {
+          console.log(`[ClaudeExecutorWrapper] Process already exited with code ${childProcess.exitCode}`);
+          resolve(childProcess.exitCode || 0);
+          return;
+        }
 
-      await processOutputPromise;
+        childProcess.once("exit", (code: number | null) => {
+          console.log(`[ClaudeExecutorWrapper] Process exited for ${executionId} with code ${code}`);
+          resolve(code || 0);
+        });
+        childProcess.once("error", (error: Error) => {
+          console.error(`[ClaudeExecutorWrapper] Process error for ${executionId}:`, error);
+          reject(error);
+        });
+      });
 
       if (exitCode === 0) {
         await this.handleSuccess(executionId);
@@ -493,6 +595,9 @@ export class ClaudeExecutorWrapper {
    * Persists entries to ExecutionLogsStore and converts to AG-UI events
    * for broadcasting via TransportManager.
    *
+   * Also captures session ID from the normalized entry metadata (set by the normalizer
+   * from the first SystemMessage) for session resumption support.
+   *
    * @private
    */
   private async processNormalizedOutput(
@@ -505,6 +610,7 @@ export class ClaudeExecutorWrapper {
     );
 
     let entryCount = 0;
+    let sessionIdCaptured = false;
 
     for await (const entry of outputStream) {
       entryCount++;
@@ -517,11 +623,24 @@ export class ClaudeExecutorWrapper {
             index: entry.index,
             kind: entry.type.kind,
             timestamp: entry.timestamp,
+            hasMetadata: !!entry.metadata,
+            sessionId: entry.metadata?.sessionId,
           }
         );
       }
 
       try {
+        // Capture session ID from metadata (populated by normalizer from SystemMessage)
+        // Only capture once to avoid unnecessary DB updates
+        if (!sessionIdCaptured && entry.metadata?.sessionId) {
+          const sessionId = entry.metadata.sessionId;
+          updateExecution(this.db, executionId, { session_id: sessionId });
+          console.log(
+            `[ClaudeExecutorWrapper] Captured session ID from metadata: ${sessionId} for ${executionId}`
+          );
+          sessionIdCaptured = true;
+        }
+
         // 1. Store normalized entry for historical replay
         this.logsStore.appendNormalizedEntry(executionId, entry);
 
@@ -599,10 +718,7 @@ export class ClaudeExecutorWrapper {
    *
    * @private
    */
-  private async handleError(
-    executionId: string,
-    error: Error
-  ): Promise<void> {
+  private async handleError(executionId: string, error: Error): Promise<void> {
     console.error(
       `[ClaudeExecutorWrapper] Execution ${executionId} failed:`,
       error

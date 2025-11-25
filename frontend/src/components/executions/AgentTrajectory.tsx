@@ -29,6 +29,12 @@ export interface AgentTrajectoryProps {
   renderMarkdown?: boolean
 
   /**
+   * Whether to hide system messages (default: true)
+   * System messages are those that start with [System]
+   */
+  hideSystemMessages?: boolean
+
+  /**
    * Custom class name
    */
   className?: string
@@ -70,14 +76,20 @@ export function AgentTrajectory({
   messages,
   toolCalls,
   renderMarkdown = true,
+  hideSystemMessages = true,
   className = '',
 }: AgentTrajectoryProps) {
   // Merge messages and tool calls into a chronological timeline
   const trajectory = useMemo(() => {
     const items: TrajectoryItem[] = []
 
-    // Add messages
+    // Add messages (filtering out system messages if requested)
     messages.forEach((message) => {
+      // Skip system messages if hideSystemMessages is true
+      if (hideSystemMessages && message.content.trim().startsWith('[System]')) {
+        return
+      }
+
       items.push({
         type: 'message',
         timestamp: message.timestamp,
@@ -107,7 +119,7 @@ export function AgentTrajectory({
       }
       return 0
     })
-  }, [messages, toolCalls])
+  }, [messages, toolCalls, hideSystemMessages])
 
   if (trajectory.length === 0) {
     return null
