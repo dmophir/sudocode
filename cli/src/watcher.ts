@@ -25,6 +25,7 @@ import {
   generateUniqueFilename,
 } from "./filename-generator.js";
 import { getOutgoingRelationships } from "./operations/relationships.js";
+import type { EntitySyncEvent, FileChangeEvent } from "@sudocode-ai/types/events";
 
 export interface WatcherOptions {
   /**
@@ -57,6 +58,18 @@ export interface WatcherOptions {
    * When enabled, changes to JSONL files will update both the database and markdown files
    */
   syncJSONLToMarkdown?: boolean;
+
+  /**
+   * Called when an entity is synced (after successful sync)
+   * Provides typed event data for machine consumption
+   */
+  onEntitySync?: (event: EntitySyncEvent) => void | Promise<void>;
+
+  /**
+   * Called when a file change is detected (before sync)
+   * Provides typed event data for machine consumption
+   */
+  onFileChange?: (event: FileChangeEvent) => void | Promise<void>;
 }
 
 export interface WatcherControl {
@@ -90,6 +103,8 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
     onError = console.error,
     ignoreInitial = true,
     syncJSONLToMarkdown: enableReverseSync = false,
+    onEntitySync,
+    onFileChange,
   } = options;
 
   const stats: WatcherStats = {
@@ -391,6 +406,27 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
             onLog(
               `[watch] Synced ${result.entityType} ${result.entityId} (${result.action})`
             );
+
+            // Emit typed callback event for markdown sync
+            if (onEntitySync) {
+              // Get full entity data to include in event
+              const entity =
+                result.entityType === "spec"
+                  ? getSpec(db, result.entityId)
+                  : getIssue(db, result.entityId);
+
+              await onEntitySync({
+                entityType: result.entityType,
+                entityId: result.entityId,
+                action: result.action,
+                filePath,
+                baseDir,
+                source: "markdown",
+                timestamp: new Date(),
+                entity: entity ?? undefined,
+                version: 1,
+              });
+            }
           } else {
             onError(new Error(`Failed to sync ${filePath}: ${result.error}`));
             stats.errors++;
@@ -401,12 +437,103 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
         onLog(`[watch] ${event} ${path.relative(baseDir, filePath)}`);
 
         if (event !== "unlink") {
+          const entityType = basename === "specs.jsonl" ? "spec" : "issue";
+
+          // ALWAYS track entities before (even if import not needed)
+          // This ensures we detect changes when CLI/MCP updates DB directly
+          const beforeEntities =
+            entityType === "spec"
+              ? listSpecs(db).map((s) => ({
+                  id: s.id,
+                  updated_at: s.updated_at,
+                }))
+              : listIssues(db).map((i) => ({
+                  id: i.id,
+                  updated_at: i.updated_at,
+                }));
+
           // Check if JSONL actually differs from database before importing
           if (jsonlNeedsImport(filePath)) {
             await importFromJSONL(db, {
               inputDir: baseDir,
             });
             onLog(`[watch] Imported JSONL changes to database`);
+          }
+
+          // ALWAYS track entities after (whether imported or not)
+          const afterEntities =
+            entityType === "spec"
+              ? listSpecs(db).map((s) => ({
+                  id: s.id,
+                  updated_at: s.updated_at,
+                }))
+              : listIssues(db).map((i) => ({
+                  id: i.id,
+                  updated_at: i.updated_at,
+                }));
+
+          // Detect which entities changed by comparing updated_at timestamps
+          const beforeMap = new Map(
+            beforeEntities.map((e) => [e.id, e.updated_at])
+          );
+          const afterMap = new Map(
+            afterEntities.map((e) => [e.id, e.updated_at])
+          );
+
+          // Emit entity-specific log messages AND typed events for changed entities
+          for (const [id, afterTimestamp] of afterMap) {
+            const beforeTimestamp = beforeMap.get(id);
+            let action: "created" | "updated" | "no-change" = "no-change";
+
+            if (!beforeTimestamp) {
+              // New entity (created)
+              action = "created";
+              onLog(`[watch] Synced ${entityType} ${id} (created)`);
+            } else if (beforeTimestamp !== afterTimestamp) {
+              // Updated entity
+              action = "updated";
+              onLog(`[watch] Synced ${entityType} ${id} (updated)`);
+            }
+
+            // Emit typed callback event for created/updated entities
+            if (action !== "no-change" && onEntitySync) {
+              // Get full entity data to include in event (avoids server DB query)
+              const entity =
+                entityType === "spec" ? getSpec(db, id) : getIssue(db, id);
+
+              // Find markdown file path
+              let entityFilePath: string;
+              if (entityType === "spec" && entity && "file_path" in entity) {
+                // Spec has file_path property
+                entityFilePath = path.join(baseDir, entity.file_path);
+              } else if (
+                entityType === "issue" &&
+                entity &&
+                "file_path" in entity
+              ) {
+                // Issue also has file_path
+                entityFilePath = path.join(baseDir, entity.file_path);
+              } else {
+                // Fallback to default path
+                entityFilePath = path.join(
+                  baseDir,
+                  entityType === "spec" ? "specs" : "issues",
+                  `${id}.md`
+                );
+              }
+
+              await onEntitySync({
+                entityType,
+                entityId: id,
+                action,
+                filePath: entityFilePath,
+                baseDir,
+                source: "jsonl",
+                timestamp: new Date(),
+                entity: entity ?? undefined,
+                version: 1,
+              });
+            }
           }
 
           // Optionally sync database changes back to markdown files

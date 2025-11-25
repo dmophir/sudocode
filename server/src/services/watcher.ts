@@ -85,9 +85,12 @@ export function startServerWatcher(
       if (onFileChange) {
         // TODO: Use something more robust than regex parsing here.
 
-        // Match markdown sync log: "[watch] Synced issue ISSUE-001 (updated)"
+        // Match markdown sync log: "[watch] Synced issue i-xxxx (updated)" or "[watch] Synced spec s-xxxx (created)"
+        // Supports both old format (ISSUE-001, SPEC-123) and new format (i-x7k9, s-14sh, i-multi-test)
+        // The "to <path>" part is optional and can contain spaces in the path
+        // Pattern allows multiple hyphens in ID (e.g., i-multi-jsonl1)
         const syncMatch = message.match(
-          /\[watch\] Synced (spec|issue) ([A-Z]+-\d+) \((created|updated)\)/
+          /\[watch\] Synced (spec|issue) ([A-Za-z0-9-]+) (?:to .+ )?\((created|updated)\)/
         );
         if (syncMatch) {
           const [, entityType, entityId] = syncMatch;
