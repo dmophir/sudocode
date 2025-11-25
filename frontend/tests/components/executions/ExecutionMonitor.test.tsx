@@ -1143,5 +1143,120 @@ describe('ExecutionMonitor', () => {
       expect(items[1].textContent).toContain('Bash')
       expect(items[2].textContent).toContain('Beta')
     })
+
+    it('should show SSE data while logs are loading during transition (no flicker)', () => {
+      // SSE stream has data from running execution
+      const sseMessages = new Map()
+      sseMessages.set('msg-1', {
+        messageId: 'msg-1',
+        timestamp: 1000,
+        role: 'assistant',
+        content: 'SSE streamed message',
+        complete: true,
+      })
+
+      const sseToolCalls = new Map()
+      sseToolCalls.set('tool-1', {
+        toolCallId: 'tool-1',
+        toolCallName: 'Read',
+        args: '{}',
+        status: 'completed',
+        startTime: 2000,
+        endTime: 2500,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'disconnected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'completed',
+          currentStep: null,
+          error: null,
+          startTime: 1000,
+          endTime: 3000,
+        },
+        messages: sseMessages,
+        toolCalls: sseToolCalls,
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: false,
+      })
+
+      // Logs are still loading
+      mockUseExecutionLogs.mockReturnValue({
+        events: [],
+        loading: true,
+        error: null,
+        metadata: null,
+      })
+
+      const { container } = render(
+        <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
+      )
+
+      // Should still show SSE data while logs are loading (no flicker)
+      expect(screen.getByText('SSE streamed message')).toBeInTheDocument()
+      expect(screen.getByText('Read')).toBeInTheDocument()
+
+      // Should NOT show empty state
+      expect(screen.queryByText('No execution activity yet')).not.toBeInTheDocument()
+    })
+
+    it('should switch to logs data once loaded', () => {
+      // SSE stream has data from running execution
+      const sseMessages = new Map()
+      sseMessages.set('msg-1', {
+        messageId: 'msg-1',
+        timestamp: 1000,
+        role: 'assistant',
+        content: 'SSE message',
+        complete: true,
+      })
+
+      mockUseAgUiStream.mockReturnValue({
+        connectionStatus: 'disconnected',
+        execution: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+          status: 'completed',
+          currentStep: null,
+          error: null,
+          startTime: 1000,
+          endTime: 3000,
+        },
+        messages: sseMessages,
+        toolCalls: new Map(),
+        state: {},
+        error: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnect: vi.fn(),
+        isConnected: false,
+      })
+
+      // Logs have finished loading with different content
+      mockUseExecutionLogs.mockReturnValue({
+        events: [
+          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'log-msg-1', role: 'assistant' },
+          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1000, messageId: 'log-msg-1', delta: 'Logs message' },
+          { type: 'TEXT_MESSAGE_END', timestamp: 1000, messageId: 'log-msg-1' },
+        ],
+        loading: false,
+        error: null,
+        metadata: { lineCount: 3, byteSize: 100, createdAt: '', updatedAt: '' },
+      })
+
+      render(
+        <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
+      )
+
+      // Should show logs data (not SSE data) once logs are loaded
+      expect(screen.getByText('Logs message')).toBeInTheDocument()
+      expect(screen.queryByText('SSE message')).not.toBeInTheDocument()
+    })
   })
 })

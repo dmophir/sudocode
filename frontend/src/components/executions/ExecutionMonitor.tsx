@@ -89,7 +89,92 @@ export function ExecutionMonitor({
   // Use logs API for completed executions
   const logsResult = useExecutionLogs(executionId)
 
+  // Process logs events into messages/toolCalls format
+  const processedLogs = useMemo(() => {
+    const messages = new Map()
+    const toolCalls = new Map()
+    const state: any = {}
+
+    // Track sequence indices for stable ordering
+    let messageIndex = 0
+    let toolCallIndex = 0
+
+    // Process events from logs (same logic as useAgUiStream)
+    if (logsResult.events && logsResult.events.length > 0) {
+      logsResult.events.forEach((event: any) => {
+        // Handle TEXT_MESSAGE events
+        if (event.type === 'TEXT_MESSAGE_START') {
+          messages.set(event.messageId, {
+            messageId: event.messageId,
+            role: event.role || 'assistant',
+            content: '',
+            complete: false,
+            timestamp: event.timestamp || Date.now(),
+            index: messageIndex++,
+          })
+        } else if (event.type === 'TEXT_MESSAGE_CONTENT') {
+          const existing = messages.get(event.messageId)
+          if (existing) {
+            messages.set(event.messageId, {
+              ...existing,
+              content: existing.content + (event.delta || ''),
+            })
+          }
+        } else if (event.type === 'TEXT_MESSAGE_END') {
+          const existing = messages.get(event.messageId)
+          if (existing) {
+            messages.set(event.messageId, {
+              ...existing,
+              complete: true,
+            })
+          }
+        }
+        // Handle TOOL_CALL events
+        else if (event.type === 'TOOL_CALL_START') {
+          toolCalls.set(event.toolCallId, {
+            toolCallId: event.toolCallId,
+            toolCallName: event.toolCallName || event.toolName,
+            args: '',
+            status: 'started',
+            startTime: event.timestamp || Date.now(),
+            index: toolCallIndex++,
+          })
+        } else if (event.type === 'TOOL_CALL_ARGS') {
+          const existing = toolCalls.get(event.toolCallId)
+          if (existing) {
+            toolCalls.set(event.toolCallId, {
+              ...existing,
+              args: existing.args + (event.delta || ''),
+            })
+          }
+        } else if (event.type === 'TOOL_CALL_END') {
+          const existing = toolCalls.get(event.toolCallId)
+          if (existing) {
+            toolCalls.set(event.toolCallId, {
+              ...existing,
+              status: 'executing',
+            })
+          }
+        } else if (event.type === 'TOOL_CALL_RESULT') {
+          const existing = toolCalls.get(event.toolCallId)
+          if (existing) {
+            toolCalls.set(event.toolCallId, {
+              ...existing,
+              status: 'completed',
+              result: event.result || event.content,
+              endTime: event.timestamp || Date.now(),
+            })
+          }
+        }
+      })
+    }
+
+    return { messages, toolCalls, state }
+  }, [logsResult.events])
+
   // Select the appropriate data source
+  // Key insight: When transitioning from active to completed, keep showing SSE data
+  // until logs are fully loaded to prevent flickering
   const {
     connectionStatus,
     execution,
@@ -99,8 +184,8 @@ export function ExecutionMonitor({
     error,
     isConnected,
   } = useMemo(() => {
+    // For active executions, always use SSE stream
     if (isActive) {
-      // Use SSE stream for active executions
       return {
         connectionStatus: sseStream.connectionStatus,
         execution: sseStream.execution,
@@ -110,87 +195,47 @@ export function ExecutionMonitor({
         error: sseStream.error,
         isConnected: sseStream.isConnected,
       }
-    } else {
-      // Use logs API for completed executions
-      // Transform events to messages/toolCalls format (matching SSE stream format)
-      const messages = new Map()
-      const toolCalls = new Map()
-      const state: any = {}
+    }
 
-      // Track sequence indices for stable ordering
-      let messageIndex = 0
-      let toolCallIndex = 0
+    // For completed executions, use logs when available
+    // But fall back to SSE data while logs are loading to prevent flicker
+    const logsLoaded = !logsResult.loading && logsResult.events && logsResult.events.length > 0
+    const hasSSEData = sseStream.messages.size > 0 || sseStream.toolCalls.size > 0
 
-      // Process events from logs (same logic as useAgUiStream)
-      if (logsResult.events) {
-        logsResult.events.forEach((event: any) => {
-          // Handle TEXT_MESSAGE events
-          if (event.type === 'TEXT_MESSAGE_START') {
-            messages.set(event.messageId, {
-              messageId: event.messageId,
-              role: event.role || 'assistant',
-              content: '',
-              complete: false,
-              timestamp: event.timestamp || Date.now(),
-              index: messageIndex++,
-            })
-          } else if (event.type === 'TEXT_MESSAGE_CONTENT') {
-            const existing = messages.get(event.messageId)
-            if (existing) {
-              messages.set(event.messageId, {
-                ...existing,
-                content: existing.content + (event.delta || ''),
-              })
-            }
-          } else if (event.type === 'TEXT_MESSAGE_END') {
-            const existing = messages.get(event.messageId)
-            if (existing) {
-              messages.set(event.messageId, {
-                ...existing,
-                complete: true,
-              })
-            }
-          }
-          // Handle TOOL_CALL events
-          else if (event.type === 'TOOL_CALL_START') {
-            toolCalls.set(event.toolCallId, {
-              toolCallId: event.toolCallId,
-              toolCallName: event.toolCallName || event.toolName,
-              args: '',
-              status: 'started',
-              startTime: event.timestamp || Date.now(),
-              index: toolCallIndex++,
-            })
-          } else if (event.type === 'TOOL_CALL_ARGS') {
-            const existing = toolCalls.get(event.toolCallId)
-            if (existing) {
-              toolCalls.set(event.toolCallId, {
-                ...existing,
-                args: existing.args + (event.delta || ''),
-              })
-            }
-          } else if (event.type === 'TOOL_CALL_END') {
-            const existing = toolCalls.get(event.toolCallId)
-            if (existing) {
-              toolCalls.set(event.toolCallId, {
-                ...existing,
-                status: 'executing',
-              })
-            }
-          } else if (event.type === 'TOOL_CALL_RESULT') {
-            const existing = toolCalls.get(event.toolCallId)
-            if (existing) {
-              toolCalls.set(event.toolCallId, {
-                ...existing,
-                status: 'completed',
-                result: event.result || event.content,
-                endTime: event.timestamp || Date.now(),
-              })
-            }
-          }
-        })
+    // Use logs if loaded, otherwise fall back to SSE data if available
+    if (logsLoaded) {
+      return {
+        connectionStatus: logsResult.error ? 'error' : 'connected',
+        execution: {
+          status: executionProp?.status || 'completed',
+          runId: executionId,
+          currentStep: undefined,
+          error: logsResult.error?.message,
+          startTime: undefined,
+          endTime: undefined,
+        },
+        messages: processedLogs.messages,
+        toolCalls: processedLogs.toolCalls,
+        state: processedLogs.state,
+        error: logsResult.error,
+        isConnected: false,
       }
-
+    } else if (hasSSEData) {
+      // Logs still loading but we have SSE data - keep showing it
+      return {
+        connectionStatus: logsResult.loading ? 'connecting' : sseStream.connectionStatus,
+        execution: {
+          ...sseStream.execution,
+          status: executionProp?.status || sseStream.execution.status,
+        },
+        messages: sseStream.messages,
+        toolCalls: sseStream.toolCalls,
+        state: sseStream.state,
+        error: sseStream.error,
+        isConnected: false, // Not live anymore since execution completed
+      }
+    } else {
+      // No SSE data and logs not loaded yet - show loading state
       return {
         connectionStatus: logsResult.loading ? 'connecting' : logsResult.error ? 'error' : 'connected',
         execution: {
@@ -201,14 +246,14 @@ export function ExecutionMonitor({
           startTime: undefined,
           endTime: undefined,
         },
-        messages,
-        toolCalls,
-        state,
+        messages: processedLogs.messages,
+        toolCalls: processedLogs.toolCalls,
+        state: processedLogs.state,
         error: logsResult.error,
-        isConnected: false, // Not live for historical
+        isConnected: false,
       }
     }
-  }, [isActive, sseStream, logsResult, executionId, executionProp])
+  }, [isActive, sseStream, logsResult, processedLogs, executionId, executionProp])
 
   // Trigger callbacks when execution status changes
   useEffect(() => {
