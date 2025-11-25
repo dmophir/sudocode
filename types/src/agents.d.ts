@@ -66,8 +66,66 @@ export interface ClaudeCodeConfig extends BaseAgentConfig {
   verbose?: boolean;
   /** Skip permission prompts */
   dangerouslySkipPermissions?: boolean;
-  /** Permission mode setting */
-  permissionMode?: string;
+  /** Enable bypassing permission checks as an option without enabling by default */
+  allowDangerouslySkipPermissions?: boolean;
+  /** Permission mode setting (acceptEdits, bypassPermissions, default, dontAsk, plan) */
+  permissionMode?: "acceptEdits" | "bypassPermissions" | "default" | "dontAsk" | "plan";
+
+  // === Model Configuration ===
+  /** Model for the session (alias like 'sonnet', 'opus' or full name like 'claude-sonnet-4-5-20250929') */
+  model?: string;
+  /** Fallback model when default is overloaded (only works with --print) */
+  fallbackModel?: string;
+
+  // === Tool Permissions ===
+  /** Comma or space-separated list of tool names to allow (e.g., "Bash(git:*) Edit") */
+  allowedTools?: string[];
+  /** Specify available tools from built-in set. Use "" to disable all, "default" for all, or tool names */
+  tools?: string[];
+  /** Comma or space-separated list of tool names to deny (e.g., "Bash(git:*) Edit") */
+  disallowedTools?: string[];
+
+  // === System Prompt ===
+  /** System prompt to use for the session */
+  systemPrompt?: string;
+  /** Append a system prompt to the default system prompt */
+  appendSystemPrompt?: string;
+
+  // === Directory & Context ===
+  /** Additional directories to allow tool access to */
+  addDir?: string[];
+
+  // === MCP Configuration ===
+  /** Load MCP servers from JSON files or strings (space-separated) */
+  mcpConfig?: string[];
+  /** Only use MCP servers from --mcp-config, ignoring all other MCP configurations */
+  strictMcpConfig?: boolean;
+
+  // === Session Management ===
+  /** Continue the most recent conversation */
+  continue?: boolean;
+  /** Resume a conversation - provide a session ID or leave empty for interactive selection */
+  resume?: string;
+  /** When resuming, create a new session ID instead of reusing the original */
+  forkSession?: boolean;
+  /** Use a specific session ID for the conversation (must be a valid UUID) */
+  sessionId?: string;
+
+  // === Output Configuration ===
+  /** JSON Schema for structured output validation */
+  jsonSchema?: string;
+  /** Include partial message chunks as they arrive (only with --print and --output-format=stream-json) */
+  includePartialMessages?: boolean;
+
+  // === Advanced ===
+  /** Path to a settings JSON file or a JSON string to load additional settings from */
+  settings?: string;
+  /** Comma-separated list of setting sources to load (user, project, local) */
+  settingSources?: string;
+  /** Enable debug mode with optional category filtering */
+  debug?: string | boolean;
+
+  // === Process Management ===
   /** Maximum idle time before cleanup (pool only) */
   idleTimeout?: number;
   /** Retry configuration for failed spawns */

@@ -23,7 +23,7 @@ import type {
 } from "./worker-ipc.js";
 import { isMainMessage } from "./worker-ipc.js";
 import type { ExecutionTask } from "agent-execution-engine/engine";
-import { ClaudeExecutorWrapper } from "../execution/executors/claude-executor-wrapper.js";
+import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
 import { ExecutionLifecycleService } from "../services/execution-lifecycle.js";
 import { ExecutionLogsStore } from "../services/execution-logs-store.js";
 import { IpcTransportManager } from "../execution/transport/ipc-transport-manager.js";
@@ -64,7 +64,7 @@ function sendToMain(message: WorkerToMainMessage): void {
 
 /**
  * Send log event to main process
- * Note: Currently unused as ClaudeExecutorWrapper handles log storage directly.
+ * Note: Currently unused as AgentExecutorWrapper handles log storage directly.
  * Kept for backward compatibility with IPC protocol.
  */
 // function sendLog(data: OutputEvent): void {
@@ -184,24 +184,31 @@ async function runExecution(): Promise<void> {
       workerId: WORKER_ID!,
     });
 
-    // 6. Create services for ClaudeExecutorWrapper
+    // 6. Create services for AgentExecutorWrapper
     const lifecycleService = new ExecutionLifecycleService(db, REPO_PATH!);
     const logsStore = new ExecutionLogsStore(db);
 
     // 7. Create IPC transport manager to forward AG-UI events
     const ipcTransport = new IpcTransportManager(EXECUTION_ID!);
 
-    // 8. Create ClaudeExecutorWrapper
-    const wrapper = new ClaudeExecutorWrapper({
-      workDir: REPO_PATH!,
-      lifecycleService,
-      logsStore,
-      projectId: PROJECT_ID!,
-      db,
-      transportManager: ipcTransport as any, // IpcTransportManager matches interface
-    });
+    // 8. Determine agent type (default to claude-code for backwards compatibility)
+    const agentType = config.agentType || "claude-code";
 
-    // 9. Build execution task
+    // 9. Create executor using factory
+    const wrapper = createExecutorForAgent(
+      agentType,
+      { workDir: REPO_PATH!, ...config },
+      {
+        workDir: REPO_PATH!,
+        lifecycleService,
+        logsStore,
+        projectId: PROJECT_ID!,
+        db,
+        transportManager: ipcTransport as any, // IpcTransportManager matches interface
+      }
+    );
+
+    // 10. Build execution task
     const task: ExecutionTask = {
       id: execution.id,
       type: "issue",
@@ -223,17 +230,17 @@ async function runExecution(): Promise<void> {
       createdAt: new Date(),
     };
 
-    // 10. Update status to running
-    console.log(`[Worker:${WORKER_ID}] Starting execution with ClaudeExecutorWrapper`);
+    // 11. Update status to running
+    console.log(`[Worker:${WORKER_ID}] Starting execution with AgentExecutorWrapper (${agentType})`);
     sendStatus("running");
 
-    // 11. Execute with lifecycle management (blocking)
+    // 12. Execute with lifecycle management (blocking)
     const startTime = Date.now();
     await wrapper.executeWithLifecycle(execution.id, task, workDir);
     const duration = Date.now() - startTime;
     console.log(`[Worker:${WORKER_ID}] Execution completed in ${duration}ms`);
 
-    // 12. Check if cancellation was requested
+    // 13. Check if cancellation was requested
     if (cancelRequested) {
       console.log(`[Worker:${WORKER_ID}] Execution was cancelled`);
       updateExecution(db, execution.id, {

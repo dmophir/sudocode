@@ -1,17 +1,21 @@
 /**
  * AgentExecutorWrapper - Generic wrapper for any agent adapter
  *
- * Provides a simplified execution interface that works with any IAgentAdapter.
- * For production Claude Code executions, ClaudeExecutorWrapper is still used
- * due to its specialized protocol handling.
+ * Provides a unified execution interface that works with any IAgentAdapter.
+ * Supports Claude Code, Codex, Cursor, Copilot, and any future agents.
  *
  * @module execution/executors/agent-executor-wrapper
  */
 
 import type { IAgentAdapter, NormalizedEntry } from 'agent-execution-engine/agents';
-import type { BaseAgentConfig } from '@sudocode-ai/types/agents';
+import {
+  ClaudeCodeExecutor,
+  CodexExecutor,
+  CursorExecutor,
+  CopilotExecutor,
+} from 'agent-execution-engine/agents';
+import type { AgentType, BaseAgentConfig } from '@sudocode-ai/types/agents';
 import type { ProcessConfig } from 'agent-execution-engine/process';
-import { CodexExecutor } from 'agent-execution-engine/agents/codex';
 import type Database from 'better-sqlite3';
 import type { ExecutionTask } from 'agent-execution-engine/engine';
 import type { ExecutionLifecycleService } from '../../services/execution-lifecycle.js';
@@ -26,11 +30,32 @@ import {
 import { broadcastExecutionUpdate } from '../../services/websocket.js';
 
 /**
+ * Base executor interface that all agent executors implement
+ */
+interface IAgentExecutor {
+  executeTask(task: ExecutionTask): Promise<{ process: any }>;
+  resumeTask?(task: ExecutionTask, sessionId: string): Promise<{ process: any }>;
+  normalizeOutput(
+    outputStream: AsyncIterable<any>,
+    workDir: string
+  ): AsyncIterable<NormalizedEntry>;
+  getCapabilities?(): {
+    supportsSessionResume?: boolean;
+    requiresSetup?: boolean;
+    supportsApprovals?: boolean;
+    supportsMcp?: boolean;
+    protocol?: string;
+  };
+}
+
+/**
  * Configuration for AgentExecutorWrapper
  */
 export interface AgentExecutorWrapperConfig<TConfig extends BaseAgentConfig> {
   adapter: IAgentAdapter<TConfig>;
   agentConfig: TConfig;
+  /** Agent type for executor selection */
+  agentType: AgentType;
   lifecycleService: ExecutionLifecycleService;
   logsStore: ExecutionLogsStore;
   projectId: string;
@@ -66,7 +91,9 @@ export interface AgentExecutorWrapperConfig<TConfig extends BaseAgentConfig> {
  */
 export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   private adapter: IAgentAdapter<TConfig>;
-  private executor: CodexExecutor;
+  private executor: IAgentExecutor;
+  /** Agent type used for executor selection and logging */
+  private readonly agentType: AgentType;
   private _agentConfig: TConfig;
   private logsStore: ExecutionLogsStore;
   private transportManager?: TransportManager;
@@ -77,6 +104,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
   constructor(config: AgentExecutorWrapperConfig<TConfig>) {
     this.adapter = config.adapter;
+    this.agentType = config.agentType;
     this._agentConfig = config.agentConfig;
     this.logsStore = config.logsStore;
     this.transportManager = config.transportManager;
@@ -87,17 +115,50 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     // Build process configuration from agent-specific config
     this.processConfig = this.adapter.buildProcessConfig(this._agentConfig);
 
-    // Create executor instance - for now hardcoded to Codex
-    // TODO: Make this generic when we add more agent types
-    this.executor = new CodexExecutor(this._agentConfig as any);
+    // Create executor instance based on agent type
+    this.executor = this.createExecutor(config.agentType, this._agentConfig);
 
     console.log('[AgentExecutorWrapper] Initialized', {
-      agentType: this.adapter.metadata.name,
+      agentType: this.agentType,
+      adapterName: this.adapter.metadata.name,
       projectId: this.projectId,
       workDir: this.processConfig.workDir,
       hasTransport: !!this.transportManager,
       hasLogsStore: !!this.logsStore,
     });
+  }
+
+  /**
+   * Create the appropriate executor for the given agent type
+   *
+   * @param agentType - Type of agent
+   * @param agentConfig - Agent configuration
+   * @returns Executor instance
+   */
+  private createExecutor(agentType: AgentType, agentConfig: TConfig): IAgentExecutor {
+    switch (agentType) {
+      case 'claude-code':
+        return new ClaudeCodeExecutor({
+          workDir: agentConfig.workDir,
+          executablePath: (agentConfig as any).claudePath,
+          print: (agentConfig as any).print ?? true,
+          outputFormat: (agentConfig as any).outputFormat ?? 'stream-json',
+          verbose: (agentConfig as any).verbose ?? true,
+          dangerouslySkipPermissions: (agentConfig as any).dangerouslySkipPermissions ?? true,
+        }) as IAgentExecutor;
+
+      case 'codex':
+        return new CodexExecutor(agentConfig as any) as IAgentExecutor;
+
+      case 'cursor':
+        return new CursorExecutor(agentConfig as any) as IAgentExecutor;
+
+      case 'copilot':
+        return new CopilotExecutor(agentConfig as any) as IAgentExecutor;
+
+      default:
+        throw new Error(`Unknown agent type: ${agentType}`);
+    }
   }
 
   /**
@@ -270,17 +331,104 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
    * @param workDir - Working directory for execution
    */
   async resumeWithLifecycle(
-    _executionId: string,
-    _sessionId: string,
-    _task: ExecutionTask,
-    _workDir: string
+    executionId: string,
+    sessionId: string,
+    task: ExecutionTask,
+    workDir: string
   ): Promise<void> {
+    // Check if executor supports resume
+    const capabilities = this.executor.getCapabilities?.();
+    if (!capabilities?.supportsSessionResume || !this.executor.resumeTask) {
+      console.log(
+        `[AgentExecutorWrapper] Resume not supported for agent '${this.adapter.metadata.name}'`
+      );
+      throw new Error(
+        `Resume functionality not supported for agent '${this.adapter.metadata.name}'`
+      );
+    }
+
     console.log(
-      `[AgentExecutorWrapper] Resume not yet implemented for agent '${this.adapter.metadata.name}'`
+      `[AgentExecutorWrapper] Resuming session ${sessionId} for ${executionId}`
     );
-    throw new Error(
-      `Resume functionality not yet implemented for agent '${this.adapter.metadata.name}'`
-    );
+
+    // Setup AG-UI system
+    const { agUiAdapter, normalizedAdapter } = this.setupAgUiSystem(executionId);
+
+    if (this.transportManager) {
+      this.transportManager.connectAdapter(agUiAdapter, executionId);
+    }
+
+    try {
+      agUiAdapter.emitRunStarted({
+        model: (task.config as any)?.model || this.adapter.metadata.name,
+        sessionId,
+        resumed: true,
+      } as any);
+
+      updateExecution(this.db, executionId, { status: 'running' });
+      const execution = getExecution(this.db, executionId);
+      if (execution) {
+        broadcastExecutionUpdate(
+          this.projectId,
+          executionId,
+          'status_changed',
+          execution,
+          execution.issue_id || undefined
+        );
+      }
+
+      // Use resumeTask instead of executeTask
+      const spawned = await this.executor.resumeTask(task, sessionId);
+
+      this.activeExecutions.set(executionId, {
+        cancel: () => {
+          if (spawned.process.process) {
+            spawned.process.process.kill('SIGTERM');
+          }
+        },
+      });
+
+      // Create output streams
+      const outputChunks = this.createOutputChunks(spawned.process);
+      const normalized = this.executor.normalizeOutput(outputChunks, workDir);
+
+      const processOutputPromise = this.processNormalizedOutput(
+        executionId,
+        normalized,
+        normalizedAdapter
+      );
+
+      const exitCode = await new Promise<number>((resolve, reject) => {
+        const childProcess = spawned.process.process;
+        if (!childProcess) {
+          reject(new Error('No child process available'));
+          return;
+        }
+
+        childProcess.on('exit', (code: number | null) => resolve(code || 0));
+        childProcess.on('error', (error: Error) => reject(error));
+      });
+
+      await processOutputPromise;
+
+      if (exitCode === 0) {
+        await this.handleSuccess(executionId);
+        agUiAdapter.emitRunFinished({ exitCode });
+      } else {
+        throw new Error(`Process exited with code ${exitCode}`);
+      }
+    } catch (error) {
+      await this.handleError(executionId, error as Error);
+      agUiAdapter.emitRunError(
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    } finally {
+      this.activeExecutions.delete(executionId);
+      if (this.transportManager) {
+        this.transportManager.disconnectAdapter(agUiAdapter);
+      }
+    }
   }
 
   /**
@@ -291,6 +439,18 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   async cancel(executionId: string): Promise<void> {
     console.log(`[AgentExecutorWrapper] Cancel execution ${executionId}`);
 
+    // Kill the process if active
+    const execution = this.activeExecutions.get(executionId);
+    if (execution) {
+      execution.cancel();
+      this.activeExecutions.delete(executionId);
+    } else {
+      console.warn(
+        `[AgentExecutorWrapper] No active execution found for ${executionId}`
+      );
+    }
+
+    // Update database status
     updateExecution(this.db, executionId, {
       status: 'stopped',
       completed_at: new Date().toISOString(),
