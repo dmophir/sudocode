@@ -303,7 +303,7 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
   });
 
   describe("Executor Factory", () => {
-    it("should create ClaudeExecutorWrapper for claude-code", () => {
+    it("should create AgentExecutorWrapper for claude-code", () => {
       const wrapper = createExecutorForAgent(
         "claude-code",
         { workDir: testDir },
@@ -317,7 +317,8 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       );
 
       expect(wrapper).toBeDefined();
-      expect(wrapper.constructor.name).toBe("ClaudeExecutorWrapper");
+      // All agents now use unified AgentExecutorWrapper
+      expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
     });
 
     it("should create AgentExecutorWrapper for codex", () => {

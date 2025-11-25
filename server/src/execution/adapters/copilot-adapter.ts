@@ -13,10 +13,7 @@ import type {
   AgentMetadata,
 } from 'agent-execution-engine/agents';
 import type { ProcessConfig } from 'agent-execution-engine/process';
-import {
-  buildCopilotProcessConfig,
-  validateCopilotConfig,
-} from './copilot-config-builder.js';
+import { AgentConfigUtils } from './shared/index.js';
 
 /**
  * GitHub Copilot Agent Adapter
@@ -71,7 +68,53 @@ export class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
    * @returns ProcessConfig for process spawning
    */
   buildProcessConfig(config: CopilotConfig): ProcessConfig {
-    return buildCopilotProcessConfig(config);
+    const args = this.buildCopilotArgs(config);
+    return AgentConfigUtils.buildBaseProcessConfig(
+      config.copilotPath || config.executablePath || 'copilot',
+      args,
+      config
+    );
+  }
+
+  /**
+   * Build Copilot-specific command-line arguments
+   *
+   * @param config - Copilot configuration
+   * @returns Array of command-line arguments
+   */
+  private buildCopilotArgs(config: CopilotConfig): string[] {
+    const args: string[] = [];
+
+    // Required args for logging (needed for session ID discovery)
+    args.push('--no-color');
+    args.push('--log-level', 'debug');
+    // Note: --log-dir will be added at execution time by the executor
+
+    // Add conditional flags using shared utility
+    args.push(
+      ...AgentConfigUtils.buildConditionalArgs([
+        { flag: '--model', value: config.model, condition: !!config.model },
+        { flag: '--allow-all-tools', condition: !!config.allowAllTools },
+        { flag: '--allow-tool', value: config.allowTool, condition: !!config.allowTool },
+        { flag: '--deny-tool', value: config.denyTool, condition: !!config.denyTool },
+      ])
+    );
+
+    // Additional directories
+    if (config.addDir) {
+      for (const dir of config.addDir) {
+        args.push('--add-dir', dir);
+      }
+    }
+
+    // MCP server configuration
+    if (config.disableMcpServer) {
+      for (const server of config.disableMcpServer) {
+        args.push('--disable-mcp-server', server);
+      }
+    }
+
+    return args;
   }
 
   /**
@@ -83,7 +126,51 @@ export class CopilotAdapter implements IAgentAdapter<CopilotConfig> {
    * @returns Array of validation error messages (empty if valid)
    */
   validateConfig(config: CopilotConfig): string[] {
-    return validateCopilotConfig(config);
+    return [
+      ...AgentConfigUtils.validateBaseConfig(config),
+      ...this.validateCopilotSpecific(config),
+    ];
+  }
+
+  /**
+   * Validate Copilot-specific configuration
+   *
+   * @param config - Configuration to validate
+   * @returns Array of validation errors
+   */
+  private validateCopilotSpecific(config: CopilotConfig): string[] {
+    const errors: string[] = [];
+
+    // Check for conflicting tool permissions
+    if (config.allowAllTools && config.allowTool) {
+      errors.push('allowTool is ignored when allowAllTools is true');
+    }
+
+    if (config.allowAllTools && config.denyTool) {
+      errors.push('denyTool takes precedence over allowAllTools');
+    }
+
+    // Validate addDir paths
+    errors.push(...AgentConfigUtils.validatePaths(config.addDir, 'addDir'));
+
+    // Validate disableMcpServer
+    if (config.disableMcpServer) {
+      for (const server of config.disableMcpServer) {
+        if (!server || server.trim() === '') {
+          errors.push('disableMcpServer contains empty server name');
+        }
+      }
+    }
+
+    // Validate timeouts
+    errors.push(
+      ...AgentConfigUtils.validateTimeouts(config.timeout, config.idleTimeout)
+    );
+
+    // Validate retry config
+    errors.push(...AgentConfigUtils.validateRetryConfig(config.retry));
+
+    return errors;
   }
 
   /**

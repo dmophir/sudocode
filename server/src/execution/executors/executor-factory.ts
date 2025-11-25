@@ -2,8 +2,7 @@
  * Executor Factory
  *
  * Factory functions for creating the appropriate executor wrapper based on agent type.
- * Routes to specialized wrappers (like ClaudeExecutorWrapper) or the generic
- * AgentExecutorWrapper as appropriate.
+ * All agents now use the unified AgentExecutorWrapper.
  *
  * @module execution/executors/executor-factory
  */
@@ -14,7 +13,6 @@ import type { ExecutionLifecycleService } from '../../services/execution-lifecyc
 import type { ExecutionLogsStore } from '../../services/execution-logs-store.js';
 import type { TransportManager } from '../transport/transport-manager.js';
 import { agentRegistryService, AgentNotImplementedError } from '../../services/agent-registry.js';
-import { ClaudeExecutorWrapper, type ClaudeExecutorWrapperConfig } from './claude-executor-wrapper.js';
 import { AgentExecutorWrapper, type AgentExecutorWrapperConfig } from './agent-executor-wrapper.js';
 
 /**
@@ -47,9 +45,7 @@ export interface ExecutorFactoryConfig {
 /**
  * Union type of all possible executor wrapper types
  */
-export type ExecutorWrapper =
-  | ClaudeExecutorWrapper
-  | AgentExecutorWrapper<any>;
+export type ExecutorWrapper = AgentExecutorWrapper<any>;
 
 /**
  * Create an executor wrapper for the specified agent type
@@ -104,21 +100,7 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
     }
   }
 
-  // Route to specialized wrapper for Claude Code
-  if (agentType === 'claude-code') {
-    console.log('[ExecutorFactory] Using ClaudeExecutorWrapper for Claude Code');
-    const claudeConfig: ClaudeExecutorWrapperConfig = {
-      workDir: factoryConfig.workDir,
-      lifecycleService: factoryConfig.lifecycleService,
-      logsStore: factoryConfig.logsStore,
-      projectId: factoryConfig.projectId,
-      db: factoryConfig.db,
-      transportManager: factoryConfig.transportManager,
-    };
-    return new ClaudeExecutorWrapper(claudeConfig);
-  }
-
-  // For other agents, use generic wrapper
+  // All agents use the unified AgentExecutorWrapper
   console.log(`[ExecutorFactory] Using AgentExecutorWrapper for ${agentType}`);
 
   // Check if agent is implemented
@@ -131,6 +113,7 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
   const wrapperConfig: AgentExecutorWrapperConfig<any> = {
     adapter,
     agentConfig,
+    agentType,
     lifecycleService: factoryConfig.lifecycleService,
     logsStore: factoryConfig.logsStore,
     projectId: factoryConfig.projectId,

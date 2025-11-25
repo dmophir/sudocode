@@ -592,11 +592,11 @@ Please continue working on this issue, taking into account the feedback above.`;
       return; // Worker pool handles DB updates and broadcasts
     }
 
-    // For in-process executions using ClaudeExecutorWrapper:
+    // For in-process executions using AgentExecutorWrapper:
     // The wrapper manages its own lifecycle and cancellation.
     // We update the database status, which the wrapper may check,
     // or we rely on process termination to stop execution.
-    // TODO: Add cancellation registry in ClaudeExecutorWrapper for direct process control
+    // TODO: Add cancellation registry in AgentExecutorWrapper for direct process control
 
     // Update status in database
     updateExecution(this.db, executionId, {
@@ -699,10 +699,10 @@ Please continue working on this issue, taking into account the feedback above.`;
       await this.workerPool.shutdown();
     }
 
-    // For in-process executions using ClaudeExecutorWrapper:
+    // For in-process executions using AgentExecutorWrapper:
     // The wrapper manages its own lifecycle. Processes will be terminated
     // when the Node.js process exits.
-    // TODO: Add active execution tracking to ClaudeExecutorWrapper for graceful shutdown
+    // TODO: Add active execution tracking to AgentExecutorWrapper for graceful shutdown
   }
 
   /**

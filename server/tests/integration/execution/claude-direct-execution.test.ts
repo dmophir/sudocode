@@ -1,14 +1,15 @@
 /**
  * Integration Tests for Phase 1: Direct Execution Pattern
  *
- * Tests the integration of ClaudeExecutorWrapper, NormalizedEntryToAgUiAdapter,
+ * Tests the integration of AgentExecutorWrapper, NormalizedEntryToAgUiAdapter,
  * and ExecutionLogsStore with real components.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Database from 'better-sqlite3';
 import type { NormalizedEntry } from 'agent-execution-engine/agents';
-import { ClaudeExecutorWrapper } from '../../../src/execution/executors/claude-executor-wrapper.js';
+import { createExecutorForAgent } from '../../../src/execution/executors/executor-factory.js';
+import { AgentExecutorWrapper } from '../../../src/execution/executors/agent-executor-wrapper.js';
 import {
   createTestDatabase,
   createTestServices,
@@ -32,7 +33,7 @@ describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
   let logsStore: any;
   let transportManager: any;
   let mockExecutor: any;
-  let wrapper: ClaudeExecutorWrapper;
+  let wrapper: AgentExecutorWrapper<any>;
 
   beforeEach(() => {
     // Create fresh database and services for each test
@@ -45,15 +46,19 @@ describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
     // Create mock executor
     mockExecutor = createMockExecutor();
 
-    // Create wrapper with real services
-    wrapper = new ClaudeExecutorWrapper({
-      workDir: '/tmp/test',
-      lifecycleService,
-      logsStore,
-      projectId: 'test-project',
-      db,
-      transportManager,
-    });
+    // Create wrapper using factory
+    wrapper = createExecutorForAgent(
+      'claude-code',
+      { workDir: '/tmp/test' },
+      {
+        workDir: '/tmp/test',
+        lifecycleService,
+        logsStore,
+        projectId: 'test-project',
+        db,
+        transportManager,
+      }
+    );
 
     // Replace the real executor with our mock
     (wrapper as any).executor = mockExecutor;
