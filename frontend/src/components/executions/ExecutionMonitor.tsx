@@ -368,7 +368,7 @@ export function ExecutionMonitor({
         {executionProp?.prompt && (
           <div className="rounded-md bg-muted/30 p-3">
             <div className="flex items-start gap-2">
-              <div className="flex-1 whitespace-pre-wrap text-sm text-foreground">
+              <div className="flex-1 whitespace-pre-wrap font-mono text-sm text-foreground">
                 {executionProp.prompt}
               </div>
             </div>
