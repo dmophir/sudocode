@@ -11,8 +11,10 @@
  * - Compact, collapsible view
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react'
+
+const TODO_TRACKER_STORAGE_KEY = 'todoTracker.isCollapsed'
 
 /**
  * Todo item with status and history tracking
@@ -51,7 +53,24 @@ export interface TodoTrackerProps {
  * ```
  */
 export function TodoTracker({ todos, className = '' }: TodoTrackerProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // Initialize state from localStorage
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      const stored = localStorage.getItem(TODO_TRACKER_STORAGE_KEY)
+      return stored ? JSON.parse(stored) : false
+    } catch {
+      return false
+    }
+  })
+
+  // Save to localStorage whenever collapse state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(TODO_TRACKER_STORAGE_KEY, JSON.stringify(isCollapsed))
+    } catch {
+      // Ignore localStorage errors (e.g., in incognito mode)
+    }
+  }, [isCollapsed])
 
   const hasAnyTodos = todos.length > 0
 
