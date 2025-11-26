@@ -135,7 +135,21 @@ export const issuesApi = {
   create: (data: CreateIssueRequest) => post<Issue>('/issues', data),
   update: (id: string, data: UpdateIssueRequest) => put<Issue>(`/issues/${id}`, data),
   delete: (id: string) => del(`/issues/${id}`),
-  getFeedback: (id: string) => get<IssueFeedback[]>(`/feedback?to_id=${id}`),
+  getFeedback: async (id: string) => {
+    // Fetch both inbound (feedback ON this issue) and outbound (feedback FROM this issue)
+    const [inbound, outbound] = await Promise.all([
+      get<IssueFeedback[]>(`/feedback?to_id=${id}`),
+      get<IssueFeedback[]>(`/feedback?from_id=${id}`),
+    ])
+    // Combine and deduplicate (in case an issue left feedback on itself)
+    const combined = [...inbound, ...outbound]
+    const seen = new Set<string>()
+    return combined.filter((f) => {
+      if (seen.has(f.id)) return false
+      seen.add(f.id)
+      return true
+    })
+  },
 }
 
 /**
@@ -179,6 +193,14 @@ export const feedbackApi = {
 /**
  * Executions API
  */
+/**
+ * Execution chain response from /executions/:id/chain
+ */
+export interface ExecutionChainResponse {
+  rootId: string
+  executions: Execution[]
+}
+
 export const executionsApi = {
   // Prepare execution (preview template and gather context)
   prepare: (issueId: string, request?: PrepareExecutionRequest) =>
@@ -190,6 +212,9 @@ export const executionsApi = {
 
   // Get execution by ID
   getById: (executionId: string) => get<Execution>(`/executions/${executionId}`),
+
+  // Get execution chain (root + all follow-ups)
+  getChain: (executionId: string) => get<ExecutionChainResponse>(`/executions/${executionId}/chain`),
 
   // List executions for issue
   list: (issueId: string) => get<Execution[]>(`/issues/${issueId}/executions`),

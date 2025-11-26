@@ -101,6 +101,8 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   private db: Database.Database;
   private processConfig: ProcessConfig;
   private activeExecutions: Map<string, { cancel: () => void }>;
+  /** Track completion state for Claude Code executions (from protocol peer) */
+  private completionState: Map<string, { completed: boolean; exitCode: number }>;
 
   constructor(config: AgentExecutorWrapperConfig<TConfig>) {
     this.adapter = config.adapter;
@@ -111,6 +113,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     this.projectId = config.projectId;
     this.db = config.db;
     this.activeExecutions = new Map();
+    this.completionState = new Map();
 
     // Build process configuration from agent-specific config
     this.processConfig = this.adapter.buildProcessConfig(this._agentConfig);
@@ -238,18 +241,23 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         },
       });
 
-      // 7. Create output stream from process stdout/stderr
-      const outputStream = this.createOutputChunks(spawned.process);
+      // 7. Initialize completion state for Claude Code
+      if (this.agentType === 'claude-code') {
+        this.completionState.set(executionId, { completed: false, exitCode: 0 });
+      }
+
+      // 8. Create output stream from process stdout/stderr
+      const outputStream = this.createOutputChunks(spawned.process, executionId);
       const normalized = this.executor.normalizeOutput(outputStream, workDir);
 
-      // 8. Process normalized output (runs concurrently with process)
+      // 9. Process normalized output (runs concurrently with process)
       const processOutputPromise = this.processNormalizedOutput(
         executionId,
         normalized,
         normalizedAdapter
       );
 
-      // 9. Capture stderr for debugging
+      // 10. Capture stderr for debugging
       const childProcess = spawned.process.process;
       if (childProcess && childProcess.stderr) {
         let stderrOutput = '';
@@ -263,37 +271,87 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         });
       }
 
-      // 10. Wait for output processing to complete
+      // 11. Wait for output processing to complete
       await processOutputPromise;
 
       console.log(
         `[AgentExecutorWrapper] Output processing completed for ${executionId}`
       );
 
-      // 11. Wait for process to exit
-      const exitCode = await new Promise<number>((resolve) => {
-        if (!childProcess) {
-          resolve(0);
-          return;
-        }
-
-        childProcess.on('exit', (code: number | null) => {
+      // 12. Close stdin to signal the process to exit (for Claude Code with peer)
+      if (this.agentType === 'claude-code' && childProcess && childProcess.stdin) {
+        try {
+          childProcess.stdin.end();
           console.log(
-            `[AgentExecutorWrapper] Process exited with code ${code} for ${executionId}`
+            `[AgentExecutorWrapper] Closed stdin for Claude Code process ${executionId}`
           );
-          resolve(code ?? 0);
-        });
-
-        childProcess.on('error', (error: Error) => {
+        } catch (error) {
           console.error(
-            `[AgentExecutorWrapper] Process error for ${executionId}:`,
+            `[AgentExecutorWrapper] Error closing stdin for ${executionId}:`,
             error
           );
-          resolve(1);
-        });
-      });
+        }
+      }
 
-      // 12. Handle completion
+      // 13. Wait for process to exit (with timeout for Claude Code)
+      const exitCode = await Promise.race([
+        new Promise<number>((resolve) => {
+          if (!childProcess) {
+            // Use completion state for Claude Code if available
+            if (this.agentType === 'claude-code') {
+              const state = this.completionState.get(executionId);
+              resolve(state?.exitCode ?? 0);
+            } else {
+              resolve(0);
+            }
+            return;
+          }
+
+          childProcess.on('exit', (code: number | null) => {
+            console.log(
+              `[AgentExecutorWrapper] Process exited with code ${code} for ${executionId}`
+            );
+            // For Claude Code, use completion state exit code if available (more reliable)
+            if (this.agentType === 'claude-code') {
+              const state = this.completionState.get(executionId);
+              if (state?.completed) {
+                console.log(
+                  `[AgentExecutorWrapper] Using completion state exit code ${state.exitCode} for ${executionId}`
+                );
+                resolve(state.exitCode);
+                return;
+              }
+            }
+            resolve(code ?? 0);
+          });
+
+          childProcess.on('error', (error: Error) => {
+            console.error(
+              `[AgentExecutorWrapper] Process error for ${executionId}:`,
+              error
+            );
+            resolve(1);
+          });
+        }),
+        // Timeout for Claude Code processes that may not exit cleanly
+        this.agentType === 'claude-code'
+          ? new Promise<number>((resolve) => {
+              setTimeout(() => {
+                console.log(
+                  `[AgentExecutorWrapper] Process exit timeout for ${executionId}, using completion state`
+                );
+                if (childProcess && !childProcess.killed) {
+                  childProcess.kill('SIGTERM');
+                }
+                // Use completion state exit code
+                const state = this.completionState.get(executionId);
+                resolve(state?.exitCode ?? 0);
+              }, 5000);
+            })
+          : new Promise<number>(() => {}), // Never resolves for non-Claude agents
+      ]);
+
+      // 14. Handle completion
       if (exitCode === 0) {
         await this.handleSuccess(executionId);
         agUiAdapter.emitRunFinished({ exitCode });
@@ -313,6 +371,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     } finally {
       // Cleanup
       this.activeExecutions.delete(executionId);
+      this.completionState.delete(executionId);
       if (this.transportManager) {
         this.transportManager.disconnectAdapter(agUiAdapter);
         console.log(
@@ -365,7 +424,11 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         resumed: true,
       } as any);
 
-      updateExecution(this.db, executionId, { status: 'running' });
+      // Update status and session_id (sessionId is the path used for resumption)
+      updateExecution(this.db, executionId, {
+        status: 'running',
+        session_id: sessionId,
+      });
       const execution = getExecution(this.db, executionId);
       if (execution) {
         broadcastExecutionUpdate(
@@ -388,8 +451,13 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         },
       });
 
+      // Initialize completion state for Claude Code
+      if (this.agentType === 'claude-code') {
+        this.completionState.set(executionId, { completed: false, exitCode: 0 });
+      }
+
       // Create output streams
-      const outputChunks = this.createOutputChunks(spawned.process);
+      const outputChunks = this.createOutputChunks(spawned.process, executionId);
       const normalized = this.executor.normalizeOutput(outputChunks, workDir);
 
       const processOutputPromise = this.processNormalizedOutput(
@@ -398,18 +466,28 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         normalizedAdapter
       );
 
-      const exitCode = await new Promise<number>((resolve, reject) => {
-        const childProcess = spawned.process.process;
-        if (!childProcess) {
-          reject(new Error('No child process available'));
-          return;
-        }
-
-        childProcess.on('exit', (code: number | null) => resolve(code || 0));
-        childProcess.on('error', (error: Error) => reject(error));
-      });
-
       await processOutputPromise;
+
+      // For Claude Code, use completion state; for others, wait for process exit
+      let exitCode = 0;
+      if (this.agentType === 'claude-code') {
+        const state = this.completionState.get(executionId);
+        exitCode = state?.exitCode ?? 0;
+        console.log(
+          `[AgentExecutorWrapper] Using completion state exit code ${exitCode} for resumed ${executionId}`
+        );
+      } else {
+        exitCode = await new Promise<number>((resolve, reject) => {
+          const childProcess = spawned.process.process;
+          if (!childProcess) {
+            reject(new Error('No child process available'));
+            return;
+          }
+
+          childProcess.on('exit', (code: number | null) => resolve(code || 0));
+          childProcess.on('error', (error: Error) => reject(error));
+        });
+      }
 
       if (exitCode === 0) {
         await this.handleSuccess(executionId);
@@ -425,6 +503,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       throw error;
     } finally {
       this.activeExecutions.delete(executionId);
+      this.completionState.delete(executionId);
       if (this.transportManager) {
         this.transportManager.disconnectAdapter(agUiAdapter);
       }
@@ -490,6 +569,8 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   /**
    * Process normalized output from agent
    *
+   * For Claude Code: Also captures session ID from metadata for session resumption
+   *
    * @private
    */
   private async processNormalizedOutput(
@@ -502,6 +583,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     );
 
     let entryCount = 0;
+    let sessionIdCaptured = false;
 
     for await (const entry of normalized) {
       entryCount++;
@@ -514,11 +596,27 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
             index: entry.index,
             kind: entry.type.kind,
             timestamp: entry.timestamp,
+            hasMetadata: !!entry.metadata,
+            sessionId: entry.metadata?.sessionId,
           }
         );
       }
 
       try {
+        // Capture session ID from metadata for Claude Code (populated by normalizer from SystemMessage)
+        if (
+          this.agentType === 'claude-code' &&
+          !sessionIdCaptured &&
+          entry.metadata?.sessionId
+        ) {
+          const sessionId = entry.metadata.sessionId;
+          updateExecution(this.db, executionId, { session_id: sessionId });
+          console.log(
+            `[AgentExecutorWrapper] Captured session ID from metadata: ${sessionId} for ${executionId}`
+          );
+          sessionIdCaptured = true;
+        }
+
         // 1. Store normalized entry for historical replay
         this.logsStore.appendNormalizedEntry(executionId, entry);
 
@@ -553,6 +651,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     updateExecution(this.db, executionId, {
       status: 'completed',
       completed_at: new Date().toISOString(),
+      exit_code: 0,
     });
 
     const updatedExecution = getExecution(this.db, executionId);
@@ -602,11 +701,30 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   /**
    * Create output chunk stream from ManagedProcess
    *
+   * For Claude Code: Uses protocol peer to receive messages
+   * For other agents: Reads directly from stdout/stderr streams
+   *
    * @private
    */
   private async *createOutputChunks(
-    process: any
+    process: any,
+    executionId: string
   ): AsyncIterable<{ type: 'stdout' | 'stderr'; data: Buffer; timestamp: Date }> {
+    // Check if this is a Claude Code process with a protocol peer
+    const peer = process.peer;
+
+    if (this.agentType === 'claude-code') {
+      // Claude Code REQUIRES a protocol peer
+      if (!peer) {
+        throw new Error('No peer attached to Claude Code process - cannot read output');
+      }
+      // Claude Code: Use protocol peer messages
+      console.log('[AgentExecutorWrapper] Using protocol peer for Claude Code output');
+      yield* this.peerMessagesToOutputChunks(peer, executionId);
+      return;
+    }
+
+    // Other agents: Use stdout/stderr streams
     if (!process.streams) {
       throw new Error('Process does not have streams available');
     }
@@ -627,6 +745,64 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       for await (const chunk of stream) {
         yield chunk;
       }
+    }
+  }
+
+  /**
+   * Convert protocol peer messages to output chunks
+   *
+   * Used for Claude Code which uses a protocol peer that consumes stdout
+   * Updates completion state when result message is received
+   *
+   * @private
+   */
+  private async *peerMessagesToOutputChunks(
+    peer: any,
+    executionId: string
+  ): AsyncIterable<{ type: 'stdout' | 'stderr'; data: Buffer; timestamp: Date }> {
+    const messageQueue: any[] = [];
+    let streamEnded = false;
+    let exitDetected = false;
+
+    // Register message handler
+    peer.onMessage((message: any) => {
+      messageQueue.push(message);
+
+      // Detect completion and update completion state
+      if (
+        message.type === 'result' &&
+        (message.subtype === 'success' || message.subtype === 'failure')
+      ) {
+        exitDetected = true;
+        const exitCode = message.subtype === 'success' ? 0 : 1;
+        this.completionState.set(executionId, { completed: true, exitCode });
+        console.log(
+          `[AgentExecutorWrapper] Detected completion from peer for ${executionId}:`,
+          { subtype: message.subtype, exitCode }
+        );
+      }
+    });
+
+    // Process messages until completion
+    while (!streamEnded || messageQueue.length > 0) {
+      if (messageQueue.length === 0) {
+        if (exitDetected) {
+          streamEnded = true;
+          break;
+        }
+        // Wait for more messages
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        continue;
+      }
+
+      // Convert message to stream-json line format
+      const message = messageQueue.shift();
+      const line = JSON.stringify(message) + '\n';
+      yield {
+        type: 'stdout' as const,
+        data: Buffer.from(line, 'utf-8'),
+        timestamp: new Date(),
+      };
     }
   }
 

@@ -514,7 +514,7 @@ describe("ExecutionService", () => {
 
     it(
       "should preserve agent type from parent execution",
-      
+
       async () => {
         // Create initial execution with explicit agent type
         const prepareResult = await service.prepareExecution(testIssueId);
@@ -538,6 +538,35 @@ describe("ExecutionService", () => {
       }
     );
 
+    it(
+      "should store user feedback as prompt in follow-up execution",
+
+      async () => {
+        // Create initial execution
+        const prepareResult = await service.prepareExecution(testIssueId);
+        const initialExecution = await service.createExecution(
+          testIssueId,
+          prepareResult.defaultConfig,
+          prepareResult.renderedPrompt
+        );
+
+        // Verify initial execution has a prompt
+        expect(initialExecution.prompt).toBe(prepareResult.renderedPrompt);
+
+        // Create follow-up with specific feedback
+        const feedbackText = "Please add unit tests for the authentication flow";
+        const followUpExecution = await service.createFollowUp(
+          initialExecution.id,
+          feedbackText
+        );
+
+        // Verify follow-up execution stores the feedback as the prompt
+        expect(followUpExecution.prompt).toBe(feedbackText);
+        expect(followUpExecution.prompt).not.toBe(initialExecution.prompt);
+        expect(followUpExecution.parent_execution_id).toBe(initialExecution.id);
+      }
+    );
+
     it("should throw error for non-existent execution", async () => {
       await expect(
         service.createFollowUp("non-existent-id", "feedback")
@@ -545,8 +574,8 @@ describe("ExecutionService", () => {
     });
 
     it(
-      "should throw error for execution without worktree",
-      
+      "should support follow-ups for local mode executions (no worktree)",
+
       async () => {
         // Create local execution (no worktree)
         const prepareResult = await service.prepareExecution(testIssueId, {
@@ -558,9 +587,13 @@ describe("ExecutionService", () => {
           prepareResult.renderedPrompt
         );
 
-        await expect(
-          service.createFollowUp(localExecution.id, "feedback")
-        ).rejects.toThrow(/has no worktree/);
+        // Follow-ups should work for local mode (uses repo path instead of worktree)
+        const followUp = await service.createFollowUp(localExecution.id, "Continue the work");
+
+        expect(followUp).toBeDefined();
+        expect(followUp.parent_execution_id).toBe(localExecution.id);
+        expect(followUp.issue_id).toBe(testIssueId);
+        expect(followUp.worktree_path).toBeNull(); // Local mode has no worktree
       }
     );
   });

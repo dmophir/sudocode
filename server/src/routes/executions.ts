@@ -197,6 +197,74 @@ export function createExecutionsRouter(): Router {
   });
 
   /**
+   * GET /api/executions/:executionId/chain
+   *
+   * Get execution chain (root execution + all follow-ups)
+   *
+   * Returns the full chain of executions starting from the root.
+   * If the requested execution is a follow-up, finds the root and returns the full chain.
+   * Executions are ordered chronologically (oldest first).
+   */
+  router.get("/executions/:executionId/chain", (req: Request, res: Response) => {
+    try {
+      const { executionId } = req.params;
+      const db = req.project!.db;
+
+      // Get the requested execution
+      const execution = req.project!.executionService!.getExecution(executionId);
+      if (!execution) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          message: `Execution not found: ${executionId}`,
+        });
+        return;
+      }
+
+      // Find the root execution by traversing up parent_execution_id
+      let rootId = executionId;
+      let current = execution;
+      while (current.parent_execution_id) {
+        rootId = current.parent_execution_id;
+        const parent = req.project!.executionService!.getExecution(rootId);
+        if (!parent) break;
+        current = parent;
+      }
+
+      // Get all executions in the chain (root + all descendants)
+      // Using recursive CTE to get all descendants
+      const chain = db.prepare(`
+        WITH RECURSIVE execution_chain AS (
+          -- Base case: the root execution
+          SELECT * FROM executions WHERE id = ?
+          UNION ALL
+          -- Recursive case: children of executions in the chain
+          SELECT e.* FROM executions e
+          INNER JOIN execution_chain ec ON e.parent_execution_id = ec.id
+        )
+        SELECT * FROM execution_chain
+        ORDER BY created_at ASC
+      `).all(rootId) as any[];
+
+      res.json({
+        success: true,
+        data: {
+          rootId,
+          executions: chain,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting execution chain:", error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error instanceof Error ? error.message : String(error),
+        message: "Failed to get execution chain",
+      });
+    }
+  });
+
+  /**
    * GET /api/executions/:executionId/logs
    *
    * Get AG-UI events for historical replay
