@@ -3,6 +3,7 @@ import { executionsApi, type ExecutionChainResponse } from '@/lib/api'
 import { ExecutionMonitor, RunIndicator } from './ExecutionMonitor'
 import { AgentConfigPanel } from './AgentConfigPanel'
 import { DeleteWorktreeDialog } from './DeleteWorktreeDialog'
+import { DeleteExecutionDialog } from './DeleteExecutionDialog'
 import { TodoTracker } from './TodoTracker'
 import { buildTodoHistory } from '@/utils/todoExtractor'
 import { Button } from '@/components/ui/button'
@@ -47,8 +48,10 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showDeleteWorktree, setShowDeleteWorktree] = useState(false)
+  const [showDeleteExecution, setShowDeleteExecution] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)
+  const [deletingExecution, setDeletingExecution] = useState(false)
   const [worktreeExists, setWorktreeExists] = useState(false)
   const [submittingFollowUp, setSubmittingFollowUp] = useState(false)
 
@@ -193,6 +196,24 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
       setError(err instanceof Error ? err.message : 'Failed to delete worktree')
     } finally {
       setDeletingWorktree(false)
+    }
+  }
+
+  // Handle delete execution action
+  const handleDeleteExecution = async () => {
+    if (!chainData || chainData.executions.length === 0) return
+    const rootExecution = chainData.executions[0]
+
+    setDeletingExecution(true)
+    try {
+      await executionsApi.delete(rootExecution.id)
+      // Navigate back to issue page after deletion
+      if (rootExecution.issue_id) {
+        window.location.href = `/issues/${rootExecution.issue_id}`
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete execution')
+      setDeletingExecution(false)
     }
   }
 
@@ -567,6 +588,14 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                       Delete Worktree
                     </Button>
                   )}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteExecution(true)}
+                    disabled={deletingExecution}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -696,6 +725,16 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
           onClose={() => setShowDeleteWorktree(false)}
           onConfirm={handleDeleteWorktree}
           isDeleting={deletingWorktree}
+        />
+
+        {/* Delete Execution Dialog */}
+        <DeleteExecutionDialog
+          executionId={rootExecution.id}
+          executionCount={executions.length}
+          isOpen={showDeleteExecution}
+          onClose={() => setShowDeleteExecution(false)}
+          onConfirm={handleDeleteExecution}
+          isDeleting={deletingExecution}
         />
       </div>
     </TooltipProvider>
