@@ -12,7 +12,7 @@ import {
   AgentNotFoundError,
   AgentNotImplementedError,
 } from "../../../../src/services/agent-registry.js";
-import { ClaudeExecutorWrapper } from "../../../../src/execution/executors/claude-executor-wrapper.js";
+import { AgentExecutorWrapper } from "../../../../src/execution/executors/agent-executor-wrapper.js";
 import type { AgentType } from "@sudocode-ai/types/agents";
 import type { ExecutorFactoryConfig } from "../../../../src/execution/executors/executor-factory.js";
 
@@ -33,14 +33,15 @@ const factoryConfig: ExecutorFactoryConfig = {
 
 describe("ExecutorFactory", () => {
   describe("createExecutorForAgent", () => {
-    it("should create ClaudeExecutorWrapper for claude-code agent", () => {
+    it("should create AgentExecutorWrapper for claude-code agent", () => {
       const executor = createExecutorForAgent(
         "claude-code",
         { workDir: "/tmp/test" },
         factoryConfig
       );
 
-      expect(executor).toBeInstanceOf(ClaudeExecutorWrapper);
+      // All agents now use unified AgentExecutorWrapper
+      expect(executor).toBeInstanceOf(AgentExecutorWrapper);
     });
 
     it("should create AgentExecutorWrapper for codex agent", () => {
@@ -50,9 +51,8 @@ describe("ExecutorFactory", () => {
         factoryConfig
       );
 
-      // Codex uses the generic AgentExecutorWrapper
-      expect(executor).toBeDefined();
-      expect(executor).not.toBeInstanceOf(ClaudeExecutorWrapper);
+      // All agents now use unified AgentExecutorWrapper
+      expect(executor).toBeInstanceOf(AgentExecutorWrapper);
     });
 
     it("should throw AgentNotFoundError for unknown agent type", () => {
@@ -129,7 +129,8 @@ describe("ExecutorFactory", () => {
         factoryConfig
       );
 
-      expect(executor).toBeInstanceOf(ClaudeExecutorWrapper);
+      // All agents now use unified AgentExecutorWrapper
+      expect(executor).toBeInstanceOf(AgentExecutorWrapper);
     });
   });
 

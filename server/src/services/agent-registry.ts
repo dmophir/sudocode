@@ -5,15 +5,13 @@
  * Wraps the agent-execution-engine's AgentRegistry with sudocode-specific logic.
  */
 
-import {
-  AgentRegistry,
-  ClaudeCodeAdapter,
-} from "agent-execution-engine/agents";
+import { AgentRegistry } from "agent-execution-engine/agents";
 import type {
   IAgentAdapter,
   AgentMetadata,
 } from "agent-execution-engine/agents";
 import type { AgentType } from "@sudocode-ai/types/agents";
+import { ClaudeCodeAdapter } from "../execution/adapters/claude-adapter.js";
 import { CodexAdapter } from "../execution/adapters/codex-adapter.js";
 import { CursorAdapter } from "../execution/adapters/cursor-adapter.js";
 import { copilotAdapter } from "../execution/adapters/copilot-adapter.js";

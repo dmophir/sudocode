@@ -7,8 +7,7 @@
  * - ExecutionService with multi-agent support
  * - End-to-end execution flow with mocked agent executors
  *
- * Note: This test suite mocks the ClaudeExecutorWrapper to prevent actual
- * Claude process spawning. Real end-to-end tests with actual Claude execution
+ * Note: Real end-to-end tests with actual agent execution
  * should be in separate E2E test files that are run explicitly.
  */
 
@@ -60,51 +59,6 @@ import * as os from "os";
 vi.mock("../../src/services/websocket.js", () => ({
   broadcastExecutionUpdate: vi.fn(),
 }));
-
-// Mock ClaudeExecutorWrapper to prevent actual Claude process spawning
-vi.mock("../../src/execution/executors/claude-executor-wrapper.js", () => {
-  return {
-    ClaudeExecutorWrapper: class ClaudeExecutorWrapper {
-      private config: any;
-
-      constructor(config: any) {
-        // Store config for inspection if needed
-        this.config = config;
-      }
-
-      async executeWithLifecycle(
-        executionId: string,
-        task: any,
-        workDir: string
-      ): Promise<void> {
-        // Don't actually spawn Claude - just resolve immediately
-        // The ExecutionService already created the execution with status 'running'
-        // We simulate successful execution by just resolving
-        return Promise.resolve();
-      }
-
-      async resumeWithLifecycle(
-        executionId: string,
-        sessionId: string,
-        task: any,
-        workDir: string
-      ): Promise<void> {
-        // Don't actually spawn Claude - just resolve immediately
-        // Simulates resuming an existing session
-        return Promise.resolve();
-      }
-
-      async cancelExecution(executionId: string): Promise<void> {
-        // Mock cancel - do nothing
-        return Promise.resolve();
-      }
-
-      destroy(): void {
-        // Mock destroy - do nothing
-      }
-    },
-  };
-});
 
 // Mock AgentExecutorWrapper to prevent actual Codex process spawning
 vi.mock("../../src/execution/executors/agent-executor-wrapper.js", () => {
@@ -303,7 +257,7 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
   });
 
   describe("Executor Factory", () => {
-    it("should create ClaudeExecutorWrapper for claude-code", () => {
+    it("should create AgentExecutorWrapper for claude-code", () => {
       const wrapper = createExecutorForAgent(
         "claude-code",
         { workDir: testDir },
@@ -317,7 +271,8 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       );
 
       expect(wrapper).toBeDefined();
-      expect(wrapper.constructor.name).toBe("ClaudeExecutorWrapper");
+      // All agents now use unified AgentExecutorWrapper
+      expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
     });
 
     it("should create AgentExecutorWrapper for codex", () => {
