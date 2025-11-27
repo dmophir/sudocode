@@ -13,4 +13,3 @@ export * from "./markdown.js";
 export * from "./sync.js";
 export * from "./id-generator.js";
 export * from "./config.js";
-export * from "./cli/init-commands.js";

@@ -16,7 +16,10 @@ import { Ok, Err } from "../types/project.js";
 import { broadcastIssueUpdate, broadcastSpecUpdate } from "./websocket.js";
 import { getIssueById } from "./issues.js";
 import { getSpecById } from "./specs.js";
-import { performInitialization, isInitialized } from "@sudocode-ai/cli";
+import {
+  performInitialization,
+  isInitialized,
+} from "@sudocode-ai/cli/dist/cli/init-commands.js";
 
 interface CachedDatabase {
   db: Database.Database;
