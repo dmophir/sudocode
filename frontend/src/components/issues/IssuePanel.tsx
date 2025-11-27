@@ -136,6 +136,7 @@ export function IssuePanel({
   const activitySectionRef = useRef<HTMLDivElement>(null)
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const shouldScrollToActivityRef = useRef(false)
+  const hasInitializedForIssueRef = useRef<string | null>(null)
 
   // WebSocket for real-time updates
   const { subscribe, unsubscribe, addMessageHandler, removeMessageHandler } = useWebSocketContext()
@@ -163,6 +164,10 @@ export function IssuePanel({
     }
     // Reset hasChanges to prevent saving old content to new issue
     setHasChanges(false)
+    // Reset executions to prevent stale data affecting auto-collapse logic
+    setExecutions([])
+    // Reset initialization ref so auto-collapse can re-evaluate for new issue
+    hasInitializedForIssueRef.current = null
   }, [issue.id])
 
   // Save internal view mode preference to localStorage
@@ -290,6 +295,30 @@ export function IssuePanel({
       })
     }
   }, [executions])
+
+  // Auto-collapse description and scroll to activity when issue has activity
+  useEffect(() => {
+    // Only run once per issue (wait for executions to load)
+    if (hasInitializedForIssueRef.current === issue.id) return
+
+    const hasActivity = executions.length > 0 || feedback.length > 0
+
+    if (hasActivity) {
+      // Mark as initialized for this issue
+      hasInitializedForIssueRef.current = issue.id
+
+      // Collapse the description
+      setIsDescriptionCollapsed(true)
+
+      // Scroll to the activity section after a brief delay to let the collapse happen
+      requestAnimationFrame(() => {
+        activitySectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
+  }, [issue.id, executions, feedback])
 
   // Handle click outside to close panel
   useEffect(() => {

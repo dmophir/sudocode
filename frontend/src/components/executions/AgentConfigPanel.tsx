@@ -12,6 +12,7 @@ import {
 import { executionsApi } from '@/lib/api'
 import type { ExecutionConfig, ExecutionPrepareResult, ExecutionMode } from '@/types/execution'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
+import { BranchSelector } from './BranchSelector'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
 import type { CodexConfig } from './CodexConfigForm'
@@ -565,10 +566,10 @@ export function AgentConfigPanel({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="worktree" className="text-xs">
-                      Run in worktree
+                      New worktree
                     </SelectItem>
                     <SelectItem value="local" className="text-xs">
-                      Run directly
+                      Run local
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -579,40 +580,22 @@ export function AgentConfigPanel({
             )}
           </Tooltip>
 
-          {/* Base Branch (only for worktree mode) - disabled in follow-up mode */}
-          {config.mode === 'worktree' && (prepareResult?.availableBranches || isFollowUp) && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Select
-                    value={config.baseBranch}
-                    onValueChange={(value) => updateConfig({ baseBranch: value })}
-                    onOpenChange={onSelectOpenChange}
-                    disabled={loading || isFollowUp}
-                  >
-                    <SelectTrigger className="h-8 w-[120px] text-xs">
-                      <SelectValue placeholder="Branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isFollowUp && config.baseBranch ? (
-                        <SelectItem value={config.baseBranch} className="text-xs">
-                          {config.baseBranch}
-                        </SelectItem>
-                      ) : (
-                        prepareResult?.availableBranches?.map((branch) => (
-                          <SelectItem key={branch} value={branch} className="text-xs">
-                            {branch}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </span>
-              </TooltipTrigger>
-              {isFollowUp && (
-                <TooltipContent>Branch is inherited from parent execution</TooltipContent>
-              )}
-            </Tooltip>
+          {/* Branch Selector - always shown, disabled in local mode or follow-up */}
+          {config.baseBranch && (
+            <BranchSelector
+              branches={prepareResult?.availableBranches || [config.baseBranch]}
+              value={config.baseBranch}
+              onChange={(branch, isNew) => {
+                updateConfig({
+                  baseBranch: branch,
+                  createBaseBranch: isNew || false,
+                })
+              }}
+              disabled={loading || isFollowUp || config.mode === 'local'}
+              allowCreate={!isFollowUp && config.mode !== 'local'}
+              className="w-[160px]"
+              currentBranch={prepareResult?.availableBranches?.[0]}
+            />
           )}
 
           <div className="ml-auto" />

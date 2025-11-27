@@ -184,7 +184,7 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
     })
 
@@ -194,7 +194,7 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
 
       // Find the execution mode selector (second combobox)
@@ -202,13 +202,13 @@ describe('AgentConfigPanel', () => {
       await user.click(triggers[1])
 
       await waitFor(() => {
-        expect(screen.getByText('Run directly')).toBeInTheDocument()
+        expect(screen.getByText('Run local')).toBeInTheDocument()
       })
     })
   })
 
   describe('Branch Selection', () => {
-    it('should show branch selector when in worktree mode', async () => {
+    it('should always show branch selector when baseBranch is set', async () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
@@ -218,7 +218,7 @@ describe('AgentConfigPanel', () => {
       })
     })
 
-    it('should display available branches', async () => {
+    it('should display available branches in worktree mode', async () => {
       const user = userEvent.setup()
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
@@ -228,17 +228,80 @@ describe('AgentConfigPanel', () => {
         expect(triggers.length).toBeGreaterThanOrEqual(3)
       })
 
-      // Click branch selector (third combobox)
+      // Branch selector should be enabled in worktree mode
       const triggers = screen.getAllByRole('combobox')
-      await user.click(triggers[2])
+      const branchSelector = triggers[2]
+      expect(branchSelector).not.toBeDisabled()
+
+      // Click branch selector (third combobox)
+      await user.click(branchSelector)
+
+      // BranchSelector uses a Popover with buttons, not Select with options
+      await waitFor(() => {
+        // Should show the search input
+        expect(screen.getByPlaceholderText('Search or create branch...')).toBeInTheDocument()
+        // Should show available branches (main appears in trigger + list)
+        expect(screen.getAllByText('main').length).toBeGreaterThanOrEqual(2)
+        expect(screen.getByText('develop')).toBeInTheDocument()
+      })
+    })
+
+    it('should disable branch selector in local mode', async () => {
+      // Override prepare result to set mode to local
+      vi.mocked(executionsApi.prepare).mockResolvedValue({
+        ...mockPrepareResult,
+        defaultConfig: {
+          mode: 'local',
+          baseBranch: 'main',
+          cleanupMode: 'manual',
+        },
+      })
+
+      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        const options = screen.getAllByRole('option')
-        const branchOptions = options.filter(
-          (opt) => opt.textContent === 'main' || opt.textContent === 'develop'
-        )
-        expect(branchOptions.length).toBeGreaterThanOrEqual(2)
+        // Wait for mode to be set to local
+        expect(screen.getByText('Run local')).toBeInTheDocument()
       })
+
+      const triggers = screen.getAllByRole('combobox')
+      const branchSelector = triggers[2]
+
+      // Branch selector should be disabled in local mode
+      expect(branchSelector).toBeDisabled()
+    })
+
+    it('should show current branch in local mode', async () => {
+      // Override prepare result to set mode to local
+      vi.mocked(executionsApi.prepare).mockResolvedValue({
+        ...mockPrepareResult,
+        defaultConfig: {
+          mode: 'local',
+          baseBranch: 'develop',
+          cleanupMode: 'manual',
+        },
+      })
+
+      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
+
+      await waitFor(() => {
+        // Should show the current branch
+        expect(screen.getByText('develop')).toBeInTheDocument()
+      })
+    })
+
+    it('should show GitBranch icon in branch selector', async () => {
+      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
+
+      await waitFor(() => {
+        const triggers = screen.getAllByRole('combobox')
+        expect(triggers.length).toBeGreaterThanOrEqual(3)
+      })
+
+      // Branch selector should have GitBranch icon (rendered as svg)
+      const branchSelector = screen.getAllByRole('combobox')[2]
+      const svgIcon = branchSelector.querySelector('svg')
+      expect(svgIcon).toBeInTheDocument()
     })
   })
 
@@ -519,7 +582,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should show inherited mode from previous execution
-        expect(screen.getByText('Run directly')).toBeInTheDocument()
+        expect(screen.getByText('Run local')).toBeInTheDocument()
       })
     })
 
@@ -581,7 +644,7 @@ describe('AgentConfigPanel', () => {
       await waitFor(() => {
         // Should use saved mode from localStorage (before prepare API merge)
         // After prepare merges, the mode should still be 'local' since prepare doesn't set it
-        expect(screen.getByText('Run directly')).toBeInTheDocument()
+        expect(screen.getByText('Run local')).toBeInTheDocument()
         // Should use saved agent type from localStorage
         expect(screen.getByText('Cursor')).toBeInTheDocument()
       })
@@ -603,7 +666,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should fall back to default mode
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
 
       // Should have warned about invalid config
@@ -627,7 +690,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should fall back to default config
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
 
       // Should have warned about parse error
@@ -692,7 +755,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should use previous execution config, not localStorage
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
     })
 
@@ -721,7 +784,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should fall back to defaults
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -810,6 +873,39 @@ describe('AgentConfigPanel', () => {
         const triggers = screen.getAllByRole('combobox')
         // Mode selector should be disabled
         expect(triggers[1]).toBeDisabled()
+      })
+    })
+
+    it('should disable branch selector in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        const triggers = screen.getAllByRole('combobox')
+        // Branch selector should be disabled
+        expect(triggers[2]).toBeDisabled()
+      })
+    })
+
+    it('should show inherited branch in follow-up mode', async () => {
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          parentExecution={parentExecution}
+        />
+      )
+
+      await waitFor(() => {
+        // Should show inherited branch from parent execution
+        expect(screen.getByText('main')).toBeInTheDocument()
       })
     })
 
@@ -909,7 +1005,9 @@ describe('AgentConfigPanel', () => {
         // Should show inherited agent type
         expect(screen.getByText('Claude Code')).toBeInTheDocument()
         // Should show inherited mode
-        expect(screen.getByText('Run in worktree')).toBeInTheDocument()
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
+        // Should show inherited branch
+        expect(screen.getByText('main')).toBeInTheDocument()
       })
     })
   })
