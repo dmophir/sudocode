@@ -43,6 +43,11 @@ export interface InlineExecutionViewProps {
    * Callback when execution is deleted (optional - for parent to refresh)
    */
   onExecutionDeleted?: () => void
+
+  /**
+   * Initial expanded state (defaults to true)
+   */
+  defaultExpanded?: boolean
 }
 
 /**
@@ -51,12 +56,12 @@ export interface InlineExecutionViewProps {
  * Displays an execution chain inline without header metadata or follow-up controls.
  * Designed to be embedded in activity timelines and other compact contexts.
  */
-export function InlineExecutionView({ executionId, onExecutionDeleted }: InlineExecutionViewProps) {
+export function InlineExecutionView({ executionId, onExecutionDeleted, defaultExpanded = true }: InlineExecutionViewProps) {
   const navigate = useNavigate()
   const [chainData, setChainData] = useState<ExecutionChainResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [showDeleteWorktree, setShowDeleteWorktree] = useState(false)
   const [showDeleteExecution, setShowDeleteExecution] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)

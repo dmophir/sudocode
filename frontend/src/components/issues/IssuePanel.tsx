@@ -340,10 +340,10 @@ export function IssuePanel({
 
     const hasActivity = executions.length > 0 || feedback.length > 0
 
-    if (hasActivity) {
-      // Mark as initialized for this issue
-      hasInitializedForIssueRef.current = issue.id
+    // Mark as initialized for this issue
+    hasInitializedForIssueRef.current = issue.id
 
+    if (hasActivity) {
       // Collapse the description
       setIsDescriptionCollapsed(true)
 
@@ -354,6 +354,9 @@ export function IssuePanel({
           block: 'start',
         })
       })
+    } else {
+      // No activity - expand the description
+      setIsDescriptionCollapsed(false)
     }
   }, [issue.id, executions, feedback])
 

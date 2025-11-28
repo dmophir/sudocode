@@ -239,16 +239,22 @@ describe('InlineExecutionView', () => {
         executions: [createMockExecution({ id: 'exec-001' })],
       })
 
-      renderWithProviders(<InlineExecutionView executionId="exec-001" />)
+      const { container } = renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
         expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
       })
 
-      const idButton = screen.getByText(/Execution exec-001/)
-      await user.click(idButton)
+      // Find the execution ID button - it has specific classes and contains the execution ID text
+      const idButton = container.querySelector('button.font-mono.text-xs.text-muted-foreground')
 
-      expect(mockNavigate).toHaveBeenCalledWith('/executions/exec-001')
+      expect(idButton).toBeTruthy()
+      expect(idButton?.textContent).toContain('Execution exec-001')
+      await user.click(idButton!)
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('/executions/exec-001')
+      })
     })
 
     it.skip('should not collapse when clicking execution ID', async () => {

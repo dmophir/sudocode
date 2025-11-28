@@ -176,7 +176,7 @@ describe('ActivityTimeline', () => {
   })
 
   describe('outbound vs inbound feedback', () => {
-    it('should style outbound feedback with purple border (feedback FROM current entity)', () => {
+    it('should style outbound feedback with purple icon (feedback FROM current entity)', () => {
       // Current entity is i-abc1, feedback is FROM i-abc1 TO s-xyz1
       const feedback = createMockFeedback({
         from_id: 'i-abc1',
@@ -188,12 +188,12 @@ describe('ActivityTimeline', () => {
         <ActivityTimeline items={items} currentEntityId="i-abc1" />
       )
 
-      // Outbound should have purple border
-      const card = container.querySelector('.border-l-purple-500\\/50')
-      expect(card).toBeInTheDocument()
+      // Outbound should have purple icon
+      const icon = container.querySelector('.text-purple-600')
+      expect(icon).toBeInTheDocument()
     })
 
-    it('should style inbound feedback with blue border (feedback TO current entity)', () => {
+    it('should style inbound feedback with blue icon (feedback TO current entity)', () => {
       // Current entity is i-abc1, feedback is FROM i-xyz1 TO i-abc1
       const feedback = createMockFeedback({
         from_id: 'i-xyz1',
@@ -205,9 +205,9 @@ describe('ActivityTimeline', () => {
         <ActivityTimeline items={items} currentEntityId="i-abc1" />
       )
 
-      // Inbound should have blue border
-      const card = container.querySelector('.border-l-blue-700\\/50')
-      expect(card).toBeInTheDocument()
+      // Inbound should have blue icon
+      const icon = container.querySelector('.text-blue-600')
+      expect(icon).toBeInTheDocument()
     })
 
     it('should show arrow and target entity for outbound feedback', () => {
