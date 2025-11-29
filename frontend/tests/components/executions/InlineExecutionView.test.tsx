@@ -179,7 +179,7 @@ describe('InlineExecutionView', () => {
 
       // Wait for header to render
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-123/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Should show status badge
@@ -236,7 +236,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // ChevronDown icon indicates expanded state
@@ -257,7 +257,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Wait for initial expanded state
@@ -267,7 +267,7 @@ describe('InlineExecutionView', () => {
       })
 
       // Find and click the header
-      const headerButton = screen.getByText(/Execution exec-001/)
+      const headerButton = screen.getByText('sudocode')
       const header = headerButton.closest('[class*="cursor-pointer"]')
       expect(header).toBeInTheDocument()
 
@@ -306,7 +306,7 @@ describe('InlineExecutionView', () => {
       await waitFor(
         () => {
           expect(screen.queryByText(/Error Loading Execution/)).not.toBeInTheDocument()
-          expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+          expect(screen.getByText('sudocode')).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -314,12 +314,12 @@ describe('InlineExecutionView', () => {
       // Ensure mockNavigate hasn't been called yet
       expect(mockNavigate).not.toHaveBeenCalled()
 
-      // Find the execution ID button - it has specific classes and contains the execution ID text
-      const idButton = container.querySelector('button.font-mono.text-xs.text-muted-foreground')
+      // Find the agent name button - it has specific classes and contains the agent name
+      const agentButton = container.querySelector('button.font-mono.text-xs.text-muted-foreground')
 
-      expect(idButton).toBeTruthy()
-      expect(idButton?.textContent).toContain('Execution exec-001')
-      await user.click(idButton!)
+      expect(agentButton).toBeTruthy()
+      expect(agentButton?.textContent).toContain('sudocode')
+      await user.click(agentButton!)
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/executions/exec-001')
@@ -337,11 +337,11 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
-      const idButton = screen.getByText(/Execution exec-001/)
-      await user.click(idButton)
+      const agentButton = screen.getByText('sudocode')
+      await user.click(agentButton)
 
       // Should still be expanded
       const chevronDown = document.querySelector('.lucide-chevron-down')
@@ -418,7 +418,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Find the actions menu button (MoreVertical icon)
@@ -448,7 +448,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Find the actions menu button
@@ -481,7 +481,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Find the actions menu button
@@ -566,7 +566,7 @@ describe('InlineExecutionView', () => {
       renderWithProviders(<InlineExecutionView executionId="exec-001" />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Execution exec-001/)).toBeInTheDocument()
+        expect(screen.getByText('sudocode')).toBeInTheDocument()
       })
 
       // Should have a menu button

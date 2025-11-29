@@ -33,6 +33,7 @@ import {
   Trash2,
   PlayCircle,
   GitBranch,
+  Maximize2,
 } from 'lucide-react'
 
 export interface InlineExecutionViewProps {
@@ -413,8 +414,6 @@ export function InlineExecutionView({
   const lastExecution = executions[executions.length - 1]
   const canDeleteWorktree = rootExecution.worktree_path && worktreeExists
 
-  const truncateId = (id: string, length = 8) => id.substring(0, length)
-
   return (
     <>
       <Card className="overflow-hidden rounded-md border">
@@ -444,9 +443,14 @@ export function InlineExecutionView({
                   }}
                   className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
                 >
-                  Execution {truncateId(rootExecution.id)}
+                  {rootExecution.agent_type}
                 </button>
                 {renderStatusBadge(lastExecution.status)}
+                {mostRecentTime && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(mostRecentTime), { addSuffix: true })}
+                  </span>
+                )}
                 {rootExecution.branch_name && (
                   <div className="flex items-center gap-1 rounded bg-muted px-2 py-0.5">
                     <GitBranch className="h-3 w-3 text-muted-foreground" />
@@ -456,16 +460,23 @@ export function InlineExecutionView({
                     </span>
                   </div>
                 )}
-                {mostRecentTime && (
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(mostRecentTime), { addSuffix: true })}
-                  </span>
-                )}
               </div>
             </div>
 
             {/* Actions Menu */}
-            <div onClick={(e) => e.stopPropagation()}>
+            <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`/executions/${rootExecution.id}`)
+                }}
+                title="Open in full page"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
