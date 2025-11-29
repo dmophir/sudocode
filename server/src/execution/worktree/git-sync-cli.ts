@@ -188,8 +188,7 @@ export class GitSyncCli {
 
   /**
    * Check if merge would conflict WITHOUT modifying working tree
-   * Uses git merge-tree for dry-run conflict detection
-   * Equivalent to: git merge-tree $(git merge-base source target) source target
+   * Detects files that changed in both branches since merge base
    *
    * @param sourceBranch - Source branch to merge from
    * @param targetBranch - Target branch to merge into
@@ -200,68 +199,48 @@ export class GitSyncCli {
     targetBranch: string
   ): ConflictCheckResult {
     try {
-      // First, get the merge base
+      // Find merge base
       const mergeBase = this.getMergeBase(sourceBranch, targetBranch);
 
-      const escapedBase = this.escapeShellArg(mergeBase);
-      const escapedSource = this.escapeShellArg(sourceBranch);
-      const escapedTarget = this.escapeShellArg(targetBranch);
+      // Get files changed in source branch since merge base
+      const sourceFiles = this.getChangedFiles(mergeBase, sourceBranch);
 
-      // Run merge-tree to simulate merge
-      const command = `git merge-tree ${escapedBase} ${escapedSource} ${escapedTarget}`;
-      const output = this.execGit(command);
+      // Get files changed in target branch since merge base
+      const targetFiles = this.getChangedFiles(mergeBase, targetBranch);
 
-      // Parse output for conflict markers
-      const hasConflicts =
-        output.includes('<<<<<<<') ||
-        output.includes('=======') ||
-        output.includes('>>>>>>>');
+      // Files that changed in both branches are potential conflicts
+      const conflictingFiles = sourceFiles.filter((file) =>
+        targetFiles.includes(file)
+      );
 
-      if (!hasConflicts) {
-        return { hasConflicts: false, conflictingFiles: [] };
-      }
-
-      // Extract conflicting files
-      // Conflict markers are followed by file content
-      // We need to parse the tree structure to get file paths
-      const conflictingFiles = this.parseConflictingFiles(output);
-
-      return { hasConflicts: true, conflictingFiles };
+      return {
+        hasConflicts: conflictingFiles.length > 0,
+        conflictingFiles,
+      };
     } catch (error) {
-      // If merge-tree fails, assume there are conflicts
       throw error;
     }
   }
 
   /**
-   * Parse conflicting files from merge-tree output
+   * Get list of files changed between two refs
+   * Equivalent to: git diff --name-only <fromRef>..<toRef>
    *
-   * @param output - Output from git merge-tree
-   * @returns Array of conflicting file paths
+   * @param fromRef - Starting reference
+   * @param toRef - Ending reference
+   * @returns Array of changed file paths
    */
-  private parseConflictingFiles(output: string): string[] {
-    const files = new Set<string>();
-    const lines = output.split('\n');
+  private getChangedFiles(fromRef: string, toRef: string): string[] {
+    const escapedFrom = this.escapeShellArg(fromRef);
+    const escapedTo = this.escapeShellArg(toRef);
 
-    // Look for conflict markers and extract file context
-    // In merge-tree output, conflicts are shown inline
-    // We'll use a heuristic: look for conflict markers and nearby file indicators
+    const command = `git diff --name-only ${escapedFrom}..${escapedTo}`;
+    const output = this.execGit(command);
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      if (line.includes('<<<<<<<')) {
-        // Try to extract file info from marker (if present)
-        // Format can be: <<<<<<< branch:path/to/file
-        const match = line.match(/<<<<<<< [^:]+:(.+)/);
-        if (match) {
-          files.add(match[1]);
-        }
-      }
-    }
-
-    // If we couldn't extract files from markers, return generic indicator
-    return files.size > 0 ? Array.from(files) : ['(conflicts detected)'];
+    return output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   }
 
   /**
