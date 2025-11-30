@@ -619,9 +619,13 @@ ${feedback}`;
    * when they're configured for manual cleanup.
    *
    * @param executionId - ID of execution whose worktree to delete
+   * @param deleteBranch - Whether to also delete the execution's branch (default: false)
    * @throws Error if execution not found, has no worktree, or worktree doesn't exist
    */
-  async deleteWorktree(executionId: string): Promise<void> {
+  async deleteWorktree(
+    executionId: string,
+    deleteBranch: boolean = false
+  ): Promise<void> {
     const execution = getExecution(this.db, executionId);
     if (!execution) {
       throw new Error(`Execution ${executionId} not found`);
@@ -651,6 +655,39 @@ ${feedback}`;
       execution.worktree_path,
       this.repoPath
     );
+
+    // Delete branch if requested and it was created by this execution
+    if (deleteBranch && execution.branch_name) {
+      try {
+        // A branch was created for this execution if:
+        // - branch_name is DIFFERENT from target_branch (autoCreateBranches was true)
+        // - This means a new worktree-specific branch was created
+        const wasCreatedByExecution =
+          execution.branch_name !== execution.target_branch &&
+          execution.branch_name !== "(detached)";
+
+        if (wasCreatedByExecution) {
+          await worktreeManager.git.deleteBranch(
+            this.repoPath,
+            execution.branch_name,
+            true // Force deletion
+          );
+          console.log(
+            `[ExecutionService] Deleted execution-created branch: ${execution.branch_name}`
+          );
+        } else {
+          console.log(
+            `[ExecutionService] Skipping branch deletion - branch ${execution.branch_name} is the target branch (not created by execution)`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to delete branch ${execution.branch_name} during worktree deletion:`,
+          err
+        );
+        // Continue even if branch deletion fails
+      }
+    }
   }
 
   /**
@@ -660,9 +697,13 @@ ${feedback}`;
    * Also attempts to clean up the worktree if one exists.
    *
    * @param executionId - ID of execution to delete (can be root or any execution in chain)
+   * @param deleteBranch - Whether to also delete the execution's branch (default: false)
    * @throws Error if execution not found
    */
-  async deleteExecution(executionId: string): Promise<void> {
+  async deleteExecution(
+    executionId: string,
+    deleteBranch: boolean = false
+  ): Promise<void> {
     const execution = getExecution(this.db, executionId);
     if (!execution) {
       throw new Error(`Execution ${executionId} not found`);
@@ -724,6 +765,48 @@ ${feedback}`;
           err
         );
         // Continue with deletion even if worktree cleanup fails
+      }
+    }
+
+    // Delete branch if requested and it exists
+    // IMPORTANT: Only delete branches that were created specifically for this execution
+    if (deleteBranch && rootExecution?.branch_name) {
+      try {
+        // A branch was created for this execution if:
+        // - branch_name is DIFFERENT from target_branch (autoCreateBranches was true)
+        // - This means a new worktree-specific branch was created
+        //
+        // A branch was NOT created (reusing existing) if:
+        // - branch_name === target_branch (autoCreateBranches was false)
+        // - This means the worktree reused the target branch directly
+        const wasCreatedByExecution =
+          rootExecution.branch_name !== rootExecution.target_branch &&
+          rootExecution.branch_name !== "(detached)";
+
+        if (wasCreatedByExecution) {
+          // Get worktree manager from lifecycle service to access git operations
+          const worktreeManager = (this.lifecycleService as any)
+            .worktreeManager;
+
+          await worktreeManager.git.deleteBranch(
+            this.repoPath,
+            rootExecution.branch_name,
+            true // Force deletion
+          );
+          console.log(
+            `[ExecutionService] Deleted execution-created branch: ${rootExecution.branch_name}`
+          );
+        } else {
+          console.log(
+            `[ExecutionService] Skipping branch deletion - branch ${rootExecution.branch_name} is the target branch (not created by execution)`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to delete branch ${rootExecution.branch_name} during execution deletion:`,
+          err
+        );
+        // Continue with deletion even if branch deletion fails
       }
     }
 

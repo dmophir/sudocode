@@ -232,14 +232,20 @@ export const executionsApi = {
   cancel: (executionId: string) => post(`/executions/${executionId}/cancel`),
 
   // Delete execution and its entire chain (including worktree and logs)
-  delete: (executionId: string) => del(`/executions/${executionId}`),
+  delete: (executionId: string, deleteBranch?: boolean) => {
+    const params = deleteBranch ? `?deleteBranch=true` : ''
+    return del(`/executions/${executionId}${params}`)
+  },
 
   // Check if worktree exists for execution
   worktreeExists: (executionId: string) =>
     get<{ exists: boolean }>(`/executions/${executionId}/worktree`),
 
   // Delete worktree for execution
-  deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
+  deleteWorktree: (executionId: string, deleteBranch?: boolean) => {
+    const params = deleteBranch ? `?deleteBranch=true` : ''
+    return del(`/executions/${executionId}/worktree${params}`)
+  },
 
   // Worktree sync operations
   syncPreview: (executionId: string) =>

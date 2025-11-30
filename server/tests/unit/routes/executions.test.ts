@@ -692,7 +692,8 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.message).toBe("Execution deleted successfully");
       expect(response.body.data.executionId).toBe("exec-123");
       expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
-        "exec-123"
+        "exec-123",
+        false
       );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });
@@ -721,7 +722,8 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe("Execution deleted successfully");
       expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
-        "exec-123"
+        "exec-123",
+        false
       );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });
@@ -752,6 +754,21 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.success).toBe(false);
       expect(response.body.message).toBe("Failed to delete/cancel execution");
       expect(response.body.error_data).toContain("not found");
+    });
+
+    it("should delete execution with branch when deleteBranch=true query param provided", async () => {
+      const response = await request(app).delete(
+        "/api/executions/exec-123?deleteBranch=true"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe("Execution deleted successfully");
+      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
+        "exec-123",
+        true
+      );
+      expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });
 
     it("should return 500 on service error", async () => {

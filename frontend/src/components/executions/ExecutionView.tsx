@@ -202,14 +202,14 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }
 
   // Handle delete worktree action
-  const handleDeleteWorktree = async () => {
+  const handleDeleteWorktree = async (deleteBranch: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
     if (!rootExecution.worktree_path) return
 
     setDeletingWorktree(true)
     try {
-      await executionsApi.deleteWorktree(rootExecution.id)
+      await executionsApi.deleteWorktree(rootExecution.id, deleteBranch)
       setWorktreeExists(false)
       // Reload chain
       const data = await executionsApi.getChain(executionId)
@@ -223,13 +223,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }
 
   // Handle delete execution action
-  const handleDeleteExecution = async () => {
+  const handleDeleteExecution = async (deleteBranch: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
 
     setDeletingExecution(true)
     try {
-      await executionsApi.delete(rootExecution.id)
+      await executionsApi.delete(rootExecution.id, deleteBranch)
       // Navigate back to issue page after deletion
       if (rootExecution.issue_id) {
         window.location.href = `/issues/${rootExecution.issue_id}`
@@ -838,6 +838,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
           onClose={() => setShowDeleteWorktree(false)}
           onConfirm={handleDeleteWorktree}
           isDeleting={deletingWorktree}
+          branchName={rootExecution.branch_name}
+          branchWasCreatedByExecution={(() => {
+            const wasCreatedByExecution =
+              rootExecution.branch_name !== rootExecution.target_branch &&
+              rootExecution.branch_name !== '(detached)'
+            return wasCreatedByExecution
+          })()}
         />
 
         {/* Delete Execution Dialog */}
@@ -848,6 +855,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
           onClose={() => setShowDeleteExecution(false)}
           onConfirm={handleDeleteExecution}
           isDeleting={deletingExecution}
+          branchName={rootExecution.branch_name}
+          branchWasCreatedByExecution={(() => {
+            const wasCreatedByExecution =
+              rootExecution.branch_name !== rootExecution.target_branch &&
+              rootExecution.branch_name !== '(detached)'
+            return wasCreatedByExecution
+          })()}
         />
 
         {/* Sync Preview Dialog */}

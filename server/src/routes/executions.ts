@@ -530,13 +530,14 @@ export function createExecutionsRouter(): Router {
    *
    * Query parameters:
    * - cancel: if "true", cancel the execution instead of deleting it
+   * - deleteBranch: if "true", also delete the execution's branch
    */
   router.delete(
     "/executions/:executionId",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
-        const { cancel } = req.query;
+        const { cancel, deleteBranch } = req.query;
 
         // If cancel query param is true, cancel the execution
         if (cancel === "true") {
@@ -551,7 +552,10 @@ export function createExecutionsRouter(): Router {
         }
 
         // Otherwise, delete the execution and its chain
-        await req.project!.executionService!.deleteExecution(executionId);
+        await req.project!.executionService!.deleteExecution(
+          executionId,
+          deleteBranch === "true"
+        );
 
         res.json({
           success: true,
@@ -611,14 +615,21 @@ export function createExecutionsRouter(): Router {
    * DELETE /api/executions/:executionId/worktree
    *
    * Delete the worktree for an execution
+   *
+   * Query parameters:
+   * - deleteBranch: if "true", also delete the execution's branch
    */
   router.delete(
     "/executions/:executionId/worktree",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
+        const { deleteBranch } = req.query;
 
-        await req.project!.executionService!.deleteWorktree(executionId);
+        await req.project!.executionService!.deleteWorktree(
+          executionId,
+          deleteBranch === "true"
+        );
 
         res.json({
           success: true,
