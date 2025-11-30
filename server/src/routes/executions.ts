@@ -20,6 +20,7 @@ import {
   WorktreeSyncError,
   WorktreeSyncErrorCode,
 } from "../services/worktree-sync-service.js";
+import { ExecutionChangesService } from "../services/execution-changes-service.js";
 
 /**
  * Get WorktreeSyncService instance for a request
@@ -362,6 +363,46 @@ export function createExecutionsRouter(): Router {
           data: null,
           error_data: error instanceof Error ? error.message : String(error),
           message: "Failed to fetch execution logs",
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/executions/:executionId/changes
+   *
+   * Get code changes (file list + diff statistics) for an execution
+   *
+   * Calculates changes on-demand from commit SHAs. Supports:
+   * - Committed changes (commit-to-commit diff)
+   * - Uncommitted changes (working tree diff)
+   * - Unavailable states with clear error reasons
+   */
+  router.get(
+    "/executions/:executionId/changes",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Create changes service
+        const changesService = new ExecutionChangesService(db, repoPath);
+
+        // Get changes
+        const result = await changesService.getChanges(executionId);
+
+        res.json({
+          success: true,
+          data: result,
+        });
+      } catch (error) {
+        console.error("[GET /executions/:id/changes] Error:", error);
+        res.status(500).json({
+          success: false,
+          data: null,
+          error_data: error instanceof Error ? error.message : String(error),
+          message: "Failed to calculate changes",
         });
       }
     }
