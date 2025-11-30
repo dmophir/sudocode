@@ -3,8 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/test-utils'
 import { AgentConfigPanel } from '@/components/executions/AgentConfigPanel'
-import { executionsApi, agentsApi } from '@/lib/api'
-import type { ExecutionPrepareResult } from '@/types/execution'
+import { repositoryApi, agentsApi, filesApi, specsApi, issuesApi } from '@/lib/api'
 import type { AgentInfo } from '@/types/api'
 
 // Mock the API
@@ -12,7 +11,6 @@ vi.mock('@/lib/api', () => ({
   setCurrentProjectId: vi.fn(),
   getCurrentProjectId: vi.fn(() => 'test-project-123'),
   executionsApi: {
-    prepare: vi.fn(),
     create: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
@@ -22,6 +20,39 @@ vi.mock('@/lib/api', () => ({
   agentsApi: {
     getAll: vi.fn(),
   },
+  repositoryApi: {
+    getInfo: vi.fn(),
+    getBranches: vi.fn(),
+  },
+  filesApi: {
+    search: vi.fn(),
+  },
+  specsApi: {
+    getAll: vi.fn(),
+  },
+  issuesApi: {
+    getAll: vi.fn(),
+  },
+}))
+
+// Mock useProject hook
+vi.mock('@/hooks/useProject', () => ({
+  useProject: vi.fn(() => ({
+    currentProjectId: 'test-project-123',
+    setCurrentProjectId: vi.fn(),
+  })),
+}))
+
+// Mock caret position utility
+vi.mock('@/lib/caret-position', () => ({
+  getCaretClientRect: vi.fn(() => ({
+    top: 100,
+    left: 100,
+    bottom: 120,
+    right: 200,
+    width: 100,
+    height: 20,
+  })),
 }))
 
 describe('AgentConfigPanel', () => {
@@ -47,30 +78,23 @@ describe('AgentConfigPanel', () => {
     },
   ]
 
-  const mockPrepareResult: ExecutionPrepareResult = {
-    renderedPrompt: 'Test prompt for i-test1',
-    issue: {
-      id: 'i-test1',
-      title: 'Test Issue',
-      description: 'Test description',
-    },
-    relatedSpecs: [],
-    relatedFeedback: [],
-    defaultConfig: {
-      mode: 'worktree',
-      baseBranch: 'main',
-      cleanupMode: 'manual',
-    },
-    availableModels: ['claude-sonnet-4'],
-    availableBranches: ['main', 'develop'],
-    warnings: [],
-    errors: [],
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(executionsApi.prepare).mockResolvedValue(mockPrepareResult)
+    vi.mocked(repositoryApi.getInfo).mockResolvedValue({
+      name: 'test-repo',
+      path: '/test/path',
+      branch: 'main',
+    })
+    vi.mocked(repositoryApi.getBranches).mockResolvedValue({
+      current: 'main',
+      branches: ['main', 'develop', 'feature/test'],
+    })
     vi.mocked(agentsApi.getAll).mockResolvedValue(mockAgents)
+
+    // Mock context search API responses (for @ mention functionality)
+    vi.mocked(filesApi.search).mockResolvedValue([])
+    vi.mocked(specsApi.getAll).mockResolvedValue([])
+    vi.mocked(issuesApi.getAll).mockResolvedValue([])
   })
 
   describe('Initial Rendering', () => {
@@ -78,15 +102,19 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Enter prompt for the agent...')).toBeInTheDocument()
+        expect(
+          screen.getByPlaceholderText(
+            'Add additional context (optional) for the agent... (@ for context)'
+          )
+        ).toBeInTheDocument()
       })
     })
 
-    it('should load execution preview on mount', async () => {
+    it('should load repository info on mount', async () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(executionsApi.prepare).toHaveBeenCalledWith('i-test1')
+        expect(repositoryApi.getInfo).toHaveBeenCalled()
       })
     })
 
@@ -207,79 +235,63 @@ describe('AgentConfigPanel', () => {
     })
   })
 
-  describe('Branch Selection', () => {
-    it('should always show branch selector when baseBranch is set', async () => {
+  describe('Branch Display', () => {
+    it('should show branch display when baseBranch is set', async () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
+        // Should only have agent selector and mode selector (2 comboboxes)
         const triggers = screen.getAllByRole('combobox')
-        // Should have: agent selector, mode selector, branch selector
-        expect(triggers.length).toBeGreaterThanOrEqual(3)
+        expect(triggers.length).toBe(2)
+      })
+
+      // Should show current branch from repositoryApi in worktree mode
+      await waitFor(() => {
+        expect(screen.getByText('main')).toBeInTheDocument()
       })
     })
 
-    it('should display available branches in worktree mode', async () => {
+    it('should display current branch in worktree mode', async () => {
+      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
+
+      await waitFor(() => {
+        // Should show current branch from repositoryApi
+        expect(screen.getByText('main')).toBeInTheDocument()
+      })
+    })
+
+    it('should hide branch display in local mode', async () => {
       const user = userEvent.setup()
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
+      // Wait for initial render
       await waitFor(() => {
-        const triggers = screen.getAllByRole('combobox')
-        expect(triggers.length).toBeGreaterThanOrEqual(3)
+        expect(screen.getByText('New worktree')).toBeInTheDocument()
       })
 
-      // Branch selector should be enabled in worktree mode
+      // Initially should show branch in worktree mode
+      expect(screen.getByText('main')).toBeInTheDocument()
+
+      // Switch to local mode
       const triggers = screen.getAllByRole('combobox')
-      const branchSelector = triggers[2]
-      expect(branchSelector).not.toBeDisabled()
+      await user.click(triggers[1]) // Mode selector
 
-      // Click branch selector (third combobox)
-      await user.click(branchSelector)
+      const localOption = await screen.findByText('Run local')
+      await user.click(localOption)
 
-      // BranchSelector uses a Popover with buttons, not Select with options
       await waitFor(() => {
-        // Should show the search input
-        expect(screen.getByPlaceholderText('Search or create branch...')).toBeInTheDocument()
-        // Should show available branches (main appears in trigger + list)
-        expect(screen.getAllByText('main').length).toBeGreaterThanOrEqual(2)
-        expect(screen.getByText('develop')).toBeInTheDocument()
+        // Branch display should be hidden in local mode
+        expect(screen.queryByText('main')).not.toBeInTheDocument()
       })
     })
 
-    it('should disable branch selector in local mode', async () => {
-      // Override prepare result to set mode to local
-      vi.mocked(executionsApi.prepare).mockResolvedValue({
-        ...mockPrepareResult,
-        defaultConfig: {
-          mode: 'local',
-          baseBranch: 'main',
-          cleanupMode: 'manual',
-        },
-      })
-
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      await waitFor(() => {
-        // Wait for mode to be set to local
-        expect(screen.getByText('Run local')).toBeInTheDocument()
-      })
-
-      const triggers = screen.getAllByRole('combobox')
-      const branchSelector = triggers[2]
-
-      // Branch selector should be disabled in local mode
-      expect(branchSelector).toBeDisabled()
-    })
-
-    it('should show current branch in local mode', async () => {
-      // Override prepare result to set mode to local
-      vi.mocked(executionsApi.prepare).mockResolvedValue({
-        ...mockPrepareResult,
-        defaultConfig: {
-          mode: 'local',
-          baseBranch: 'develop',
-          cleanupMode: 'manual',
-        },
+    it('should show current branch from repository', async () => {
+      // Override repo info to return a different branch
+      vi.mocked(repositoryApi.getInfo).mockResolvedValue({
+        name: 'test-repo',
+        path: '/test/path',
+        branch: 'develop',
       })
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
@@ -289,20 +301,6 @@ describe('AgentConfigPanel', () => {
         expect(screen.getByText('develop')).toBeInTheDocument()
       })
     })
-
-    it('should show GitBranch icon in branch selector', async () => {
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      await waitFor(() => {
-        const triggers = screen.getAllByRole('combobox')
-        expect(triggers.length).toBeGreaterThanOrEqual(3)
-      })
-
-      // Branch selector should have GitBranch icon (rendered as svg)
-      const branchSelector = screen.getAllByRole('combobox')[2]
-      const svgIcon = branchSelector.querySelector('svg')
-      expect(svgIcon).toBeInTheDocument()
-    })
   })
 
   describe('Prompt Input', () => {
@@ -311,14 +309,16 @@ describe('AgentConfigPanel', () => {
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       expect(textarea).toHaveValue('Test prompt')
     })
 
     it('should disable prompt input while loading', () => {
-      vi.mocked(executionsApi.prepare).mockImplementation(
+      vi.mocked(repositoryApi.getInfo).mockImplementation(
         () => new Promise(() => {}) // Never resolves
       )
 
@@ -327,11 +327,50 @@ describe('AgentConfigPanel', () => {
       const textarea = screen.getByPlaceholderText('Loading prompt...')
       expect(textarea).toBeDisabled()
     })
+
+    it('should show running placeholder when execution is running', async () => {
+      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} isRunning />)
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Execution is running (esc to cancel)')
+        ).toBeInTheDocument()
+      })
+    })
   })
 
   describe('Run Button', () => {
-    it('should be disabled when prompt is empty', async () => {
+    it('should be enabled when prompt is empty for first messages', async () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
+
+      await waitFor(() => {
+        const runButton = screen.getByRole('button', { name: /Submit/i })
+        expect(runButton).not.toBeDisabled()
+      })
+    })
+
+    it('should be disabled when prompt is empty for follow-ups', async () => {
+      const lastExecution = {
+        id: 'exec-parent-123',
+        mode: 'worktree',
+        model: 'claude-sonnet-4',
+        target_branch: 'main',
+        agent_type: 'claude-code',
+        config: {
+          mode: 'worktree' as const,
+          baseBranch: 'main',
+          cleanupMode: 'manual' as const,
+        },
+      }
+
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          lastExecution={lastExecution}
+        />
+      )
 
       await waitFor(() => {
         const runButton = screen.getByRole('button', { name: /Submit/i })
@@ -344,7 +383,9 @@ describe('AgentConfigPanel', () => {
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       await waitFor(() => {
@@ -360,7 +401,9 @@ describe('AgentConfigPanel', () => {
         <AgentConfigPanel issueId="i-test1" onStart={mockOnStart} disabled={true} />
       )
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       const runButton = screen.getByRole('button', { name: /Submit/i })
@@ -372,7 +415,9 @@ describe('AgentConfigPanel', () => {
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       const runButton = screen.getByRole('button', { name: /Submit/i })
@@ -420,7 +465,9 @@ describe('AgentConfigPanel', () => {
       await user.click(cursorOption)
 
       // Enter prompt
-      const textarea = screen.getByPlaceholderText('Enter prompt for the agent...')
+      const textarea = screen.getByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       // Click run
@@ -428,6 +475,67 @@ describe('AgentConfigPanel', () => {
       await user.click(runButton)
 
       expect(mockOnStart).toHaveBeenCalledWith(expect.any(Object), 'Test prompt', 'cursor', false)
+    })
+
+    it('should use default prompt "Implement issue [[issueId]]" when submitting empty prompt for first message', async () => {
+      const user = userEvent.setup()
+
+      // Clear localStorage to ensure clean state
+      localStorage.clear()
+
+      renderWithProviders(<AgentConfigPanel issueId="i-test123" onStart={mockOnStart} />)
+
+      await waitFor(() => {
+        const runButton = screen.getByRole('button', { name: /Submit/i })
+        expect(runButton).not.toBeDisabled()
+      })
+
+      const runButton = screen.getByRole('button', { name: /Submit/i })
+      await user.click(runButton)
+
+      expect(mockOnStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'worktree',
+          cleanupMode: 'manual',
+        }),
+        'Implement issue [[i-test123]]',
+        expect.any(String), // Allow any agent type since it might vary based on test order
+        false
+      )
+    })
+
+    it('should not use default prompt for follow-ups with empty prompt', async () => {
+      userEvent.setup()
+
+      const lastExecution = {
+        id: 'exec-parent-123',
+        mode: 'worktree',
+        model: 'claude-sonnet-4',
+        target_branch: 'main',
+        agent_type: 'claude-code',
+        config: {
+          mode: 'worktree' as const,
+          baseBranch: 'main',
+          cleanupMode: 'manual' as const,
+        },
+      }
+
+      renderWithProviders(
+        <AgentConfigPanel
+          issueId="i-test1"
+          onStart={mockOnStart}
+          isFollowUp
+          lastExecution={lastExecution}
+        />
+      )
+
+      await waitFor(() => {
+        const runButton = screen.getByRole('button', { name: /Submit/i })
+        // Should be disabled for empty follow-up prompts
+        expect(runButton).toBeDisabled()
+      })
+
+      // Can't click disabled button, so no need to test onStart call
     })
   })
 
@@ -438,7 +546,11 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Enter prompt for the agent...')).toBeInTheDocument()
+        expect(
+          screen.getByPlaceholderText(
+            'Add additional context (optional) for the agent... (@ for context)'
+          )
+        ).toBeInTheDocument()
       })
 
       // Find settings button by looking for all buttons and finding the one with Settings icon
@@ -454,80 +566,9 @@ describe('AgentConfigPanel', () => {
     })
   })
 
-  describe('Error Handling', () => {
-    it('should display errors from prepare result', async () => {
-      const errorPrepareResult: ExecutionPrepareResult = {
-        ...mockPrepareResult,
-        errors: ['Error 1: Git repository not found', 'Error 2: No base branch'],
-      }
-      vi.mocked(executionsApi.prepare).mockResolvedValue(errorPrepareResult)
-
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      await waitFor(() => {
-        expect(screen.getByText('Errors')).toBeInTheDocument()
-        expect(screen.getByText('Error 1: Git repository not found')).toBeInTheDocument()
-        expect(screen.getByText('Error 2: No base branch')).toBeInTheDocument()
-      })
-    })
-
-    it('should disable run button when there are errors', async () => {
-      const user = userEvent.setup()
-      const errorPrepareResult: ExecutionPrepareResult = {
-        ...mockPrepareResult,
-        errors: ['Error 1: Git repository not found'],
-      }
-      vi.mocked(executionsApi.prepare).mockResolvedValue(errorPrepareResult)
-
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
-      await user.type(textarea, 'Test prompt')
-
-      const runButton = screen.getByRole('button', { name: /Submit/i })
-      expect(runButton).toBeDisabled()
-    })
-  })
-
-  describe('Warnings', () => {
-    it('should display warnings from prepare result', async () => {
-      const warningPrepareResult: ExecutionPrepareResult = {
-        ...mockPrepareResult,
-        warnings: ['Warning: Working directory has uncommitted changes'],
-      }
-      vi.mocked(executionsApi.prepare).mockResolvedValue(warningPrepareResult)
-
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      await waitFor(() => {
-        expect(screen.getByText('Warnings')).toBeInTheDocument()
-        expect(
-          screen.getByText('Warning: Working directory has uncommitted changes')
-        ).toBeInTheDocument()
-      })
-    })
-
-    it('should still allow running with warnings', async () => {
-      const user = userEvent.setup()
-      const warningPrepareResult: ExecutionPrepareResult = {
-        ...mockPrepareResult,
-        warnings: ['Warning: Working directory has uncommitted changes'],
-      }
-      vi.mocked(executionsApi.prepare).mockResolvedValue(warningPrepareResult)
-
-      renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
-
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
-      await user.type(textarea, 'Test prompt')
-
-      const runButton = screen.getByRole('button', { name: /Submit/i })
-      expect(runButton).not.toBeDisabled()
-    })
-  })
-
   describe('Loading States', () => {
-    it('should disable controls while loading execution preview', () => {
-      vi.mocked(executionsApi.prepare).mockImplementation(
+    it('should disable controls while loading repository info', () => {
+      vi.mocked(repositoryApi.getInfo).mockImplementation(
         () => new Promise(() => {}) // Never resolves
       )
 
@@ -574,11 +615,7 @@ describe('AgentConfigPanel', () => {
       }
 
       renderWithProviders(
-        <AgentConfigPanel
-          issueId="i-test1"
-          onStart={mockOnStart}
-          lastExecution={lastExecution}
-        />
+        <AgentConfigPanel issueId="i-test1" onStart={mockOnStart} lastExecution={lastExecution} />
       )
 
       await waitFor(() => {
@@ -592,7 +629,9 @@ describe('AgentConfigPanel', () => {
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       const runButton = screen.getByRole('button', { name: /Submit/i })
@@ -631,20 +670,10 @@ describe('AgentConfigPanel', () => {
       ]
       vi.mocked(agentsApi.getAll).mockResolvedValue(mockAgentsWithCursor)
 
-      // Override prepare to return config without baseBranch so localStorage mode is visible
-      vi.mocked(executionsApi.prepare).mockResolvedValue({
-        ...mockPrepareResult,
-        defaultConfig: {
-          // Don't override mode - let localStorage value persist
-          cleanupMode: 'manual',
-        },
-      })
-
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        // Should use saved mode from localStorage (before prepare API merge)
-        // After prepare merges, the mode should still be 'local' since prepare doesn't set it
+        // Should use saved mode from localStorage
         expect(screen.getByText('Run local')).toBeInTheDocument()
         // Should use saved agent type from localStorage
         expect(screen.getByText('Cursor')).toBeInTheDocument()
@@ -711,7 +740,9 @@ describe('AgentConfigPanel', () => {
 
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
       await user.type(textarea, 'Test prompt')
 
       // Manually corrupt the config state (simulating a bug or future schema change)
@@ -747,11 +778,7 @@ describe('AgentConfigPanel', () => {
       }
 
       renderWithProviders(
-        <AgentConfigPanel
-          issueId="i-test1"
-          onStart={mockOnStart}
-          lastExecution={lastExecution}
-        />
+        <AgentConfigPanel issueId="i-test1" onStart={mockOnStart} lastExecution={lastExecution} />
       )
 
       await waitFor(() => {
@@ -822,12 +849,14 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new)')
+          screen.getByPlaceholderText(
+            'Continue the previous conversation... (ctrl+k for new, @ for context)'
+          )
         ).toBeInTheDocument()
       })
     })
 
-    it('should not call prepare API in follow-up mode', async () => {
+    it('should not call repository API in follow-up mode', async () => {
       renderWithProviders(
         <AgentConfigPanel
           issueId="i-test1"
@@ -840,7 +869,7 @@ describe('AgentConfigPanel', () => {
       // Wait a tick for any potential API calls
       await new Promise((resolve) => setTimeout(resolve, 100))
 
-      expect(executionsApi.prepare).not.toHaveBeenCalled()
+      expect(repositoryApi.getInfo).not.toHaveBeenCalled()
     })
 
     it('should disable agent selector in follow-up mode', async () => {
@@ -874,23 +903,6 @@ describe('AgentConfigPanel', () => {
         const triggers = screen.getAllByRole('combobox')
         // Mode selector should be disabled
         expect(triggers[1]).toBeDisabled()
-      })
-    })
-
-    it('should disable branch selector in follow-up mode', async () => {
-      renderWithProviders(
-        <AgentConfigPanel
-          issueId="i-test1"
-          onStart={mockOnStart}
-          isFollowUp
-          lastExecution={lastExecution}
-        />
-      )
-
-      await waitFor(() => {
-        const triggers = screen.getAllByRole('combobox')
-        // Branch selector should be disabled
-        expect(triggers[2]).toBeDisabled()
       })
     })
 
@@ -960,7 +972,7 @@ describe('AgentConfigPanel', () => {
 
       // Enter feedback prompt
       const textarea = await screen.findByPlaceholderText(
-        'Continue the previous conversation... (ctrl+k for new)'
+        'Continue the previous conversation... (ctrl+k for new, @ for context)'
       )
       await user.type(textarea, 'Continue with this feedback')
 
@@ -1011,7 +1023,7 @@ describe('AgentConfigPanel', () => {
       )
 
       const textarea = await screen.findByPlaceholderText(
-        'Continue the previous conversation... (ctrl+k for new)'
+        'Continue the previous conversation... (ctrl+k for new, @ for context)'
       )
 
       // Press Ctrl+K to toggle to new execution mode
@@ -1039,7 +1051,7 @@ describe('AgentConfigPanel', () => {
       )
 
       const textarea = await screen.findByPlaceholderText(
-        'Start a new execution... (ctrl+k to continue previous)'
+        'Start a new execution... (ctrl+k to continue previous, @ for context)'
       )
 
       // Press Ctrl+K to toggle back to continue mode
@@ -1064,7 +1076,9 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Start a new execution... (ctrl+k to continue previous)')
+          screen.getByPlaceholderText(
+            'Start a new execution... (ctrl+k to continue previous, @ for context)'
+          )
         ).toBeInTheDocument()
       })
     })
@@ -1083,7 +1097,7 @@ describe('AgentConfigPanel', () => {
       )
 
       const textarea = await screen.findByPlaceholderText(
-        'Start a new execution... (ctrl+k to continue previous)'
+        'Start a new execution... (ctrl+k to continue previous, @ for context)'
       )
       await user.type(textarea, 'Create a new execution')
 
@@ -1114,7 +1128,9 @@ describe('AgentConfigPanel', () => {
         />
       )
 
-      const textarea = await screen.findByPlaceholderText('Enter prompt for the agent...')
+      const textarea = await screen.findByPlaceholderText(
+        'Add additional context (optional) for the agent... (@ for context)'
+      )
 
       await user.click(textarea)
       await user.keyboard('{Control>}k{/Control}')
@@ -1139,7 +1155,7 @@ describe('AgentConfigPanel', () => {
       )
 
       const textarea = await screen.findByPlaceholderText(
-        'Continue the previous conversation...'
+        'Continue the previous conversation... (@ for context)'
       )
 
       await user.click(textarea)
@@ -1162,13 +1178,15 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Continue the previous conversation...')
+          screen.getByPlaceholderText('Continue the previous conversation... (@ for context)')
         ).toBeInTheDocument()
       })
 
       // Should not show the ctrl+k hint
       expect(
-        screen.queryByPlaceholderText('Continue the previous conversation... (ctrl+k for new)')
+        screen.queryByPlaceholderText(
+          'Continue the previous conversation... (ctrl+k for new, @ for context)'
+        )
       ).not.toBeInTheDocument()
     })
 
@@ -1186,13 +1204,15 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Start a new execution...')
+          screen.getByPlaceholderText('Start a new execution... (@ for context)')
         ).toBeInTheDocument()
       })
 
       // Should not show the ctrl+k hint
       expect(
-        screen.queryByPlaceholderText('Start a new execution... (ctrl+k to continue previous)')
+        screen.queryByPlaceholderText(
+          'Start a new execution... (ctrl+k to continue previous, @ for context)'
+        )
       ).not.toBeInTheDocument()
     })
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Settings, AlertCircle, Info, ArrowDown, Loader2, Square } from 'lucide-react'
+import { Settings, ArrowDown, Loader2, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { ContextSearchTextarea } from '@/components/ui/context-search-textarea'
 import {
   Select,
   SelectContent,
@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { executionsApi } from '@/lib/api'
+import { repositoryApi, executionsApi } from '@/lib/api'
 import type {
   ExecutionConfig,
   ExecutionPrepareResult,
@@ -20,6 +20,7 @@ import { AgentSettingsDialog } from './AgentSettingsDialog'
 import { BranchSelector } from './BranchSelector'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
+import { useProject } from '@/hooks/useProject'
 import { useAgentActions } from '@/hooks/useAgentActions'
 import type { CodexConfig } from './CodexConfigForm'
 import type { CopilotConfig } from './CopilotConfigForm'
@@ -192,10 +193,11 @@ export function AgentConfigPanel({
   forceNewExecution: controlledForceNewExecution,
   currentExecution,
 }: AgentConfigPanelProps) {
-  const [loading, setLoading] = useState(!isFollowUp) // Skip loading for follow-ups
-  const [prepareResult, setPrepareResult] = useState<ExecutionPrepareResult | null>(null)
+  const [loading, setLoading] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [internalForceNewExecution, setInternalForceNewExecution] = useState(false)
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = useState<string>('')
 
   // Use controlled value if provided, otherwise use internal state
   const forceNewExecution =
@@ -290,6 +292,9 @@ export function AgentConfigPanel({
     },
   })
 
+  // Get current project ID for context search
+  const { currentProjectId } = useProject()
+
   // Reset config when issue or lastExecution changes (issue switching)
   useEffect(() => {
     // Skip for follow-ups - they use parent execution
@@ -367,25 +372,38 @@ export function AgentConfigPanel({
     setSelectedAgentType(loadAgentTypeForIssue())
   }, [issueId, lastExecution?.id, isFollowUp])
 
-  // Load template preview on mount (skip for follow-ups)
+  // Load branches and repository info (skip for follow-ups)
   useEffect(() => {
-    // Skip prepare API call for follow-ups - we use parent execution config
+    // Skip for follow-ups - we use parent execution config
     if (isFollowUp) return
 
     let isMounted = true
 
-    const loadPreview = async () => {
+    const loadRepoInfo = async () => {
       if (!isMounted) return
       setLoading(true)
       try {
-        const result = await executionsApi.prepare(issueId)
+        // Load branches and repo info in parallel
+        const [branchInfo, repoInfo] = await Promise.all([
+          repositoryApi.getBranches(),
+          repositoryApi.getInfo(),
+        ])
+
         if (isMounted) {
-          setPrepareResult(result)
-          // setPrompt(result.renderedPrompt)
-          setConfig({ ...config, ...result.defaultConfig })
+          // Store available branches and current branch
+          setAvailableBranches(branchInfo.branches)
+          setCurrentBranch(branchInfo.current)
+
+          // Set baseBranch to current branch if not already set
+          if (repoInfo.branch) {
+            setConfig((prev) => ({
+              ...prev,
+              baseBranch: prev.baseBranch || repoInfo.branch,
+            }))
+          }
         }
       } catch (error) {
-        console.error('Failed to prepare execution:', error)
+        console.error('Failed to get repository info:', error)
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -393,25 +411,12 @@ export function AgentConfigPanel({
       }
     }
 
-    loadPreview()
+    loadRepoInfo()
 
     return () => {
       isMounted = false
     }
   }, [issueId, isFollowUp])
-
-  // Auto-resize textarea based on content
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto'
-
-    // Calculate new height (max 300px to prevent it from getting too tall)
-    const newHeight = Math.min(textarea.scrollHeight, 300)
-    textarea.style.height = `${newHeight}px`
-  }, [prompt])
 
   // Auto-focus textarea when panel opens or issue changes
   useEffect(() => {
@@ -452,7 +457,10 @@ export function AgentConfigPanel({
       console.warn('Config is invalid, not saving to localStorage')
     }
 
-    onStart(config, prompt, selectedAgentType, forceNewExecution)
+    // Use default prompt for first messages when no prompt is provided
+    const finalPrompt = prompt.trim() || (!isFollowUp ? `Implement issue [[${issueId}]]` : '')
+
+    onStart(config, finalPrompt, selectedAgentType, forceNewExecution)
     setPrompt('') // Clear the prompt after submission
     setForceNewExecution(false) // Reset the flag after submission
   }
@@ -479,9 +487,9 @@ export function AgentConfigPanel({
     // Shift+Enter creates newline (default behavior, no need to handle)
   }
 
-  const hasErrors = prepareResult?.errors && prepareResult.errors.length > 0
-  const hasWarnings = prepareResult?.warnings && prepareResult.warnings.length > 0
-  const canStart = !loading && !hasErrors && prompt.trim().length > 0 && !disabled
+  // Allow empty prompts for first messages (not follow-ups)
+  // For follow-ups, require a prompt
+  const canStart = !loading && (prompt.trim().length > 0 || !isFollowUp) && !disabled
 
   return (
     <div className="space-y-2 py-2">
@@ -566,29 +574,32 @@ export function AgentConfigPanel({
 
       {/* Prompt Input */}
       <div>
-        <Textarea
+        <ContextSearchTextarea
           ref={textareaRef}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={setPrompt}
           onKeyDown={handleKeyDown}
           placeholder={
-            promptPlaceholder ||
-            (loading
-              ? 'Loading prompt...'
-              : isFollowUp
-                ? forceNewExecution
-                  ? allowModeToggle
-                    ? 'Start a new execution... (ctrl+k to continue previous)'
-                    : 'Start a new execution...'
-                  : allowModeToggle
-                    ? 'Continue the previous conversation... (ctrl+k for new)'
-                    : 'Continue the previous conversation...'
-                : 'Enter prompt for the agent...')
+            isRunning
+              ? 'Execution is running (esc to cancel)'
+              : promptPlaceholder ||
+                (loading
+                  ? 'Loading prompt...'
+                  : isFollowUp
+                    ? forceNewExecution
+                      ? allowModeToggle
+                        ? 'Start a new execution... (ctrl+k to continue previous, @ for context)'
+                        : 'Start a new execution... (@ for context)'
+                      : allowModeToggle
+                        ? 'Continue the previous conversation... (ctrl+k for new, @ for context)'
+                        : 'Continue the previous conversation... (@ for context)'
+                    : 'Add additional context (optional) for the agent... (@ for context)')
           }
           disabled={loading || disabled}
           className="max-h-[300px] min-h-0 resize-none overflow-y-auto border-none bg-muted/80 py-2 text-sm shadow-none transition-[height] duration-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-          style={{ height: 'auto' }}
-          rows={1}
+          projectId={currentProjectId || ''}
+          autoResize
+          maxHeight={300}
         />
       </div>
 
@@ -657,22 +668,33 @@ export function AgentConfigPanel({
             )}
           </Tooltip>
 
-          {/* Branch Selector - always shown, disabled in local mode or follow-up (unless forcing new execution) */}
-          {config.baseBranch && (
-            <BranchSelector
-              branches={prepareResult?.availableBranches || [config.baseBranch]}
-              value={config.baseBranch}
-              onChange={(branch, isNew) => {
-                updateConfig({
-                  baseBranch: branch,
-                  createBaseBranch: isNew || false,
-                })
-              }}
-              disabled={loading || (isFollowUp && !forceNewExecution) || config.mode === 'local'}
-              allowCreate={!(isFollowUp && !forceNewExecution) && config.mode !== 'local'}
-              className="w-[160px]"
-              currentBranch={prepareResult?.availableBranches?.[0]}
-            />
+          {/* Branch Selector - enabled for worktree mode, disabled for local mode and follow-ups */}
+          {config.baseBranch && config.mode === 'worktree' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <BranchSelector
+                    branches={
+                      availableBranches.length > 0 ? availableBranches : [config.baseBranch]
+                    }
+                    value={config.baseBranch}
+                    onChange={(branch, isNew) => {
+                      updateConfig({
+                        baseBranch: branch,
+                        createBaseBranch: isNew || false,
+                      })
+                    }}
+                    disabled={loading || (isFollowUp && !forceNewExecution)}
+                    allowCreate={!isFollowUp || forceNewExecution}
+                    className="w-[160px]"
+                    currentBranch={currentBranch}
+                  />
+                </span>
+              </TooltipTrigger>
+              {isFollowUp && !forceNewExecution && (
+                <TooltipContent>Base branch is inherited from parent execution</TooltipContent>
+              )}
+            </Tooltip>
           )}
 
           <div className="ml-auto" />

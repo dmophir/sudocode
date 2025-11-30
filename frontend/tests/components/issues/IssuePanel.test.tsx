@@ -6,7 +6,7 @@ import { IssuePanel } from '@/components/issues/IssuePanel'
 import type { Issue } from '@sudocode-ai/types'
 import { executionsApi } from '@/lib/api'
 
-// Mock the executionsApi
+// Mock the executionsApi, repositoryApi, and agentsApi
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual('@/lib/api')
   return {
@@ -16,14 +16,53 @@ vi.mock('@/lib/api', async () => {
       create: vi.fn(),
       createFollowUp: vi.fn(),
       get: vi.fn(),
-      prepare: vi.fn().mockResolvedValue({
-        renderedPrompt: 'test',
-        defaultConfig: { mode: 'worktree', cleanupMode: 'manual' },
-        availableBranches: ['main'],
+    },
+    repositoryApi: {
+      getInfo: vi.fn().mockResolvedValue({
+        name: 'test-repo',
+        path: '/test/path',
+        branch: 'main',
       }),
+      getBranches: vi.fn().mockResolvedValue({
+        current: 'main',
+        branches: ['main', 'develop', 'feature/test'],
+      }),
+    },
+    agentsApi: {
+      getAll: vi.fn().mockResolvedValue([
+        {
+          type: 'claude-code',
+          displayName: 'Claude Code',
+          supportedModes: ['structured', 'interactive', 'hybrid'],
+          supportsStreaming: true,
+          supportsStructuredOutput: true,
+          implemented: true,
+        },
+      ]),
+    },
+    filesApi: {
+      search: vi.fn().mockResolvedValue([]),
+    },
+    specsApi: {
+      getAll: vi.fn().mockResolvedValue([]),
+    },
+    issuesApi: {
+      getAll: vi.fn().mockResolvedValue([]),
     },
   }
 })
+
+// Mock caret position utility for ContextSearchTextarea
+vi.mock('@/lib/caret-position', () => ({
+  getCaretClientRect: vi.fn(() => ({
+    top: 100,
+    left: 100,
+    bottom: 120,
+    right: 200,
+    width: 100,
+    height: 20,
+  })),
+}))
 
 const mockIssue: Issue = {
   id: 'ISSUE-001',
@@ -357,7 +396,7 @@ describe('IssuePanel', () => {
 
     // Wait for execution to load
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter prompt for the agent...')).toBeDisabled()
+      expect(screen.getByPlaceholderText('Execution is running (esc to cancel)')).toBeDisabled()
     })
 
     // First ESC press should cancel the execution
@@ -505,7 +544,7 @@ describe('IssuePanel', () => {
       // Initial placeholder should be for continuing
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new)')
+          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new, @ for context)')
         ).toBeInTheDocument()
       })
 
@@ -515,7 +554,7 @@ describe('IssuePanel', () => {
       // After clicking, placeholder should change to new execution mode
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Start a new execution... (ctrl+k to continue previous)')
+          screen.getByPlaceholderText('Start a new execution... (ctrl+k to continue previous, @ for context)')
         ).toBeInTheDocument()
       })
     })
@@ -552,7 +591,7 @@ describe('IssuePanel', () => {
       // Should show follow-up placeholder (meaning it found the child execution to continue)
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new)')
+          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new, @ for context)')
         ).toBeInTheDocument()
       })
 
@@ -578,7 +617,7 @@ describe('IssuePanel', () => {
       renderWithProviders(<IssuePanel issue={mockIssue} />)
 
       await waitFor(() => {
-        const textarea = screen.getByPlaceholderText('Enter prompt for the agent...')
+        const textarea = screen.getByPlaceholderText('Execution is running (esc to cancel)')
         expect(textarea).toBeDisabled()
       })
     })

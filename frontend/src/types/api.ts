@@ -30,6 +30,44 @@ export interface RepositoryInfo {
   path: string
 }
 
+export interface BranchInfo {
+  current: string
+  branches: string[]
+}
+
+/**
+ * File search types
+ */
+export interface FileSearchResult {
+  path: string
+  name: string
+  isFile: boolean
+  matchType?: 'exact' | 'prefix' | 'contains'
+}
+
+/**
+ * Context search types
+ */
+export type ContextSearchResultType = 'file' | 'spec' | 'issue'
+
+export interface ContextSearchResult {
+  type: ContextSearchResultType
+
+  // For files
+  filePath?: string
+  fileName?: string
+
+  // For specs/issues
+  entityId?: string
+  title?: string
+
+  // Display/insertion
+  displayText: string
+  secondaryText?: string
+  insertText: string
+  matchScore?: number
+}
+
 /**
  * Issue API types
  */
