@@ -20,7 +20,7 @@ import { AgentConfigUtils } from "./shared/index.js";
  */
 const CODEX_METADATA: AgentMetadata = {
   name: "codex",
-  displayName: "OpenAI Codex",
+  displayName: "Codex",
   version: ">=1.0.0",
   supportedModes: ["structured", "interactive"],
   supportsStreaming: true,
@@ -74,42 +74,61 @@ export class CodexAdapter implements IAgentAdapter<CodexConfig> {
 
     // Add 'exec' subcommand for non-interactive mode
     if (config.exec !== false) {
-      args.push('exec');
+      args.push("exec");
 
       // Add '-' to explicitly read prompt from stdin
       // This prevents the "Reading prompt from stdin..." blocking message
       if (!config.prompt) {
-        args.push('-');
+        args.push("-");
       }
     }
 
     // Add conditional flags using shared utility
     args.push(
       ...AgentConfigUtils.buildConditionalArgs([
-        { flag: '--json', condition: !!config.json },
-        { flag: '--experimental-json', condition: !!config.experimentalJson },
-        { flag: '--output-last-message', value: config.outputLastMessage, condition: !!config.outputLastMessage },
-        { flag: '--model', value: config.model, condition: !!config.model },
-        { flag: '--sandbox', value: config.sandbox, condition: !!config.sandbox },
-        { flag: '--ask-for-approval', value: config.askForApproval, condition: !!config.askForApproval },
-        { flag: '--full-auto', condition: !!config.fullAuto },
-        { flag: '--skip-git-repo-check', condition: !!config.skipGitRepoCheck },
-        { flag: '--color', value: config.color, condition: !!config.color },
-        { flag: '--search', condition: !!config.search },
-        { flag: '--profile', value: config.profile, condition: !!config.profile },
-        { flag: '--dangerously-bypass-approvals-and-sandbox', condition: !!config.yolo },
+        { flag: "--json", condition: !!config.json },
+        { flag: "--experimental-json", condition: !!config.experimentalJson },
+        {
+          flag: "--output-last-message",
+          value: config.outputLastMessage,
+          condition: !!config.outputLastMessage,
+        },
+        { flag: "--model", value: config.model, condition: !!config.model },
+        {
+          flag: "--sandbox",
+          value: config.sandbox,
+          condition: !!config.sandbox,
+        },
+        {
+          flag: "--ask-for-approval",
+          value: config.askForApproval,
+          condition: !!config.askForApproval,
+        },
+        { flag: "--full-auto", condition: !!config.fullAuto },
+        { flag: "--skip-git-repo-check", condition: !!config.skipGitRepoCheck },
+        { flag: "--color", value: config.color, condition: !!config.color },
+        { flag: "--search", condition: !!config.search },
+        {
+          flag: "--profile",
+          value: config.profile,
+          condition: !!config.profile,
+        },
+        {
+          flag: "--dangerously-bypass-approvals-and-sandbox",
+          condition: !!config.yolo,
+        },
       ])
     );
 
     // Add --image flag(s) for image attachments
     if (config.image && config.image.length > 0) {
-      args.push('--image', config.image.join(','));
+      args.push("--image", config.image.join(","));
     }
 
     // Add --add-dir flag(s) for additional directories
     if (config.addDir && config.addDir.length > 0) {
       config.addDir.forEach((dir) => {
-        args.push('--add-dir', dir);
+        args.push("--add-dir", dir);
       });
     }
 

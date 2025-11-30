@@ -10,7 +10,7 @@ describe('AgentSelector', () => {
   const mockAgents: AgentInfo[] = [
     {
       type: 'claude-code',
-      displayName: 'Claude Code',
+      displayName: 'Claude',
       supportedModes: ['structured', 'interactive', 'hybrid'],
       supportsStreaming: true,
       supportsStructuredOutput: true,
@@ -18,7 +18,7 @@ describe('AgentSelector', () => {
     },
     {
       type: 'codex',
-      displayName: 'OpenAI Codex',
+      displayName: 'Codex',
       supportedModes: ['structured'],
       supportsStreaming: false,
       supportsStructuredOutput: true,
@@ -56,11 +56,7 @@ describe('AgentSelector', () => {
   describe('Rendering', () => {
     it('should render with default label', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       expect(screen.getByText('AI Agent')).toBeInTheDocument()
@@ -81,38 +77,26 @@ describe('AgentSelector', () => {
 
     it('should display selected agent', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
-      expect(screen.getByText('Claude Code')).toBeInTheDocument()
+      expect(screen.getByText('Claude')).toBeInTheDocument()
     })
 
     it('should show "Coming Soon" badge for unimplemented selected agent', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="codex"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="codex" onChange={mockOnChange} />
       )
 
-      // Should show OpenAI Codex as selected
-      expect(screen.getByText('OpenAI Codex')).toBeInTheDocument()
+      // Should show Codex as selected
+      expect(screen.getByText('Codex')).toBeInTheDocument()
       // Should show Coming Soon badge
       expect(screen.getAllByText('Coming Soon').length).toBeGreaterThan(0)
     })
 
     it('should show warning message for unimplemented selected agent', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="codex"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="codex" onChange={mockOnChange} />
       )
 
       expect(
@@ -124,11 +108,7 @@ describe('AgentSelector', () => {
 
     it('should not show warning for implemented agent', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       expect(
@@ -144,11 +124,7 @@ describe('AgentSelector', () => {
       const user = userEvent.setup()
 
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       // Click to open dropdown
@@ -156,8 +132,8 @@ describe('AgentSelector', () => {
       await user.click(trigger)
 
       // Should show all 4 agents
-      expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(0)
-      expect(screen.getAllByText('OpenAI Codex').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Claude').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Codex').length).toBeGreaterThan(0)
       expect(screen.getAllByText('GitHub Copilot').length).toBeGreaterThan(0)
       expect(screen.getAllByText('Cursor').length).toBeGreaterThan(0)
     })
@@ -166,11 +142,7 @@ describe('AgentSelector', () => {
       const user = userEvent.setup()
 
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       // Open dropdown
@@ -200,11 +172,7 @@ describe('AgentSelector', () => {
 
     it('should not be disabled by default', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       const trigger = screen.getByRole('combobox')
@@ -217,11 +185,7 @@ describe('AgentSelector', () => {
       const claudeCode = mockAgents.find((a) => a.type === 'claude-code')!
       const codex = mockAgents.find((a) => a.type === 'codex')!
 
-      expect(claudeCode.supportedModes).toEqual([
-        'structured',
-        'interactive',
-        'hybrid',
-      ])
+      expect(claudeCode.supportedModes).toEqual(['structured', 'interactive', 'hybrid'])
       expect(claudeCode.supportsStreaming).toBe(true)
       expect(claudeCode.implemented).toBe(true)
 
@@ -234,11 +198,7 @@ describe('AgentSelector', () => {
   describe('Empty State', () => {
     it('should handle empty agents list', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={[]}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={[]} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       // Should still render the selector
@@ -247,11 +207,7 @@ describe('AgentSelector', () => {
 
     it('should handle no selected agent', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent=""
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="" onChange={mockOnChange} />
       )
 
       // Should still render without error
@@ -262,11 +218,7 @@ describe('AgentSelector', () => {
   describe('Accessibility', () => {
     it('should have proper ARIA label', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       const trigger = screen.getByRole('combobox')
@@ -275,11 +227,7 @@ describe('AgentSelector', () => {
 
     it('should be keyboard navigable', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       const trigger = screen.getByRole('combobox')
@@ -306,11 +254,7 @@ describe('AgentSelector', () => {
 
     it('should not show info icon when no description', () => {
       const { container } = renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       // No description, so no info icon
@@ -325,23 +269,15 @@ describe('AgentSelector', () => {
       const singleAgent = [mockAgents[0]]
 
       renderWithTooltip(
-        <AgentSelector
-          agents={singleAgent}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={singleAgent} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
-      expect(screen.getByText('Claude Code')).toBeInTheDocument()
+      expect(screen.getByText('Claude')).toBeInTheDocument()
     })
 
     it('should handle multiple agents', () => {
       renderWithTooltip(
-        <AgentSelector
-          agents={mockAgents}
-          selectedAgent="claude-code"
-          onChange={mockOnChange}
-        />
+        <AgentSelector agents={mockAgents} selectedAgent="claude-code" onChange={mockOnChange} />
       )
 
       // Should render without error with 4 agents

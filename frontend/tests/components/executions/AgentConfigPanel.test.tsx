@@ -62,15 +62,17 @@ describe('AgentConfigPanel', () => {
   const mockAgents: AgentInfo[] = [
     {
       type: 'claude-code',
-      displayName: 'Claude Code',
+      displayName: 'Claude',
       supportedModes: ['structured', 'interactive', 'hybrid'],
       supportsStreaming: true,
       supportsStructuredOutput: true,
       implemented: true,
+      available: true,
+      executablePath: '/usr/local/bin/claude',
     },
     {
       type: 'codex',
-      displayName: 'OpenAI Codex',
+      displayName: 'Codex',
       supportedModes: ['structured'],
       supportsStreaming: false,
       supportsStructuredOutput: true,
@@ -132,7 +134,7 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
       })
     })
 
@@ -142,7 +144,7 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
       })
 
       // Find all combobox triggers and click the agent selector (first one)
@@ -150,10 +152,10 @@ describe('AgentConfigPanel', () => {
       await user.click(triggers[0])
 
       await waitFor(() => {
-        // Should show Claude Code (implemented)
-        expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(1)
-        // Should NOT show OpenAI Codex (unimplemented)
-        expect(screen.queryByText('OpenAI Codex')).not.toBeInTheDocument()
+        // Should show Claude (implemented)
+        expect(screen.getAllByText('Claude').length).toBeGreaterThan(1)
+        // Should NOT show Codex (unimplemented)
+        expect(screen.queryByText('Codex')).not.toBeInTheDocument()
       })
     })
 
@@ -163,25 +165,25 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
       })
 
       const triggers = screen.getAllByRole('combobox')
       await user.click(triggers[0])
 
       await waitFor(() => {
-        // Only Claude Code should be in the options (it's the only implemented agent in mockAgents)
+        // Only Claude should be in the options (it's the only implemented agent in mockAgents)
         const options = screen.getAllByRole('option')
         // Filter to agent selector options (exclude mode and branch options)
         const agentOptions = options.filter(
           (opt) =>
-            opt.textContent?.includes('Claude Code') ||
+            opt.textContent?.includes('Claude') ||
             opt.textContent?.includes('Codex') ||
             opt.textContent?.includes('Copilot') ||
             opt.textContent?.includes('Cursor')
         )
         expect(agentOptions.length).toBe(1)
-        expect(agentOptions[0].textContent).toBe('Claude Code')
+        expect(agentOptions[0].textContent).toBe('Claude')
       })
     })
 
@@ -197,7 +199,7 @@ describe('AgentConfigPanel', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
       })
 
       const triggers = screen.getAllByRole('combobox')
@@ -454,7 +456,7 @@ describe('AgentConfigPanel', () => {
       renderWithProviders(<AgentConfigPanel issueId="i-test1" onStart={mockOnStart} />)
 
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
       })
 
       // Change agent selection
@@ -1228,7 +1230,7 @@ describe('AgentConfigPanel', () => {
 
       await waitFor(() => {
         // Should show inherited agent type
-        expect(screen.getByText('Claude Code')).toBeInTheDocument()
+        expect(screen.getByText('Claude')).toBeInTheDocument()
         // Should show inherited mode
         expect(screen.getByText('New worktree')).toBeInTheDocument()
         // Should show inherited branch

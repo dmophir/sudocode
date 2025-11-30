@@ -21,7 +21,7 @@ describe('useAgents', () => {
   const mockAgents: AgentInfo[] = [
     {
       type: 'claude-code',
-      displayName: 'Claude Code',
+      displayName: 'Claude',
       supportedModes: ['structured', 'interactive', 'hybrid'],
       supportsStreaming: true,
       supportsStructuredOutput: true,
@@ -29,7 +29,7 @@ describe('useAgents', () => {
     },
     {
       type: 'codex',
-      displayName: 'OpenAI Codex',
+      displayName: 'Codex',
       supportedModes: ['structured'],
       supportsStreaming: false,
       supportsStructuredOutput: true,

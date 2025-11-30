@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Settings, ArrowDown, Loader2, Square } from 'lucide-react'
+import {
+  Settings,
+  ArrowDown,
+  Loader2,
+  Square,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ContextSearchTextarea } from '@/components/ui/context-search-textarea'
 import {
@@ -100,6 +108,46 @@ const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
 // localStorage keys for persisting config
 const LAST_EXECUTION_CONFIG_KEY = 'sudocode:lastExecutionConfig'
 const LAST_AGENT_TYPE_KEY = 'sudocode:lastAgentType'
+
+/**
+ * Get verification status icon and color for an agent
+ */
+function getAgentVerificationStatus(agent: any) {
+  // Not implemented agents
+  if (!agent.implemented) {
+    return {
+      icon: AlertCircle,
+      color: 'text-muted-foreground',
+      tooltip: 'Coming soon',
+    }
+  }
+
+  // Implemented but verification not yet run (still loading)
+  if (agent.available === undefined) {
+    return {
+      icon: Loader2,
+      color: 'text-muted-foreground',
+      tooltip: 'Checking availability...',
+      spin: true,
+    }
+  }
+
+  // Available
+  if (agent.available) {
+    return {
+      icon: CheckCircle2,
+      color: 'text-green-600',
+      tooltip: agent.executablePath ? `Available at ${agent.executablePath}` : 'Available',
+    }
+  }
+
+  // Not available
+  return {
+    icon: XCircle,
+    color: 'text-destructive',
+    tooltip: agent.verificationError || 'Warning: Agent CLI not found in PATH',
+  }
+}
 
 /**
  * Validates that a config object has the expected shape and valid values.
@@ -463,6 +511,8 @@ export function AgentConfigPanel({
 
   // Allow empty prompts for first messages (not follow-ups)
   // For follow-ups, require a prompt
+  // Note: We don't block based on agent availability - we just show warnings
+  // Users can still attempt to run unavailable agents (will fail at execution time)
   const canStart = !loading && (prompt.trim().length > 0 || !isFollowUp) && !disabled
 
   return (
@@ -513,18 +563,55 @@ export function AgentConfigPanel({
                 >
                   <SelectTrigger className="h-8 w-[140px] text-xs">
                     <SelectValue placeholder={agentsLoading ? 'Loading...' : 'Agent'}>
-                      {agents?.find((a) => a.type === selectedAgentType)?.displayName ||
-                        'Select agent'}
+                      {(() => {
+                        const selectedAgent = agents?.find((a) => a.type === selectedAgentType)
+                        if (!selectedAgent) return 'Select agent'
+
+                        const status = getAgentVerificationStatus(selectedAgent)
+                        const StatusIcon = status.icon
+                        // Only show icon for unavailable agents to keep UI clean
+                        const showIcon =
+                          !selectedAgent.available && selectedAgent.available !== undefined
+
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            {showIcon && (
+                              <StatusIcon
+                                className={`h-3 w-3 ${status.color} ${status.spin ? 'animate-spin' : ''}`}
+                              />
+                            )}
+                            <span>{selectedAgent.displayName}</span>
+                          </div>
+                        )
+                      })()}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {agents
                       ?.filter((agent) => agent.implemented)
-                      .map((agent) => (
-                        <SelectItem key={agent.type} value={agent.type} className="text-xs">
-                          {agent.displayName}
-                        </SelectItem>
-                      ))}
+                      .map((agent) => {
+                        const status = getAgentVerificationStatus(agent)
+                        const StatusIcon = status.icon
+                        // Only show icon for unavailable agents to keep UI clean
+                        const showIcon = !agent.available && agent.available !== undefined
+                        return (
+                          <SelectItem key={agent.type} value={agent.type} className="text-xs">
+                            <div className="flex items-center gap-2">
+                              {showIcon && (
+                                <StatusIcon
+                                  className={`h-3.5 w-3.5 ${status.color} ${status.spin ? 'animate-spin' : ''}`}
+                                />
+                              )}
+                              <span>{agent.displayName}</span>
+                              {showIcon && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  (not installed)
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
                   </SelectContent>
                 </Select>
               </span>
