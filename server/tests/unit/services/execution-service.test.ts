@@ -205,9 +205,9 @@ describe("ExecutionService", () => {
       // Verify execution was created
       expect(execution.id).toBeTruthy();
 
-      // Verify prompt was resolved (should contain spec content without formatting)
-      expect(execution.prompt).toContain("OAuth2 with JWT tokens");
-      expect(execution.prompt).not.toContain(`[[${testSpecId}]]`);
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
     });
 
     it("should resolve @s-xxxxx spec references in prompt", async () => {
@@ -219,9 +219,9 @@ describe("ExecutionService", () => {
         promptWithSpec
       );
 
-      // Verify prompt was resolved (no formatting)
-      expect(execution.prompt).toContain("OAuth2 with JWT tokens");
-      expect(execution.prompt).not.toContain(`@${testSpecId}`);
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`@${testSpecId}`);
     });
 
     it("should resolve [[i-xxxxx]] issue references in prompt", async () => {
@@ -233,9 +233,9 @@ describe("ExecutionService", () => {
         promptWithIssue
       );
 
-      // Verify prompt was resolved (no formatting)
-      expect(execution.prompt).toContain("Add OAuth2 authentication with JWT tokens");
-      expect(execution.prompt).not.toContain(`[[${testIssueId}]]`);
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithIssue);
+      expect(execution.prompt).toContain(`[[${testIssueId}]]`);
     });
 
     it("should resolve @i-xxxxx issue references in prompt", async () => {
@@ -247,9 +247,9 @@ describe("ExecutionService", () => {
         promptWithIssue
       );
 
-      // Verify prompt was resolved (no formatting)
-      expect(execution.prompt).toContain("Add OAuth2 authentication with JWT tokens");
-      expect(execution.prompt).not.toContain(`@${testIssueId}`);
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithIssue);
+      expect(execution.prompt).toContain(`@${testIssueId}`);
     });
 
     it("should resolve multiple references in one prompt", async () => {
@@ -261,11 +261,10 @@ describe("ExecutionService", () => {
         promptWithMultiple
       );
 
-      // Should contain both resolved contents (no formatting)
-      expect(execution.prompt).toContain("OAuth2 with JWT tokens");
-      expect(execution.prompt).toContain("Add OAuth2 authentication with JWT tokens");
-      expect(execution.prompt).not.toContain(`[[${testSpecId}]]`);
-      expect(execution.prompt).not.toContain(`@${testIssueId}`);
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithMultiple);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
+      expect(execution.prompt).toContain(`@${testIssueId}`);
     });
 
     it("should pass through @file mentions unchanged", async () => {
@@ -277,10 +276,10 @@ describe("ExecutionService", () => {
         promptWithFile
       );
 
-      // File mention should remain unchanged
+      // Verify original (unexpanded) prompt is stored with file mention and spec reference
+      expect(execution.prompt).toBe(promptWithFile);
       expect(execution.prompt).toContain("@src/auth.ts");
-      // Spec reference should be resolved (no formatting)
-      expect(execution.prompt).toContain("OAuth2 with JWT tokens");
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
     });
 
     it("should handle missing spec references gracefully", async () => {
@@ -320,9 +319,9 @@ describe("ExecutionService", () => {
         promptWithSpec
       );
 
-      // Should work in worktree mode too (no formatting)
-      expect(execution.prompt).toContain("OAuth2 with JWT tokens");
-      expect(execution.prompt).not.toContain(`[[${testSpecId}]]`);
+      // Verify original (unexpanded) prompt is stored in worktree mode too
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
     });
   });
 

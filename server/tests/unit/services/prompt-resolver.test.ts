@@ -87,8 +87,9 @@ describe("PromptResolver", () => {
         found: true,
       })
 
-      // Now returns raw content only, not formatted headers
-      expect(result.resolvedPrompt).toContain("This is the issue description.")
+      // Issue reference should stay in place and content appended at end
+      expect(result.resolvedPrompt).toContain("Fix the bug described in [[i-xyz789]]")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\nThis is the issue description.")
       expect(mockGetIssueById).toHaveBeenCalledWith(mockDb, "i-xyz789")
     })
 
@@ -157,8 +158,10 @@ describe("PromptResolver", () => {
       expect(issueRefs).toHaveLength(1)
       expect(fileRefs).toHaveLength(1)
 
-      // Now returns raw content only
-      expect(result.resolvedPrompt).toContain("Implement the API endpoints.")
+      // Spec should be replaced inline, issue reference stays with content appended
+      expect(result.resolvedPrompt).toContain("API design document.")
+      expect(result.resolvedPrompt).toContain("[[i-xyz789]]")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\nImplement the API endpoints.")
       expect(result.resolvedPrompt).toContain("@src/api/routes.ts")
     })
 
@@ -314,7 +317,9 @@ describe("PromptResolver", () => {
       const prompt = "Complete [[i-xyz789]]"
       const result = await resolver.resolve(prompt)
 
-      expect(result.resolvedPrompt).toContain("## Steps")
+      // Issue reference stays in place, content appended with markdown preserved
+      expect(result.resolvedPrompt).toContain("Complete [[i-xyz789]]")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\n## Steps")
       expect(result.resolvedPrompt).toContain("1. First step")
       expect(result.resolvedPrompt).toContain("`code block`")
     })
@@ -397,6 +402,9 @@ describe("PromptResolver", () => {
       expect(result.errors).toHaveLength(0)
       expect(result.references).toHaveLength(1)
       expect(result.references[0].id).toBe("i-x9y8z7")
+      // Issue reference stays in place, content appended
+      expect(result.resolvedPrompt).toContain("Fix [[i-x9y8z7]]")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-x9y8z7:\nContent")
     })
 
     it("should accumulate multiple errors", async () => {
@@ -499,7 +507,9 @@ describe("PromptResolver", () => {
         found: true,
       })
 
-      expect(result.resolvedPrompt).not.toContain("@i-xyz789")
+      // Issue reference stays in place (@i-xyz789), content appended at end
+      expect(result.resolvedPrompt).toContain("Fix @i-xyz789 urgently")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\nIssue description.")
     })
 
     it("should handle mixed @ and [[ ]] syntax", async () => {
@@ -534,6 +544,10 @@ describe("PromptResolver", () => {
       expect(result.errors).toHaveLength(0)
       expect(result.references).toHaveLength(2)
 
+      // Spec should be replaced inline, issue reference stays with content appended
+      expect(result.resolvedPrompt).toContain("Spec content.")
+      expect(result.resolvedPrompt).toContain("[[i-issue1]]")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-issue1:\nIssue description.")
     })
 
     it("should not confuse @entity-id with @file paths", async () => {
@@ -634,6 +648,87 @@ describe("PromptResolver", () => {
 
       expect(result.errors).toHaveLength(0)
       expect(result.references).toHaveLength(1)
+      // Issue reference stays in place, content appended
+      expect(result.resolvedPrompt).toContain("Fix @i-xyz789, then test it")
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\nIssue description.")
+    })
+
+    it("should only expand issue content once when referenced multiple times", async () => {
+      const mockIssue: Issue = {
+        id: "i-xyz789",
+        uuid: "uuid-issue",
+        title: "Test Issue",
+        content: "Issue description.",
+        status: "open",
+        priority: 1,
+        created_at: "2025-01-01T00:00:00Z",
+        updated_at: "2025-01-02T00:00:00Z",
+      }
+
+      mockGetIssueById.mockReturnValue(mockIssue)
+
+      const prompt = "Implement [[i-xyz789]] and then test [[i-xyz789]] thoroughly"
+      const result = await resolver.resolve(prompt)
+
+      expect(result.errors).toHaveLength(0)
+      expect(result.references).toHaveLength(1) // Deduplicated
+      expect(mockGetIssueById).toHaveBeenCalledTimes(1) // Only fetched once
+
+      // Both references should stay in the original prompt
+      expect(result.resolvedPrompt).toContain("Implement [[i-xyz789]] and then test [[i-xyz789]] thoroughly")
+
+      // Issue content should only be appended once at the end
+      const issueContentMatches = result.resolvedPrompt.match(/Issue i-xyz789:/g)
+      expect(issueContentMatches).toHaveLength(1)
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\nIssue description.")
+
+      // Should track that i-xyz789 was expanded
+      expect(result.expandedEntityIds).toContain("i-xyz789")
+    })
+
+    it("should skip expanding entities that were already expanded", async () => {
+      const mockSpec: Spec = {
+        id: "s-abc123",
+        uuid: "uuid-spec",
+        title: "Test Spec",
+        file_path: "/path/to/spec.md",
+        content: "Spec content.",
+        priority: 2,
+        created_at: "2025-01-01T00:00:00Z",
+        updated_at: "2025-01-02T00:00:00Z",
+      }
+
+      const mockIssue: Issue = {
+        id: "i-xyz789",
+        uuid: "uuid-issue",
+        title: "Test Issue",
+        content: "Issue description.",
+        status: "open",
+        priority: 1,
+        created_at: "2025-01-01T00:00:00Z",
+        updated_at: "2025-01-02T00:00:00Z",
+      }
+
+      mockGetSpecById.mockReturnValue(mockSpec)
+      mockGetIssueById.mockReturnValue(mockIssue)
+
+      // Simulate a follow-up where s-abc123 and i-xyz789 were already expanded
+      const alreadyExpanded = new Set(["s-abc123", "i-xyz789"])
+      const prompt = "Now also implement [[s-abc123]] and fix [[i-xyz789]]"
+      const result = await resolver.resolve(prompt, alreadyExpanded)
+
+      expect(result.errors).toHaveLength(0)
+      expect(result.references).toHaveLength(2)
+
+      // Should not have called the getters since entities were already expanded
+      expect(mockGetSpecById).not.toHaveBeenCalled()
+      expect(mockGetIssueById).not.toHaveBeenCalled()
+
+      // Prompt should stay unchanged (no expansion)
+      expect(result.resolvedPrompt).toBe(prompt)
+
+      // Should not add to expanded list since they were skipped
+      expect(result.expandedEntityIds).toHaveLength(0)
     })
   })
 })

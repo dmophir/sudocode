@@ -34,6 +34,8 @@ export interface PromptResolutionResult {
   resolvedPrompt: string
   references: PromptReference[]
   errors: string[]
+  /** IDs of entities that were expanded (for tracking in follow-ups) */
+  expandedEntityIds: string[]
 }
 
 /**
@@ -48,11 +50,16 @@ export class PromptResolver {
    * Resolve all references in a prompt
    *
    * @param prompt - The raw prompt with [[entity-id]], @entity-id, and @file references
+   * @param alreadyExpandedIds - Optional set of entity IDs that were already expanded in parent executions
    * @returns Resolution result with resolved prompt, references, and errors
    */
-  async resolve(prompt: string): Promise<PromptResolutionResult> {
+  async resolve(
+    prompt: string,
+    alreadyExpandedIds: Set<string> = new Set()
+  ): Promise<PromptResolutionResult> {
     const references: PromptReference[] = []
     const errors: string[] = []
+    const expandedEntityIds: string[] = []
 
     // Extract all references (order matters - extract entity IDs first)
     const specRefs = this.extractSpecReferences(prompt)
@@ -69,9 +76,16 @@ export class PromptResolver {
     // Track all references
     references.push(...fileRefs)
 
-    // Resolve and inject specs
+    // Resolve and inject specs (replace inline)
     let resolvedPrompt = prompt
     for (const ref of specRefs) {
+      // Skip if already expanded in parent execution
+      if (alreadyExpandedIds.has(ref.id)) {
+        ref.found = true
+        references.push(ref)
+        continue
+      }
+
       const spec = getSpecById(this.db, ref.id)
       if (spec) {
         ref.found = true
@@ -80,6 +94,7 @@ export class PromptResolver {
           ref.id,
           this.formatSpec(spec)
         )
+        expandedEntityIds.push(ref.id)
       } else {
         ref.found = false
         ref.error = `Spec ${ref.id} not found`
@@ -88,16 +103,22 @@ export class PromptResolver {
       references.push(ref)
     }
 
-    // Resolve and inject issues
+    // Resolve issues (keep reference, append content at end)
+    const issueAppendixes: string[] = []
     for (const ref of issueRefs) {
+      // Skip if already expanded in parent execution
+      if (alreadyExpandedIds.has(ref.id)) {
+        ref.found = true
+        references.push(ref)
+        continue
+      }
+
       const issue = getIssueById(this.db, ref.id)
       if (issue) {
         ref.found = true
-        resolvedPrompt = this.replaceReference(
-          resolvedPrompt,
-          ref.id,
-          this.formatIssue(issue)
-        )
+        // Don't replace the reference - append content at end instead
+        issueAppendixes.push(`\n\nIssue ${ref.id}:\n${this.formatIssue(issue)}`)
+        expandedEntityIds.push(ref.id)
       } else {
         ref.found = false
         ref.error = `Issue ${ref.id} not found`
@@ -106,10 +127,16 @@ export class PromptResolver {
       references.push(ref)
     }
 
+    // Append all issue contents at the end
+    if (issueAppendixes.length > 0) {
+      resolvedPrompt += issueAppendixes.join('')
+    }
+
     return {
       resolvedPrompt,
       references,
       errors,
+      expandedEntityIds,
     }
   }
 

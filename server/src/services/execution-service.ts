@@ -120,14 +120,8 @@ export class ExecutionService {
       throw new Error(`Issue ${issueId} not found`);
     }
 
-    // 2. Resolve prompt references before creating execution
-    const resolver = new PromptResolver(this.db);
-    const { resolvedPrompt, errors } = await resolver.resolve(prompt);
-    if (errors.length > 0) {
-      console.warn(`[ExecutionService] Prompt resolution warnings:`, errors);
-    }
-
-    // 3. Determine execution mode and create execution with worktree
+    // 2. Determine execution mode and create execution with worktree
+    // Store the original (unexpanded) prompt in the database
     const mode = config.mode || "worktree";
     let execution: Execution;
     let workDir: string;
@@ -141,8 +135,7 @@ export class ExecutionService {
         targetBranch: config.baseBranch || "main",
         repoPath: this.repoPath,
         mode: mode,
-        // TODO: Separate original prompt from resolved prompt (?)
-        prompt: resolvedPrompt, // Store resolved prompt
+        prompt: prompt, // Store original (unexpanded) prompt
         config: JSON.stringify(config),
         createTargetBranch: config.createBaseBranch || false,
       });
@@ -157,12 +150,19 @@ export class ExecutionService {
         issue_id: issueId,
         agent_type: agentType,
         mode: mode,
-        prompt: resolvedPrompt, // Store resolved prompt
+        prompt: prompt, // Store original (unexpanded) prompt
         config: JSON.stringify(config),
         target_branch: config.baseBranch || "main",
         branch_name: config.baseBranch || "main",
       });
       workDir = this.repoPath;
+    }
+
+    // 3. Resolve prompt references for execution (done after storing original)
+    const resolver = new PromptResolver(this.db);
+    const { resolvedPrompt, errors } = await resolver.resolve(prompt);
+    if (errors.length > 0) {
+      console.warn(`[ExecutionService] Prompt resolution warnings:`, errors);
     }
 
     // Initialize empty logs for this execution
@@ -346,7 +346,7 @@ ${feedback}`;
       worktree_path: prevExecution.worktree_path || undefined, // Reuse same worktree (undefined for local)
       config: prevExecution.config || undefined, // Preserve config (including cleanupMode) from previous execution
       parent_execution_id: executionId, // Link to parent execution for follow-up chain
-      prompt: followUpPrompt, // Store the follow-up prompt (feedback or combined with original)
+      prompt: followUpPrompt, // Store original (unexpanded) follow-up prompt
     });
 
     // Initialize empty logs for this execution
@@ -361,6 +361,17 @@ ${feedback}`;
         }
       );
       // Don't fail execution creation - logs are nice-to-have
+    }
+
+    // Collect already-expanded entities from parent execution chain
+    const alreadyExpandedIds = await this.collectExpandedEntitiesFromChain(executionId);
+
+    // Resolve prompt references for execution (done after storing original)
+    // Skip entities that were already expanded in parent executions
+    const resolver = new PromptResolver(this.db);
+    const { resolvedPrompt, errors } = await resolver.resolve(followUpPrompt, alreadyExpandedIds);
+    if (errors.length > 0) {
+      console.warn(`[ExecutionService] Follow-up prompt resolution warnings:`, errors);
     }
 
     // 4. Use executor wrapper with session resumption
@@ -392,12 +403,12 @@ ${feedback}`;
       ? JSON.parse(prevExecution.config)
       : {};
 
-    // Build execution task for follow-up
+    // Build execution task for follow-up (use resolved prompt for agent)
     const task: ExecutionTask = {
       id: newExecution.id,
       type: "issue",
       entityId: prevExecution.issue_id ?? undefined,
-      prompt: followUpPrompt,
+      prompt: resolvedPrompt,
       workDir: workDir,
       config: {
         timeout: parsedConfig.timeout,
@@ -756,5 +767,44 @@ ${feedback}`;
       .get() as { count: number };
 
     return runningExecutions.count > 0;
+  }
+
+  /**
+   * Collect entity IDs that were already expanded in parent executions
+   *
+   * Walks the execution chain backwards and resolves each prompt to extract
+   * which entities were referenced (and thus expanded) in previous executions.
+   * This prevents redundant expansion of the same entities in follow-ups.
+   *
+   * @param executionId - ID of the current execution
+   * @returns Set of entity IDs that were already expanded
+   */
+  private async collectExpandedEntitiesFromChain(
+    executionId: string
+  ): Promise<Set<string>> {
+    const expandedIds = new Set<string>();
+    const resolver = new PromptResolver(this.db);
+
+    // Walk backwards through the execution chain
+    let currentExecId: string | null = executionId;
+    while (currentExecId) {
+      const execution = getExecution(this.db, currentExecId);
+      if (!execution || !execution.prompt) break;
+
+      // Resolve the prompt to extract what entities were referenced
+      // Pass empty set so we expand everything in this pass (just to collect IDs)
+      const { expandedEntityIds } = await resolver.resolve(
+        execution.prompt,
+        new Set()
+      );
+
+      // Add all expanded entity IDs from this execution
+      expandedEntityIds.forEach((id) => expandedIds.add(id));
+
+      // Move to parent execution
+      currentExecId = execution.parent_execution_id || null;
+    }
+
+    return expandedIds;
   }
 }
