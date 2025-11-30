@@ -318,16 +318,175 @@ export class PromptResolver {
   }
 
   /**
-   * Format spec - returns raw content only
+   * Format spec - returns all information shown in CLI show command
    */
   private formatSpec(spec: Spec): string {
-    return spec.content;
+    const parts: string[] = [];
+
+    // Header
+    parts.push(`**${spec.id}: ${spec.title}**`);
+    parts.push("");
+
+    // Metadata
+    parts.push(`**Priority:** ${spec.priority}`);
+    if (spec.file_path) {
+      parts.push(`**File:** ${spec.file_path}`);
+    }
+    if (spec.parent_id) {
+      parts.push(`**Parent:** ${spec.parent_id}`);
+    }
+    parts.push(`**Created:** ${spec.created_at}`);
+    parts.push(`**Updated:** ${spec.updated_at}`);
+
+    // Tags
+    const tags = this.getTags(spec.id, "spec");
+    if (tags.length > 0) {
+      parts.push(`**Tags:** ${tags.join(", ")}`);
+    }
+
+    // Relationships
+    const outgoing = this.getOutgoingRelationships(spec.id, "spec");
+    if (outgoing.length > 0) {
+      parts.push("");
+      parts.push("**Outgoing Relationships:**");
+      for (const rel of outgoing) {
+        parts.push(`- ${rel.relationship_type} → ${rel.to_id} (${rel.to_type})`);
+      }
+    }
+
+    const incoming = this.getIncomingRelationships(spec.id, "spec");
+    if (incoming.length > 0) {
+      parts.push("");
+      parts.push("**Incoming Relationships:**");
+      for (const rel of incoming) {
+        parts.push(`- ${rel.from_id} (${rel.from_type}) → ${rel.relationship_type}`);
+      }
+    }
+
+    // Content
+    if (spec.content) {
+      parts.push("");
+      parts.push("**Content:**");
+      parts.push(spec.content);
+    }
+
+    return parts.join("\n");
   }
 
   /**
-   * Format issue - returns raw content only
+   * Format issue - returns all information shown in CLI show command
    */
   private formatIssue(issue: Issue): string {
-    return issue.content;
+    const parts: string[] = [];
+
+    // Header
+    parts.push(`**${issue.id}: ${issue.title}**`);
+    parts.push("");
+
+    // Metadata
+    parts.push(`**Status:** ${issue.status}`);
+    parts.push(`**Priority:** ${issue.priority}`);
+    if (issue.assignee) {
+      parts.push(`**Assignee:** ${issue.assignee}`);
+    }
+    if (issue.parent_id) {
+      parts.push(`**Parent:** ${issue.parent_id}`);
+    }
+    parts.push(`**Created:** ${issue.created_at}`);
+    parts.push(`**Updated:** ${issue.updated_at}`);
+    if (issue.closed_at) {
+      parts.push(`**Closed:** ${issue.closed_at}`);
+    }
+
+    // Tags
+    const tags = this.getTags(issue.id, "issue");
+    if (tags.length > 0) {
+      parts.push(`**Tags:** ${tags.join(", ")}`);
+    }
+
+    // Relationships
+    const outgoing = this.getOutgoingRelationships(issue.id, "issue");
+    if (outgoing.length > 0) {
+      parts.push("");
+      parts.push("**Outgoing Relationships:**");
+      for (const rel of outgoing) {
+        parts.push(`- ${rel.relationship_type} → ${rel.to_id} (${rel.to_type})`);
+      }
+    }
+
+    const incoming = this.getIncomingRelationships(issue.id, "issue");
+    if (incoming.length > 0) {
+      parts.push("");
+      parts.push("**Incoming Relationships:**");
+      for (const rel of incoming) {
+        parts.push(`- ${rel.from_id} (${rel.from_type}) → ${rel.relationship_type}`);
+      }
+    }
+
+    // Content
+    if (issue.content) {
+      parts.push("");
+      parts.push("**Content:**");
+      parts.push(issue.content);
+    }
+
+    return parts.join("\n");
+  }
+
+  /**
+   * Get tags for an entity
+   */
+  private getTags(entityId: string, entityType: "spec" | "issue"): string[] {
+    const query = this.db.prepare(`
+      SELECT tag FROM tags WHERE entity_id = ? AND entity_type = ?
+    `);
+    const rows = query.all(entityId, entityType) as { tag: string }[];
+    return rows.map((r) => r.tag);
+  }
+
+  /**
+   * Get outgoing relationships for an entity
+   */
+  private getOutgoingRelationships(
+    entityId: string,
+    entityType: "spec" | "issue"
+  ): Array<{
+    relationship_type: string;
+    to_id: string;
+    to_type: string;
+  }> {
+    const query = this.db.prepare(`
+      SELECT relationship_type, to_id, to_type
+      FROM relationships
+      WHERE from_id = ? AND from_type = ?
+    `);
+    return query.all(entityId, entityType) as Array<{
+      relationship_type: string;
+      to_id: string;
+      to_type: string;
+    }>;
+  }
+
+  /**
+   * Get incoming relationships for an entity
+   */
+  private getIncomingRelationships(
+    entityId: string,
+    entityType: "spec" | "issue"
+  ): Array<{
+    relationship_type: string;
+    from_id: string;
+    from_type: string;
+  }> {
+    const query = this.db.prepare(`
+      SELECT relationship_type, from_id, from_type
+      FROM relationships
+      WHERE to_id = ? AND to_type = ?
+    `);
+    return query.all(entityId, entityType) as Array<{
+      relationship_type: string;
+      from_id: string;
+      from_type: string;
+    }>;
   }
 }

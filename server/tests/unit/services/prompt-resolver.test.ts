@@ -25,7 +25,18 @@ describe("PromptResolver", () => {
   let mockDb: any;
 
   beforeEach(() => {
-    mockDb = {} as any;
+    // Create mock database with prepare method
+    const mockPrepare = vi.fn((sql: string) => {
+      // Return empty results for tags and relationships by default
+      return {
+        all: vi.fn(() => []),
+      };
+    });
+
+    mockDb = {
+      prepare: mockPrepare,
+    } as any;
+
     resolver = new PromptResolver(mockDb);
     mockGetSpecById.mockClear();
     mockGetIssueById.mockClear();
@@ -91,9 +102,10 @@ describe("PromptResolver", () => {
       expect(result.resolvedPrompt).toContain(
         "Fix the bug described in [[i-xyz789]]"
       );
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-xyz789:\nThis is the issue description."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Test Issue**");
+      expect(result.resolvedPrompt).toContain("**Status:** open");
+      expect(result.resolvedPrompt).toContain("This is the issue description.");
       expect(mockGetIssueById).toHaveBeenCalledWith(mockDb, "i-xyz789");
     });
 
@@ -165,9 +177,9 @@ describe("PromptResolver", () => {
       // Spec should be replaced inline, issue reference stays with content appended
       expect(result.resolvedPrompt).toContain("API design document.");
       expect(result.resolvedPrompt).toContain("[[i-xyz789]]");
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-xyz789:\nImplement the API endpoints."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Implement API**");
+      expect(result.resolvedPrompt).toContain("Implement the API endpoints.");
       expect(result.resolvedPrompt).toContain("@src/api/routes.ts");
     });
 
@@ -325,12 +337,14 @@ describe("PromptResolver", () => {
 
       // Issue reference stays in place, content appended with markdown preserved
       expect(result.resolvedPrompt).toContain("Complete [[i-xyz789]]");
-      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:\n## Steps");
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Formatted Issue**");
+      expect(result.resolvedPrompt).toContain("## Steps");
       expect(result.resolvedPrompt).toContain("1. First step");
       expect(result.resolvedPrompt).toContain("`code block`");
     });
 
-    it("should return raw content without metadata", async () => {
+    it("should include metadata with content", async () => {
       const mockSpec: Spec = {
         id: "s-abc123",
         uuid: "uuid-spec",
@@ -347,10 +361,11 @@ describe("PromptResolver", () => {
       const prompt = "Review [[s-abc123]]";
       const result = await resolver.resolve(prompt);
 
-      // Now returns raw content only, no metadata formatting
+      // Now returns formatted content with metadata
       expect(result.resolvedPrompt).toContain("Content");
-      expect(result.resolvedPrompt).not.toContain("Created:");
-      expect(result.resolvedPrompt).not.toContain("Updated:");
+      expect(result.resolvedPrompt).toContain("**Created:**");
+      expect(result.resolvedPrompt).toContain("**Updated:**");
+      expect(result.resolvedPrompt).toContain("**s-abc123: Test Spec**");
     });
 
     it("should handle file mentions with various formats", async () => {
@@ -410,7 +425,9 @@ describe("PromptResolver", () => {
       expect(result.references[0].id).toBe("i-x9y8z7");
       // Issue reference stays in place, content appended
       expect(result.resolvedPrompt).toContain("Fix [[i-x9y8z7]]");
-      expect(result.resolvedPrompt).toContain("\n\nIssue i-x9y8z7:\nContent");
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-x9y8z7:");
+      expect(result.resolvedPrompt).toContain("**i-x9y8z7: Alphanumeric Issue**");
+      expect(result.resolvedPrompt).toContain("Content");
     });
 
     it("should accumulate multiple errors", async () => {
@@ -518,9 +535,9 @@ describe("PromptResolver", () => {
 
       // Issue reference stays in place (@i-xyz789), content appended at end
       expect(result.resolvedPrompt).toContain("Fix @i-xyz789 urgently");
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-xyz789:\nIssue description."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Test Issue**");
+      expect(result.resolvedPrompt).toContain("Issue description.");
     });
 
     it("should handle mixed @ and [[ ]] syntax", async () => {
@@ -558,9 +575,9 @@ describe("PromptResolver", () => {
       // Spec should be replaced inline, issue reference stays with content appended
       expect(result.resolvedPrompt).toContain("Spec content.");
       expect(result.resolvedPrompt).toContain("[[i-issue1]]");
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-issue1:\nIssue description."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-issue1:");
+      expect(result.resolvedPrompt).toContain("**i-issue1: Issue 1**");
+      expect(result.resolvedPrompt).toContain("Issue description.");
     });
 
     it("should not confuse @entity-id with @file paths", async () => {
@@ -636,10 +653,12 @@ describe("PromptResolver", () => {
       expect(result.references).toHaveLength(1); // Deduplicated
       expect(mockGetSpecById).toHaveBeenCalledTimes(1); // Only fetched once
 
-      // Both occurrences should be replaced with raw content
-      const occurrences = (result.resolvedPrompt.match(/Content/g) || [])
-        .length;
-      expect(occurrences).toBe(2);
+      // Both occurrences should be replaced with the same formatted spec content
+      // The formatted content appears twice (once for each reference)
+      const formattedSpecMatches = result.resolvedPrompt.match(
+        /\*\*s-abc123: Test Spec\*\*/g
+      );
+      expect(formattedSpecMatches).toHaveLength(2);
     });
 
     it("should handle @entity-id with comma after it", async () => {
@@ -663,9 +682,9 @@ describe("PromptResolver", () => {
       expect(result.references).toHaveLength(1);
       // Issue reference stays in place, content appended
       expect(result.resolvedPrompt).toContain("Fix @i-xyz789, then test it");
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-xyz789:\nIssue description."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Test Issue**");
+      expect(result.resolvedPrompt).toContain("Issue description.");
     });
 
     it("should only expand issue content once when referenced multiple times", async () => {
@@ -699,9 +718,9 @@ describe("PromptResolver", () => {
       const issueContentMatches =
         result.resolvedPrompt.match(/Issue i-xyz789:/g);
       expect(issueContentMatches).toHaveLength(1);
-      expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-xyz789:\nIssue description."
-      );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-xyz789:");
+      expect(result.resolvedPrompt).toContain("**i-xyz789: Test Issue**");
+      expect(result.resolvedPrompt).toContain("Issue description.");
 
       // Should track that i-xyz789 was expanded
       expect(result.expandedEntityIds).toContain("i-xyz789");
@@ -786,8 +805,10 @@ describe("PromptResolver", () => {
       expect(result.resolvedPrompt).toContain(
         "Implement this feature with tests"
       );
+      expect(result.resolvedPrompt).toContain("\n\nIssue i-abc123:");
+      expect(result.resolvedPrompt).toContain("**i-abc123: Implement feature**");
       expect(result.resolvedPrompt).toContain(
-        "\n\nIssue i-abc123:\nAdd OAuth2 authentication with JWT tokens"
+        "Add OAuth2 authentication with JWT tokens"
       );
 
       // Should track that i-abc123 was expanded
