@@ -30,6 +30,11 @@ export interface RepositoryInfo {
   path: string
 }
 
+export interface BranchInfo {
+  current: string
+  branches: string[]
+}
+
 /**
  * Issue API types
  */

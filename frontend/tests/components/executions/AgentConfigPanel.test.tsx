@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/test-utils'
 import { AgentConfigPanel } from '@/components/executions/AgentConfigPanel'
-import { agentsApi, repositoryApi } from '@/lib/api'
+import { repositoryApi, agentsApi } from '@/lib/api'
 import type { AgentInfo } from '@/types/api'
 
 // Mock the API
@@ -22,6 +22,7 @@ vi.mock('@/lib/api', () => ({
   },
   repositoryApi: {
     getInfo: vi.fn(),
+    getBranches: vi.fn(),
   },
 }))
 
@@ -54,6 +55,10 @@ describe('AgentConfigPanel', () => {
       name: 'test-repo',
       path: '/test/path',
       branch: 'main',
+    })
+    vi.mocked(repositoryApi.getBranches).mockResolvedValue({
+      current: 'main',
+      branches: ['main', 'develop', 'feature/test'],
     })
     vi.mocked(agentsApi.getAll).mockResolvedValue(mockAgents)
   })

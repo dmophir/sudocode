@@ -12,6 +12,7 @@ import {
 import { repositoryApi } from '@/lib/api'
 import type { ExecutionConfig, ExecutionMode } from '@/types/execution'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
+import { BranchSelector } from './BranchSelector'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
 import type { CodexConfig } from './CodexConfigForm'
@@ -182,6 +183,8 @@ export function AgentConfigPanel({
   const [loading, setLoading] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [internalForceNewExecution, setInternalForceNewExecution] = useState(false)
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = useState<string>('')
 
   // Use controlled value if provided, otherwise use internal state
   const forceNewExecution =
@@ -339,7 +342,7 @@ export function AgentConfigPanel({
     setSelectedAgentType(loadAgentTypeForIssue())
   }, [issueId, lastExecution?.id, isFollowUp])
 
-  // Load current branch for baseBranch default (skip for follow-ups)
+  // Load branches and repository info (skip for follow-ups)
   useEffect(() => {
     // Skip for follow-ups - we use parent execution config
     if (isFollowUp) return
@@ -350,13 +353,24 @@ export function AgentConfigPanel({
       if (!isMounted) return
       setLoading(true)
       try {
-        const repoInfo = await repositoryApi.getInfo()
-        if (isMounted && repoInfo.branch) {
+        // Load branches and repo info in parallel
+        const [branchInfo, repoInfo] = await Promise.all([
+          repositoryApi.getBranches(),
+          repositoryApi.getInfo(),
+        ])
+
+        if (isMounted) {
+          // Store available branches and current branch
+          setAvailableBranches(branchInfo.branches)
+          setCurrentBranch(branchInfo.current)
+
           // Set baseBranch to current branch if not already set
-          setConfig((prev) => ({
-            ...prev,
-            baseBranch: prev.baseBranch || repoInfo.branch,
-          }))
+          if (repoInfo.branch) {
+            setConfig((prev) => ({
+              ...prev,
+              baseBranch: prev.baseBranch || repoInfo.branch,
+            }))
+          }
         }
       } catch (error) {
         console.error('Failed to get repository info:', error)
@@ -550,31 +564,31 @@ export function AgentConfigPanel({
             )}
           </Tooltip>
 
-          {/* Branch Selector - always shown, disabled in local mode or follow-up */}
-          {config.baseBranch && (
+          {/* Branch Selector - enabled for worktree mode, disabled for local mode and follow-ups */}
+          {config.baseBranch && config.mode === 'worktree' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex h-8 w-[160px] items-center rounded-md border border-input bg-muted/50 px-3 text-xs text-muted-foreground">
-                  {config.baseBranch}
-                </div>
+                <span>
+                  <BranchSelector
+                    branches={availableBranches.length > 0 ? availableBranches : [config.baseBranch]}
+                    value={config.baseBranch}
+                    onChange={(branch, isNew) => {
+                      updateConfig({
+                        baseBranch: branch,
+                        createBaseBranch: isNew || false,
+                      })
+                    }}
+                    disabled={loading || (isFollowUp && !forceNewExecution)}
+                    allowCreate={!isFollowUp || forceNewExecution}
+                    className="w-[160px]"
+                    currentBranch={currentBranch}
+                  />
+                </span>
               </TooltipTrigger>
-              <TooltipContent>Base branch for worktree</TooltipContent>
+              {isFollowUp && !forceNewExecution && (
+                <TooltipContent>Base branch is inherited from parent execution</TooltipContent>
+              )}
             </Tooltip>
-            // TODO: Re-enable branch selector when ready
-            // <BranchSelector
-            //   branches={prepareResult?.availableBranches || [config.baseBranch]}
-            //   value={config.baseBranch}
-            //   onChange={(branch, isNew) => {
-            //     updateConfig({
-            //       baseBranch: branch,
-            //       createBaseBranch: isNew || false,
-            //     })
-            //   }}
-            //   disabled={loading || isFollowUp || config.mode === 'local'}
-            //   allowCreate={!isFollowUp && config.mode !== 'local'}
-            //   className="w-[160px]"
-            //   currentBranch={prepareResult?.availableBranches?.[0]}
-            // />
           )}
 
           <div className="ml-auto" />

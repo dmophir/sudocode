@@ -6,6 +6,7 @@ import type {
   Relationship,
   IssueFeedback,
   RepositoryInfo,
+  BranchInfo,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateSpecRequest,
@@ -248,6 +249,7 @@ export const executionsApi = {
  */
 export const repositoryApi = {
   getInfo: () => get<RepositoryInfo>('/repo-info'),
+  getBranches: () => get<BranchInfo>('/repo-info/branches'),
 }
 
 /**
