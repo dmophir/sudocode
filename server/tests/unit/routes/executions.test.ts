@@ -693,6 +693,7 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.data.executionId).toBe("exec-123");
       expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
         "exec-123",
+        false,
         false
       );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
@@ -723,6 +724,7 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.message).toBe("Execution deleted successfully");
       expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
         "exec-123",
+        false,
         false
       );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
@@ -766,7 +768,8 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.message).toBe("Execution deleted successfully");
       expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
         "exec-123",
-        true
+        true,
+        false
       );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });

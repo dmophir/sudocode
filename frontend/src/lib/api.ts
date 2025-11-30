@@ -231,10 +231,13 @@ export const executionsApi = {
   // Cancel execution
   cancel: (executionId: string) => post(`/executions/${executionId}/cancel`),
 
-  // Delete execution and its entire chain (including worktree and logs)
-  delete: (executionId: string, deleteBranch?: boolean) => {
-    const params = deleteBranch ? `?deleteBranch=true` : ''
-    return del(`/executions/${executionId}${params}`)
+  // Delete execution and its entire chain
+  delete: (executionId: string, deleteBranch?: boolean, deleteWorktree?: boolean) => {
+    const params = new URLSearchParams()
+    if (deleteBranch) params.append('deleteBranch', 'true')
+    if (deleteWorktree) params.append('deleteWorktree', 'true')
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return del(`/executions/${executionId}${query}`)
   },
 
   // Check if worktree exists for execution

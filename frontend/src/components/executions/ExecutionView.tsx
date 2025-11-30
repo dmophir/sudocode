@@ -223,13 +223,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }
 
   // Handle delete execution action
-  const handleDeleteExecution = async (deleteBranch: boolean) => {
+  const handleDeleteExecution = async (deleteBranch: boolean, deleteWorktree: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
 
     setDeletingExecution(true)
     try {
-      await executionsApi.delete(rootExecution.id, deleteBranch)
+      await executionsApi.delete(rootExecution.id, deleteBranch, deleteWorktree)
       // Navigate back to issue page after deletion
       if (rootExecution.issue_id) {
         window.location.href = `/issues/${rootExecution.issue_id}`
@@ -850,7 +850,6 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         {/* Delete Execution Dialog */}
         <DeleteExecutionDialog
           executionId={rootExecution.id}
-          executionCount={executions.length}
           isOpen={showDeleteExecution}
           onClose={() => setShowDeleteExecution(false)}
           onConfirm={handleDeleteExecution}
@@ -862,6 +861,8 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
               rootExecution.branch_name !== '(detached)'
             return wasCreatedByExecution
           })()}
+          hasWorktree={!!rootExecution.worktree_path && worktreeExists}
+          worktreePath={rootExecution.worktree_path || undefined}
         />
 
         {/* Sync Preview Dialog */}

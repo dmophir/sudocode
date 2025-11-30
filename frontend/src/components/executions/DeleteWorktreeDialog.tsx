@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,8 @@ interface DeleteWorktreeDialogProps {
   branchWasCreatedByExecution?: boolean
 }
 
+const STORAGE_KEY_DELETE_BRANCH = 'deleteWorktree.deleteBranch'
+
 export function DeleteWorktreeDialog({
   worktreePath,
   isOpen,
@@ -32,6 +34,20 @@ export function DeleteWorktreeDialog({
   branchWasCreatedByExecution = false,
 }: DeleteWorktreeDialogProps) {
   const [deleteBranch, setDeleteBranch] = useState(false)
+
+  // Load saved preference from localStorage on mount
+  useEffect(() => {
+    const savedDeleteBranch = localStorage.getItem(STORAGE_KEY_DELETE_BRANCH)
+
+    if (savedDeleteBranch !== null) {
+      setDeleteBranch(savedDeleteBranch === 'true')
+    }
+  }, [])
+
+  // Save preference to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_DELETE_BRANCH, String(deleteBranch))
+  }, [deleteBranch])
 
   if (!worktreePath) return null
 

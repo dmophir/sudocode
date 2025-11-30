@@ -694,15 +694,17 @@ ${feedback}`;
    * Delete an execution and its entire chain
    *
    * Deletes the execution and all its follow-ups (descendants).
-   * Also attempts to clean up the worktree if one exists.
+   * Optionally deletes the worktree and/or branch.
    *
    * @param executionId - ID of execution to delete (can be root or any execution in chain)
    * @param deleteBranch - Whether to also delete the execution's branch (default: false)
+   * @param deleteWorktree - Whether to also delete the execution's worktree (default: false)
    * @throws Error if execution not found
    */
   async deleteExecution(
     executionId: string,
-    deleteBranch: boolean = false
+    deleteBranch: boolean = false,
+    deleteWorktree: boolean = false
   ): Promise<void> {
     const execution = getExecution(this.db, executionId);
     if (!execution) {
@@ -751,9 +753,9 @@ ${feedback}`;
       }
     }
 
-    // Delete worktree if it exists (only for root execution)
+    // Delete worktree if requested and it exists (only for root execution)
     const rootExecution = chain.find((e) => e.id === rootId);
-    if (rootExecution?.worktree_path) {
+    if (deleteWorktree && rootExecution?.worktree_path) {
       try {
         const fs = await import("fs");
         if (fs.existsSync(rootExecution.worktree_path)) {

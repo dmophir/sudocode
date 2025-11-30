@@ -206,13 +206,13 @@ export function InlineExecutionView({
   }
 
   // Handle delete execution action
-  const handleDeleteExecution = async () => {
+  const handleDeleteExecution = async (deleteBranch: boolean, deleteWorktree: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
 
     setDeletingExecution(true)
     try {
-      await executionsApi.delete(rootExecution.id)
+      await executionsApi.delete(rootExecution.id, deleteBranch, deleteWorktree)
       setShowDeleteExecution(false)
       // Notify parent to refresh
       if (onExecutionDeleted) {
@@ -575,7 +575,6 @@ export function InlineExecutionView({
       {/* Delete Execution Dialog */}
       <DeleteExecutionDialog
         executionId={rootExecution.id}
-        executionCount={executions.length}
         isOpen={showDeleteExecution}
         onClose={() => setShowDeleteExecution(false)}
         onConfirm={handleDeleteExecution}
