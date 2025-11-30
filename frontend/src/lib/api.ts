@@ -6,6 +6,8 @@ import type {
   Relationship,
   IssueFeedback,
   RepositoryInfo,
+  BranchInfo,
+  FileSearchResult,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateSpecRequest,
@@ -19,8 +21,6 @@ import type {
 } from '@/types/api'
 import type {
   Execution,
-  ExecutionPrepareResult,
-  PrepareExecutionRequest,
   CreateExecutionRequest,
   CreateFollowUpRequest,
   SyncPreviewResult,
@@ -205,10 +205,6 @@ export interface ExecutionChainResponse {
 }
 
 export const executionsApi = {
-  // Prepare execution (preview template and gather context)
-  prepare: (issueId: string, request?: PrepareExecutionRequest) =>
-    post<ExecutionPrepareResult>(`/issues/${issueId}/executions/prepare`, request),
-
   // Create and start execution
   create: (issueId: string, request: CreateExecutionRequest) =>
     post<Execution>(`/issues/${issueId}/executions`, request),
@@ -254,6 +250,17 @@ export const executionsApi = {
  */
 export const repositoryApi = {
   getInfo: () => get<RepositoryInfo>('/repo-info'),
+  getBranches: () => get<BranchInfo>('/repo-info/branches'),
+}
+
+/**
+ * Files API
+ */
+export const filesApi = {
+  search: (query: string, options?: { limit?: number; includeDirectories?: boolean }) =>
+    get<{ results: FileSearchResult[] }>(
+      `/files/search?q=${encodeURIComponent(query)}${options?.limit ? `&limit=${options.limit}` : ''}${options?.includeDirectories ? `&includeDirectories=${options.includeDirectories}` : ''}`
+    ).then((res) => res.results),
 }
 
 /**
