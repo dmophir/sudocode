@@ -71,6 +71,16 @@ vi.mock('@/hooks/useAgents', () => ({
   }),
 }))
 
+// Mock useWorktrees
+vi.mock('@/hooks/useWorktrees', () => ({
+  useWorktrees: () => ({
+    worktrees: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}))
+
 describe('AgentConfigPanel - Contextual Actions', () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -142,7 +152,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Sync to Main')).not.toBeInTheDocument()
+        expect(screen.queryByText('Sync to Local')).not.toBeInTheDocument()
         expect(screen.queryByText('Open in IDE')).not.toBeInTheDocument()
         expect(screen.queryByText('Verify Code')).not.toBeInTheDocument()
       })
@@ -177,7 +187,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Sync to Main')).toBeInTheDocument()
+        expect(screen.getByText('Sync to Local')).toBeInTheDocument()
       })
     })
 
@@ -258,10 +268,10 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Sync to Main')).toBeInTheDocument()
+        expect(screen.getByText('Sync to Local')).toBeInTheDocument()
       })
 
-      const syncButton = screen.getByText('Sync to Main')
+      const syncButton = screen.getByText('Sync to Local')
       await user.click(syncButton)
 
       expect(mockFetchSyncPreview).toHaveBeenCalledWith('exec-123')
@@ -318,7 +328,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Sync to Main').closest('button')
+        const syncButton = screen.getByText('Sync to Local').closest('button')
         const openButton = screen.getByText('Open in IDE').closest('button')
         const verifyButton = screen.getByText('Verify Code').closest('button')
 
@@ -360,7 +370,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Sync to Main').closest('button')
+        const syncButton = screen.getByText('Sync to Local').closest('button')
         const openButton = screen.getByText('Open in IDE').closest('button')
         const verifyButton = screen.getByText('Verify Code').closest('button')
 
@@ -433,7 +443,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Sync to Main')).not.toBeInTheDocument()
+        expect(screen.queryByText('Sync to Local')).not.toBeInTheDocument()
       })
     })
   })
