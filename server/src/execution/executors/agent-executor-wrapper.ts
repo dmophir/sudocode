@@ -7,35 +7,39 @@
  * @module execution/executors/agent-executor-wrapper
  */
 
-import type { IAgentAdapter, NormalizedEntry } from 'agent-execution-engine/agents';
+import type {
+  IAgentAdapter,
+  NormalizedEntry,
+} from "agent-execution-engine/agents";
 import {
   ClaudeCodeExecutor,
   CodexExecutor,
   CursorExecutor,
   CopilotExecutor,
-} from 'agent-execution-engine/agents';
-import type { AgentType, BaseAgentConfig } from '@sudocode-ai/types/agents';
-import type { ProcessConfig } from 'agent-execution-engine/process';
-import type Database from 'better-sqlite3';
-import type { ExecutionTask } from 'agent-execution-engine/engine';
-import type { ExecutionLifecycleService } from '../../services/execution-lifecycle.js';
-import type { ExecutionLogsStore } from '../../services/execution-logs-store.js';
-import type { TransportManager } from '../transport/transport-manager.js';
-import { NormalizedEntryToAgUiAdapter } from '../output/normalized-to-ag-ui-adapter.js';
-import { AgUiEventAdapter } from '../output/ag-ui-adapter.js';
-import {
-  updateExecution,
-  getExecution,
-} from '../../services/executions.js';
-import { broadcastExecutionUpdate } from '../../services/websocket.js';
-import { execSync } from 'child_process';
+} from "agent-execution-engine/agents";
+import type { AgentType, BaseAgentConfig } from "@sudocode-ai/types/agents";
+import type { ProcessConfig } from "agent-execution-engine/process";
+import type Database from "better-sqlite3";
+import type { ExecutionTask } from "agent-execution-engine/engine";
+import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
+import type { ExecutionLogsStore } from "../../services/execution-logs-store.js";
+import type { TransportManager } from "../transport/transport-manager.js";
+import { NormalizedEntryToAgUiAdapter } from "../output/normalized-to-ag-ui-adapter.js";
+import { AgUiEventAdapter } from "../output/ag-ui-adapter.js";
+import { updateExecution, getExecution } from "../../services/executions.js";
+import { broadcastExecutionUpdate } from "../../services/websocket.js";
+import { execSync } from "child_process";
+import { ExecutionChangesService } from "../../services/execution-changes-service.js";
 
 /**
  * Base executor interface that all agent executors implement
  */
 interface IAgentExecutor {
   executeTask(task: ExecutionTask): Promise<{ process: any }>;
-  resumeTask?(task: ExecutionTask, sessionId: string): Promise<{ process: any }>;
+  resumeTask?(
+    task: ExecutionTask,
+    sessionId: string
+  ): Promise<{ process: any }>;
   normalizeOutput(
     outputStream: AsyncIterable<any>,
     workDir: string
@@ -103,7 +107,10 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   private processConfig: ProcessConfig;
   private activeExecutions: Map<string, { cancel: () => void }>;
   /** Track completion state for Claude Code executions (from protocol peer) */
-  private completionState: Map<string, { completed: boolean; exitCode: number }>;
+  private completionState: Map<
+    string,
+    { completed: boolean; exitCode: number }
+  >;
 
   constructor(config: AgentExecutorWrapperConfig<TConfig>) {
     this.adapter = config.adapter;
@@ -122,7 +129,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     // Create executor instance based on agent type
     this.executor = this.createExecutor(config.agentType, this._agentConfig);
 
-    console.log('[AgentExecutorWrapper] Initialized', {
+    console.log("[AgentExecutorWrapper] Initialized", {
       agentType: this.agentType,
       adapterName: this.adapter.metadata.name,
       projectId: this.projectId,
@@ -139,25 +146,29 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
    * @param agentConfig - Agent configuration
    * @returns Executor instance
    */
-  private createExecutor(agentType: AgentType, agentConfig: TConfig): IAgentExecutor {
+  private createExecutor(
+    agentType: AgentType,
+    agentConfig: TConfig
+  ): IAgentExecutor {
     switch (agentType) {
-      case 'claude-code':
+      case "claude-code":
         return new ClaudeCodeExecutor({
           workDir: agentConfig.workDir,
           executablePath: (agentConfig as any).claudePath,
           print: (agentConfig as any).print ?? true,
-          outputFormat: (agentConfig as any).outputFormat ?? 'stream-json',
+          outputFormat: (agentConfig as any).outputFormat ?? "stream-json",
           verbose: (agentConfig as any).verbose ?? true,
-          dangerouslySkipPermissions: (agentConfig as any).dangerouslySkipPermissions ?? true,
+          dangerouslySkipPermissions:
+            (agentConfig as any).dangerouslySkipPermissions ?? true,
         }) as IAgentExecutor;
 
-      case 'codex':
+      case "codex":
         return new CodexExecutor(agentConfig as any) as IAgentExecutor;
 
-      case 'cursor':
+      case "cursor":
         return new CursorExecutor(agentConfig as any) as IAgentExecutor;
 
-      case 'copilot':
+      case "copilot":
         return new CopilotExecutor(agentConfig as any) as IAgentExecutor;
 
       default:
@@ -203,13 +214,13 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       });
 
       // 4. Update execution status to running
-      updateExecution(this.db, executionId, { status: 'running' });
+      updateExecution(this.db, executionId, { status: "running" });
       const execution = getExecution(this.db, executionId);
       if (execution) {
         broadcastExecutionUpdate(
           this.projectId,
           executionId,
-          'status_changed',
+          "status_changed",
           execution,
           execution.issue_id || undefined
         );
@@ -237,18 +248,24 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       this.activeExecutions.set(executionId, {
         cancel: () => {
           if (spawned.process.process) {
-            spawned.process.process.kill('SIGTERM');
+            spawned.process.process.kill("SIGTERM");
           }
         },
       });
 
       // 7. Initialize completion state for Claude Code
-      if (this.agentType === 'claude-code') {
-        this.completionState.set(executionId, { completed: false, exitCode: 0 });
+      if (this.agentType === "claude-code") {
+        this.completionState.set(executionId, {
+          completed: false,
+          exitCode: 0,
+        });
       }
 
       // 8. Create output stream from process stdout/stderr
-      const outputStream = this.createOutputChunks(spawned.process, executionId);
+      const outputStream = this.createOutputChunks(
+        spawned.process,
+        executionId
+      );
       const normalized = this.executor.normalizeOutput(outputStream, workDir);
 
       // 9. Process normalized output (runs concurrently with process)
@@ -261,8 +278,8 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       // 10. Capture stderr for debugging
       const childProcess = spawned.process.process;
       if (childProcess && childProcess.stderr) {
-        let stderrOutput = '';
-        childProcess.stderr.on('data', (data: Buffer) => {
+        let stderrOutput = "";
+        childProcess.stderr.on("data", (data: Buffer) => {
           const chunk = data.toString();
           stderrOutput += chunk;
           console.error(
@@ -280,7 +297,11 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       );
 
       // 12. Close stdin to signal the process to exit (for Claude Code with peer)
-      if (this.agentType === 'claude-code' && childProcess && childProcess.stdin) {
+      if (
+        this.agentType === "claude-code" &&
+        childProcess &&
+        childProcess.stdin
+      ) {
         try {
           childProcess.stdin.end();
           console.log(
@@ -299,7 +320,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         new Promise<number>((resolve) => {
           if (!childProcess) {
             // Use completion state for Claude Code if available
-            if (this.agentType === 'claude-code') {
+            if (this.agentType === "claude-code") {
               const state = this.completionState.get(executionId);
               resolve(state?.exitCode ?? 0);
             } else {
@@ -308,12 +329,12 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
             return;
           }
 
-          childProcess.on('exit', (code: number | null) => {
+          childProcess.on("exit", (code: number | null) => {
             console.log(
               `[AgentExecutorWrapper] Process exited with code ${code} for ${executionId}`
             );
             // For Claude Code, use completion state exit code if available (more reliable)
-            if (this.agentType === 'claude-code') {
+            if (this.agentType === "claude-code") {
               const state = this.completionState.get(executionId);
               if (state?.completed) {
                 console.log(
@@ -326,7 +347,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
             resolve(code ?? 0);
           });
 
-          childProcess.on('error', (error: Error) => {
+          childProcess.on("error", (error: Error) => {
             console.error(
               `[AgentExecutorWrapper] Process error for ${executionId}:`,
               error
@@ -335,14 +356,14 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
           });
         }),
         // Timeout for Claude Code processes that may not exit cleanly
-        this.agentType === 'claude-code'
+        this.agentType === "claude-code"
           ? new Promise<number>((resolve) => {
               setTimeout(() => {
                 console.log(
                   `[AgentExecutorWrapper] Process exit timeout for ${executionId}, using completion state`
                 );
                 if (childProcess && !childProcess.killed) {
-                  childProcess.kill('SIGTERM');
+                  childProcess.kill("SIGTERM");
                 }
                 // Use completion state exit code
                 const state = this.completionState.get(executionId);
@@ -412,7 +433,8 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     );
 
     // Setup AG-UI system
-    const { agUiAdapter, normalizedAdapter } = this.setupAgUiSystem(executionId);
+    const { agUiAdapter, normalizedAdapter } =
+      this.setupAgUiSystem(executionId);
 
     if (this.transportManager) {
       this.transportManager.connectAdapter(agUiAdapter, executionId);
@@ -427,7 +449,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       // Update status and session_id (sessionId is the path used for resumption)
       updateExecution(this.db, executionId, {
-        status: 'running',
+        status: "running",
         session_id: sessionId,
       });
       const execution = getExecution(this.db, executionId);
@@ -435,7 +457,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         broadcastExecutionUpdate(
           this.projectId,
           executionId,
-          'status_changed',
+          "status_changed",
           execution,
           execution.issue_id || undefined
         );
@@ -447,18 +469,24 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       this.activeExecutions.set(executionId, {
         cancel: () => {
           if (spawned.process.process) {
-            spawned.process.process.kill('SIGTERM');
+            spawned.process.process.kill("SIGTERM");
           }
         },
       });
 
       // Initialize completion state for Claude Code
-      if (this.agentType === 'claude-code') {
-        this.completionState.set(executionId, { completed: false, exitCode: 0 });
+      if (this.agentType === "claude-code") {
+        this.completionState.set(executionId, {
+          completed: false,
+          exitCode: 0,
+        });
       }
 
       // Create output streams
-      const outputChunks = this.createOutputChunks(spawned.process, executionId);
+      const outputChunks = this.createOutputChunks(
+        spawned.process,
+        executionId
+      );
       const normalized = this.executor.normalizeOutput(outputChunks, workDir);
 
       const processOutputPromise = this.processNormalizedOutput(
@@ -471,7 +499,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       // For Claude Code, use completion state; for others, wait for process exit
       let exitCode = 0;
-      if (this.agentType === 'claude-code') {
+      if (this.agentType === "claude-code") {
         const state = this.completionState.get(executionId);
         exitCode = state?.exitCode ?? 0;
         console.log(
@@ -481,12 +509,12 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         exitCode = await new Promise<number>((resolve, reject) => {
           const childProcess = spawned.process.process;
           if (!childProcess) {
-            reject(new Error('No child process available'));
+            reject(new Error("No child process available"));
             return;
           }
 
-          childProcess.on('exit', (code: number | null) => resolve(code || 0));
-          childProcess.on('error', (error: Error) => reject(error));
+          childProcess.on("exit", (code: number | null) => resolve(code || 0));
+          childProcess.on("error", (error: Error) => reject(error));
         });
       }
 
@@ -536,9 +564,9 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
     let afterCommit: string | undefined;
     try {
-      afterCommit = execSync('git rev-parse HEAD', {
+      afterCommit = execSync("git rev-parse HEAD", {
         cwd: repoPath,
-        encoding: 'utf-8',
+        encoding: "utf-8",
       }).trim();
     } catch (error) {
       console.warn(
@@ -551,7 +579,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     // Update database status
     updateExecution(this.db, executionId, {
       after_commit: afterCommit,
-      status: 'stopped',
+      status: "stopped",
       completed_at: new Date().toISOString(),
     });
 
@@ -560,7 +588,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       broadcastExecutionUpdate(
         this.projectId,
         executionId,
-        'status_changed',
+        "status_changed",
         updatedExecution,
         updatedExecution.issue_id || undefined
       );
@@ -579,9 +607,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     const agUiAdapter = new AgUiEventAdapter(executionId);
     const normalizedAdapter = new NormalizedEntryToAgUiAdapter(agUiAdapter);
 
-    console.log(
-      `[AgentExecutorWrapper] Setup AG-UI system for ${executionId}`
-    );
+    console.log(`[AgentExecutorWrapper] Setup AG-UI system for ${executionId}`);
 
     return { agUiAdapter, normalizedAdapter };
   }
@@ -625,7 +651,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       try {
         // Capture session ID from metadata for Claude Code (populated by normalizer from SystemMessage)
         if (
-          this.agentType === 'claude-code' &&
+          this.agentType === "claude-code" &&
           !sessionIdCaptured &&
           entry.metadata?.sessionId
         ) {
@@ -666,7 +692,9 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
    * @private
    */
   private async handleSuccess(executionId: string): Promise<void> {
-    console.log(`[AgentExecutorWrapper] Execution ${executionId} completed successfully`);
+    console.log(
+      `[AgentExecutorWrapper] Execution ${executionId} completed successfully`
+    );
 
     // Capture final commit before marking complete
     const execution = getExecution(this.db, executionId);
@@ -674,9 +702,9 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
     let afterCommit: string | undefined;
     try {
-      afterCommit = execSync('git rev-parse HEAD', {
+      afterCommit = execSync("git rev-parse HEAD", {
         cwd: repoPath,
-        encoding: 'utf-8',
+        encoding: "utf-8",
       }).trim();
     } catch (error) {
       console.warn(
@@ -686,9 +714,43 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       // Continue - this is supplementary data
     }
 
+    // Calculate file changes using ExecutionChangesService
+    let filesChangedJson: string | null = null;
+    try {
+      // Import and instantiate ExecutionChangesService
+      const changesService = new ExecutionChangesService(
+        this.db,
+        this.processConfig.workDir
+      );
+
+      // Get changes for this execution
+      const changesResult = await changesService.getChanges(executionId);
+
+      if (changesResult.available && changesResult.captured) {
+        // Extract just the file paths from the changes
+        const filePaths = changesResult.captured.files.map((f) => f.path);
+        filesChangedJson = JSON.stringify(filePaths);
+        console.log(
+          `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for execution ${executionId}`
+        );
+      } else {
+        console.log(
+          `[AgentExecutorWrapper] No file changes detected for execution ${executionId}:`,
+          changesResult.reason
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[AgentExecutorWrapper] Failed to calculate files_changed for execution ${executionId}:`,
+        error instanceof Error ? error.message : String(error)
+      );
+      // Continue - this is supplementary data
+    }
+
     updateExecution(this.db, executionId, {
       after_commit: afterCommit,
-      status: 'completed',
+      files_changed: filesChangedJson,
+      status: "completed",
       completed_at: new Date().toISOString(),
       exit_code: 0,
     });
@@ -698,7 +760,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       broadcastExecutionUpdate(
         this.projectId,
         executionId,
-        'status_changed',
+        "status_changed",
         updatedExecution,
         updatedExecution.issue_id || undefined
       );
@@ -710,19 +772,41 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
    *
    * @private
    */
-  private async handleError(
-    executionId: string,
-    error: Error
-  ): Promise<void> {
+  private async handleError(executionId: string, error: Error): Promise<void> {
     console.error(
       `[AgentExecutorWrapper] Execution ${executionId} failed:`,
       error
     );
 
+    // Calculate file changes even for failed executions
+    // (user may want to commit partial work)
+    let filesChangedJson: string | null = null;
+    try {
+      const changesService = new ExecutionChangesService(
+        this.db,
+        this.processConfig.workDir
+      );
+      const changesResult = await changesService.getChanges(executionId);
+
+      if (changesResult.available && changesResult.captured) {
+        const filePaths = changesResult.captured.files.map((f) => f.path);
+        filesChangedJson = JSON.stringify(filePaths);
+        console.log(
+          `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for failed execution ${executionId}`
+        );
+      }
+    } catch (calcError) {
+      console.warn(
+        `[AgentExecutorWrapper] Failed to calculate files_changed for failed execution ${executionId}:`,
+        calcError instanceof Error ? calcError.message : String(calcError)
+      );
+    }
+
     updateExecution(this.db, executionId, {
-      status: 'failed',
+      status: "failed",
       completed_at: new Date().toISOString(),
       error_message: error.message,
+      files_changed: filesChangedJson,
     });
 
     const execution = getExecution(this.db, executionId);
@@ -730,7 +814,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       broadcastExecutionUpdate(
         this.projectId,
         executionId,
-        'status_changed',
+        "status_changed",
         execution,
         execution.issue_id || undefined
       );
@@ -748,24 +832,32 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   private async *createOutputChunks(
     process: any,
     executionId: string
-  ): AsyncIterable<{ type: 'stdout' | 'stderr'; data: Buffer; timestamp: Date }> {
+  ): AsyncIterable<{
+    type: "stdout" | "stderr";
+    data: Buffer;
+    timestamp: Date;
+  }> {
     // Check if this is a Claude Code process with a protocol peer
     const peer = process.peer;
 
-    if (this.agentType === 'claude-code') {
+    if (this.agentType === "claude-code") {
       // Claude Code REQUIRES a protocol peer
       if (!peer) {
-        throw new Error('No peer attached to Claude Code process - cannot read output');
+        throw new Error(
+          "No peer attached to Claude Code process - cannot read output"
+        );
       }
       // Claude Code: Use protocol peer messages
-      console.log('[AgentExecutorWrapper] Using protocol peer for Claude Code output');
+      console.log(
+        "[AgentExecutorWrapper] Using protocol peer for Claude Code output"
+      );
       yield* this.peerMessagesToOutputChunks(peer, executionId);
       return;
     }
 
     // Other agents: Use stdout/stderr streams
     if (!process.streams) {
-      throw new Error('Process does not have streams available');
+      throw new Error("Process does not have streams available");
     }
 
     const { stdout, stderr } = process.streams;
@@ -773,10 +865,10 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     // Merge stdout and stderr
     const streams = [];
     if (stdout) {
-      streams.push(this.streamToChunks(stdout, 'stdout'));
+      streams.push(this.streamToChunks(stdout, "stdout"));
     }
     if (stderr) {
-      streams.push(this.streamToChunks(stderr, 'stderr'));
+      streams.push(this.streamToChunks(stderr, "stderr"));
     }
 
     // Yield chunks from all streams
@@ -798,7 +890,11 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
   private async *peerMessagesToOutputChunks(
     peer: any,
     executionId: string
-  ): AsyncIterable<{ type: 'stdout' | 'stderr'; data: Buffer; timestamp: Date }> {
+  ): AsyncIterable<{
+    type: "stdout" | "stderr";
+    data: Buffer;
+    timestamp: Date;
+  }> {
     const messageQueue: any[] = [];
     let streamEnded = false;
     let exitDetected = false;
@@ -809,11 +905,11 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       // Detect completion and update completion state
       if (
-        message.type === 'result' &&
-        (message.subtype === 'success' || message.subtype === 'failure')
+        message.type === "result" &&
+        (message.subtype === "success" || message.subtype === "failure")
       ) {
         exitDetected = true;
-        const exitCode = message.subtype === 'success' ? 0 : 1;
+        const exitCode = message.subtype === "success" ? 0 : 1;
         this.completionState.set(executionId, { completed: true, exitCode });
         console.log(
           `[AgentExecutorWrapper] Detected completion from peer for ${executionId}:`,
@@ -836,10 +932,10 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       // Convert message to stream-json line format
       const message = messageQueue.shift();
-      const line = JSON.stringify(message) + '\n';
+      const line = JSON.stringify(message) + "\n";
       yield {
-        type: 'stdout' as const,
-        data: Buffer.from(line, 'utf-8'),
+        type: "stdout" as const,
+        data: Buffer.from(line, "utf-8"),
         timestamp: new Date(),
       };
     }
@@ -852,8 +948,12 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
    */
   private async *streamToChunks(
     stream: any,
-    type: 'stdout' | 'stderr'
-  ): AsyncIterable<{ type: 'stdout' | 'stderr'; data: Buffer; timestamp: Date }> {
+    type: "stdout" | "stderr"
+  ): AsyncIterable<{
+    type: "stdout" | "stderr";
+    data: Buffer;
+    timestamp: Date;
+  }> {
     for await (const chunk of stream) {
       yield {
         type,
