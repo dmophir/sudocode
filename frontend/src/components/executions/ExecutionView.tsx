@@ -770,6 +770,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                       executions.some((exec) => exec.status === 'running') ? 30000 : undefined
                     }
                     executionStatus={lastExecution.status}
+                    worktreePath={rootExecution.worktree_path}
                   />
                 </>
               )}
