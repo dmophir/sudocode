@@ -46,7 +46,7 @@ export class ClaudeCodeAdapter implements IAgentAdapter<ClaudeCodeConfig> {
    */
   readonly metadata: AgentMetadata = {
     name: "claude-code",
-    displayName: "Claude Code",
+    displayName: "Claude",
     version: "1.0.0",
     supportedModes: ["structured", "interactive", "hybrid"],
     supportsStreaming: true,

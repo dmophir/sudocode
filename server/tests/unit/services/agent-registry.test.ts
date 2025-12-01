@@ -74,7 +74,7 @@ describe("AgentRegistryService", () => {
       const agents = service.getAvailableAgents();
 
       const claudeCode = agents.find((a) => a.name === "claude-code");
-      expect(claudeCode?.displayName).toBe("Claude Code");
+      expect(claudeCode?.displayName).toBe("Claude");
       expect(claudeCode?.supportedModes).toEqual([
         "structured",
         "interactive",
@@ -84,7 +84,7 @@ describe("AgentRegistryService", () => {
       expect(claudeCode?.supportsStructuredOutput).toBe(true);
 
       const codex = agents.find((a) => a.name === "codex");
-      expect(codex?.displayName).toBe("OpenAI Codex");
+      expect(codex?.displayName).toBe("Codex");
       expect(codex?.supportedModes).toEqual(["structured", "interactive"]);
       expect(codex?.supportsStreaming).toBe(true);
       expect(codex?.supportsStructuredOutput).toBe(true);

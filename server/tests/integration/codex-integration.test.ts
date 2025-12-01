@@ -122,13 +122,13 @@ describe("Codex Agent Integration", () => {
       const adapter = agentRegistryService.getAdapter("codex");
       expect(adapter).toBeDefined();
       expect(adapter.metadata.name).toBe("codex");
-      expect(adapter.metadata.displayName).toBe("OpenAI Codex");
+      expect(adapter.metadata.displayName).toBe("Codex");
     });
 
     it("should provide correct metadata", () => {
       const metadata = codexAdapter.metadata;
       expect(metadata.name).toBe("codex");
-      expect(metadata.displayName).toBe("OpenAI Codex");
+      expect(metadata.displayName).toBe("Codex");
       expect(metadata.supportedModes).toContain("structured");
       expect(metadata.supportedModes).toContain("interactive");
       expect(metadata.supportsStreaming).toBe(true);

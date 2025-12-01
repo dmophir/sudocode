@@ -47,7 +47,7 @@ vi.mock('@/lib/api', () => ({
     getAll: vi.fn().mockResolvedValue([
       {
         type: 'claude-code',
-        displayName: 'Claude Code',
+        displayName: 'Claude',
         supportedModes: ['structured', 'interactive', 'hybrid'],
         supportsStreaming: true,
         supportsStructuredOutput: true,

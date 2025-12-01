@@ -26,6 +26,7 @@ import type {
   SyncPreviewResult,
   SyncResult,
   PerformSyncRequest,
+  ExecutionChangesResult,
 } from '@/types/execution'
 import type {
   ProjectInfo,
@@ -230,15 +231,24 @@ export const executionsApi = {
   // Cancel execution
   cancel: (executionId: string) => post(`/executions/${executionId}/cancel`),
 
-  // Delete execution and its entire chain (including worktree and logs)
-  delete: (executionId: string) => del(`/executions/${executionId}`),
+  // Delete execution and its entire chain
+  delete: (executionId: string, deleteBranch?: boolean, deleteWorktree?: boolean) => {
+    const params = new URLSearchParams()
+    if (deleteBranch) params.append('deleteBranch', 'true')
+    if (deleteWorktree) params.append('deleteWorktree', 'true')
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return del(`/executions/${executionId}${query}`)
+  },
 
   // Check if worktree exists for execution
   worktreeExists: (executionId: string) =>
     get<{ exists: boolean }>(`/executions/${executionId}/worktree`),
 
   // Delete worktree for execution
-  deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
+  deleteWorktree: (executionId: string, deleteBranch?: boolean) => {
+    const params = deleteBranch ? `?deleteBranch=true` : ''
+    return del(`/executions/${executionId}/worktree${params}`)
+  },
 
   // Worktree sync operations
   syncPreview: (executionId: string) =>
@@ -249,6 +259,10 @@ export const executionsApi = {
 
   syncPreserve: (executionId: string, request?: PerformSyncRequest) =>
     post<SyncResult>(`/executions/${executionId}/sync/preserve`, request),
+
+  // Get code changes for execution
+  getChanges: (executionId: string) =>
+    get<ExecutionChangesResult>(`/executions/${executionId}/changes`),
 }
 
 /**

@@ -195,6 +195,12 @@ export interface AgentInfo {
   supportsStreaming: boolean
   supportsStructuredOutput: boolean
   implemented: boolean
+  /** Whether the agent executable is available on the system */
+  available?: boolean
+  /** Path to the agent executable if found */
+  executablePath?: string
+  /** Error message if verification failed */
+  verificationError?: string
 }
 
 export interface GetAgentsResponse {

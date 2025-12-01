@@ -12,7 +12,7 @@ describe("CodexAdapter", () => {
   describe("metadata", () => {
     it("should have correct metadata", () => {
       expect(adapter.metadata.name).toBe("codex");
-      expect(adapter.metadata.displayName).toBe("OpenAI Codex");
+      expect(adapter.metadata.displayName).toBe("Codex");
       expect(adapter.metadata.supportedModes).toEqual([
         "structured",
         "interactive",

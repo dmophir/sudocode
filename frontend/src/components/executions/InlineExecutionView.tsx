@@ -5,6 +5,7 @@ import { executionsApi, type ExecutionChainResponse } from '@/lib/api'
 import { ExecutionMonitor, RunIndicator } from './ExecutionMonitor'
 import { DeleteWorktreeDialog } from './DeleteWorktreeDialog'
 import { DeleteExecutionDialog } from './DeleteExecutionDialog'
+import { CodeChangesPanel } from './CodeChangesPanel'
 import { TodoTracker } from './TodoTracker'
 import { buildTodoHistory } from '@/utils/todoExtractor'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
@@ -206,13 +207,13 @@ export function InlineExecutionView({
   }
 
   // Handle delete execution action
-  const handleDeleteExecution = async () => {
+  const handleDeleteExecution = async (deleteBranch: boolean, deleteWorktree: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
 
     setDeletingExecution(true)
     try {
-      await executionsApi.delete(rootExecution.id)
+      await executionsApi.delete(rootExecution.id, deleteBranch, deleteWorktree)
       setShowDeleteExecution(false)
       // Notify parent to refresh
       if (onExecutionDeleted) {
@@ -539,7 +540,7 @@ export function InlineExecutionView({
                   />
 
                   {/* Visual separator between executions (subtle spacing only) */}
-                  {showDivider && <div className="my-6" />}
+                  {showDivider && <div className="my-4" />}
                 </div>
               )
             })}
@@ -547,15 +548,29 @@ export function InlineExecutionView({
             {/* Accumulated Todo Tracker - shows todos from all executions in chain */}
             {allTodos.length > 0 && (
               <>
-                <div className="my-6" />
+                <div className="my-3" />
                 <TodoTracker todos={allTodos} />
+              </>
+            )}
+
+            {/* Accumulated Code Changes - shows changes from the entire chain */}
+            {(rootExecution.before_commit || rootExecution.after_commit) && (
+              <>
+                <div className="my-3" />
+                <CodeChangesPanel
+                  executionId={rootExecution.id}
+                  autoRefreshInterval={
+                    executions.some((exec) => exec.status === 'running') ? 30000 : undefined
+                  }
+                  executionStatus={lastExecution.status}
+                />
               </>
             )}
 
             {/* Running indicator if any executions are running */}
             {executions.some((exec) => exec.status === 'running') && (
               <>
-                <div className="my-6" />
+                <div className="my-3" />
                 <RunIndicator />
               </>
             )}
@@ -575,7 +590,6 @@ export function InlineExecutionView({
       {/* Delete Execution Dialog */}
       <DeleteExecutionDialog
         executionId={rootExecution.id}
-        executionCount={executions.length}
         isOpen={showDeleteExecution}
         onClose={() => setShowDeleteExecution(false)}
         onConfirm={handleDeleteExecution}

@@ -20,6 +20,7 @@ import {
   WorktreeSyncError,
   WorktreeSyncErrorCode,
 } from "../services/worktree-sync-service.js";
+import { ExecutionChangesService } from "../services/execution-changes-service.js";
 
 /**
  * Get WorktreeSyncService instance for a request
@@ -368,6 +369,46 @@ export function createExecutionsRouter(): Router {
   );
 
   /**
+   * GET /api/executions/:executionId/changes
+   *
+   * Get code changes (file list + diff statistics) for an execution
+   *
+   * Calculates changes on-demand from commit SHAs. Supports:
+   * - Committed changes (commit-to-commit diff)
+   * - Uncommitted changes (working tree diff)
+   * - Unavailable states with clear error reasons
+   */
+  router.get(
+    "/executions/:executionId/changes",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Create changes service
+        const changesService = new ExecutionChangesService(db, repoPath);
+
+        // Get changes
+        const result = await changesService.getChanges(executionId);
+
+        res.json({
+          success: true,
+          data: result,
+        });
+      } catch (error) {
+        console.error("[GET /executions/:id/changes] Error:", error);
+        res.status(500).json({
+          success: false,
+          data: null,
+          error_data: error instanceof Error ? error.message : String(error),
+          message: "Failed to calculate changes",
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/issues/:issueId/executions
    *
    * List all executions for an issue
@@ -489,13 +530,15 @@ export function createExecutionsRouter(): Router {
    *
    * Query parameters:
    * - cancel: if "true", cancel the execution instead of deleting it
+   * - deleteBranch: if "true", also delete the execution's branch
+   * - deleteWorktree: if "true", also delete the execution's worktree
    */
   router.delete(
     "/executions/:executionId",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
-        const { cancel } = req.query;
+        const { cancel, deleteBranch, deleteWorktree } = req.query;
 
         // If cancel query param is true, cancel the execution
         if (cancel === "true") {
@@ -510,7 +553,11 @@ export function createExecutionsRouter(): Router {
         }
 
         // Otherwise, delete the execution and its chain
-        await req.project!.executionService!.deleteExecution(executionId);
+        await req.project!.executionService!.deleteExecution(
+          executionId,
+          deleteBranch === "true",
+          deleteWorktree === "true"
+        );
 
         res.json({
           success: true,
@@ -570,14 +617,21 @@ export function createExecutionsRouter(): Router {
    * DELETE /api/executions/:executionId/worktree
    *
    * Delete the worktree for an execution
+   *
+   * Query parameters:
+   * - deleteBranch: if "true", also delete the execution's branch
    */
   router.delete(
     "/executions/:executionId/worktree",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
+        const { deleteBranch } = req.query;
 
-        await req.project!.executionService!.deleteWorktree(executionId);
+        await req.project!.executionService!.deleteWorktree(
+          executionId,
+          deleteBranch === "true"
+        );
 
         res.json({
           success: true,

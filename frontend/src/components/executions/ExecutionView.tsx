@@ -6,6 +6,7 @@ import { DeleteWorktreeDialog } from './DeleteWorktreeDialog'
 import { DeleteExecutionDialog } from './DeleteExecutionDialog'
 import { SyncPreviewDialog } from './SyncPreviewDialog'
 import { SyncProgressDialog } from './SyncProgressDialog'
+import { CodeChangesPanel } from './CodeChangesPanel'
 import { TodoTracker } from './TodoTracker'
 import { buildTodoHistory } from '@/utils/todoExtractor'
 import { useExecutionSync } from '@/hooks/useExecutionSync'
@@ -201,14 +202,14 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }
 
   // Handle delete worktree action
-  const handleDeleteWorktree = async () => {
+  const handleDeleteWorktree = async (deleteBranch: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
     if (!rootExecution.worktree_path) return
 
     setDeletingWorktree(true)
     try {
-      await executionsApi.deleteWorktree(rootExecution.id)
+      await executionsApi.deleteWorktree(rootExecution.id, deleteBranch)
       setWorktreeExists(false)
       // Reload chain
       const data = await executionsApi.getChain(executionId)
@@ -222,13 +223,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   }
 
   // Handle delete execution action
-  const handleDeleteExecution = async () => {
+  const handleDeleteExecution = async (deleteBranch: boolean, deleteWorktree: boolean) => {
     if (!chainData || chainData.executions.length === 0) return
     const rootExecution = chainData.executions[0]
 
     setDeletingExecution(true)
     try {
-      await executionsApi.delete(rootExecution.id)
+      await executionsApi.delete(rootExecution.id, deleteBranch, deleteWorktree)
       // Navigate back to issue page after deletion
       if (rootExecution.issue_id) {
         window.location.href = `/issues/${rootExecution.issue_id}`
@@ -746,7 +747,7 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
                     />
 
                     {/* Visual separator between executions (subtle spacing only) */}
-                    {showDivider && <div className="my-6" />}
+                    {showDivider && <div className="my-4" />}
                   </div>
                 )
               })}
@@ -754,15 +755,29 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
               {/* Accumulated Todo Tracker - shows todos from all executions in chain */}
               {allTodos.length > 0 && (
                 <>
-                  <div className="my-6" />
+                  <div className="my-3" />
                   <TodoTracker todos={allTodos} />
+                </>
+              )}
+
+              {/* Accumulated Code Changes - shows changes from the entire chain */}
+              {(rootExecution.before_commit || rootExecution.after_commit) && (
+                <>
+                  <div className="my-3" />
+                  <CodeChangesPanel
+                    executionId={rootExecution.id}
+                    autoRefreshInterval={
+                      executions.some((exec) => exec.status === 'running') ? 30000 : undefined
+                    }
+                    executionStatus={lastExecution.status}
+                  />
                 </>
               )}
 
               {/* Running indicator if any executions are running */}
               {executions.some((exec) => exec.status === 'running') && (
                 <>
-                  <div className="my-6" />
+                  <div className="my-3" />
                   <RunIndicator />
                 </>
               )}
@@ -830,16 +845,31 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
           onClose={() => setShowDeleteWorktree(false)}
           onConfirm={handleDeleteWorktree}
           isDeleting={deletingWorktree}
+          branchName={rootExecution.branch_name}
+          branchWasCreatedByExecution={(() => {
+            const wasCreatedByExecution =
+              rootExecution.branch_name !== rootExecution.target_branch &&
+              rootExecution.branch_name !== '(detached)'
+            return wasCreatedByExecution
+          })()}
         />
 
         {/* Delete Execution Dialog */}
         <DeleteExecutionDialog
           executionId={rootExecution.id}
-          executionCount={executions.length}
           isOpen={showDeleteExecution}
           onClose={() => setShowDeleteExecution(false)}
           onConfirm={handleDeleteExecution}
           isDeleting={deletingExecution}
+          branchName={rootExecution.branch_name}
+          branchWasCreatedByExecution={(() => {
+            const wasCreatedByExecution =
+              rootExecution.branch_name !== rootExecution.target_branch &&
+              rootExecution.branch_name !== '(detached)'
+            return wasCreatedByExecution
+          })()}
+          hasWorktree={!!rootExecution.worktree_path && worktreeExists}
+          worktreePath={rootExecution.worktree_path || undefined}
         />
 
         {/* Sync Preview Dialog */}

@@ -21,6 +21,7 @@ vi.mock('@/lib/api', () => ({
     syncPreview: vi.fn(),
     syncSquash: vi.fn(),
     syncPreserve: vi.fn(),
+    getChanges: vi.fn(),
   },
   agentsApi: {
     getAll: vi.fn(),
@@ -70,7 +71,7 @@ vi.mock('@/components/executions/DeleteWorktreeDialog', () => ({
   DeleteWorktreeDialog: ({ isOpen, onConfirm, onClose }: any) =>
     isOpen ? (
       <div data-testid="delete-worktree-dialog">
-        <button onClick={onConfirm}>Delete</button>
+        <button onClick={() => onConfirm(false)}>Delete</button>
         <button onClick={onClose}>Cancel</button>
       </div>
     ) : null,
@@ -594,7 +595,7 @@ describe('ExecutionView', () => {
     await user.click(confirmButton)
 
     await waitFor(() => {
-      expect(executionsApi.deleteWorktree).toHaveBeenCalledWith('exec-123')
+      expect(executionsApi.deleteWorktree).toHaveBeenCalledWith('exec-123', false)
     })
   })
 
