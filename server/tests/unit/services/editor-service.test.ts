@@ -141,8 +141,56 @@ describe('EditorService', () => {
       })
     })
 
+    it('should throw WORKTREE_MISSING if worktree path does not exist', async () => {
+      vi.mocked(which).mockResolvedValue('/usr/local/bin/code')
+
+      const error: NodeJS.ErrnoException = new Error('ENOENT')
+      error.code = 'ENOENT'
+      vi.mocked(fs.access).mockRejectedValue(error)
+
+      const config = { editorType: EditorType.VS_CODE }
+
+      await expect(
+        service.spawnEditor('/test/nonexistent', config)
+      ).rejects.toThrow(EditorOpenError)
+
+      await expect(
+        service.spawnEditor('/test/nonexistent', config)
+      ).rejects.toMatchObject({
+        code: 'WORKTREE_MISSING',
+        editorType: EditorType.VS_CODE,
+        message: expect.stringContaining('not found')
+      })
+    })
+
+    it('should throw WORKTREE_MISSING if worktree path is not a directory', async () => {
+      vi.mocked(which).mockResolvedValue('/usr/local/bin/code')
+      vi.mocked(fs.access).mockResolvedValue(undefined)
+      vi.mocked(fs.stat).mockResolvedValue({
+        isDirectory: () => false
+      } as any)
+
+      const config = { editorType: EditorType.VS_CODE }
+
+      await expect(
+        service.spawnEditor('/test/file.txt', config)
+      ).rejects.toThrow(EditorOpenError)
+
+      await expect(
+        service.spawnEditor('/test/file.txt', config)
+      ).rejects.toMatchObject({
+        code: 'WORKTREE_MISSING',
+        editorType: EditorType.VS_CODE,
+        message: expect.stringContaining('not a directory')
+      })
+    })
+
     it('should spawn editor with correct arguments', async () => {
       vi.mocked(which).mockResolvedValue('/usr/local/bin/code')
+      vi.mocked(fs.access).mockResolvedValue(undefined)
+      vi.mocked(fs.stat).mockResolvedValue({
+        isDirectory: () => true
+      } as any)
 
       const config = { editorType: EditorType.VS_CODE }
       await service.spawnEditor('/test/worktree', config)
@@ -170,6 +218,10 @@ describe('EditorService', () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig))
       vi.mocked(which).mockResolvedValue('/usr/local/bin/cursor')
+      vi.mocked(fs.access).mockResolvedValue(undefined)
+      vi.mocked(fs.stat).mockResolvedValue({
+        isDirectory: () => true
+      } as any)
 
       await service.openWorktree('/test/worktree')
 
@@ -190,6 +242,10 @@ describe('EditorService', () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig))
       vi.mocked(which).mockResolvedValue('/usr/local/bin/zed')
+      vi.mocked(fs.access).mockResolvedValue(undefined)
+      vi.mocked(fs.stat).mockResolvedValue({
+        isDirectory: () => true
+      } as any)
 
       await service.openWorktree('/test/worktree', EditorType.ZED)
 

@@ -1,19 +1,18 @@
 /**
  * Editor types and configuration for IDE opening functionality
- * Based on vibe-kanban's editor service patterns
  */
 
 /**
  * Supported editor types for opening worktrees
  */
 export enum EditorType {
-  VS_CODE = 'vs-code',
-  CURSOR = 'cursor',
-  WINDSURF = 'windsurf',
-  INTELLIJ = 'intellij',
-  ZED = 'zed',
-  XCODE = 'xcode',
-  CUSTOM = 'custom'
+  VS_CODE = "vs-code",
+  CURSOR = "cursor",
+  WINDSURF = "windsurf",
+  INTELLIJ = "intellij",
+  ZED = "zed",
+  XCODE = "xcode",
+  CUSTOM = "custom",
 }
 
 /**
@@ -21,17 +20,17 @@ export enum EditorType {
  * Loaded from .sudocode/config.local.json
  */
 export interface EditorConfig {
-  editorType: EditorType
-  customCommand?: string  // Required when editorType === 'custom'
+  editorType: EditorType;
+  customCommand?: string; // Required when editorType === 'custom'
 }
 
 /**
  * Error codes for editor opening failures
  */
 export type EditorErrorCode =
-  | 'EDITOR_NOT_FOUND'    // Editor command not in PATH
-  | 'WORKTREE_MISSING'    // Execution has no worktree path
-  | 'SPAWN_FAILED'        // Process spawn failed
+  | "EDITOR_NOT_FOUND" // Editor command not in PATH
+  | "WORKTREE_MISSING" // Execution has no worktree path
+  | "SPAWN_FAILED"; // Process spawn failed
 
 /**
  * Custom error class for editor opening failures
@@ -44,12 +43,12 @@ export class EditorOpenError extends Error {
     message: string,
     public details?: string
   ) {
-    super(message)
-    this.name = 'EditorOpenError'
+    super(message);
+    this.name = "EditorOpenError";
 
     // Maintains proper stack trace for where error was thrown (V8 only)
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, EditorOpenError)
+      Error.captureStackTrace(this, EditorOpenError);
     }
   }
 
@@ -62,8 +61,8 @@ export class EditorOpenError extends Error {
         code: this.code,
         message: this.message,
         details: this.details,
-        editorType: this.editorType
-      }
-    }
+        editorType: this.editorType,
+      },
+    };
   }
 }
