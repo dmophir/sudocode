@@ -20,6 +20,9 @@ import {
 import { repositoryApi } from '@/lib/api'
 import type { ExecutionConfig, ExecutionMode, Execution } from '@/types/execution'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
+import { CommitChangesDialog } from './CommitChangesDialog'
+import { CleanupWorktreeDialog } from './CleanupWorktreeDialog'
+import { SyncPreviewDialog } from './SyncPreviewDialog'
 import { BranchSelector } from './BranchSelector'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
@@ -324,16 +327,27 @@ export function AgentConfigPanel({
 
   // Get contextual actions based on execution state
   // Actions are handled internally by the hook
-  const { actions, hasActions } = useAgentActions({
+  const {
+    actions,
+    hasActions,
+    isCommitDialogOpen,
+    setIsCommitDialogOpen,
+    isCleanupDialogOpen,
+    setIsCleanupDialogOpen,
+    isCommitting,
+    isCleaning,
+    handleCommitChanges,
+    handleCleanupWorktree,
+    // Sync dialog state
+    syncPreview,
+    isSyncPreviewOpen,
+    setIsSyncPreviewOpen,
+    performSync,
+    isPreviewing,
+  } = useAgentActions({
     execution: currentExecution,
     issueId,
     disabled: disabled || isRunning,
-    // Optional: provide onStart to create follow-up executions
-    onStartExecution: (verificationPrompt: string) => {
-      setPrompt(verificationPrompt)
-      // Optionally auto-focus the textarea
-      textareaRef.current?.focus()
-    },
   })
 
   // Get current project ID for context search
@@ -547,7 +561,7 @@ export function AgentConfigPanel({
     <div className="space-y-2 py-2">
       {/* Contextual Actions */}
       {hasActions && (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           {actions.map((action) => {
             const Icon = action.icon
             return (
@@ -798,6 +812,49 @@ export function AgentConfigPanel({
         onClose={() => setShowSettingsDialog(false)}
         agentType={selectedAgentType}
       />
+
+      {/* Commit Changes Dialog */}
+      {currentExecution && (
+        <CommitChangesDialog
+          execution={currentExecution}
+          isOpen={isCommitDialogOpen}
+          onClose={() => setIsCommitDialogOpen(false)}
+          onConfirm={handleCommitChanges}
+          isCommitting={isCommitting}
+        />
+      )}
+
+      {/* Cleanup Worktree Dialog */}
+      {currentExecution && (
+        <CleanupWorktreeDialog
+          execution={currentExecution}
+          isOpen={isCleanupDialogOpen}
+          onClose={() => setIsCleanupDialogOpen(false)}
+          onConfirm={handleCleanupWorktree}
+          isCleaning={isCleaning}
+        />
+      )}
+
+      {/* Sync Preview Dialog */}
+      {currentExecution && syncPreview && (
+        <SyncPreviewDialog
+          execution={currentExecution}
+          preview={syncPreview}
+          isOpen={isSyncPreviewOpen}
+          onClose={() => setIsSyncPreviewOpen(false)}
+          onConfirmSync={(mode, commitMessage) => {
+            performSync(currentExecution.id, mode, commitMessage)
+          }}
+          onOpenIDE={() => {
+            // Open worktree path in IDE (copy to clipboard for now)
+            if (currentExecution.worktree_path) {
+              navigator.clipboard.writeText(currentExecution.worktree_path)
+              alert(`Worktree path copied to clipboard:\n${currentExecution.worktree_path}\n\nOpen it manually in your IDE.`)
+            }
+          }}
+          isPreviewing={isPreviewing}
+        />
+      )}
     </div>
   )
 }
