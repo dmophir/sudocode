@@ -2,8 +2,9 @@
  * CodeChangesPanel Component Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { CodeChangesPanel } from '@/components/executions/CodeChangesPanel'
 import { useExecutionChanges } from '@/hooks/useExecutionChanges'
 import type { ExecutionChangesResult } from '@/types/execution'
@@ -762,6 +763,357 @@ describe('CodeChangesPanel', () => {
 
       expect(screen.getByText(/Showing current state of branch:/)).toBeInTheDocument()
       expect(screen.getByText('feature-branch')).toBeInTheDocument()
+    })
+  })
+
+  describe('Auto-refresh Behavior', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should call refresh on interval when autoRefreshInterval is provided', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      render(<CodeChangesPanel executionId="exec-123" autoRefreshInterval={5000} />)
+
+      // Initially not called
+      expect(refreshMock).not.toHaveBeenCalled()
+
+      // After 5 seconds, should be called once
+      vi.advanceTimersByTime(5000)
+      expect(refreshMock).toHaveBeenCalledTimes(1)
+
+      // After another 5 seconds, should be called again
+      vi.advanceTimersByTime(5000)
+      expect(refreshMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('should not set up interval when autoRefreshInterval is not provided', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      render(<CodeChangesPanel executionId="exec-123" />)
+
+      // Advance time significantly - should not call refresh
+      vi.advanceTimersByTime(60000)
+      expect(refreshMock).not.toHaveBeenCalled()
+    })
+
+    it('should call refresh when execution status changes from running to completed', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      const { rerender } = render(
+        <CodeChangesPanel executionId="exec-123" executionStatus="running" />
+      )
+
+      // Initially not called
+      expect(refreshMock).not.toHaveBeenCalled()
+
+      // Change status to completed
+      rerender(<CodeChangesPanel executionId="exec-123" executionStatus="completed" />)
+
+      // Should call refresh
+      expect(refreshMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should call refresh when execution status changes from running to stopped', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      const { rerender } = render(
+        <CodeChangesPanel executionId="exec-123" executionStatus="running" />
+      )
+
+      expect(refreshMock).not.toHaveBeenCalled()
+
+      // Change status to stopped
+      rerender(<CodeChangesPanel executionId="exec-123" executionStatus="stopped" />)
+
+      expect(refreshMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should call refresh when execution status changes from running to failed', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      const { rerender } = render(
+        <CodeChangesPanel executionId="exec-123" executionStatus="running" />
+      )
+
+      expect(refreshMock).not.toHaveBeenCalled()
+
+      // Change status to failed
+      rerender(<CodeChangesPanel executionId="exec-123" executionStatus="failed" />)
+
+      expect(refreshMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not call refresh when status changes between non-terminal states', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      const { rerender } = render(
+        <CodeChangesPanel executionId="exec-123" executionStatus="pending" />
+      )
+
+      // Change status to running (non-terminal to non-terminal)
+      rerender(<CodeChangesPanel executionId="exec-123" executionStatus="running" />)
+
+      // Should not call refresh
+      expect(refreshMock).not.toHaveBeenCalled()
+    })
+
+    it('should not call refresh when status changes between terminal states', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      const { rerender } = render(
+        <CodeChangesPanel executionId="exec-123" executionStatus="completed" />
+      )
+
+      // Change status to stopped (terminal to terminal)
+      rerender(<CodeChangesPanel executionId="exec-123" executionStatus="stopped" />)
+
+      // Should not call refresh
+      expect(refreshMock).not.toHaveBeenCalled()
+    })
+
+    it('should call refresh when clicking the refresh button', async () => {
+      // Temporarily use real timers for this user interaction test
+      vi.useRealTimers()
+
+      const user = userEvent.setup()
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: false,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      render(<CodeChangesPanel executionId="exec-123" />)
+
+      const refreshButton = screen.getByTitle('Refresh changes')
+      expect(refreshMock).not.toHaveBeenCalled()
+
+      await user.click(refreshButton)
+
+      expect(refreshMock).toHaveBeenCalledTimes(1)
+
+      // Restore fake timers
+      vi.useFakeTimers()
+    })
+
+    it('should disable refresh button while loading', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: true,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      render(<CodeChangesPanel executionId="exec-123" />)
+
+      const refreshButton = screen.getByTitle('Refresh changes')
+      expect(refreshButton).toBeDisabled()
+    })
+
+    it('should show spinning icon on refresh button while loading', () => {
+      const refreshMock = vi.fn()
+      const data: ExecutionChangesResult = {
+        available: true,
+        captured: {
+          files: [{ path: 'src/file1.ts', additions: 10, deletions: 5, status: 'M' }],
+          summary: {
+            totalFiles: 1,
+            totalAdditions: 10,
+            totalDeletions: 5,
+          },
+          commitRange: { before: 'abc123', after: 'def456' },
+          uncommitted: false,
+        },
+      }
+
+      mockUseExecutionChanges.mockReturnValue({
+        data,
+        loading: true,
+        error: null,
+        refresh: refreshMock,
+      })
+
+      render(<CodeChangesPanel executionId="exec-123" />)
+
+      const refreshButton = screen.getByTitle('Refresh changes')
+      const icon = refreshButton.querySelector('svg')
+      expect(icon).toHaveClass('animate-spin')
     })
   })
 })

@@ -7,6 +7,7 @@
  * @module components/executions/CodeChangesPanel
  */
 
+import { useEffect, useRef } from 'react';
 import { useExecutionChanges } from '@/hooks/useExecutionChanges';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +17,10 @@ import type { FileChangeStat } from '@/types/execution';
 
 interface CodeChangesPanelProps {
   executionId: string;
+  /** Auto-refresh interval in milliseconds. If provided, changes will refresh automatically. */
+  autoRefreshInterval?: number;
+  /** Execution status - used to trigger refresh on completion */
+  executionStatus?: string;
 }
 
 /**
@@ -94,10 +99,47 @@ function FileChangeRow({ file }: { file: FileChangeStat }) {
 /**
  * Code changes panel component
  */
-export function CodeChangesPanel({ executionId }: CodeChangesPanelProps) {
+export function CodeChangesPanel({ executionId, autoRefreshInterval, executionStatus }: CodeChangesPanelProps) {
   const { data, loading, error, refresh } = useExecutionChanges(executionId);
+  const previousStatusRef = useRef<string | undefined>(executionStatus);
 
-  if (loading) {
+  // Set up auto-refresh interval if provided
+  useEffect(() => {
+    if (!autoRefreshInterval) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      refresh();
+    }, autoRefreshInterval);
+
+    // Cleanup interval on unmount or when interval changes
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [autoRefreshInterval, refresh]);
+
+  // Refresh when execution completes
+  useEffect(() => {
+    const previousStatus = previousStatusRef.current;
+    const currentStatus = executionStatus;
+
+    // Update ref for next comparison
+    previousStatusRef.current = currentStatus;
+
+    // If status changed from running to a terminal state, refresh
+    if (
+      previousStatus === 'running' &&
+      currentStatus &&
+      ['completed', 'stopped', 'failed'].includes(currentStatus)
+    ) {
+      console.log(`[CodeChangesPanel] Execution ${executionId} completed, refreshing changes`);
+      refresh();
+    }
+  }, [executionStatus, executionId, refresh]);
+
+  // Show loading state only on initial load (when we have no data yet)
+  if (loading && !data) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -108,7 +150,8 @@ export function CodeChangesPanel({ executionId }: CodeChangesPanelProps) {
     );
   }
 
-  if (error) {
+  // Show error only if we have no data to display
+  if (error && !data) {
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 text-destructive">

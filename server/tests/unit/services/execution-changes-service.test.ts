@@ -289,16 +289,24 @@ describe("ExecutionChangesService", () => {
       expect(result.reason).toBe("incomplete_execution");
     });
 
-    it("should return unavailable for incomplete execution (running)", async () => {
+    it("should support running executions with valid commits", async () => {
+      // Create a real commit to use as before_commit
+      const beforeCommit = execSync("git rev-parse HEAD", {
+        cwd: testRepo,
+        encoding: "utf-8",
+      }).trim();
+
       db.prepare(`
         INSERT INTO executions (id, agent_type, target_branch, branch_name, status, before_commit)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run("exec-8", "claude-code", "main", "main", "running", "abc123");
+      `).run("exec-8", "claude-code", "main", "main", "running", beforeCommit);
 
       const result = await service.getChanges("exec-8");
 
-      expect(result.available).toBe(false);
-      expect(result.reason).toBe("incomplete_execution");
+      // Should succeed for running executions with valid commits
+      expect(result.available).toBe(true);
+      // Should show uncommitted changes (since no after_commit)
+      expect(result.uncommitted).toBe(true);
     });
 
     it("should return unavailable when before_commit is missing", async () => {

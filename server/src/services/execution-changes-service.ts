@@ -57,9 +57,11 @@ export class ExecutionChangesService {
       parent_execution_id: execution.parent_execution_id,
     });
 
-    // 2. Validate status (must be completed or stopped)
-    if (execution.status !== "completed" && execution.status !== "stopped") {
-      console.log(`[ExecutionChangesService] Invalid status: ${execution.status}`);
+    // 2. Validate status (must have started executing)
+    // Allow running, completed, stopped, failed, cancelled - reject pending, preparing, paused
+    const validStatuses = ["running", "completed", "stopped", "failed", "cancelled"];
+    if (!validStatuses.includes(execution.status)) {
+      console.log(`[ExecutionChangesService] Execution not started: ${execution.status}`);
       return {
         available: false,
         reason: "incomplete_execution",
@@ -76,7 +78,7 @@ export class ExecutionChangesService {
     });
     console.log(`[ExecutionChangesService] Computed beforeCommit: ${beforeCommit}`);
 
-    // 3a. Validate before_commit exists (required for calculating any changes)
+    // 4. Validate before_commit exists (required for calculating any changes)
     if (!beforeCommit) {
       console.log(`[ExecutionChangesService] Missing before_commit - cannot calculate changes`);
       return {
@@ -85,13 +87,13 @@ export class ExecutionChangesService {
       };
     }
 
-    // 4. Get branch and worktree information
+    // 5. Get branch and worktree information
     const branchName = execution.branch_name;
     const worktreeExists = execution.worktree_path
       ? existsSync(execution.worktree_path)
       : false;
 
-    // 5. Check if branch exists and get current HEAD
+    // 6. Check if branch exists and get current HEAD
     // Always check the main repo for branch info (branches exist in main repo, not just worktrees)
     let branchExists = false;
     let currentBranchHead: string | null = null;
@@ -102,7 +104,7 @@ export class ExecutionChangesService {
       currentBranchHead = branchInfo.head;
     }
 
-    // 6. Compute captured state (from root to current execution)
+    // 7. Compute captured state (from root to current execution)
     let captured: ChangesSnapshot | undefined;
     const hasCommittedChanges =
       beforeCommit &&
@@ -146,7 +148,7 @@ export class ExecutionChangesService {
       }
     }
 
-    // 7. Compute current state (if branch exists and differs from captured)
+    // 8. Compute current state (if branch exists and differs from captured)
     // Requires beforeCommit to calculate diff
     // Note: Use main repo for git operations (worktree may be deleted)
     let current: ChangesSnapshot | undefined;
@@ -185,7 +187,7 @@ export class ExecutionChangesService {
       }
     }
 
-    // 8. Return result with both states
+    // 9. Return result with both states
     if (!captured) {
       return {
         available: false,

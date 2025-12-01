@@ -764,7 +764,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
               {(rootExecution.before_commit || rootExecution.after_commit) && (
                 <>
                   <div className="my-6" />
-                  <CodeChangesPanel executionId={rootExecution.id} />
+                  <CodeChangesPanel
+                    executionId={rootExecution.id}
+                    autoRefreshInterval={executions.some((exec) => exec.status === 'running') ? 30000 : undefined}
+                    executionStatus={lastExecution.status}
+                  />
                 </>
               )}
 
