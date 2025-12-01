@@ -37,6 +37,7 @@ export interface UpdateExecutionInput {
   worktree_path?: string | null;
   session_id?: string | null;
   summary?: string | null;
+  files_changed?: string | null;
 }
 
 /**
@@ -203,6 +204,11 @@ export function updateExecution(
   if (input.summary !== undefined) {
     updates.push("summary = ?");
     values.push(input.summary);
+  }
+
+  if (input.files_changed !== undefined) {
+    updates.push("files_changed = ?");
+    values.push(input.files_changed);
   }
 
   // Always update updated_at

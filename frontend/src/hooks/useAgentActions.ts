@@ -1,9 +1,11 @@
-import { useMemo, useCallback } from 'react'
-import { GitCommit, CheckCircle, GitBranch, FolderOpen } from 'lucide-react'
+import { useMemo, useCallback, useState } from 'react'
+import { GitCommit, GitMerge, Trash2 } from 'lucide-react'
 import type { Execution } from '@/types/execution'
 import type { LucideIcon } from 'lucide-react'
 import { useExecutionSync } from './useExecutionSync'
 import { toast } from 'sonner'
+import { executionsApi } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 
 /**
  * Represents a contextual action available to the user
@@ -37,12 +39,6 @@ interface UseAgentActionsOptions {
    * Whether actions should be disabled (e.g., when another operation is in progress)
    */
   disabled?: boolean
-
-  /**
-   * Optional callback to start a new execution (for verify action)
-   * If not provided, verify action will use a default prompt
-   */
-  onStartExecution?: (prompt: string) => void | Promise<void>
 }
 
 /**
@@ -52,38 +48,64 @@ interface UseAgentActionsOptions {
  * actions that are available to the user, such as:
  * - Committing code changes
  * - Syncing worktree to target branch
- * - Spawning verification agents
- * - Opening worktree in IDE
+ * - Cleaning up worktree
  *
  * @example
  * ```tsx
  * const { actions, hasActions } = useAgentActions({
  *   execution: latestExecution,
  *   issueId: issue.id,
- *   onStartExecution: handleStartExecution, // Optional: for verify action
  * })
  * ```
  */
 export function useAgentActions(options: UseAgentActionsOptions) {
-  const { execution, issueId, disabled = false, onStartExecution } = options
+  const { execution, issueId, disabled = false } = options
+
+  // Query client for invalidating queries
+  const queryClient = useQueryClient()
 
   // Use execution sync hook for worktree operations
-  const { fetchSyncPreview, openWorktreeInIDE } = useExecutionSync()
+  const {
+    fetchSyncPreview,
+    syncPreview,
+    isSyncPreviewOpen,
+    setIsSyncPreviewOpen,
+    performSync,
+    isPreviewing,
+    syncStatus,
+  } = useExecutionSync()
+
+  // Dialog visibility state
+  const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false)
+  const [isCleanupDialogOpen, setIsCleanupDialogOpen] = useState(false)
+
+  // Loading states
+  const [isCommitting, setIsCommitting] = useState(false)
+  const [isCleaning, setIsCleaning] = useState(false)
 
   // Action handler: Commit changes
-  const handleCommitChanges = useCallback(async () => {
-    if (!execution) return
+  const handleCommitChanges = useCallback(
+    async (message: string) => {
+      if (!execution) return
 
-    try {
-      // TODO: Implement actual commit API call
-      // await executionsApi.commitChanges(execution.id)
-      toast.success('Commit changes functionality coming soon')
-      console.log('Committing changes for execution:', execution.id)
-    } catch (error) {
-      console.error('Failed to commit changes:', error)
-      toast.error('Failed to commit changes')
-    }
-  }, [execution])
+      setIsCommitting(true)
+      try {
+        await executionsApi.commit(execution.id, { message })
+        toast.success('Changes committed successfully')
+        setIsCommitDialogOpen(false)
+
+        // Invalidate execution queries
+        queryClient.invalidateQueries({ queryKey: ['executions'] })
+      } catch (error) {
+        toast.error('Failed to commit changes', {
+          description: error instanceof Error ? error.message : 'Unknown error',
+        })
+      } finally {
+        setIsCommitting(false)
+      }
+    },
+    [execution, queryClient]
+  )
 
   // Action handler: Sync worktree
   const handleSyncWorktree = useCallback(() => {
@@ -98,39 +120,32 @@ export function useAgentActions(options: UseAgentActionsOptions) {
     }
   }, [execution, fetchSyncPreview])
 
-  // Action handler: Open worktree in IDE
-  const handleOpenWorktree = useCallback(async () => {
-    if (!execution) return
+  // Action handler: Cleanup worktree
+  const handleCleanupWorktree = useCallback(
+    async (deleteBranch: boolean) => {
+      if (!execution) return
 
-    try {
-      await openWorktreeInIDE(execution)
-    } catch (error) {
-      console.error('Failed to open worktree:', error)
-      toast.error('Failed to open worktree in IDE')
-    }
-  }, [execution, openWorktreeInIDE])
-
-  // Action handler: Verify code
-  const handleVerifyCode = useCallback(async () => {
-    if (!execution) return
-
-    try {
-      const verificationPrompt = `Review and verify the implementation from execution ${execution.id}`
-
-      if (onStartExecution) {
-        await onStartExecution(verificationPrompt)
-      } else {
-        // Fallback: just show the prompt
-        toast.info('Verification prompt ready', {
-          description: verificationPrompt,
+      setIsCleaning(true)
+      try {
+        await executionsApi.deleteWorktree(execution.id, deleteBranch)
+        toast.success('Worktree cleaned up', {
+          description: deleteBranch ? 'Branch also deleted' : 'Branch preserved',
         })
-        console.log('Verification prompt:', verificationPrompt)
+        setIsCleanupDialogOpen(false)
+
+        // Invalidate queries
+        queryClient.invalidateQueries({ queryKey: ['executions'] })
+        queryClient.invalidateQueries({ queryKey: ['worktrees'] })
+      } catch (error) {
+        toast.error('Failed to cleanup worktree', {
+          description: error instanceof Error ? error.message : 'Unknown error',
+        })
+      } finally {
+        setIsCleaning(false)
       }
-    } catch (error) {
-      console.error('Failed to start verification:', error)
-      toast.error('Failed to start verification agent')
-    }
-  }, [execution, onStartExecution])
+    },
+    [execution, queryClient]
+  )
 
   const actions = useMemo(() => {
     const availableActions: AgentAction[] = []
@@ -155,69 +170,48 @@ export function useAgentActions(options: UseAgentActionsOptions) {
     let filesChanged: string[] = []
     if (execution.files_changed) {
       try {
-        filesChanged =
+        const parsed =
           typeof execution.files_changed === 'string'
             ? JSON.parse(execution.files_changed)
             : execution.files_changed
+        filesChanged = Array.isArray(parsed) ? parsed : [parsed]
       } catch (error) {
         // If it's not JSON, treat it as a single file path
         filesChanged = [execution.files_changed]
       }
     }
 
-    // Action: Commit changes
-    // Show when execution completed and has file changes
-    // Note: We assume changes are uncommitted if after_commit is null
-    const hasUncommittedChanges =
-      execution.status === 'completed' && filesChanged.length > 0 && !execution.after_commit
+    // Determine execution mode and state
+    const isWorktreeMode = execution.mode === 'worktree' || parsedConfig?.mode === 'worktree'
+    const hasWorktreePath = !!execution.worktree_path
+    const hasUncommittedChanges = filesChanged.length > 0 && !execution.after_commit
+    const isTerminalState = ['completed', 'failed', 'stopped', 'cancelled'].includes(
+      execution.status
+    )
 
-    if (hasUncommittedChanges) {
+    if (hasUncommittedChanges && isTerminalState) {
       const fileCount = filesChanged.length
       availableActions.push({
         id: 'commit-changes',
         label: 'Commit Changes',
         icon: GitCommit,
         description: `Commit ${fileCount} file change${fileCount !== 1 ? 's' : ''}`,
-        onClick: handleCommitChanges,
+        onClick: () => setIsCommitDialogOpen(true),
         variant: 'outline',
         disabled,
         badge: fileCount,
       })
     }
 
-    // Determine if execution is in worktree mode
-    const isWorktreeMode = execution.mode === 'worktree' || parsedConfig?.mode === 'worktree'
-    const hasWorktreePath = !!execution.worktree_path
-
-    // Debug logging for worktree actions
-    if (hasWorktreePath || filesChanged.length > 0) {
-    }
-
-    // Action: Open worktree in IDE
-    // Show when execution has an active worktree (regardless of status)
-    // Per i-xdp0: Available when execution has worktree_path
-    if (hasWorktreePath && isWorktreeMode) {
-      availableActions.push({
-        id: 'open-worktree',
-        label: 'Open in IDE',
-        icon: FolderOpen,
-        description: 'Open worktree directory in your IDE',
-        onClick: handleOpenWorktree,
-        variant: 'outline',
-        disabled,
-      })
-    }
-
-    // Action: Sync worktree to local
-    // Show when execution has worktree and there are code changes
-    // Per i-xdp0: Available for ALL execution states when worktree_path exists
+    // Action: Squash & Merge
+    // Available for worktree mode with file changes
     const hasSyncableWorktree = hasWorktreePath && isWorktreeMode && filesChanged.length > 0
 
     if (hasSyncableWorktree) {
       availableActions.push({
-        id: 'sync-worktree',
-        label: 'Sync to Local',
-        icon: GitBranch,
+        id: 'squash-merge',
+        label: 'Squash & Merge',
+        icon: GitMerge,
         description: 'Sync worktree changes to local branch',
         onClick: handleSyncWorktree,
         variant: 'outline',
@@ -225,40 +219,24 @@ export function useAgentActions(options: UseAgentActionsOptions) {
       })
     }
 
-    // Action: Verify code
-    // Show when execution completed successfully
-    const canVerify = execution.status === 'completed'
+    // Action: Cleanup Worktree
+    // Available whenever there's a worktree (user can clean up at any time)
+    const canCleanup = isWorktreeMode && hasWorktreePath
 
-    if (canVerify) {
+    if (canCleanup) {
       availableActions.push({
-        id: 'verify-code',
-        label: 'Verify Code',
-        icon: CheckCircle,
-        description: 'Spawn an agent to verify the implementation',
-        onClick: handleVerifyCode,
+        id: 'cleanup-worktree',
+        label: 'Cleanup Worktree',
+        icon: Trash2,
+        description: 'Delete worktree and optionally the branch',
+        onClick: () => setIsCleanupDialogOpen(true),
         variant: 'outline',
         disabled,
       })
     }
 
-    // Future actions can be added here:
-    // - Review changes (spawn review agent)
-    // - Run tests (trigger test execution)
-    // - Deploy changes (if CI/CD integration)
-    // - Create PR (if worktree ready)
-    // - Rollback changes
-    // etc.
-
     return availableActions
-  }, [
-    execution,
-    issueId,
-    disabled,
-    handleCommitChanges,
-    handleSyncWorktree,
-    handleOpenWorktree,
-    handleVerifyCode,
-  ])
+  }, [execution, issueId, disabled, handleSyncWorktree])
 
   return {
     /**
@@ -275,5 +253,27 @@ export function useAgentActions(options: UseAgentActionsOptions) {
      * Helper to get a specific action by id
      */
     getAction: (id: string) => actions.find((action) => action.id === id),
+
+    // Dialog state
+    isCommitDialogOpen,
+    setIsCommitDialogOpen,
+    isCleanupDialogOpen,
+    setIsCleanupDialogOpen,
+
+    // Loading states
+    isCommitting,
+    isCleaning,
+
+    // Handlers
+    handleCommitChanges,
+    handleCleanupWorktree,
+
+    // Sync dialog state (for SyncPreviewDialog)
+    syncPreview,
+    isSyncPreviewOpen,
+    setIsSyncPreviewOpen,
+    performSync,
+    isPreviewing,
+    syncStatus,
   }
 }

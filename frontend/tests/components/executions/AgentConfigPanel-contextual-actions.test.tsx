@@ -6,7 +6,6 @@ import { AgentConfigPanel } from '@/components/executions/AgentConfigPanel'
 import type { Execution } from '@/types/execution'
 import { WebSocketProvider } from '@/contexts/WebSocketContext'
 import { ProjectProvider } from '@/contexts/ProjectContext'
-import { toast } from 'sonner'
 
 // Mock WebSocket
 vi.mock('@/contexts/WebSocketContext', async () => {
@@ -45,7 +44,7 @@ vi.mock('@/hooks/useExecutionSync', () => ({
   }),
 }))
 
-// Mock executionsApi
+// Mock API modules
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return {
@@ -56,6 +55,26 @@ vi.mock('@/lib/api', async (importOriginal) => {
         renderedPrompt: 'Test prompt',
         issue: { id: 'i-test', title: 'Test', description: 'Test issue' },
       }),
+    },
+    repositoryApi: {
+      getInfo: vi.fn().mockResolvedValue({
+        name: 'test-repo',
+        path: '/test/path',
+        branch: 'main',
+      }),
+      getBranches: vi.fn().mockResolvedValue({
+        current: 'main',
+        branches: ['main', 'develop', 'feature/test'],
+      }),
+    },
+    filesApi: {
+      search: vi.fn().mockResolvedValue([]),
+    },
+    specsApi: {
+      getAll: vi.fn().mockResolvedValue([]),
+    },
+    issuesApi: {
+      getAll: vi.fn().mockResolvedValue([]),
     },
   }
 })
@@ -79,6 +98,26 @@ vi.mock('@/hooks/useWorktrees', () => ({
     isError: false,
     error: null,
   }),
+}))
+
+// Mock caret position utility
+vi.mock('@/lib/caret-position', () => ({
+  getCaretClientRect: vi.fn(() => ({
+    top: 100,
+    left: 100,
+    bottom: 120,
+    right: 200,
+    width: 100,
+    height: 20,
+  })),
+}))
+
+// Mock useProject hook
+vi.mock('@/hooks/useProject', () => ({
+  useProject: vi.fn(() => ({
+    currentProjectId: 'test-project-123',
+    setCurrentProjectId: vi.fn(),
+  })),
 }))
 
 describe('AgentConfigPanel - Contextual Actions', () => {
@@ -147,20 +186,33 @@ describe('AgentConfigPanel - Contextual Actions', () => {
   })
 
   describe('Action Visibility', () => {
-    it('should not show actions when no execution is provided', async () => {
-      renderComponent()
+    it('should not show actions by default (disableContextualActions defaults to true)', async () => {
+      renderComponent({
+        currentExecution: mockCompletedExecution,
+      })
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Sync to Local')).not.toBeInTheDocument()
-        expect(screen.queryByText('Open in IDE')).not.toBeInTheDocument()
-        expect(screen.queryByText('Verify Code')).not.toBeInTheDocument()
+        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
+        expect(screen.queryByText('Cleanup Worktree')).not.toBeInTheDocument()
       })
     })
 
-    it('should show commit action when execution has uncommitted files', async () => {
+    it('should not show actions when no execution is provided', async () => {
+      renderComponent({
+        disableContextualActions: false,
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
+        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should show commit action when execution has uncommitted files and actions are enabled', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -171,6 +223,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
     it('should show file count badge on commit button', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -184,30 +237,22 @@ describe('AgentConfigPanel - Contextual Actions', () => {
     it('should show sync action for worktree executions', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Sync to Local')).toBeInTheDocument()
+        expect(screen.getByText('Squash & Merge')).toBeInTheDocument()
       })
     })
 
-    it('should show open worktree action', async () => {
+    it('should show cleanup action for worktree executions', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Open in IDE')).toBeInTheDocument()
-      })
-    })
-
-    it('should show verify action for completed executions', async () => {
-      renderComponent({
-        currentExecution: mockCompletedExecution,
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText('Verify Code')).toBeInTheDocument()
+        expect(screen.getByText('Cleanup Worktree')).toBeInTheDocument()
       })
     })
 
@@ -219,6 +264,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       renderComponent({
         currentExecution: committedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -226,96 +272,40 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
     })
 
-    it('should not show actions for running executions when disabled', async () => {
+    it('should not show actions for running executions even when enabled', async () => {
       renderComponent({
         currentExecution: {
           ...mockCompletedExecution,
           status: 'running',
         },
         isRunning: true,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
-        // Verify action should be hidden since execution is not completed
-        expect(screen.queryByText('Verify Code')).not.toBeInTheDocument()
+        // Commit action should be hidden since execution is not in terminal state
+        expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
       })
     })
   })
 
   describe('Action Interactions', () => {
-    it('should show toast when commit button is clicked', async () => {
-      const user = userEvent.setup()
-
-      renderComponent({
-        currentExecution: mockCompletedExecution,
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText('Commit Changes')).toBeInTheDocument()
-      })
-
-      const commitButton = screen.getByText('Commit Changes')
-      await user.click(commitButton)
-
-      expect(toast.success).toHaveBeenCalledWith('Commit changes functionality coming soon')
-    })
-
     it('should call fetchSyncPreview when sync button is clicked', async () => {
       const user = userEvent.setup()
 
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Sync to Local')).toBeInTheDocument()
+        expect(screen.getByText('Squash & Merge')).toBeInTheDocument()
       })
 
-      const syncButton = screen.getByText('Sync to Local')
+      const syncButton = screen.getByText('Squash & Merge')
       await user.click(syncButton)
 
       expect(mockFetchSyncPreview).toHaveBeenCalledWith('exec-123')
-    })
-
-    it('should call openWorktreeInIDE when open button is clicked', async () => {
-      const user = userEvent.setup()
-
-      renderComponent({
-        currentExecution: mockCompletedExecution,
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText('Open in IDE')).toBeInTheDocument()
-      })
-
-      const openButton = screen.getByText('Open in IDE')
-      await user.click(openButton)
-
-      await waitFor(() => {
-        expect(mockOpenWorktreeInIDE).toHaveBeenCalledWith(mockCompletedExecution)
-      })
-    })
-
-    it('should populate prompt textarea when verify button is clicked', async () => {
-      const user = userEvent.setup()
-
-      renderComponent({
-        currentExecution: mockCompletedExecution,
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText('Verify Code')).toBeInTheDocument()
-      })
-
-      const verifyButton = screen.getByText('Verify Code')
-      await user.click(verifyButton)
-
-      await waitFor(() => {
-        // Find textarea by role instead of placeholder
-        const textarea = screen.getByRole('textbox')
-        const value = (textarea as HTMLTextAreaElement).value
-        expect(value).toContain('Review and verify the implementation')
-      })
     })
   })
 
@@ -324,18 +314,17 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
         disabled: true,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Sync to Local').closest('button')
-        const openButton = screen.getByText('Open in IDE').closest('button')
-        const verifyButton = screen.getByText('Verify Code').closest('button')
+        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
 
         expect(commitButton).toBeDisabled()
         expect(syncButton).toBeDisabled()
-        expect(openButton).toBeDisabled()
-        expect(verifyButton).toBeDisabled()
+        expect(cleanupButton).toBeDisabled()
       })
     })
 
@@ -343,6 +332,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
         isRunning: true,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -351,9 +341,8 @@ describe('AgentConfigPanel - Contextual Actions', () => {
         const actionButtons = buttons.filter(
           (btn) =>
             btn.textContent?.includes('Commit') ||
-            btn.textContent?.includes('Sync') ||
-            btn.textContent?.includes('Open') ||
-            btn.textContent?.includes('Verify')
+            btn.textContent?.includes('Squash') ||
+            btn.textContent?.includes('Cleanup')
         )
 
         actionButtons.forEach((button) => {
@@ -366,18 +355,17 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
         disabled: false,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Sync to Local').closest('button')
-        const openButton = screen.getByText('Open in IDE').closest('button')
-        const verifyButton = screen.getByText('Verify Code').closest('button')
+        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
 
         expect(commitButton).not.toBeDisabled()
         expect(syncButton).not.toBeDisabled()
-        expect(openButton).not.toBeDisabled()
-        expect(verifyButton).not.toBeDisabled()
+        expect(cleanupButton).not.toBeDisabled()
       })
     })
   })
@@ -386,6 +374,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
     it('should update actions when execution changes', async () => {
       const { rerender } = renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -406,6 +395,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
                 issueId="i-test1"
                 onStart={mockOnStart}
                 currentExecution={committedExecution}
+                disableContextualActions={false}
               />
             </ProjectProvider>
           </WebSocketProvider>
@@ -420,6 +410,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
     it('should clear actions when execution becomes null', async () => {
       const { rerender } = renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
@@ -435,6 +426,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
                 issueId="i-test1"
                 onStart={mockOnStart}
                 currentExecution={null}
+                disableContextualActions={false}
               />
             </ProjectProvider>
           </WebSocketProvider>
@@ -443,33 +435,39 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Sync to Local')).not.toBeInTheDocument()
+        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
       })
     })
   })
 
   describe('Layout and Styling', () => {
-    it('should render actions in a centered container', async () => {
+    it('should render actions in a flex container', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes')
         const container = commitButton.closest('div.flex')
-        expect(container).toHaveClass('items-center', 'justify-center')
+        expect(container).toHaveClass('items-center')
       })
     })
 
-    it('should render action buttons with outline variant', async () => {
+    it('should render action buttons with correct styling', async () => {
       renderComponent({
         currentExecution: mockCompletedExecution,
+        disableContextualActions: false,
       })
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        // Check that button has outline styling (this depends on your Button component implementation)
+        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
+
         expect(commitButton).toBeInTheDocument()
+        expect(syncButton).toBeInTheDocument()
+        expect(cleanupButton).toBeInTheDocument()
       })
     })
   })

@@ -7,6 +7,7 @@
  */
 
 import { Router, Request, Response } from "express";
+import { execSync } from "child_process";
 import { NormalizedEntryToAgUiAdapter } from "../execution/output/normalized-to-ag-ui-adapter.js";
 import { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
 import { agentRegistryService } from "../services/agent-registry.js";
@@ -779,6 +780,164 @@ export function createExecutionsRouter(): Router {
             message: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+    }
+  );
+
+  /**
+   * POST /api/executions/:executionId/commit
+   *
+   * Commit uncommitted changes for an execution
+   *
+   * Commits changes to the appropriate branch based on execution mode:
+   * - Local mode: Commits to target_branch (current branch)
+   * - Worktree mode: Commits to branch_name (temp branch) in worktree
+   *
+   * Request body:
+   * - message: string (required) - Commit message
+   */
+  router.post(
+    "/executions/:executionId/commit",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const { message } = req.body;
+
+        // Validate commit message
+        if (!message || typeof message !== "string" || !message.trim()) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "Commit message is required and must be non-empty",
+          });
+          return;
+        }
+
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Load execution from database
+        const execution = db
+          .prepare("SELECT * FROM executions WHERE id = ?")
+          .get(executionId) as any;
+
+        if (!execution) {
+          res.status(404).json({
+            success: false,
+            data: null,
+            message: "Execution not found",
+          });
+          return;
+        }
+
+        // Parse files_changed
+        let filesChanged: string[] = [];
+        try {
+          if (execution.files_changed) {
+            const parsed =
+              typeof execution.files_changed === "string"
+                ? JSON.parse(execution.files_changed)
+                : execution.files_changed;
+            filesChanged = Array.isArray(parsed) ? parsed : [parsed];
+          }
+        } catch (error) {
+          console.error("Failed to parse files_changed:", error);
+        }
+
+        // Validate has uncommitted changes
+        if (filesChanged.length === 0) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "No files to commit",
+          });
+          return;
+        }
+
+        // Determine working directory and target branch based on mode
+        const mode = execution.mode || "local";
+        const workingDir =
+          mode === "worktree" && execution.worktree_path
+            ? execution.worktree_path
+            : repoPath;
+        const targetBranch =
+          mode === "worktree"
+            ? execution.branch_name
+            : execution.target_branch || "main";
+
+        console.log(
+          `[Commit] Execution ${executionId}: mode=${mode}, workingDir=${workingDir}, targetBranch=${targetBranch}`
+        );
+
+        // Escape commit message for shell
+        const escapedMessage = message.replace(/"/g, '\\"');
+
+        // Execute git operations
+        try {
+          // Add files
+          const addCommand = `git add ${filesChanged.map((f) => `"${f}"`).join(" ")}`;
+          execSync(addCommand, {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          });
+
+          // Commit with message
+          const commitCommand = `git commit -m "${escapedMessage}"`;
+          execSync(commitCommand, {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          });
+
+          // Get commit SHA
+          const commitSha = execSync("git rev-parse HEAD", {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          }).trim();
+
+          console.log(
+            `[Commit] Successfully committed ${filesChanged.length} files: ${commitSha}`
+          );
+
+          // Note: We do NOT update execution.after_commit here
+          // That field represents the state at execution completion time
+          // Manual commits after execution are tracked separately
+
+          res.json({
+            success: true,
+            data: {
+              commitSha,
+              filesCommitted: filesChanged.length,
+              branch: targetBranch,
+            },
+            message: `Successfully committed ${filesChanged.length} file${filesChanged.length !== 1 ? "s" : ""}`,
+          });
+        } catch (gitError) {
+          console.error("Git operation failed:", gitError);
+          const errorMessage =
+            gitError instanceof Error ? gitError.message : String(gitError);
+
+          res.status(500).json({
+            success: false,
+            data: null,
+            message: "Git commit failed",
+            error: errorMessage,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `Failed to commit for execution ${req.params.executionId}:`,
+          error
+        );
+
+        res.status(500).json({
+          success: false,
+          data: null,
+          error: "Internal server error",
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   );
