@@ -89,8 +89,9 @@ describe('Execution Changes Integration Tests', () => {
     // Create database
     db = createTestDatabase()
 
-    // Create project registry and manager
-    projectRegistry = new ProjectRegistry()
+    // Create project registry and manager with isolated config
+    const registryPath = path.join(testDir, 'projects.json')
+    projectRegistry = new ProjectRegistry(registryPath)
     projectManager = new ProjectManager(projectRegistry)
 
     // Open project
@@ -119,11 +120,21 @@ describe('Execution Changes Integration Tests', () => {
     app.use('/api', createExecutionsRouter())
   })
 
-  afterAll(() => {
+  afterAll(async () => {
     // Cleanup
-    if (projectManager) {
+    if (projectManager && projectId) {
       try {
         projectManager.closeProject(projectId)
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
+
+    // Unregister test project from registry
+    if (projectRegistry && projectId) {
+      try {
+        projectRegistry.unregisterProject(projectId)
+        await projectRegistry.save()
       } catch (e) {
         // Ignore errors during cleanup
       }
