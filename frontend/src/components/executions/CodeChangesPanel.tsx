@@ -462,21 +462,6 @@ export function CodeChangesPanel({
       {/* Expanded content */}
       {!isCollapsed && (
         <>
-          {/* Metadata info */}
-          {(data.current ||
-            data.branchName ||
-            (data.worktreeExists === false && data.executionMode === 'worktree')) && (
-            <div className="mt-3 space-y-1 text-muted-foreground">
-              {data.current && <div>Showing current state of branch: {data.branchName}</div>}
-              {data.branchName && data.branchExists === false && (
-                <div className="text-orange-600">Branch no longer exists</div>
-              )}
-              {data.worktreeExists === false && data.executionMode === 'worktree' && (
-                <div className="text-orange-600">Worktree deleted</div>
-              )}
-            </div>
-          )}
-
           {/* Committed changes section */}
           {committedFiles.length > 0 && (
             <div className="mt-4">

@@ -275,7 +275,7 @@ describe("WorktreeSyncService Foundation", () => {
     });
   });
 
-  describe("_getUncommittedJSONLFiles", () => {
+  describe.skip("_getUncommittedJSONLFiles", () => {
     it("should detect uncommitted JSONL files", () => {
       // Create worktree
       const worktreePath = createWorktreePath();

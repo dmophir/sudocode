@@ -129,6 +129,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         ],
         mergeBase: 'def456',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -230,6 +231,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         ],
         mergeBase: 'ghi789',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -313,6 +315,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         commits: [],
         mergeBase: 'abc123',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -393,6 +396,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         commits: [],
         mergeBase: 'abc123',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -444,6 +448,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         commits: [],
         mergeBase: 'abc123',
         uncommittedJSONLChanges: true,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -540,6 +545,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         commits: [],
         mergeBase: 'abc123',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'completed',
         warnings: [],
       }
@@ -650,6 +656,7 @@ describe.skip('Sync Workflow Integration Tests', () => {
         commits: [],
         mergeBase: 'abc123',
         uncommittedJSONLChanges: false,
+        uncommittedFiles: [],
         executionStatus: 'running',
         warnings: ['This execution is still running. Changes may still be in progress.'],
       }

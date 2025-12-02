@@ -188,6 +188,7 @@ export interface SyncPreviewResult {
   commits: Commit[]
   mergeBase: string
   uncommittedJSONLChanges: boolean
+  uncommittedFiles: string[]
   executionStatus: ExecutionStatus
   warnings: string[]
 }
