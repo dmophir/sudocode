@@ -24,6 +24,7 @@ import type { FileChangeStat } from '@/types/execution'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 const CODE_CHANGES_STORAGE_KEY = 'codeChanges.isCollapsed'
+const MAX_FILES_TO_SHOW = 20
 
 interface CodeChangesPanelProps {
   executionId: string
@@ -136,6 +137,9 @@ export function CodeChangesPanel({
       return true
     }
   })
+
+  // State to track whether to show all files or limit to MAX_FILES_TO_SHOW
+  const [showAllFiles, setShowAllFiles] = useState(false)
 
   // Save to localStorage whenever collapse state changes
   useEffect(() => {
@@ -326,9 +330,11 @@ export function CodeChangesPanel({
                 Committed ({committedFiles.length} {committedFiles.length === 1 ? 'file' : 'files'})
               </div>
               <div className="space-y-1">
-                {committedFiles.map((file) => (
-                  <FileChangeRow key={file.path} file={file} />
-                ))}
+                {(showAllFiles ? committedFiles : committedFiles.slice(0, MAX_FILES_TO_SHOW)).map(
+                  (file) => (
+                    <FileChangeRow key={file.path} file={file} />
+                  )
+                )}
               </div>
             </div>
           )}
@@ -341,11 +347,33 @@ export function CodeChangesPanel({
                 {uncommittedFiles.length === 1 ? 'file' : 'files'})
               </div>
               <div className="space-y-1">
-                {uncommittedFiles.map((file) => (
-                  <FileChangeRow key={`uncommitted-${file.path}`} file={file} />
-                ))}
+                {(() => {
+                  // Calculate how many uncommitted files to show based on remaining budget
+                  const committedShown = showAllFiles
+                    ? committedFiles.length
+                    : Math.min(committedFiles.length, MAX_FILES_TO_SHOW)
+                  const remainingBudget = Math.max(0, MAX_FILES_TO_SHOW - committedShown)
+                  const filesToShow = showAllFiles
+                    ? uncommittedFiles
+                    : uncommittedFiles.slice(0, remainingBudget)
+                  return filesToShow.map((file) => (
+                    <FileChangeRow key={`uncommitted-${file.path}`} file={file} />
+                  ))
+                })()}
               </div>
             </div>
+          )}
+
+          {/* Show all / Show less button */}
+          {totalFiles > MAX_FILES_TO_SHOW && (
+            <button
+              onClick={() => setShowAllFiles(!showAllFiles)}
+              className="mt-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showAllFiles
+                ? 'Show less'
+                : `Show all ${totalFiles} files (${totalFiles - MAX_FILES_TO_SHOW} more)`}
+            </button>
           )}
         </>
       )}

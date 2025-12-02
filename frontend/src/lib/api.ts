@@ -21,6 +21,7 @@ import type {
 } from '@/types/api'
 import type {
   Execution,
+  ExecutionStatus,
   CreateExecutionRequest,
   CreateFollowUpRequest,
   SyncPreviewResult,
@@ -209,6 +210,27 @@ export interface ExecutionChainResponse {
   executions: Execution[]
 }
 
+/**
+ * Parameters for listing all executions
+ */
+export interface ListExecutionsParams {
+  limit?: number
+  offset?: number
+  status?: ExecutionStatus | ExecutionStatus[]
+  issueId?: string
+  sortBy?: 'created_at' | 'updated_at'
+  order?: 'asc' | 'desc'
+}
+
+/**
+ * Response from listing all executions
+ */
+export interface ListExecutionsResponse {
+  executions: Execution[]
+  total: number
+  hasMore: boolean
+}
+
 export const executionsApi = {
   // Create and start execution
   create: (issueId: string, request: CreateExecutionRequest) =>
@@ -223,6 +245,27 @@ export const executionsApi = {
 
   // List executions for issue
   list: (issueId: string) => get<Execution[]>(`/issues/${issueId}/executions`),
+
+  // List all executions across all issues with filtering and pagination
+  listAll: (params?: ListExecutionsParams) => {
+    const queryParams = new URLSearchParams()
+
+    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit))
+    if (params?.offset !== undefined) queryParams.append('offset', String(params.offset))
+    if (params?.status) {
+      if (Array.isArray(params.status)) {
+        queryParams.append('status', params.status.join(','))
+      } else {
+        queryParams.append('status', params.status)
+      }
+    }
+    if (params?.issueId) queryParams.append('issueId', params.issueId)
+    if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
+    if (params?.order) queryParams.append('order', params.order)
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
+    return get<ListExecutionsResponse>(`/executions${query}`)
+  },
 
   // Create follow-up execution
   createFollowUp: (executionId: string, request: CreateFollowUpRequest) =>
