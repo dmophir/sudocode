@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/test-utils'
 import { ActivityTimeline } from '@/components/issues/ActivityTimeline'
 import type { IssueFeedback } from '@sudocode-ai/types'
@@ -237,8 +236,7 @@ describe('ActivityTimeline', () => {
       expect(screen.getByText('i-xyz1')).toBeInTheDocument()
     })
 
-    it('should navigate to spec page when clicking outbound feedback target (spec)', async () => {
-      const user = userEvent.setup()
+    it('should link to spec page for outbound feedback target (spec)', () => {
       const feedback = createMockFeedback({
         from_id: 'i-abc1',
         to_id: 's-xyz1',
@@ -248,13 +246,11 @@ describe('ActivityTimeline', () => {
       renderWithProviders(<ActivityTimeline items={items} currentEntityId="i-abc1" />)
 
       const targetBadge = screen.getByText('s-xyz1')
-      await user.click(targetBadge)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/specs/s-xyz1')
+      const link = targetBadge.closest('a')
+      expect(link).toHaveAttribute('href', '/specs/s-xyz1')
     })
 
-    it('should navigate to issue page when clicking outbound feedback target (issue)', async () => {
-      const user = userEvent.setup()
+    it('should link to issue page for outbound feedback target (issue)', () => {
       const feedback = createMockFeedback({
         from_id: 'i-abc1',
         to_id: 'i-def2',
@@ -264,13 +260,11 @@ describe('ActivityTimeline', () => {
       renderWithProviders(<ActivityTimeline items={items} currentEntityId="i-abc1" />)
 
       const targetBadge = screen.getByText('i-def2')
-      await user.click(targetBadge)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/issues/i-def2')
+      const link = targetBadge.closest('a')
+      expect(link).toHaveAttribute('href', '/issues/i-def2')
     })
 
-    it('should navigate to issue page when clicking inbound feedback source', async () => {
-      const user = userEvent.setup()
+    it('should link to issue page for inbound feedback source', () => {
       const feedback = createMockFeedback({
         from_id: 'i-xyz1',
         to_id: 'i-abc1',
@@ -280,9 +274,8 @@ describe('ActivityTimeline', () => {
       renderWithProviders(<ActivityTimeline items={items} currentEntityId="i-abc1" />)
 
       const sourceBadge = screen.getByText('i-xyz1')
-      await user.click(sourceBadge)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/issues/i-xyz1')
+      const link = sourceBadge.closest('a')
+      expect(link).toHaveAttribute('href', '/issues/i-xyz1')
     })
 
     it('should use spec badge variant for spec entities', () => {

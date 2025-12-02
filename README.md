@@ -152,6 +152,63 @@ Navigate dependencies, hierarchies, and relationships:
 ### Agent Feedback Loops
 Agents can update specs with findings during execution, bridging lower to higher abstraction levels to keep humans in the loop.
 
+### IDE Integration
+Open execution worktrees directly in your preferred IDE with a single click. The UI integrates with popular editors to streamline your workflow when reviewing or modifying agent-generated code.
+
+**Supported Editors:**
+- VS Code (`code`)
+- Cursor (`cursor`)
+- Windsurf (`windsurf`)
+- IntelliJ IDEA (`idea`)
+- Zed (`zed`)
+- Xcode (`xed`)
+- Custom command
+
+**Configuration:**
+
+Create `.sudocode/config.local.json` (gitignored) to set your preferred editor:
+
+```json
+{
+  "editor": {
+    "editorType": "vs-code",
+    "customCommand": null
+  }
+}
+```
+
+Or copy from the example:
+```bash
+cp .sudocode/config.local.json.example .sudocode/config.local.json
+```
+
+**Supported Editor Types:**
+- `"vs-code"` - Visual Studio Code
+- `"cursor"` - Cursor
+- `"windsurf"` - Windsurf
+- `"intellij"` - IntelliJ IDEA
+- `"zed"` - Zed
+- `"xcode"` - Xcode
+- `"custom"` - Custom command (requires `customCommand` field)
+
+**Custom Editor Example:**
+```json
+{
+  "editor": {
+    "editorType": "custom",
+    "customCommand": "code-insiders"
+  }
+}
+```
+
+**Troubleshooting:**
+
+If the editor doesn't open:
+1. Verify the editor is installed and in your PATH
+2. Test the command manually: `code /path/to/directory`
+3. Check the editor type in your config matches your installation
+4. For macOS GUI apps, ensure the command-line tool is installed (e.g., VS Code's "Install 'code' command in PATH")
+
 ## Architecture
 
 ### Distributed Git Database
