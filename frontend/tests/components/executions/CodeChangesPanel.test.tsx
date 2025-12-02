@@ -146,9 +146,7 @@ describe('CodeChangesPanel', () => {
 
       render(<CodeChangesPanel executionId="exec-123" />)
 
-      expect(
-        screen.getByText('Changes unavailable: Worktree was deleted before changes were committed')
-      ).toBeInTheDocument()
+      expect(screen.getByText('Changes unavailable: Worktree was deleted')).toBeInTheDocument()
     })
 
     it('should display generic message for unknown reason', () => {
@@ -447,7 +445,6 @@ describe('CodeChangesPanel', () => {
 
       expect(screen.getByText(/Uncommitted \(1 file\)/)).toBeInTheDocument()
     })
-
 
     it('should display committed section for committed changes', async () => {
       const user = userEvent.setup()
@@ -878,7 +875,9 @@ describe('CodeChangesPanel', () => {
       // Expand to see current state info
       await user.click(screen.getByTitle('Expand code changes'))
 
-      expect(screen.getByText(/Showing current state of branch: feature-branch/)).toBeInTheDocument()
+      expect(
+        screen.getByText(/Showing current state of branch: feature-branch/)
+      ).toBeInTheDocument()
     })
   })
 
@@ -1654,10 +1653,17 @@ describe('CodeChangesPanel', () => {
 
         // Mock with a delayed promise to catch loading state
         const mockGetFileDiff = vi.fn().mockImplementation(
-          () => new Promise((resolve) => setTimeout(() => resolve({
-            oldContent: 'old content',
-            newContent: 'new content',
-          }), 100))
+          () =>
+            new Promise((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    oldContent: 'old content',
+                    newContent: 'new content',
+                  }),
+                100
+              )
+            )
         )
         ;(executionsApi.getFileDiff as any) = mockGetFileDiff
 
@@ -1698,6 +1704,5 @@ describe('CodeChangesPanel', () => {
         expect(fileRow?.querySelector('.animate-spin')).toBeInTheDocument()
       })
     })
-
   })
 })

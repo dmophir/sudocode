@@ -55,6 +55,14 @@ vi.mock('@/lib/api', async (importOriginal) => {
         renderedPrompt: 'Test prompt',
         issue: { id: 'i-test', title: 'Test', description: 'Test issue' },
       }),
+      worktreeExists: vi.fn().mockResolvedValue({ exists: true }),
+      getChanges: vi.fn().mockResolvedValue({
+        available: true,
+        captured: { files: [], summary: null, commitRange: null, uncommitted: true },
+        uncommittedSnapshot: { files: ['file1.ts', 'file2.ts', 'file3.ts'], summary: null, commitRange: null },
+      }),
+      commit: vi.fn().mockResolvedValue({}),
+      deleteWorktree: vi.fn().mockResolvedValue({}),
     },
     repositoryApi: {
       getInfo: vi.fn().mockResolvedValue({
@@ -193,7 +201,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
+        expect(screen.queryByText('Merge Changes')).not.toBeInTheDocument()
         expect(screen.queryByText('Cleanup Worktree')).not.toBeInTheDocument()
       })
     })
@@ -205,7 +213,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
+        expect(screen.queryByText('Merge Changes')).not.toBeInTheDocument()
       })
     })
 
@@ -241,7 +249,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Squash & Merge')).toBeInTheDocument()
+        expect(screen.getByText('Merge Changes')).toBeInTheDocument()
       })
     })
 
@@ -256,10 +264,13 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
     })
 
-    it('should not show commit action when files are already committed', async () => {
+    it('should not show commit action when there are no uncommitted files', async () => {
+      // When files are committed, files_changed might still have values
+      // but we're testing the case where there are no uncommitted changes
       const committedExecution: Execution = {
         ...mockCompletedExecution,
         after_commit: 'def456',
+        files_changed: null, // No uncommitted changes to commit
       }
 
       renderComponent({
@@ -299,10 +310,10 @@ describe('AgentConfigPanel - Contextual Actions', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByText('Squash & Merge')).toBeInTheDocument()
+        expect(screen.getByText('Merge Changes')).toBeInTheDocument()
       })
 
-      const syncButton = screen.getByText('Squash & Merge')
+      const syncButton = screen.getByText('Merge Changes')
       await user.click(syncButton)
 
       expect(mockFetchSyncPreview).toHaveBeenCalledWith('exec-123')
@@ -319,7 +330,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const syncButton = screen.getByText('Merge Changes').closest('button')
         const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
 
         expect(commitButton).toBeDisabled()
@@ -360,7 +371,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const syncButton = screen.getByText('Merge Changes').closest('button')
         const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
 
         expect(commitButton).not.toBeDisabled()
@@ -381,10 +392,11 @@ describe('AgentConfigPanel - Contextual Actions', () => {
         expect(screen.getByText('Commit Changes')).toBeInTheDocument()
       })
 
-      // Change to committed execution
+      // Change to execution with no uncommitted changes
       const committedExecution: Execution = {
         ...mockCompletedExecution,
         after_commit: 'def456',
+        files_changed: null, // No uncommitted changes
       }
 
       rerender(
@@ -435,7 +447,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Commit Changes')).not.toBeInTheDocument()
-        expect(screen.queryByText('Squash & Merge')).not.toBeInTheDocument()
+        expect(screen.queryByText('Merge Changes')).not.toBeInTheDocument()
       })
     })
   })
@@ -462,7 +474,7 @@ describe('AgentConfigPanel - Contextual Actions', () => {
 
       await waitFor(() => {
         const commitButton = screen.getByText('Commit Changes').closest('button')
-        const syncButton = screen.getByText('Squash & Merge').closest('button')
+        const syncButton = screen.getByText('Merge Changes').closest('button')
         const cleanupButton = screen.getByText('Cleanup Worktree').closest('button')
 
         expect(commitButton).toBeInTheDocument()

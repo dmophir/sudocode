@@ -39,6 +39,31 @@ interface UseAgentActionsOptions {
    * Whether actions should be disabled (e.g., when another operation is in progress)
    */
   disabled?: boolean
+
+  /**
+   * Whether the worktree still exists on disk (for worktree mode executions)
+   * If false, worktree-related actions (commit, sync, cleanup) will be hidden
+   */
+  worktreeExists?: boolean
+
+  /**
+   * Callback called after worktree cleanup completes successfully
+   * Use this to update local state (e.g., worktreeExists)
+   */
+  onCleanupComplete?: () => void
+
+  /**
+   * Callback called after commit completes successfully
+   * Use this to reload execution data to reflect committed state
+   */
+  onCommitComplete?: () => void
+
+  /**
+   * Whether the worktree has uncommitted changes (for worktree mode)
+   * If false, commit action will be hidden even if files_changed is set
+   * Defaults to undefined (uses files_changed as fallback)
+   */
+  hasUncommittedChanges?: boolean
 }
 
 /**
@@ -59,7 +84,15 @@ interface UseAgentActionsOptions {
  * ```
  */
 export function useAgentActions(options: UseAgentActionsOptions) {
-  const { execution, issueId, disabled = false } = options
+  const {
+    execution,
+    issueId,
+    disabled = false,
+    worktreeExists = true,
+    onCleanupComplete,
+    onCommitComplete,
+    hasUncommittedChanges,
+  } = options
 
   // Query client for invalidating queries
   const queryClient = useQueryClient()
@@ -96,6 +129,9 @@ export function useAgentActions(options: UseAgentActionsOptions) {
 
         // Invalidate execution queries
         queryClient.invalidateQueries({ queryKey: ['executions'] })
+
+        // Notify parent component to refresh data
+        onCommitComplete?.()
       } catch (error) {
         toast.error('Failed to commit changes', {
           description: error instanceof Error ? error.message : 'Unknown error',
@@ -104,7 +140,7 @@ export function useAgentActions(options: UseAgentActionsOptions) {
         setIsCommitting(false)
       }
     },
-    [execution, queryClient]
+    [execution, queryClient, onCommitComplete]
   )
 
   // Action handler: Sync worktree
@@ -136,6 +172,9 @@ export function useAgentActions(options: UseAgentActionsOptions) {
         // Invalidate queries
         queryClient.invalidateQueries({ queryKey: ['executions'] })
         queryClient.invalidateQueries({ queryKey: ['worktrees'] })
+
+        // Notify parent component
+        onCleanupComplete?.()
       } catch (error) {
         toast.error('Failed to cleanup worktree', {
           description: error instanceof Error ? error.message : 'Unknown error',
@@ -144,7 +183,7 @@ export function useAgentActions(options: UseAgentActionsOptions) {
         setIsCleaning(false)
       }
     },
-    [execution, queryClient]
+    [execution, queryClient, onCleanupComplete]
   )
 
   const actions = useMemo(() => {
@@ -184,12 +223,22 @@ export function useAgentActions(options: UseAgentActionsOptions) {
     // Determine execution mode and state
     const isWorktreeMode = execution.mode === 'worktree' || parsedConfig?.mode === 'worktree'
     const hasWorktreePath = !!execution.worktree_path
-    const hasUncommittedChanges = filesChanged.length > 0 && !execution.after_commit
+    const hasFileChanges = filesChanged.length > 0
     const isTerminalState = ['completed', 'failed', 'stopped', 'cancelled'].includes(
       execution.status
     )
 
-    if (hasUncommittedChanges && isTerminalState) {
+    // Action: Commit Changes
+    // For worktree mode: show when there are uncommitted changes AND worktree still exists
+    // For local mode: show when there are uncommitted changes
+    // Use hasUncommittedChanges if provided, otherwise fall back to hasFileChanges
+    const hasChangesToCommit =
+      hasUncommittedChanges !== undefined ? hasUncommittedChanges : hasFileChanges
+    const showCommitAction = isWorktreeMode
+      ? hasChangesToCommit && hasWorktreePath && worktreeExists
+      : hasChangesToCommit
+
+    if (showCommitAction && isTerminalState) {
       const fileCount = filesChanged.length
       availableActions.push({
         id: 'commit-changes',
@@ -197,31 +246,32 @@ export function useAgentActions(options: UseAgentActionsOptions) {
         icon: GitCommit,
         description: `Commit ${fileCount} file change${fileCount !== 1 ? 's' : ''}`,
         onClick: () => setIsCommitDialogOpen(true),
-        variant: 'outline',
+        variant: 'secondary',
         disabled,
-        badge: fileCount,
+        badge: fileCount > 0 ? fileCount : undefined,
       })
     }
 
     // Action: Squash & Merge
-    // Available for worktree mode with file changes
-    const hasSyncableWorktree = hasWorktreePath && isWorktreeMode && filesChanged.length > 0
+    // Available for worktree mode with file changes AND worktree still exists
+    const hasSyncableWorktree =
+      hasWorktreePath && isWorktreeMode && filesChanged.length > 0 && worktreeExists
 
     if (hasSyncableWorktree) {
       availableActions.push({
         id: 'squash-merge',
-        label: 'Squash & Merge',
+        label: 'Merge Changes',
         icon: GitMerge,
         description: 'Sync worktree changes to local branch',
         onClick: handleSyncWorktree,
-        variant: 'outline',
+        variant: 'secondary',
         disabled,
       })
     }
 
     // Action: Cleanup Worktree
-    // Available whenever there's a worktree (user can clean up at any time)
-    const canCleanup = isWorktreeMode && hasWorktreePath
+    // Available whenever there's a worktree that still exists
+    const canCleanup = isWorktreeMode && hasWorktreePath && worktreeExists
 
     if (canCleanup) {
       availableActions.push({
@@ -230,13 +280,13 @@ export function useAgentActions(options: UseAgentActionsOptions) {
         icon: Trash2,
         description: 'Delete worktree and optionally the branch',
         onClick: () => setIsCleanupDialogOpen(true),
-        variant: 'outline',
+        variant: 'secondary',
         disabled,
       })
     }
 
     return availableActions
-  }, [execution, issueId, disabled, handleSyncWorktree])
+  }, [execution, issueId, disabled, handleSyncWorktree, worktreeExists, hasUncommittedChanges])
 
   return {
     /**

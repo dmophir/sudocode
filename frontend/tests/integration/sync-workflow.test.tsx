@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
   executionsApi: {
     getChain: vi.fn(),
     worktreeExists: vi.fn(),
+    getChanges: vi.fn(),
     syncPreview: vi.fn(),
     syncSquash: vi.fn(),
     syncPreserve: vi.fn(),
@@ -98,6 +99,15 @@ describe.skip('Sync Workflow Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+    vi.mocked(executionsApi.getChanges).mockResolvedValue({
+      available: true,
+      captured: {
+        files: [],
+        summary: { totalFiles: 0, totalAdditions: 0, totalDeletions: 0 },
+        commitRange: null,
+        uncommitted: false,
+      },
+    })
   })
 
   describe('Scenario 1: Happy Path - Squash Sync', () => {

@@ -57,7 +57,7 @@ function getReasonMessage(reason?: string): string {
     case 'git_error':
       return 'Git operation failed'
     case 'worktree_deleted_with_uncommitted_changes':
-      return 'Worktree was deleted before changes were committed'
+      return 'Worktree was deleted'
     case 'branch_deleted':
       return 'Branch no longer exists, showing captured state'
     default:
