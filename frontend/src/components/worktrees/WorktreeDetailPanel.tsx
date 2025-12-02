@@ -8,9 +8,7 @@ import {
   GitCommit,
   FileText,
   FilePen,
-  AlertCircle,
   Loader2,
-  GitMerge,
   FolderOpen,
   Trash2,
 } from 'lucide-react'
@@ -31,7 +29,7 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const { fetchSyncPreview, openWorktreeInIDE, cleanupWorktree, isPreviewing } = useExecutionSync()
+  const { openWorktreeInIDE, cleanupWorktree } = useExecutionSync()
 
   // Fetch sync preview when execution changes
   useEffect(() => {
@@ -72,10 +70,10 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
     }
   }, [execution])
 
-  const handleSync = useCallback(() => {
-    if (!execution) return
-    fetchSyncPreview(execution.id)
-  }, [execution, fetchSyncPreview])
+  // const handleSync = useCallback(() => {
+  //   if (!execution) return
+  //   fetchSyncPreview(execution.id)
+  // }, [execution, fetchSyncPreview])
 
   const handleOpenIDE = useCallback(() => {
     if (!execution) return
@@ -107,7 +105,6 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
     )
   }
 
-  const hasConflicts = syncPreview?.conflicts?.hasConflicts ?? false
   const totalAdditions = syncPreview?.diff?.additions ?? 0
   const totalDeletions = syncPreview?.diff?.deletions ?? 0
 
@@ -122,8 +119,7 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
           <h3 className="mb-3 text-sm font-semibold">Overview</h3>
           <div className="flex flex-col gap-2 text-sm">
             {/* Branch */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Branch</span>
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
                 <GitBranch className="h-3 w-3" />
                 <span className="text-xs font-medium">{execution.branch_name}</span>
@@ -132,19 +128,19 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
 
             {/* Worktree Path */}
             {execution.worktree_path && (
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-muted-foreground">Path</span>
-                <div className="flex max-w-[200px] items-center gap-1">
-                  <span className="truncate font-mono text-xs">{execution.worktree_path}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyPath}
-                    className="h-5 w-5 shrink-0 p-0"
-                  >
-                    {isCopiedPath ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 text-muted-foreground">Path:</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                  {execution.worktree_path}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyPath}
+                  className="h-5 w-5 shrink-0 p-0"
+                >
+                  {isCopiedPath ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
               </div>
             )}
           </div>
@@ -210,7 +206,7 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
 
         {/* Files Changed Section - Uncommitted */}
         {syncPreview?.uncommittedFiles && syncPreview.uncommittedFiles.length > 0 && (
-          <Card className="p-4 border-yellow-500/50">
+          <Card className="border-yellow-500/50 p-4">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-yellow-600 dark:text-yellow-400">
               <FilePen className="h-4 w-4" />
               Uncommitted Changes ({syncPreview.uncommittedFiles.length})
@@ -230,42 +226,12 @@ export function WorktreeDetailPanel({ execution }: WorktreeDetailPanelProps) {
           </Card>
         )}
 
-        {/* Conflicts Section */}
-        {hasConflicts && syncPreview?.conflicts && (
-          <Card className="border-destructive p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              Conflicts ({syncPreview.conflicts.totalFiles})
-            </h3>
-            <div className="flex flex-col gap-2 text-xs">
-              {syncPreview.conflicts.codeConflicts.map((conflict, index) => (
-                <div key={index} className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
-                  <div>
-                    <div className="font-mono">{conflict.filePath}</div>
-                    <div className="text-muted-foreground">Requires manual resolution</div>
-                  </div>
-                </div>
-              ))}
-              {syncPreview.conflicts.jsonlConflicts.map((conflict, index) => (
-                <div key={index} className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-yellow-600" />
-                  <div>
-                    <div className="font-mono">{conflict.filePath}</div>
-                    <div className="text-muted-foreground">Auto-resolvable</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
         {/* Action Bar */}
         <div className="flex flex-col gap-2 pt-2">
-          <Button onClick={handleSync} disabled={isPreviewing}>
+          {/* <Button onClick={handleSync} disabled={isPreviewing}>
             <GitMerge className="mr-2 h-4 w-4" />
             Sync to Local
-          </Button>
+          </Button> */}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={handleOpenIDE} className="w-full">
               <FolderOpen className="mr-2 h-4 w-4" />
