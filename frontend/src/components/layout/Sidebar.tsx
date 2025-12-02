@@ -39,6 +39,12 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
     //   label: 'Worktrees',
     //   icon: GitBranch,
     // },
+    // TODO: Re-enable when mature
+    // {
+    //   path: '/executions',
+    //   label: 'Agent Executions',
+    //   icon: PlayCircle,
+    // },
   ]
 
   return (

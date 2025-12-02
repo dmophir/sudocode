@@ -16,6 +16,7 @@ import ArchivedSpecsPage from '@/pages/ArchivedSpecsPage'
 import ExecutionDetailPage from '@/pages/ExecutionDetailPage'
 import WorktreesPage from '@/pages/WorktreesPage'
 import ProjectsPage from '@/pages/ProjectsPage'
+import ExecutionsPage from '@/pages/ExecutionsPage'
 
 // Configure TanStack Query
 const queryClient = new QueryClient({
@@ -93,6 +94,14 @@ function App() {
                     element={
                       <ProtectedRoute>
                         <WorktreesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="executions"
+                    element={
+                      <ProtectedRoute>
+                        <ExecutionsPage />
                       </ProtectedRoute>
                     }
                   />
