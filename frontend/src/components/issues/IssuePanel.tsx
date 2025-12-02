@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { EntityBadge } from '@/components/entities'
 import {
   Select,
   SelectContent,
@@ -1011,11 +1012,10 @@ export function IssuePanel({
                     <>
                       <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">Parent: </span>
-                      <button onClick={() => navigate(`/issues/${issue.parent_id}`)}>
-                        <Badge variant="issue" className="cursor-pointer hover:opacity-80">
-                          {issue.parent_id}
-                        </Badge>
-                      </button>
+                      <EntityBadge
+                        entityId={issue.parent_id}
+                        entityType="issue"
+                      />
                     </>
                   )}
                 </div>

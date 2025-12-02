@@ -1,22 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithProviders } from '@/test/test-utils'
 import { TiptapMarkdownViewer } from '@/components/specs/TiptapMarkdownViewer'
-
-// Wrapper component to provide router context
-const Wrapper = ({ children }: { children: React.ReactNode }) => (
-  <BrowserRouter>{children}</BrowserRouter>
-)
 
 describe('Entity Mention Rendering', () => {
   it('should render basic issue mention as badge', async () => {
     const content = 'This references [[ISSUE-001]]'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     // Wait for Tiptap to process the content and render the link
     await waitFor(
@@ -35,11 +26,7 @@ describe('Entity Mention Rendering', () => {
   it('should render spec mention as badge', async () => {
     const content = 'See [[SPEC-002]] for details'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -56,11 +43,7 @@ describe('Entity Mention Rendering', () => {
   it('should render mention with display text', async () => {
     const content = '[[ISSUE-003|OAuth Implementation]]'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -77,11 +60,7 @@ describe('Entity Mention Rendering', () => {
   it('should render mention with relationship type', async () => {
     const content = '[[ISSUE-004]]{ implements }'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -94,18 +73,15 @@ describe('Entity Mention Rendering', () => {
     const link = screen.getByRole('link', { name: /ISSUE-004/i })
     expect(link).toHaveAttribute('href', '/issues/ISSUE-004')
 
-    // Check that relationship type is rendered as text
-    expect(screen.getByText(/implements/i)).toBeInTheDocument()
+    // Check that relationship type is rendered as text (may appear multiple times)
+    const implementsElements = screen.getAllByText(/implements/i)
+    expect(implementsElements.length).toBeGreaterThan(0)
   })
 
   it('should render multiple mentions', async () => {
     const content = '[[ISSUE-001]] and [[SPEC-002]] and [[ISSUE-003|Display]]'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -120,11 +96,7 @@ describe('Entity Mention Rendering', () => {
   it('should create clickable links to entity pages', async () => {
     const content = '[[ISSUE-005]]'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -141,11 +113,7 @@ describe('Entity Mention Rendering', () => {
   it('should not render escaped mentions', async () => {
     const content = 'Escaped: \\[\\[ISSUE-006\\]\\]'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     // Wait a bit for any processing
     await new Promise((resolve) => setTimeout(resolve, 500))
@@ -169,11 +137,7 @@ This is a paragraph with [[ISSUE-001]].
 - List item with [[SPEC-002|Spec]]
 - Another with [[ISSUE-003]]{ implements }`
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
@@ -192,11 +156,7 @@ This is a paragraph with [[ISSUE-001]].
   it('should handle empty content gracefully', async () => {
     const content = ''
 
-    const { container } = render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    const { container } = renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     // Should not crash
     expect(container).toBeInTheDocument()
@@ -205,11 +165,7 @@ This is a paragraph with [[ISSUE-001]].
   it('should handle content with no entity mentions', async () => {
     const content = 'Just regular text with no mentions'
 
-    render(
-      <Wrapper>
-        <TiptapMarkdownViewer content={content} />
-      </Wrapper>
-    )
+    renderWithProviders(<TiptapMarkdownViewer content={content} />)
 
     await waitFor(
       () => {
