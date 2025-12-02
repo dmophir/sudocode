@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { EntityBadge } from '@/components/entities'
 import {
   MessageSquare,
   MessageSquareShare,
@@ -40,7 +40,6 @@ export function ActivityTimeline({
   className = '',
   lastFeedbackRef,
 }: ActivityTimelineProps) {
-  const navigate = useNavigate()
   const [collapsedFeedback, setCollapsedFeedback] = useState<Set<string>>(new Set())
   const [userToggledFeedback, setUserToggledFeedback] = useState<Set<string>>(new Set())
 
@@ -50,10 +49,6 @@ export function ActivityTimeline({
   // Helper to get the "other" entity ID for navigation
   const getOtherEntityId = (feedback: IssueFeedback) =>
     isOutboundFeedback(feedback) ? feedback.to_id : feedback.from_id
-
-  // Helper to get navigation path based on entity type (spec or issue)
-  const getEntityPath = (entityId: string) =>
-    entityId.startsWith('s-') ? `/specs/${entityId}` : `/issues/${entityId}`
 
   // Sort items chronologically (oldest first)
   const sortedItems = useMemo(
@@ -143,7 +138,6 @@ export function ActivityTimeline({
   const renderFeedback = (feedback: IssueFeedback, isLastFeedback: boolean) => {
     const isOutbound = isOutboundFeedback(feedback)
     const otherEntityId = getOtherEntityId(feedback)
-    const otherEntityPath = getEntityPath(otherEntityId)
     const isSpec = otherEntityId.startsWith('s-')
     const isExpanded = !collapsedFeedback.has(feedback.id)
 
@@ -187,36 +181,22 @@ export function ActivityTimeline({
                   {isOutbound ? (
                     <>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(otherEntityPath)
-                        }}
-                      >
-                        <Badge
-                          variant={isSpec ? 'spec' : 'issue'}
-                          className="cursor-pointer font-mono text-xs hover:opacity-80"
-                        >
-                          {otherEntityId}
-                        </Badge>
-                      </button>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <EntityBadge
+                          entityId={otherEntityId}
+                          entityType={isSpec ? 'spec' : 'issue'}
+                        />
+                      </span>
                     </>
                   ) : (
                     <>
                       <span className="text-xs text-muted-foreground">from</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(otherEntityPath)
-                        }}
-                      >
-                        <Badge
-                          variant={isSpec ? 'spec' : 'issue'}
-                          className="cursor-pointer font-mono text-xs hover:opacity-80"
-                        >
-                          {otherEntityId}
-                        </Badge>
-                      </button>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <EntityBadge
+                          entityId={otherEntityId}
+                          entityType={isSpec ? 'spec' : 'issue'}
+                        />
+                      </span>
                     </>
                   )}
                   {/* Timestamp */}
