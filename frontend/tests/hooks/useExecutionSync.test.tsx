@@ -82,6 +82,7 @@ describe('useExecutionSync', () => {
         ],
         mergeBase: 'def456',
         uncommittedJSONLChanges: false,
+        uncommittedChanges: { files: [], additions: 0, deletions: 0 },
         executionStatus: 'completed',
         warnings: [],
       }
@@ -184,8 +185,8 @@ describe('useExecutionSync', () => {
         success: true,
         finalCommit: 'abc123',
         filesChanged: 5,
-        conflictsResolved: 2,
-        uncommittedJSONLIncluded: true,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: false,
       }
 
@@ -195,7 +196,7 @@ describe('useExecutionSync', () => {
       const { result } = renderHook(() => useExecutionSync({ onSyncSuccess }), { wrapper })
 
       act(() => {
-        result.current.performSync('exec-123', 'squash', 'Test commit message')
+        result.current.performSync('exec-123', 'squash', { commitMessage: 'Test commit message' })
       })
 
       // Wait for success (status will transition through syncing to success)
@@ -223,8 +224,8 @@ describe('useExecutionSync', () => {
         success: true,
         finalCommit: 'def456',
         filesChanged: 3,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: true,
       }
 
@@ -233,7 +234,7 @@ describe('useExecutionSync', () => {
       const { result } = renderHook(() => useExecutionSync(), { wrapper })
 
       act(() => {
-        result.current.performSync('exec-123', 'preserve')
+        result.current.performSync('exec-123', 'preserve', {})
       })
 
       await waitFor(() => {
@@ -252,8 +253,7 @@ describe('useExecutionSync', () => {
       const mockResult: SyncResult = {
         success: false,
         filesChanged: 0,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: true,
         error: 'Merge conflict',
       }
 
@@ -396,10 +396,17 @@ describe('useExecutionSync', () => {
 
       const { result } = renderHook(() => useExecutionSync(), { wrapper })
 
+      let thrownError: Error | undefined
       await act(async () => {
-        await result.current.cleanupWorktree('exec-123')
+        try {
+          await result.current.cleanupWorktree('exec-123')
+        } catch (e) {
+          thrownError = e as Error
+        }
       })
 
+      expect(thrownError).toBeDefined()
+      expect(thrownError?.message).toBe('Cleanup failed')
       expect(result.current.syncError).toBe('Cleanup failed')
 
       consoleSpy.mockRestore()

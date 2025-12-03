@@ -116,10 +116,17 @@ api.interceptors.response.use(
 
     // Handle HTTP errors
     const status = error.response.status
+    const responseData = error.response.data as ApiResponse<any> | undefined
+
     if (status === 404) {
-      throw new Error('Resource not found')
+      throw new Error(responseData?.message || 'Resource not found')
+    } else if (status === 400) {
+      // Bad request - extract the message from the response
+      throw new Error(responseData?.message || 'Bad request')
     } else if (status === 500) {
-      throw new Error('Server error: Please try again later')
+      // Server error - include the actual error message if available
+      const message = responseData?.message || 'Server error: Please try again later'
+      throw new Error(message)
     }
 
     throw error
@@ -309,6 +316,9 @@ export const executionsApi = {
   syncPreserve: (executionId: string, request?: PerformSyncRequest) =>
     post<SyncResult>(`/executions/${executionId}/sync/preserve`, request),
 
+  syncStage: (executionId: string, options?: { includeUncommitted?: boolean }) =>
+    post<SyncResult>(`/executions/${executionId}/sync/stage`, options),
+
   // Commit uncommitted changes
   commit: (executionId: string, request: { message: string }) =>
     post<{ commitSha: string; filesCommitted: number; branch: string }>(
@@ -338,6 +348,11 @@ export const repositoryApi = {
   getInfo: () => get<RepositoryInfo>('/repo-info'),
   getBranches: () => get<BranchInfo>('/repo-info/branches'),
   listWorktrees: () => get<Execution[]>('/repo-info/worktrees'),
+  previewWorktreeSync: (params: {
+    worktreePath: string
+    branchName: string
+    targetBranch: string
+  }) => post<SyncPreviewResult>('/repo-info/worktrees/preview', params),
 }
 
 /**
@@ -348,7 +363,6 @@ export const filesApi = {
     get<{ results: FileSearchResult[] }>(
       `/files/search?q=${encodeURIComponent(query)}${options?.limit ? `&limit=${options.limit}` : ''}${options?.includeDirectories ? `&includeDirectories=${options.includeDirectories}` : ''}`
     ).then((res) => res.results),
-  listWorktrees: () => get<Execution[]>('/repo-info/worktrees'),
 }
 
 /**

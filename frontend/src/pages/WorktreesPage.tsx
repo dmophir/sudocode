@@ -9,7 +9,6 @@ import type { Execution } from '@/types/execution'
 import { WorktreeList } from '@/components/worktrees/WorktreeList'
 import { WorktreeDetailPanel } from '@/components/worktrees/WorktreeDetailPanel'
 import { SyncPreviewDialog } from '@/components/executions/SyncPreviewDialog'
-import { SyncProgressDialog } from '@/components/executions/SyncProgressDialog'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
@@ -54,17 +53,7 @@ export default function WorktreesPage() {
   const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false)
 
   // Sync state management for dialogs
-  const {
-    syncPreview,
-    syncStatus,
-    syncResult,
-    syncError,
-    isSyncPreviewOpen,
-    isSyncProgressOpen,
-    performSync,
-    setIsSyncPreviewOpen,
-    setIsSyncProgressOpen,
-  } = useExecutionSync()
+  const { syncPreview, isSyncPreviewOpen, performSync, setIsSyncPreviewOpen } = useExecutionSync()
 
   // Initialize selected worktree from URL hash on mount
   useEffect(() => {
@@ -175,19 +164,22 @@ export default function WorktreesPage() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b bg-background p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <GitBranch className="h-5 w-5" />
-            <h1 className="text-xl font-semibold">Worktrees</h1>
+            <h1 className="text-2xl font-bold">Worktrees</h1>
             <Badge variant="secondary">{sortedWorktrees.length}</Badge>
           </div>
-          {repoInfo && currentProject && (
-            <div className="hidden text-sm text-muted-foreground md:block">
-              <span className="font-medium">{currentProject.name}</span>
-              {repoInfo.branch && (
-                <span className="ml-2">
-                  on <span className="font-mono">{repoInfo.branch}</span>
-                </span>
+          {(currentProject || repoInfo) && (
+            <div className="flex flex-col gap-0.5 pl-3 text-sm">
+              {currentProject && (
+                <div className="font-medium text-foreground">{currentProject.name}</div>
+              )}
+              {repoInfo && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium">{repoInfo.name}</span>
+                  <GitBranch className="h-3.5 w-3.5" />
+                  <span>{repoInfo.branch}</span>
+                </div>
               )}
             </div>
           )}
@@ -263,26 +255,13 @@ export default function WorktreesPage() {
       {/* Sync Dialogs */}
       {syncPreview && selectedWorktree && (
         <SyncPreviewDialog
-          execution={selectedWorktree}
           preview={syncPreview}
           isOpen={isSyncPreviewOpen}
           onClose={() => setIsSyncPreviewOpen(false)}
-          onConfirmSync={(mode, commitMessage) =>
-            performSync(selectedWorktree.id, mode, commitMessage)
-          }
+          onConfirmSync={(mode, options) => performSync(selectedWorktree.id, mode, options)}
           onOpenIDE={() => {}}
           isPreviewing={false}
-        />
-      )}
-
-      {selectedWorktree && (
-        <SyncProgressDialog
-          execution={selectedWorktree}
-          syncStatus={syncStatus === 'previewing' ? 'idle' : syncStatus}
-          syncResult={syncResult}
-          syncError={syncError}
-          isOpen={isSyncProgressOpen}
-          onClose={() => setIsSyncProgressOpen(false)}
+          targetBranch={selectedWorktree.target_branch ?? undefined}
         />
       )}
     </div>

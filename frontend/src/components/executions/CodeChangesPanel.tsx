@@ -41,6 +41,8 @@ interface CodeChangesPanelProps {
   worktreePath?: string | null
   /** Diff expansion mode: 'inline' shows diff inline, 'modal' opens in full-screen modal (default: 'inline') */
   diffMode?: 'inline' | 'modal'
+  /** Refresh trigger - increment this value to force a refresh of changes data */
+  refreshTrigger?: number
 }
 
 /**
@@ -57,7 +59,7 @@ function getReasonMessage(reason?: string): string {
     case 'git_error':
       return 'Git operation failed'
     case 'worktree_deleted_with_uncommitted_changes':
-      return 'Worktree was deleted before changes were committed'
+      return 'Worktree was deleted'
     case 'branch_deleted':
       return 'Branch no longer exists, showing captured state'
     default:
@@ -234,6 +236,7 @@ export function CodeChangesPanel({
   executionStatus,
   worktreePath,
   diffMode = 'inline',
+  refreshTrigger,
 }: CodeChangesPanelProps) {
   const { data, loading, error, refresh } = useExecutionChanges(executionId)
   const previousStatusRef = useRef<string | undefined>(executionStatus)
@@ -309,10 +312,17 @@ export function CodeChangesPanel({
       currentStatus &&
       ['completed', 'stopped', 'failed'].includes(currentStatus)
     ) {
-      console.log(`[CodeChangesPanel] Execution ${executionId} completed, refreshing changes`)
       refresh()
     }
   }, [executionStatus, executionId, refresh])
+
+  // Refresh when refreshTrigger changes (e.g., after commit)
+  // Skip initial value of 0, only refresh when it increments
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      refresh()
+    }
+  }, [refreshTrigger, executionId, refresh])
 
   // Show loading state only on initial load (when we have no data yet)
   if (loading && !data) {
@@ -353,28 +363,53 @@ export function CodeChangesPanel({
     )
   }
 
-  // Use current state if available, otherwise use captured state
-  const snapshot = data.current || data.captured
-  if (!snapshot) {
+  // Determine committed and uncommitted files from all available sources
+  // Priority for committed: current > captured (if not uncommitted)
+  // Priority for uncommitted: uncommittedSnapshot > captured (if uncommitted and we have current) > captured (if only uncommitted)
+
+  let committedFiles: FileChangeStat[] = []
+  let uncommittedFiles: FileChangeStat[] = []
+
+  if (data.current) {
+    // We have current branch state - use it for committed files
+    committedFiles = data.current.files
+    // Check for uncommitted files from uncommittedSnapshot or captured
+    if (data.uncommittedSnapshot?.files) {
+      uncommittedFiles = data.uncommittedSnapshot.files
+    } else if (data.captured?.uncommitted) {
+      // Captured state was uncommitted - these are still uncommitted relative to current
+      uncommittedFiles = data.captured.files
+    }
+  } else if (data.captured) {
+    // No current state, use captured
+    if (data.captured.uncommitted) {
+      // Captured is uncommitted
+      uncommittedFiles = data.captured.files
+      // Check if there's also an uncommittedSnapshot (shouldn't happen, but be safe)
+      if (data.uncommittedSnapshot?.files) {
+        uncommittedFiles = [...uncommittedFiles, ...data.uncommittedSnapshot.files]
+      }
+    } else {
+      // Captured is committed
+      committedFiles = data.captured.files
+      if (data.uncommittedSnapshot?.files) {
+        uncommittedFiles = data.uncommittedSnapshot.files
+      }
+    }
+  }
+
+  if (committedFiles.length === 0 && uncommittedFiles.length === 0) {
     return null
   }
 
-  // Calculate total stats from all sources
-  // If snapshot is uncommitted and there's no uncommittedSnapshot, use snapshot.files as uncommitted
-  // Otherwise, use uncommittedSnapshot for uncommitted files
-  const uncommittedFiles =
-    data.uncommittedSnapshot?.files || (snapshot.uncommitted ? snapshot.files : [])
-  const committedFiles = snapshot.uncommitted ? [] : snapshot.files
+  // Calculate totals from actual files
   const totalFiles = committedFiles.length + uncommittedFiles.length
   const totalAdditions =
-    snapshot.summary.totalAdditions + (data.uncommittedSnapshot?.summary.totalAdditions || 0)
+    committedFiles.reduce((sum, f) => sum + f.additions, 0) +
+    uncommittedFiles.reduce((sum, f) => sum + f.additions, 0)
   const totalDeletions =
-    snapshot.summary.totalDeletions + (data.uncommittedSnapshot?.summary.totalDeletions || 0)
-
-  // Don't render if there are no file changes
-  if (totalFiles === 0) {
-    return null
-  }
+    committedFiles.reduce((sum, f) => sum + f.deletions, 0) +
+    uncommittedFiles.reduce((sum, f) => sum + f.deletions, 0)
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3 font-mono text-xs">
@@ -382,7 +417,7 @@ export function CodeChangesPanel({
       <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex flex-1 items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          className="flex flex-1 items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
           title={isCollapsed ? 'Expand code changes' : 'Collapse code changes'}
         >
           {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -437,21 +472,6 @@ export function CodeChangesPanel({
       {/* Expanded content */}
       {!isCollapsed && (
         <>
-          {/* Metadata info */}
-          {(data.current ||
-            data.branchName ||
-            (data.worktreeExists === false && data.executionMode === 'worktree')) && (
-            <div className="mt-3 space-y-1 text-muted-foreground">
-              {data.current && <div>Showing current state of branch: {data.branchName}</div>}
-              {data.branchName && data.branchExists === false && (
-                <div className="text-orange-600">Branch no longer exists</div>
-              )}
-              {data.worktreeExists === false && data.executionMode === 'worktree' && (
-                <div className="text-orange-600">Worktree deleted</div>
-              )}
-            </div>
-          )}
-
           {/* Committed changes section */}
           {committedFiles.length > 0 && (
             <div className="mt-4">
