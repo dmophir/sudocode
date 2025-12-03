@@ -2,26 +2,14 @@
 
 ## Project Overview
 
-**sudocode** is a git-native context management system for AI-assisted software development. It provides a 4-tiered abstraction structure to organize human-AI collaboration:
+**sudocode** is a git-native context management system for AI-assisted software development. It provides a 4-tiered abstraction structure:
 
 1. **Spec** - User intent and requirements (WHAT you want)
 2. **Issue** - Agent-scoped work items (Tasks within agent scope)
 3. **Execution** - Agent run trajectory (HOW it was executed)
 4. **Artifact** - Code diffs and output (Results)
 
-### Core Value Proposition
-Treats context as code: git-tracked, distributed, mergeable, with AI handling merge conflicts.
-
----
-
-## Technology Stack
-
-- **Language**: TypeScript (all packages)
-- **Runtime**: Node.js >=20.0.0
-- **Testing**: Vitest (all packages)
-- **Frontend**: React 18 + Vite + TanStack Query + Zustand + Tiptap
-- **Backend**: Express + WebSocket + SQLite (better-sqlite3)
-- **Storage**: JSONL source of truth (git-tracked) + SQLite (local cache)
+**Core Value Proposition:** Treats context as code: git-tracked, distributed, mergeable.
 
 ---
 
@@ -47,34 +35,13 @@ sudocode/
 
 ---
 
-## Build & Test Commands
+## Build & Test
 
-### Build System
 ```bash
-npm run build              # Build all packages in order
-npm run build:cli          # Build CLI only
-npm run build:mcp          # Build MCP only
-npm run build:server       # Build server + frontend bundled
-```
-
-**Build Order:** types → cli → mcp/server → frontend → sudocode
-
-### Testing
-```bash
-# Run all tests
-npm run test
-
-# Package-specific tests
-npm --prefix frontend test -- --run     # Frontend
-npm --prefix cli test -- --run          # CLI
-npm --prefix mcp test -- --run          # MCP
-npm --prefix server test -- --run       # Server
-
-# Run specific test file
-npm --prefix frontend test -- --run tests/components/issues/IssuePanel.test.tsx
-
-# Run tests matching name
-npm --prefix frontend test -- --run -t "auto-save"
+npm run build                    # Build all packages
+npm run test                     # Run all tests
+npm --prefix <pkg> test -- --run # Package-specific tests
+npm --prefix <pkg> test -- --run tests/path/to/file.test.ts
 ```
 
 **Test Organization:**
@@ -84,9 +51,9 @@ npm --prefix frontend test -- --run -t "auto-save"
 
 ---
 
-## Core Architecture Concepts
+## Core Architecture
 
-### Storage Architecture: Distributed Git Database
+### Storage: Distributed Git Database
 
 ```
 Markdown Files (.sudocode/specs/*.md)
@@ -104,28 +71,27 @@ SQLite Cache (cache.db) ← QUERY ENGINE (gitignored, rebuilt from JSONL)
 
 ### Data Model
 
-**Spec** (Specification)
-- ID: Hash-based (e.g., `s-14sh`)
-- Purpose: Capture user intent, requirements, design, acts as a shared blackboard between users and agents
-- Storage: Markdown + JSONL
-
-**Issue** (Work Item)
-- ID: Hash-based (e.g., `i-x7k9`)
-- Purpose: Actionable work for agents
+| Entity | ID Format | Purpose | Key File |
+|--------|-----------|---------|----------|
+| **Spec** | `s-xxxx` | User intent, requirements | `types/src/index.d.ts` |
+| **Issue** | `i-xxxx` | Actionable work for agents
 - Storage: JSONL (markdown optional)
 - Status: blocked/open → in_progress → needs_review/closed
 
 **Execution** (Agent Run)
 - Purpose: Track agent execution on an issue
-- Agent Types: claude-code, codex
-- Status: preparing → pending → running → paused/completed/failed/cancelled
-- Captures: Git commits, logs, exit code, files changed
+- Agent Types: claude-code, codex, copilot, cursor
+- Status: preparing → pending → running → paused/completed/failed/cancelled/stopped
+- Captures: Git commits, logs, exit code, files changed, session_id
 - Modes: worktree (isolated), local (in-place)
+- Workflow Support: `workflow_execution_id`, `step_type`, `step_index`, `step_config` for multi-step chains
+- Follow-ups: `parent_execution_id` links execution chains together
 
 **IssueFeedback** (Implementation → Requirements Loop)
-- Purpose: Issues provide anchored feedback on specs
+- Purpose: Issues provide anchored feedback on specs **or other issues**
 - Types: comment, suggestion, request
-- Anchoring: Line-based with smart relocation
+- Anchoring: Line-based with smart relocation (LocationAnchor → FeedbackAnchor)
+- Polymorphic: `from_id` (issue) → `to_id` (spec or issue)
 - Bidirectional: Closes loop from implementation back to requirements
 
 **Relationship** (Graph Edges)
@@ -153,24 +119,49 @@ SQLite Cache (cache.db) ← QUERY ENGINE (gitignored, rebuilt from JSONL)
 
 Extracted via regex, creates bidirectional relationships automatically.
 
+### Key Concepts
+
+- **Execution Chains:** Root execution + follow-ups via `parent_execution_id`
+- **Worktree Isolation:** Each execution gets isolated git worktree
+- **Multi-Agent:** Supports claude-code, codex, copilot, cursor (see `types/src/agents.d.ts`)
+- **Polymorphic Feedback:** Issues can provide feedback on specs OR other issues
+
+## Key Files by Package
+
+### types/
+- `src/index.d.ts` - Core entity interfaces (Spec, Issue, Execution, Feedback)
+- `src/schema.ts` - SQLite schema definitions
+- `src/agents.d.ts` - Agent configuration types
+- `src/artifacts.d.ts` - Execution change tracking types
+- `src/migrations.ts` - Database migrations
+
+### cli/
+- `src/operations/*.ts` - Core CRUD operations (specs, issues, relationships, feedback)
+- `src/jsonl.ts` - JSONL read/write with atomic operations
+- `src/markdown.ts` - Markdown parsing, frontmatter, cross-references
+- `src/watcher.ts` - File system watcher for auto-sync
+
+### server/
+- `src/services/execution-service.ts` - Execution orchestration
+- `src/services/execution-changes-service.ts` - Code change tracking
+- `src/services/worktree-sync-service.ts` - Worktree sync (squash/preserve/stage)
+- `src/services/agent-registry.ts` - Multi-agent discovery
+- `src/adapters/` - Agent adapters (claude, codex, copilot, cursor)
+- `src/execution/` - Execution engine, worktree management
+
+### mcp/
+- `src/server.ts` - MCP tool definitions (wraps CLI)
+
+### frontend/
+- `src/pages/` - ExecutionsPage, WorktreesPage, IssuesPage, SpecsPage
+- `src/components/executions/` - ExecutionView, AgentTrajectory, CodeChangesPanel
+- `src/hooks/` - useExecutions, useExecutionChanges, useExecutionSync, useAgents
+
 ---
 
-## Key Files & Modules
+## API Reference
 
-### Critical Files to Understand
-
-1. **`types/src/index.d.ts`** - All data model interfaces
-2. **`types/src/schema.ts`** - SQLite schema definitions
-3. **`cli/src/operations/*.ts`** - Core CRUD operations
-4. **`cli/src/jsonl.ts`** - JSONL read/write with atomic operations
-5. **`cli/src/markdown.ts`** - Markdown parsing, frontmatter, cross-references
-6. **`cli/src/watcher.ts`** - File system watcher (auto-sync)
-7. **`server/src/services/execution-service.ts`** - Execution orchestration
-8. **`server/src/execution/`** - Execution engine, worktree management, output processing
-9. **`mcp/src/server.ts`** - MCP tool definitions (wraps CLI)
-
-### CLI Commands (from `cli/src/cli.ts`)
-
+### CLI Commands
 ```bash
 sudocode init                           # Initialize .sudocode directory
 sudocode spec create|list|show|update   # Spec management
@@ -185,167 +176,45 @@ sudocode server start                   # Start local server
 ### MCP Tools (from `mcp/src/server.ts`)
 
 - `ready` - Get project status and ready work
-- `list_issues`, `show_issue`, `upsert_issue` - Issue operations
+- `list_issues`, `show_issue`, `upsert_issue` - Issue operations (upsert supports `parent` for hierarchy)
 - `list_specs`, `show_spec`, `upsert_spec` - Spec operations
-- `link` - Create relationships
+- `link` - Create relationships (blocks, implements, depends-on, references, discovered-from, related)
 - `add_reference` - Insert cross-references in markdown
-- `add_feedback` - Provide anchored feedback on specs
+- `add_feedback` - Provide anchored feedback on specs **or issues** (polymorphic `to_id`)
 
 ### Server API Endpoints (from `server/src/index.ts`)
 
 ```
+# Entity CRUD
 GET/POST /api/issues, /api/specs, /api/relationships, /api/feedback
-POST /api/issues/:id/executions       # Start execution
-GET /api/executions/:id                # Get execution status
-GET /api/executions/:id/stream         # SSE stream
-POST /api/executions/:id/follow-up     # Send follow-up prompt
-POST /api/executions/:id/stop          # Cancel execution
-WS /ws                                 # WebSocket for real-time updates
+
+# Execution Lifecycle
+POST /api/issues/:id/executions      # Start execution
+GET  /api/executions/:id/chain       # Get execution chain
+GET  /api/executions/:id/stream      # SSE stream
+POST /api/executions/:id/follow-up   # Create follow-up
+POST /api/executions/:id/stop        # Cancel
+
+# Code Changes
+GET  /api/executions/:id/changes     # File change stats
+GET  /api/executions/:id/changes/file # Individual file diff
+
+# Worktree Sync
+GET  /api/executions/:id/sync/preview  # Preview (conflicts, diff)
+POST /api/executions/:id/sync/squash   # Squash commits
+POST /api/executions/:id/sync/preserve # Preserve history
+POST /api/executions/:id/sync/stage    # Stage without commit
+
+# Other
+GET  /api/agents                     # Available agents
+WS   /ws                             # Real-time updates
 ```
 
 ---
 
-## Development Workflow
+## Implementation Patterns
 
-### Typical Change Flow
-
-**Example: User creates a spec**
-
-1. CLI: `sudocode spec create auth-system`
-2. Creates:
-   - Markdown file: `.sudocode/specs/auth-system.md`
-   - SQLite row in `specs` table
-   - Queues JSONL export (debounced 5s)
-3. After debounce:
-   - Exports to `.sudocode/specs/specs.jsonl`
-   - Updates file mtime to match `updated_at`
-4. User commits: `git commit .sudocode/specs/`
-5. Teammate pulls: `git pull`
-6. Auto-sync: `sudocode sync` rebuilds their SQLite cache
-
-**Example: Agent execution flow**
-
-1. Server API: `POST /api/issues/i-xyz/executions`
-2. Execution service spawns agent (Claude Code/Codex)
-3. Creates git worktree (if configured)
-4. Streams stdout/stderr, parses to JSONL
-5. Stores raw logs in `execution_logs` table
-6. Broadcasts via SSE to frontend
-7. On completion: updates status, captures commits, stores summary
-
-### Git Workflow
-
-- **Main branch**: `main` (stable, for PRs)
-- **Development**: `local-server` (current dev branch)
-- **Feature branches**: Created as needed
-
-**Commit Message Format:**
-```
-<summary>
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
-### Version & Publishing
-
-- `scripts/version.sh` - Updates all package.json versions in sync
-- `scripts/publish.sh` - Builds and publishes to npm (@sudocode-ai scope)
-
----
-
-## Best Practices for AI Agents
-
-### Session Start Protocol
-
-1. Check `.sudocode/` exists: `ls .sudocode/cache.db`
-2. Check ready work: `sudocode ready`
-3. Review project status: `sudocode status`
-
-### Creating Specs
-
-```bash
-# Create spec
-sudocode spec create "OAuth Authentication System"
-
-# Edit markdown file at .sudocode/specs/oauth-authentication-system.md
-# Add requirements, design decisions, acceptance criteria
-
-# Set metadata
-sudocode spec update s-abc123 --priority=0 --tags=auth,security
-```
-
-### Planning Issues from Specs
-
-```bash
-# Create issues
-sudocode issue create "Implement OAuth token endpoint" --priority=1
-sudocode issue create "Add token validation" --priority=0
-
-# Link to spec
-sudocode link i-xyz s-abc123 --type=implements
-
-# Set dependencies
-sudocode link i-abc i-xyz --type=blocks
-
-# Add references in spec markdown
-sudocode add-reference s-abc123 i-xyz --line=42 --format=newline
-```
-
-### Executing Issues
-
-```bash
-# Claim issue
-sudocode issue update i-xyz --status=in_progress --assignee=agent-name
-
-# Start execution (via server API)
-curl -X POST http://localhost:3000/api/issues/i-xyz/executions \
-  -H "Content-Type: application/json" \
-  -d '{"agentType": "claude-code", "prompt": "Implement OAuth token endpoint"}'
-
-# Provide feedback when complete
-sudocode feedback add i-xyz s-abc123 \
-  --type=comment \
-  --content="Implemented OAuth token endpoint. All tests passing." \
-  --line=42
-
-# Close issue
-sudocode issue close i-xyz
-```
-
-### Feedback Best Practices
-
-**When to provide feedback:**
-- Spec unclear or incomplete
-- Implementation differs from spec
-- Additional context discovered
-- Issue completed successfully
-
-**Anchoring strategy:**
-- Use `--line` for specific line anchoring
-- Use `--text` for text-based anchoring (more stable across edits)
-- Omit both for general spec feedback
-
-**Feedback types:**
-- `comment`: Informational (e.g., "Implemented successfully")
-- `suggestion`: Spec needs updating
-- `request`: Need clarification from user
-
-### Relationship Management
-
-**Common patterns:**
-- Issue implements spec: `implements` type
-- Issue blocks issue: `blocks` type (affects ready status)
-- Issue depends on issue: `depends-on` type (softer than blocks)
-- Issue discovered during work: `discovered-from` type
-- Related entities: `related` type
-
----
-
-## Important Implementation Patterns
-
-### Pattern 1: JSONL as Source of Truth
+### Pattern 1: JSONL Source of Truth
 - One JSON object per line
 - Sorted by `created_at` (minimizes merge conflicts)
 - Atomic writes via temp file + rename
@@ -372,6 +241,84 @@ sudocode issue close i-xyz
 - Auto-cleanup on completion (configurable)
 - Orphaned worktree cleanup on server startup
 
+### Pattern 5: Multi-Agent Architecture
+- Agent adapters abstract different AI coding agents (Claude, Codex, Copilot, Cursor)
+- Agent registry discovers and verifies executables (24-hour cache)
+- Each adapter handles agent-specific CLI args and output parsing
+- Normalized entry format standardizes output across agents
+- Agent configs are type-safe per agent type (ClaudeCodeConfig, CodexConfig, etc.)
+
+### Pattern 6: Worktree Sync Modes
+Four sync strategies to merge worktree changes back to main:
+1. **Preview**: Non-destructive preview showing conflicts, diffs, commits
+2. **Squash**: Combines all worktree commits into single commit on target
+3. **Preserve**: Merges preserving full commit history
+4. **Stage**: Applies changes to working directory without committing
+
+Features:
+- JSONL conflict auto-resolution via three-way merge
+- Safety snapshots via git tags for rollback
+- Uncommitted change tracking and optional inclusion
+- Handles deleted worktrees gracefully
+
+### Pattern 7: Execution Chains
+- Root execution linked to follow-up executions via `parent_execution_id`
+- Execution chains track cumulative code changes
+- Follow-up shares worktree with root (continues from same state)
+- Change calculation traverses chain to find root `before_commit`
+
+---
+
+## Agent Configuration
+
+### Claude Code (claude-code)
+Most full-featured agent with extensive configuration options:
+```typescript
+{
+  type: "claude-code",
+  model?: string,              // e.g., "claude-sonnet-4-20250514"
+  systemPrompt?: string,       // Custom system prompt
+  appendSystemPrompt?: string, // Append to default system prompt
+  allowedTools?: string[],     // ["Read", "Write", "Bash", "Glob", "Grep", "Edit"]
+  disallowedTools?: string[],  // Tools to disable
+  mcpServers?: object,         // MCP server configuration
+  permissions?: {
+    allowedDirectories?: string[],
+    disallowedDirectories?: string[]
+  }
+}
+```
+
+### Codex (codex)
+OpenAI Codex CLI integration:
+```typescript
+{
+  type: "codex",
+  model?: string,        // e.g., "gpt-4"
+  fullAuto?: boolean,    // Auto-approve all operations (default: true)
+  sandbox?: string       // Sandbox mode
+}
+```
+
+### Copilot (copilot)
+GitHub Copilot CLI integration:
+```typescript
+{
+  type: "copilot",
+  model?: string         // Model selection
+}
+```
+
+### Cursor (cursor)
+Cursor IDE agent:
+```typescript
+{
+  type: "cursor",
+  model?: string,        // Model selection
+  forceMode?: boolean    // Force mode for automated execution
+}
+```
+
 ---
 
 ## Project Configuration
@@ -393,16 +340,119 @@ Use this to capture persistent configs.
   }
 }
 ```
+
+---
+
+## Database Schema
+
+### Core Tables
+
+```
+specs              # Spec metadata and content
+issues             # Issue metadata, status, assignee
+relationships      # Entity relationships (polymorphic)
+issue_feedback     # Anchored feedback (from_id → to_id, supports issue→spec and issue→issue)
+```
+
+### Execution Tables
+
+```
+executions         # Execution lifecycle, git info, workflow fields
+                   # Key fields: issue_id, agent_type, status, mode,
+                   #   parent_execution_id (chains), workflow_execution_id,
+                   #   step_type, step_index, step_config,
+                   #   before_commit, after_commit, worktree_path
+
+execution_logs     # Raw and normalized execution output
+                   # raw_logs: Legacy JSONL format
+                   # normalized_entry: Structured NormalizedEntry objects
+```
+
+### Supporting Tables
+
+```
+prompt_templates   # Reusable execution prompts (issue|spec|custom types)
+events             # Event log for auditing
+```
+
+### Key Indexes
+
+```
+idx_executions_issue        (issue_id)
+idx_executions_status       (status)
+idx_executions_workflow     (workflow_execution_id)
+idx_executions_workflow_step (workflow_execution_id, step_index)
+idx_feedback_from           (from_id)
+idx_feedback_to             (to_id)
+```
+
+---
+
+## Frontend Architecture
+
+### Key Pages
+
+- **ExecutionsPage** - Multi-execution grid view with filtering and pagination
+- **ExecutionDetailPage** - Execution chain view with follow-ups inline
+- **WorktreesPage** - Worktree management with sync dialogs
+- **IssuesPage**, **SpecsPage** - Entity list and detail views
+- **ArchivedIssuesPage** - View archived issues with feedback
+
+### Key Components
+
+**Execution Management:**
+- `ExecutionChainTile` - Compact tile for grid view
+- `ExecutionsGrid` - CSS Grid container for multiple chains
+- `ExecutionsSidebar` - Filtering, visibility, status display
+- `ExecutionView` - Full detail view with follow-up chain
+- `ExecutionMonitor` - Real-time status monitoring
+- `FollowUpDialog` - Create follow-up executions
+- `AgentTrajectory` - Visualize agent tool calls and actions
+
+**Code Changes:**
+- `CodeChangesPanel` - File list with change stats (A/M/D/R)
+- `DiffViewer` - Unified diff rendering via @git-diff-view/react
+- `CommitChangesDialog` - Commit worktree changes
+- `SyncPreviewDialog` - Preview sync before execution
+
+**Agent Configuration:**
+- `AgentConfigPanel` - Agent selection and configuration
+- `AgentSelector` - Dropdown for agent types
+- `ClaudeCodeConfigForm`, `CodexConfigForm`, etc. - Agent-specific forms
+
+**Worktree Management:**
+- `WorktreeList` - List all worktrees with search/filter
+- `WorktreeCard` - Individual worktree display
+- `WorktreeDetailPanel` - Detail panel with sync options
+
+### Key Hooks
+
+**Execution:**
+- `useExecutions` - Fetch root executions with React Query + WebSocket
+- `useExecutionChanges` - Get file changes (committed + uncommitted)
+- `useExecutionSync` - Manage sync operations (preview, squash, preserve, stage)
+- `useExecutionLogs` - Stream execution logs in real-time
+- `useAgUiStream` - Parse ag-ui output stream
+
+**Agent:**
+- `useAgents` - Fetch available agents
+- `useAgentActions` - Compute contextual actions based on execution state
+
+**Worktree:**
+- `useWorktrees` - Fetch and manage worktrees
+- `useWorktreeMutations` - Create, update, delete worktrees
+
+**Entity:**
+- `useFeedback`, `useFeedbackPositions` - Feedback management
+- `useIssueHoverData`, `useSpecHoverData` - Hover card data
+
+### Contexts
+
+- **WebSocketContext** - Real-time message subscription with project-aware handling
+
 ---
 
 ## Quick Reference
-
-### Data Flow
-```
-Spec → Issue → Execution → Artifact
-  ↑                  ↓
-  └─── Feedback ─────┘
-```
 
 ### Storage Layout
 ```
@@ -415,26 +465,26 @@ Spec → Issue → Execution → Artifact
 ```
 
 ### Relationship Types
-- `blocks` - Hard blocker (affects ready status)
-- `implements` - Issue implements spec
-- `depends-on` - General dependency
-- `references` - Soft reference
-- `discovered-from` - Found during work
-- `related` - General relationship
+`blocks` | `implements` | `depends-on` | `references` | `discovered-from` | `related`
 
 ### Status Lifecycles
-- **Spec**: draft → review → approved → deprecated
-- **Issue**: open → in_progress → blocked/needs_review → closed
-- **Execution**: preparing → pending → running → paused/completed/failed/cancelled
+- **Issue:** open → in_progress → blocked/needs_review → closed
+- **Execution:** preparing → pending → running → paused/completed/failed/cancelled/stopped
+
+### Agent Types
+`claude-code` | `codex` | `copilot` | `cursor` (configs in `types/src/agents.d.ts`)
+
+### Sync Modes
+`preview` | `squash` | `preserve` | `stage`
 
 ---
 
 ## Working with sudocode
 
-This project uses sudocode for its own spec and issue management. When working on issues:
+This project uses sudocode for its own management. When working on issues:
 
-1. **Update issue status** when starting work: `sudocode issue update <id> --status=in_progress`
-2. **Create references** to link issues/specs to other issues and specs for discoverability and to create a dependency structure
-3. **Check spec/issue content** for context using `sudocode spec show <id>` or `sudocode issue show <id>`
-4. **Close issues** when done: `sudocode issue close <id>`
-5. **Use MCP tools** or edit markdown files directly in `.sudocode/specs/` and `.sudocode/issues/` when modifying content
+1. **Check ready work:** `sudocode ready`
+2. **Claim issue:** `sudocode issue update <id> --status=in_progress`
+3. **Check context:** `sudocode spec show <id>` or `sudocode issue show <id>`
+4. **Provide feedback:** Use `add_feedback` MCP tool when closing issues that implement specs
+5. **Close issue:** `sudocode issue close <id>`
