@@ -5,6 +5,8 @@ import type { ExecutionLogsStore } from "./execution-logs-store.js";
 import type { ServerWatcherControl } from "./watcher.js";
 import type { WorktreeManager } from "../execution/worktree/manager.js";
 import type { ExecutionWorkerPool } from "./execution-worker-pool.js";
+import type { IWorkflowEngine } from "../workflow/workflow-engine.js";
+import type { WorkflowBroadcastService } from "./workflow-broadcast-service.js";
 
 /**
  * ProjectContext encapsulates all services and resources for a single open project.
@@ -46,6 +48,12 @@ export class ProjectContext {
 
   /** Worker pool for isolated execution processes (optional) */
   readonly workerPool: ExecutionWorkerPool | undefined;
+
+  /** Workflow engine for multi-issue orchestration (optional) */
+  workflowEngine: IWorkflowEngine | undefined;
+
+  /** Workflow broadcast service for WebSocket events (optional) */
+  workflowBroadcastService: WorkflowBroadcastService | undefined;
 
   /** File watcher for detecting changes */
   watcher: ServerWatcherControl | null = null;
@@ -102,18 +110,24 @@ export class ProjectContext {
         await this.executionService.shutdown();
       }
 
-      // 3. Stop file watcher
+      // 3. Dispose workflow broadcast service
+      if (this.workflowBroadcastService) {
+        this.workflowBroadcastService.dispose();
+        this.workflowBroadcastService = undefined;
+      }
+
+      // 4. Stop file watcher
       if (this.watcher) {
         this.watcher.stop();
         this.watcher = null;
       }
 
-      // 4. Close transport streams
+      // 5. Close transport streams
       if (this.transportManager) {
         this.transportManager.shutdown();
       }
 
-      // 5. Database will be closed by ProjectManager (it manages the cache)
+      // 6. Database will be closed by ProjectManager (it manages the cache)
 
       console.log(`Project context shutdown complete: ${this.id}`);
     } catch (error) {

@@ -20,6 +20,9 @@ import {
   performInitialization,
   isInitialized,
 } from "@sudocode-ai/cli/dist/cli/init-commands.js";
+import { WorkflowEventEmitter } from "../workflow/workflow-event-emitter.js";
+import { SequentialWorkflowEngine } from "../workflow/engines/sequential-engine.js";
+import { WorkflowBroadcastService } from "./workflow-broadcast-service.js";
 
 interface CachedDatabase {
   db: Database.Database;
@@ -125,7 +128,23 @@ export class ProjectManager {
 
       await context.initialize();
 
-      // 7. Start file watcher if enabled
+      // 7. Initialize workflow engine and broadcast service
+      const workflowEventEmitter = new WorkflowEventEmitter();
+      const workflowEngine = new SequentialWorkflowEngine(
+        db,
+        executionService,
+        workflowEventEmitter
+      );
+
+      const workflowBroadcastService = new WorkflowBroadcastService(
+        workflowEventEmitter,
+        () => projectId // Simple lookup - this project owns all its workflows
+      );
+
+      context.workflowEngine = workflowEngine;
+      context.workflowBroadcastService = workflowBroadcastService;
+
+      // 8. Start file watcher if enabled
       if (this.watchEnabled) {
         context.watcher = startServerWatcher({
           db,

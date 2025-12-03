@@ -97,14 +97,14 @@ export class ExecutionService {
    * workflow execution. Returns the execution record immediately while
    * workflow runs in the background.
    *
-   * @param issueId - ID of issue to execute
+   * @param issueId - ID of issue to execute, or null for orchestrator executions
    * @param config - Execution configuration
    * @param prompt - Rendered prompt to execute
    * @param agentType - Type of agent to use (defaults to 'claude-code')
    * @returns Created execution record
    */
   async createExecution(
-    issueId: string,
+    issueId: string | null,
     config: ExecutionConfig,
     prompt: string,
     agentType: AgentType = "claude-code"
@@ -114,12 +114,16 @@ export class ExecutionService {
       throw new Error("Prompt cannot be empty");
     }
 
-    const issue = this.db
-      .prepare("SELECT * FROM issues WHERE id = ?")
-      .get(issueId) as { id: string; title: string } | undefined;
+    // Get issue if issueId is provided (orchestrator executions don't have an issue)
+    let issue: { id: string; title: string } | undefined;
+    if (issueId) {
+      issue = this.db
+        .prepare("SELECT * FROM issues WHERE id = ?")
+        .get(issueId) as { id: string; title: string } | undefined;
 
-    if (!issue) {
-      throw new Error(`Issue ${issueId} not found`);
+      if (!issue) {
+        throw new Error(`Issue ${issueId} not found`);
+      }
     }
 
     // 2. Determine execution mode and create execution with worktree
@@ -128,7 +132,12 @@ export class ExecutionService {
     let execution: Execution;
     let workDir: string;
 
-    if (mode === "worktree") {
+    // Worktree mode requires an issue
+    if (mode === "worktree" && !issueId) {
+      throw new Error("Worktree mode requires an issueId");
+    }
+
+    if (mode === "worktree" && issueId && issue) {
       // Check if we're reusing an existing worktree
       if (config.reuseWorktreeId) {
         // Reuse existing worktree
@@ -218,7 +227,7 @@ export class ExecutionService {
     const { resolvedPrompt, errors } = await resolver.resolve(
       prompt,
       new Set(),
-      issueId
+      issueId ?? undefined
     );
     if (errors.length > 0) {
       console.warn(`[ExecutionService] Prompt resolution warnings:`, errors);
@@ -274,7 +283,7 @@ export class ExecutionService {
     const task: ExecutionTask = {
       id: execution.id,
       type: "issue",
-      entityId: issueId,
+      entityId: issueId ?? undefined,
       prompt: resolvedPrompt,
       workDir: workDir,
       config: {
@@ -284,7 +293,7 @@ export class ExecutionService {
         model: config.model || "claude-sonnet-4",
         captureFileChanges: config.captureFileChanges ?? true,
         captureToolCalls: config.captureToolCalls ?? true,
-        issueId,
+        issueId: issueId ?? undefined,
         executionId: execution.id,
       },
       priority: 0,

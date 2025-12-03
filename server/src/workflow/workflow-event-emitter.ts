@@ -27,7 +27,9 @@ export type WorkflowEventPayload =
   | WorkflowResumedEvent
   | WorkflowCompletedEvent
   | WorkflowFailedEvent
-  | WorkflowCancelledEvent;
+  | WorkflowCancelledEvent
+  // Orchestrator events
+  | OrchestratorWakeupEvent;
 
 /**
  * Event type constants for use in switch statements.
@@ -43,6 +45,7 @@ export const WorkflowEventType = {
   WORKFLOW_COMPLETED: "workflow_completed",
   WORKFLOW_FAILED: "workflow_failed",
   WORKFLOW_CANCELLED: "workflow_cancelled",
+  ORCHESTRATOR_WAKEUP: "orchestrator_wakeup",
 } as const;
 
 // =============================================================================
@@ -150,6 +153,23 @@ export interface WorkflowFailedEvent {
 export interface WorkflowCancelledEvent {
   type: "workflow_cancelled";
   workflowId: string;
+  timestamp: number;
+}
+
+// =============================================================================
+// Orchestrator Events
+// =============================================================================
+
+/**
+ * Emitted when the orchestrator is woken up to process events.
+ */
+export interface OrchestratorWakeupEvent {
+  type: "orchestrator_wakeup";
+  workflowId: string;
+  payload: {
+    eventCount: number;
+    executionId: string;
+  };
   timestamp: number;
 }
 

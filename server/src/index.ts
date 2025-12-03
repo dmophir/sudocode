@@ -21,6 +21,7 @@ import { createFilesRouter } from "./routes/files.js";
 import { createRepoInfoRouter } from "./routes/repo-info.js";
 import { createAgentsRouter } from "./routes/agents.js";
 import { createVersionRouter } from "./routes/version.js";
+import { createWorkflowsRouter } from "./routes/workflows.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { ProjectRegistry } from "./services/project-registry.js";
 import { ProjectManager } from "./services/project-manager.js";
@@ -144,6 +145,11 @@ app.use(
   "/api/feedback",
   requireProject(projectManager),
   createFeedbackRouter()
+);
+app.use(
+  "/api/workflows",
+  requireProject(projectManager),
+  createWorkflowsRouter()
 );
 app.use("/api/config", requireProject(projectManager), createConfigRouter());
 app.use(

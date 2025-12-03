@@ -57,3 +57,19 @@ export { BaseWorkflowEngine } from "./base-workflow-engine.js";
 
 // Engine implementations
 export { SequentialWorkflowEngine } from "./engines/sequential-engine.js";
+export {
+  OrchestratorWorkflowEngine,
+  type OrchestratorEngineConfig,
+} from "./engines/orchestrator-engine.js";
+
+// Orchestrator services
+export {
+  WorkflowWakeupService,
+  type WakeupConfig,
+  type RecordEventParams,
+  DEFAULT_WAKEUP_CONFIG,
+} from "./services/wakeup-service.js";
+export { WorkflowPromptBuilder } from "./services/prompt-builder.js";
+
+// Orchestrator event type
+export { type OrchestratorWakeupEvent } from "./workflow-event-emitter.js";
