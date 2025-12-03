@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@ag-ui/core": "^0.0.39",
+    "@modelcontextprotocol/sdk": "^1.24.1",
     "@sudocode-ai/cli": "^0.1.9",
     "@sudocode-ai/types": "^0.1.9",
     "@types/ws": "^8.18.1",
