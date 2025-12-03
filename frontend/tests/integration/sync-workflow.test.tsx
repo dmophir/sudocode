@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
   executionsApi: {
     getChain: vi.fn(),
     worktreeExists: vi.fn(),
+    getChanges: vi.fn(),
     syncPreview: vi.fn(),
     syncSquash: vi.fn(),
     syncPreserve: vi.fn(),
@@ -98,6 +99,15 @@ describe.skip('Sync Workflow Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(executionsApi.worktreeExists).mockResolvedValue({ exists: true })
+    vi.mocked(executionsApi.getChanges).mockResolvedValue({
+      available: true,
+      captured: {
+        files: [],
+        summary: { totalFiles: 0, totalAdditions: 0, totalDeletions: 0 },
+        commitRange: null,
+        uncommitted: false,
+      },
+    })
   })
 
   describe('Scenario 1: Happy Path - Squash Sync', () => {
@@ -138,8 +148,8 @@ describe.skip('Sync Workflow Integration Tests', () => {
         success: true,
         finalCommit: 'xyz789',
         filesChanged: 5,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: true,
       }
 
@@ -238,8 +248,8 @@ describe.skip('Sync Workflow Integration Tests', () => {
         success: true,
         finalCommit: 'jkl012',
         filesChanged: 3,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: true,
       }
 
@@ -321,8 +331,8 @@ describe.skip('Sync Workflow Integration Tests', () => {
         success: true,
         finalCommit: 'xyz789',
         filesChanged: 2,
-        conflictsResolved: 1,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: true,
       }
 
@@ -452,8 +462,8 @@ describe.skip('Sync Workflow Integration Tests', () => {
         success: true,
         finalCommit: 'xyz789',
         filesChanged: 3,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: true,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 2,
         cleanupOffered: true,
       }
 
@@ -548,8 +558,8 @@ describe.skip('Sync Workflow Integration Tests', () => {
         success: true,
         finalCommit: 'xyz789',
         filesChanged: 1,
-        conflictsResolved: 0,
-        uncommittedJSONLIncluded: false,
+        hasConflicts: false,
+        uncommittedFilesIncluded: 0,
         cleanupOffered: true,
       }
 
