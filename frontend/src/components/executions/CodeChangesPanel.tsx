@@ -417,7 +417,7 @@ export function CodeChangesPanel({
       <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex flex-1 items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          className="flex flex-1 items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
           title={isCollapsed ? 'Expand code changes' : 'Collapse code changes'}
         >
           {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
