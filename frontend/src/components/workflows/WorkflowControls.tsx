@@ -10,11 +10,13 @@ import { cn } from '@/lib/utils'
 
 export interface WorkflowControlsProps {
   workflow: Workflow
+  onStart?: () => void
   onPause?: () => void
   onResume?: () => void
   onCancel?: () => void
   size?: 'sm' | 'default'
   showLabels?: boolean
+  isStarting?: boolean
   isPausing?: boolean
   isResuming?: boolean
   isCancelling?: boolean
@@ -23,11 +25,13 @@ export interface WorkflowControlsProps {
 
 export function WorkflowControls({
   workflow,
+  onStart,
   onPause,
   onResume,
   onCancel,
   size = 'default',
   showLabels = true,
+  isStarting = false,
   isPausing = false,
   isResuming = false,
   isCancelling = false,
@@ -36,12 +40,13 @@ export function WorkflowControls({
   const { status } = workflow
 
   // Determine which buttons to show based on status
+  const showStart = status === 'pending' && onStart
   const showPause = status === 'running' && onPause
   const showResume = status === 'paused' && onResume
   const showCancel = ['pending', 'running', 'paused'].includes(status) && onCancel
 
   // No buttons to show
-  if (!showPause && !showResume && !showCancel) {
+  if (!showStart && !showPause && !showResume && !showCancel) {
     return null
   }
 
@@ -50,6 +55,23 @@ export function WorkflowControls({
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
+      {/* Start Button */}
+      {showStart && (
+        <Button
+          variant="default"
+          size={buttonSize}
+          onClick={onStart}
+          disabled={isStarting}
+        >
+          {isStarting ? (
+            <Loader2 className={cn(iconSize, 'animate-spin', showLabels && 'mr-2')} />
+          ) : (
+            <Play className={cn(iconSize, showLabels && 'mr-2')} />
+          )}
+          {showLabels && (isStarting ? 'Starting...' : 'Start')}
+        </Button>
+      )}
+
       {/* Pause Button */}
       {showPause && (
         <Button

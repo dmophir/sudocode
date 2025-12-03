@@ -40,6 +40,7 @@ import {
   Pause,
 } from 'lucide-react'
 import type { IssueFeedback, Relationship, EntityType, RelationshipType } from '@/types/api'
+import type { Workflow } from '@/types/workflow'
 import { relationshipsApi } from '@/lib/api'
 import { DeleteSpecDialog } from '@/components/specs/DeleteSpecDialog'
 import { EntityBadge } from '@/components/entities/EntityBadge'
@@ -69,7 +70,7 @@ export default function SpecDetailPage() {
   const { issues } = useIssues()
   const { specs, updateSpec, isUpdating, archiveSpec, unarchiveSpec, deleteSpec } = useSpecs()
   const { createFeedback, updateFeedback, deleteFeedback } = useFeedback(id || '')
-  const { workflows } = useWorkflows()
+  const { data: workflows = [] } = useWorkflows()
   const { create: createWorkflow, isCreating: isCreatingWorkflow } = useWorkflowMutations()
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
@@ -112,7 +113,7 @@ export default function SpecDetailPage() {
   const activeWorkflow = useMemo(() => {
     if (!id) return undefined
     return workflows.find(
-      (w) =>
+      (w: Workflow) =>
         w.source.type === 'spec' &&
         w.source.specId === id &&
         ['running', 'paused'].includes(w.status)

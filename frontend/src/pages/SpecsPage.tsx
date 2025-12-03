@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Archive, Plus, Search, GitBranch } from 'lucide-react'
 import type { Spec } from '@/types/api'
-import type { WorkflowSource } from '@/types/workflow'
+import type { Workflow, WorkflowSource } from '@/types/workflow'
 
 type SortOption = 'priority' | 'newest' | 'last-updated'
 
@@ -31,7 +31,7 @@ export default function SpecsPage() {
   const { data: repoInfo } = useRepositoryInfo()
   const { currentProjectId } = useProject()
   const { data: currentProject } = useProjectById(currentProjectId)
-  const { workflows } = useWorkflows()
+  const { data: workflows = [] } = useWorkflows()
   const { create: createWorkflow, isCreating: isCreatingWorkflow } = useWorkflowMutations()
 
   const [showEditor, setShowEditor] = useState(false)
@@ -55,7 +55,7 @@ export default function SpecsPage() {
   // Compute active workflows per spec
   const activeWorkflowsPerSpec = useMemo(() => {
     const map = new Map()
-    workflows.forEach((workflow) => {
+    workflows.forEach((workflow: Workflow) => {
       if (
         workflow.source.type === 'spec' &&
         ['running', 'paused'].includes(workflow.status)

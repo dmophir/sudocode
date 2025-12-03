@@ -11,7 +11,7 @@ import { executionsApi } from '@/lib/api'
 import type { Issue, IssueStatus } from '@/types/api'
 import type { Execution } from '@/types/execution'
 import type { DragEndEvent } from '@/components/ui/kanban'
-import type { WorkflowStepStatus } from '@/types/workflow'
+import type { Workflow, WorkflowStepStatus } from '@/types/workflow'
 import IssueKanbanBoard from '@/components/issues/IssueKanbanBoard'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { CreateIssueDialog } from '@/components/issues/CreateIssueDialog'
@@ -63,7 +63,7 @@ export default function IssuesPage() {
   const { data: repoInfo } = useRepositoryInfo()
   const { currentProjectId } = useProject()
   const { data: currentProject } = useProjectById(currentProjectId)
-  const { workflows } = useWorkflows()
+  const { data: workflows = [] } = useWorkflows()
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
   const { feedback } = useIssueFeedback(selectedIssue?.id || '')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -171,7 +171,7 @@ export default function IssuesPage() {
     >()
 
     // Only process active workflows (running or paused)
-    const activeWorkflows = workflows.filter((w) =>
+    const activeWorkflows = workflows.filter((w: Workflow) =>
       ['running', 'paused'].includes(w.status)
     )
 

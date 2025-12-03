@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { WorkflowCard, CreateWorkflowDialog } from '@/components/workflows'
 import { useWorkflows, useWorkflowMutations } from '@/hooks/useWorkflows'
-import type { WorkflowStatus } from '@/types/workflow'
+import type { Workflow, WorkflowStatus } from '@/types/workflow'
 
 // Status filter options
 const STATUS_FILTER_OPTIONS: Array<{ value: WorkflowStatus | 'all'; label: string }> = [
@@ -32,7 +32,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: WorkflowStatus | 'all'; label: strin
 
 export default function WorkflowsPage() {
   const navigate = useNavigate()
-  const { workflows, isLoading } = useWorkflows()
+  const { data: workflows = [], isLoading } = useWorkflows()
   const { create } = useWorkflowMutations()
 
   // State
@@ -42,7 +42,7 @@ export default function WorkflowsPage() {
 
   // Filter workflows
   const filteredWorkflows = useMemo(() => {
-    return workflows.filter((workflow) => {
+    return workflows.filter((workflow: Workflow) => {
       // Status filter
       if (statusFilter !== 'all' && workflow.status !== statusFilter) {
         return false
@@ -69,7 +69,7 @@ export default function WorkflowsPage() {
   }, [workflows, statusFilter, searchQuery])
 
   // Stats
-  const activeCount = workflows.filter((w) =>
+  const activeCount = workflows.filter((w: Workflow) =>
     ['running', 'paused'].includes(w.status)
   ).length
 
@@ -188,7 +188,7 @@ export default function WorkflowsPage() {
         ) : (
           // Workflow grid
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredWorkflows.map((workflow) => (
+            {filteredWorkflows.map((workflow: Workflow) => (
               <WorkflowCard
                 key={workflow.id}
                 workflow={workflow}

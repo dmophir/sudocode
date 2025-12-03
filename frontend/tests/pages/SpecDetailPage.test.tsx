@@ -10,6 +10,27 @@ import * as useIssuesHook from '@/hooks/useIssues'
 // Mock the hooks
 vi.mock('@/hooks/useSpecs')
 vi.mock('@/hooks/useIssues')
+vi.mock('@/hooks/useWorkflows', () => ({
+  useWorkflows: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+  useWorkflowMutations: () => ({
+    create: vi.fn(),
+    start: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    cancel: vi.fn(),
+    delete: vi.fn(),
+    isCreating: false,
+    isStarting: false,
+    isPausing: false,
+    isResuming: false,
+    isCancelling: false,
+    isDeleting: false,
+  }),
+}))
 
 // Mock Project context
 vi.mock('@/hooks/useProject', () => ({

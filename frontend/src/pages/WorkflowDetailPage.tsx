@@ -29,8 +29,8 @@ export default function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { workflow, issues, isLoading, error } = useWorkflow(id)
-  const { pause, resume, cancel } = useWorkflowMutations()
-  const { retry, skip, cancel: cancelStep } = useWorkflowStepActions()
+  const { start, pause, resume, cancel, isStarting } = useWorkflowMutations()
+  const stepActions = useWorkflowStepActions(id || '')
   const progress = useWorkflowProgress(workflow)
 
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
@@ -50,22 +50,16 @@ export default function WorkflowDetailPage() {
   }, [])
 
   const handleRetry = useCallback(async () => {
-    if (workflow && selectedStepId) {
-      await retry(workflow.id, selectedStepId)
+    if (selectedStepId) {
+      await stepActions.retry(selectedStepId)
     }
-  }, [workflow, selectedStepId, retry])
+  }, [selectedStepId, stepActions])
 
   const handleSkip = useCallback(async () => {
-    if (workflow && selectedStepId) {
-      await skip(workflow.id, selectedStepId)
+    if (selectedStepId) {
+      await stepActions.skip(selectedStepId)
     }
-  }, [workflow, selectedStepId, skip])
-
-  const handleCancelStep = useCallback(async () => {
-    if (workflow && selectedStepId) {
-      await cancelStep(workflow.id, selectedStepId)
-    }
-  }, [workflow, selectedStepId, cancelStep])
+  }, [selectedStepId, stepActions])
 
   // Loading state
   if (isLoading) {
@@ -143,9 +137,11 @@ export default function WorkflowDetailPage() {
         {/* Controls */}
         <WorkflowControls
           workflow={workflow}
+          onStart={() => start(workflow.id)}
           onPause={() => pause(workflow.id)}
           onResume={() => resume(workflow.id)}
           onCancel={() => cancel(workflow.id)}
+          isStarting={isStarting}
         />
       </div>
 
@@ -171,7 +167,6 @@ export default function WorkflowDetailPage() {
               onClose={handlePanelClose}
               onRetry={handleRetry}
               onSkip={handleSkip}
-              onCancel={handleCancelStep}
               onDependencyClick={handleStepSelect}
               onViewExecution={
                 selectedStep.executionId
