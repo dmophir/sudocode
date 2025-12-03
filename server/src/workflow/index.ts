@@ -54,3 +54,6 @@ export {
 
 // Base workflow engine
 export { BaseWorkflowEngine } from "./base-workflow-engine.js";
+
+// Engine implementations
+export { SequentialWorkflowEngine } from "./engines/sequential-engine.js";
