@@ -78,6 +78,43 @@ export interface WorkflowSourceGoal {
 }
 
 // =============================================================================
+// Escalation Types (Human-in-the-Loop)
+// =============================================================================
+
+/**
+ * Escalation status for human-in-the-loop workflows
+ */
+export type EscalationStatus = "pending" | "resolved" | "bypassed";
+
+/**
+ * User response to an escalation request
+ */
+export interface EscalationResponse {
+  /** User's action choice */
+  action: "approve" | "reject" | "custom";
+  /** Optional message from user */
+  message?: string;
+  /** When the user responded */
+  respondedAt: string;
+}
+
+/**
+ * Escalation data structure for pending or resolved escalations
+ */
+export interface EscalationData {
+  /** Unique escalation request identifier */
+  requestId: string;
+  /** Message displayed to user */
+  message: string;
+  /** Optional predefined options for user to choose */
+  options?: string[];
+  /** Additional context for the escalation */
+  context?: Record<string, unknown>;
+  /** User's response (present when resolved) */
+  response?: EscalationResponse;
+}
+
+// =============================================================================
 // Configuration Types
 // =============================================================================
 
@@ -301,6 +338,8 @@ export type WorkflowEventType =
   // Escalation events
   | "escalation_requested"
   | "escalation_resolved"
+  // Notification events
+  | "user_notification"
   // Orchestrator events
   | "orchestrator_wakeup"
   | "user_response";

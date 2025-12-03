@@ -85,6 +85,33 @@ export interface WorkflowCompleteParams {
   status?: "completed" | "failed";
 }
 
+/**
+ * Notification level for notify_user tool.
+ */
+export type NotificationLevel = "info" | "warning" | "error";
+
+/**
+ * Parameters for escalate_to_user tool.
+ */
+export interface EscalateToUserParams {
+  /** Message displayed to user explaining what input is needed */
+  message: string;
+  /** Optional predefined options for user to choose from */
+  options?: string[];
+  /** Additional context for the escalation (passed back in response) */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for notify_user tool.
+ */
+export interface NotifyUserParams {
+  /** Notification message */
+  message: string;
+  /** Notification level (default: info) */
+  level?: NotificationLevel;
+}
+
 // =============================================================================
 // Tool Result Types
 // =============================================================================
@@ -207,6 +234,33 @@ export interface WorkflowCompleteResult {
   success: boolean;
   workflow_status: Workflow["status"];
   completed_at: string;
+}
+
+/**
+ * Status of escalation request.
+ */
+export type EscalationResultStatus = "pending" | "auto_approved";
+
+/**
+ * Result from escalate_to_user tool.
+ */
+export interface EscalateToUserResult {
+  /** Status of the escalation */
+  status: EscalationResultStatus;
+  /** Escalation ID (for pending status) */
+  escalation_id?: string;
+  /** Message for orchestrator */
+  message: string;
+}
+
+/**
+ * Result from notify_user tool.
+ */
+export interface NotifyUserResult {
+  /** Whether notification was successfully queued */
+  success: boolean;
+  /** Whether notification was delivered (may be false if user not connected) */
+  delivered: boolean;
 }
 
 // =============================================================================

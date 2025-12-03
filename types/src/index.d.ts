@@ -306,6 +306,10 @@ export type {
   WorkflowSourceIssues,
   WorkflowSourceRootIssue,
   WorkflowSourceGoal,
+  // Escalation types (Human-in-the-Loop)
+  EscalationStatus,
+  EscalationResponse,
+  EscalationData,
   // Configuration types
   WorkflowParallelism,
   WorkflowFailureStrategy,

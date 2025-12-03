@@ -5,6 +5,7 @@
  */
 
 import { Router, Request, Response } from "express";
+import { randomUUID } from "crypto";
 import type {
   Workflow,
   WorkflowSource,
@@ -627,6 +628,151 @@ export function createWorkflowsRouter(): Router {
       res.json({
         success: true,
         data: events,
+      });
+    } catch (error) {
+      handleWorkflowError(error, res);
+    }
+  });
+
+  /**
+   * POST /api/workflows/:id/escalation/respond - Respond to a pending escalation
+   *
+   * Request body:
+   * - action: 'approve' | 'reject' | 'custom' (required)
+   * - message: string (optional)
+   */
+  router.post("/:id/escalation/respond", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { action, message } = req.body as {
+        action?: string;
+        message?: string;
+      };
+
+      // Validate action
+      const validActions = ["approve", "reject", "custom"];
+      if (!action || !validActions.includes(action)) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: `action is required and must be one of: ${validActions.join(", ")}`,
+        });
+        return;
+      }
+
+      // Get workflow from database
+      const db = req.project!.db;
+      const workflowRow = db
+        .prepare("SELECT * FROM workflows WHERE id = ?")
+        .get(id) as any;
+
+      if (!workflowRow) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          message: `Workflow not found: ${id}`,
+        });
+        return;
+      }
+
+      // Check for pending escalation by querying events
+      const pendingEscalation = db.prepare(`
+        SELECT payload FROM workflow_events
+        WHERE workflow_id = ?
+          AND type = 'escalation_requested'
+          AND json_extract(payload, '$.escalation_id') NOT IN (
+            SELECT json_extract(payload, '$.escalation_id')
+            FROM workflow_events
+            WHERE workflow_id = ?
+              AND type = 'escalation_resolved'
+          )
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(id, id) as { payload: string } | undefined;
+
+      if (!pendingEscalation) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: `No pending escalation for workflow: ${id}`,
+        });
+        return;
+      }
+
+      // Parse escalation data from event
+      const escalationPayload = JSON.parse(pendingEscalation.payload) as {
+        escalation_id: string;
+        message: string;
+        options?: string[];
+        context?: Record<string, unknown>;
+      };
+
+      const now = new Date().toISOString();
+
+      // Record escalation_resolved event
+      const eventId = randomUUID();
+      db.prepare(`
+        INSERT INTO workflow_events (id, workflow_id, type, payload, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        eventId,
+        id,
+        "escalation_resolved",
+        JSON.stringify({
+          escalation_id: escalationPayload.escalation_id,
+          action,
+          message,
+          responded_at: now,
+        }),
+        now
+      );
+
+      // Trigger orchestrator wakeup if available
+      const engine = req.project!.workflowEngine;
+      if (engine && "triggerEscalationWakeup" in engine) {
+        try {
+          await (engine as { triggerEscalationWakeup: (id: string) => Promise<void> }).triggerEscalationWakeup(id);
+        } catch (wakeupError) {
+          console.error("Failed to trigger escalation wakeup:", wakeupError);
+          // Don't fail the response - escalation is still resolved
+        }
+      }
+
+      // Parse and return workflow
+      const workflow: Workflow = {
+        id: workflowRow.id,
+        title: workflowRow.title,
+        source: JSON.parse(workflowRow.source),
+        status: workflowRow.status,
+        steps: JSON.parse(workflowRow.steps || "[]"),
+        worktreePath: workflowRow.worktree_path,
+        branchName: workflowRow.branch_name,
+        baseBranch: workflowRow.base_branch,
+        currentStepIndex: workflowRow.current_step_index,
+        orchestratorExecutionId: workflowRow.orchestrator_execution_id,
+        orchestratorSessionId: workflowRow.orchestrator_session_id,
+        config: JSON.parse(workflowRow.config),
+        createdAt: workflowRow.created_at,
+        updatedAt: workflowRow.updated_at,
+        startedAt: workflowRow.started_at,
+        completedAt: workflowRow.completed_at,
+      };
+
+      // Broadcast update
+      broadcastWorkflowUpdate(req.project!.id, id, "updated", workflow);
+
+      res.json({
+        success: true,
+        data: {
+          workflow,
+          escalation: {
+            id: escalationPayload.escalation_id,
+            action,
+            message,
+            resolvedAt: now,
+          },
+        },
+        message: `Escalation resolved with action: ${action}`,
       });
     } catch (error) {
       handleWorkflowError(error, res);

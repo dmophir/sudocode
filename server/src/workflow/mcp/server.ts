@@ -22,6 +22,8 @@ import type {
   ExecutionCancelParams,
   ExecutionTrajectoryParams,
   ExecutionChangesParams,
+  EscalateToUserParams,
+  NotifyUserParams,
 } from "./types.js";
 import type { ExecutionService } from "../../services/execution-service.js";
 
@@ -39,6 +41,10 @@ import {
   handleExecutionTrajectory,
   handleExecutionChanges,
 } from "./tools/inspection.js";
+import {
+  handleEscalateToUser,
+  handleNotifyUser,
+} from "./tools/escalation.js";
 
 // =============================================================================
 // Types
@@ -213,6 +219,55 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ["execution_id"],
     },
   },
+
+  // Escalation tools (Human-in-the-Loop)
+  {
+    name: "escalate_to_user",
+    description:
+      "Request user input for a decision. Returns immediately with 'pending' status. " +
+      "Your session ends here - when the user responds, you'll receive a follow-up message. " +
+      "In full_auto mode, returns 'auto_approved' immediately without user interaction.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "Message explaining what input is needed from the user",
+        },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional predefined options for user to choose from",
+        },
+        context: {
+          type: "object",
+          description: "Additional context to include in the escalation (passed back in response)",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "notify_user",
+    description:
+      "Send a non-blocking notification to the user. Does not wait for response. " +
+      "Use for progress updates and informational messages.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "Notification message",
+        },
+        level: {
+          type: "string",
+          enum: ["info", "warning", "error"],
+          description: "Notification level (default: info)",
+        },
+      },
+      required: ["message"],
+    },
+  },
 ];
 
 // =============================================================================
@@ -356,6 +411,12 @@ export class WorkflowMCPServer {
       case "execution_changes":
         return this.handleExecutionChanges(args);
 
+      case "escalate_to_user":
+        return this.handleEscalateToUser(args);
+
+      case "notify_user":
+        return this.handleNotifyUser(args);
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -433,6 +494,27 @@ export class WorkflowMCPServer {
       include_diff: args.include_diff as boolean | undefined,
     };
     return handleExecutionChanges(this.context, params);
+  }
+
+  private async handleEscalateToUser(
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    const params: EscalateToUserParams = {
+      message: args.message as string,
+      options: args.options as string[] | undefined,
+      context: args.context as Record<string, unknown> | undefined,
+    };
+    return handleEscalateToUser(this.context, params);
+  }
+
+  private async handleNotifyUser(
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    const params: NotifyUserParams = {
+      message: args.message as string,
+      level: args.level as "info" | "warning" | "error" | undefined,
+    };
+    return handleNotifyUser(this.context, params);
   }
 
   // ===========================================================================

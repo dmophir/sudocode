@@ -399,6 +399,22 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
   }
 
   // ===========================================================================
+  // Escalation
+  // ===========================================================================
+
+  /**
+   * Trigger a wakeup for an escalation response.
+   *
+   * Called by the API when a user responds to an escalation.
+   * Immediately triggers the orchestrator to resume with the response.
+   *
+   * @param workflowId - The workflow to wake up
+   */
+  async triggerEscalationWakeup(workflowId: string): Promise<void> {
+    await this.wakeupService.triggerWakeup(workflowId);
+  }
+
+  // ===========================================================================
   // Private: Orchestrator Spawning
   // ===========================================================================
 
