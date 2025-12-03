@@ -100,13 +100,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         // Worktree mode
         try {
           const changes = await executionsApi.getChanges(rootExecution.id)
-          // Uncommitted changes can be in:
-          // 1. uncommittedSnapshot - when there are committed changes AND uncommitted on top
-          // 2. captured with uncommitted=true - when there are only uncommitted changes (no commits yet)
-          const hasUncommitted =
-            changes.available &&
-            ((changes.uncommittedSnapshot?.files?.length ?? 0) > 0 ||
-              (changes.captured?.uncommitted && (changes.captured?.files?.length ?? 0) > 0))
+          // Check for uncommitted changes: must have uncommitted flag AND actual files to commit
+          const uncommittedFiles =
+            (changes.uncommittedSnapshot?.files?.length ?? 0) +
+            (changes.captured?.uncommitted ? (changes.captured?.files?.length ?? 0) : 0)
+          const hasUncommitted = changes.available && uncommittedFiles > 0
           setHasUncommittedChanges(hasUncommitted)
           setCommitsAhead(changes.commitsAhead)
 
@@ -124,10 +122,11 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         setCommitsAhead(undefined) // Not applicable for local mode
         try {
           const changes = await executionsApi.getChanges(rootExecution.id)
-          const hasUncommitted =
-            changes.available &&
-            ((changes.uncommittedSnapshot?.files?.length ?? 0) > 0 ||
-              (changes.captured?.uncommitted && (changes.captured?.files?.length ?? 0) > 0))
+          // Check for uncommitted changes: must have uncommitted flag AND actual files to commit
+          const uncommittedFiles =
+            (changes.uncommittedSnapshot?.files?.length ?? 0) +
+            (changes.captured?.uncommitted ? (changes.captured?.files?.length ?? 0) : 0)
+          const hasUncommitted = changes.available && uncommittedFiles > 0
           setHasUncommittedChanges(hasUncommitted)
         } catch (err) {
           console.error('Failed to check uncommitted changes for local mode:', err)

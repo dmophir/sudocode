@@ -92,7 +92,7 @@ export function CommitChangesDialog({
           </DialogTitle>
           <DialogDescription>
             Commit {filesChanged.length} file change{filesChanged.length !== 1 ? 's' : ''} to{' '}
-            <span className="font-mono text-xs">{targetBranch}</span>
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{targetBranch}</code>
             {execution.mode === 'worktree' && <span> (worktree)</span>}
           </DialogDescription>
         </DialogHeader>
