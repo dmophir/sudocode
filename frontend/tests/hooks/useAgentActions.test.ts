@@ -124,6 +124,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true, // Explicitly set to show commit action
           }),
         { wrapper }
       )
@@ -317,6 +318,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -337,6 +339,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: singleFileExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -354,6 +357,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -454,6 +458,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -485,6 +490,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -592,6 +598,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: singleFileExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -606,6 +613,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: mockExecution,
             issueId: 'i-test1',
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -683,6 +691,7 @@ describe('useAgentActions', () => {
             execution: mockExecution,
             issueId: 'i-test1',
             worktreeExists: true,
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -700,6 +709,7 @@ describe('useAgentActions', () => {
             execution: mockExecution,
             issueId: 'i-test1',
             // worktreeExists not specified
+            hasUncommittedChanges: true,
           }),
         { wrapper }
       )
@@ -730,6 +740,7 @@ describe('useAgentActions', () => {
             execution: worktreeWithCommit,
             issueId: 'i-test1',
             worktreeExists: true,
+            hasUncommittedChanges: true, // There are uncommitted changes on top of the commit
           }),
         { wrapper }
       )
@@ -778,6 +789,7 @@ describe('useAgentActions', () => {
           useAgentActions({
             execution: localWithoutCommit,
             issueId: 'i-test1',
+            hasUncommittedChanges: true, // Uncommitted changes exist
           }),
         { wrapper }
       )

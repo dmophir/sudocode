@@ -245,9 +245,9 @@ export function useAgentActions(options: UseAgentActionsOptions) {
     // Action: Commit Changes
     // For worktree mode: show when there are uncommitted changes AND worktree still exists
     // For local mode: show when there are uncommitted changes
-    // Use hasUncommittedChanges if provided, otherwise fall back to hasFileChanges
-    const hasChangesToCommit =
-      hasUncommittedChanges !== undefined ? hasUncommittedChanges : hasFileChanges
+    // IMPORTANT: Only show commit action when hasUncommittedChanges is explicitly provided and true.
+    // Do NOT fall back to files_changed as it includes committed files and may be stale.
+    const hasChangesToCommit = hasUncommittedChanges === true
     const showCommitAction = isWorktreeMode
       ? hasChangesToCommit && hasWorktreePath && worktreeExists
       : hasChangesToCommit

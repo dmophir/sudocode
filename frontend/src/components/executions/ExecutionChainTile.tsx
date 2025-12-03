@@ -263,7 +263,7 @@ export function ExecutionChainTile({ executionId, onToggleVisibility }: Executio
                   } catch (err) {
                     console.error('Failed to check uncommitted changes:', err)
                     if (!cancelled) {
-                      setHasUncommittedChanges(undefined) // Fall back to files_changed
+                      setHasUncommittedChanges(false) // Safe default: assume no uncommitted changes
                     }
                   }
                 } else {
@@ -291,7 +291,7 @@ export function ExecutionChainTile({ executionId, onToggleVisibility }: Executio
             } catch (err) {
               console.error('Failed to check uncommitted changes for local mode:', err)
               if (!cancelled) {
-                setHasUncommittedChanges(undefined) // Fall back to files_changed
+                setHasUncommittedChanges(false) // Safe default: assume no uncommitted changes
               }
             }
           }

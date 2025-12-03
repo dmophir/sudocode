@@ -244,7 +244,7 @@ export function InlineExecutionView({
                 setCommitsAhead(changes.commitsAhead)
               } catch (err) {
                 console.error('Failed to check uncommitted changes:', err)
-                setHasUncommittedChanges(undefined) // Fall back to files_changed
+                setHasUncommittedChanges(false) // Safe default: assume no uncommitted changes
                 setCommitsAhead(undefined)
               }
             } else {
@@ -269,7 +269,7 @@ export function InlineExecutionView({
             setHasUncommittedChanges(hasUncommitted)
           } catch (err) {
             console.error('Failed to check uncommitted changes for local mode:', err)
-            setHasUncommittedChanges(undefined) // Fall back to files_changed
+            setHasUncommittedChanges(false) // Safe default: assume no uncommitted changes
           }
         }
       } catch (err) {
