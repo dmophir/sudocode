@@ -1,5 +1,4 @@
-import { ArrowRight, Trash2, GitBranch, FileText } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowRight, Trash2 } from 'lucide-react'
 import type { Relationship, EntityType } from '@/types/api'
 import {
   RELATIONSHIP_LABELS,
@@ -8,9 +7,9 @@ import {
   groupRelationships,
 } from '@/lib/relationships'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { EntityBadge } from '@/components/entities'
 
 interface RelationshipListProps {
   relationships: Relationship[]
@@ -52,24 +51,6 @@ export function RelationshipList({
       : getInverseLabel(rel.relationship_type)
     const color = RELATIONSHIP_COLORS[rel.relationship_type]
 
-    const getEntityUrl = () => {
-      if (targetType === 'issue') {
-        return `/issues/${targetId}`
-      }
-      return `/specs/${targetId}`
-    }
-
-    const getIcon = () => {
-      if (targetType === 'issue') {
-        return <GitBranch className="h-3 w-3" />
-      }
-      return <FileText className="h-3 w-3" />
-    }
-
-    const getBadgeVariant = () => {
-      return targetType === 'issue' ? 'issue' : 'spec'
-    }
-
     return (
       <Card
         key={`${rel.from_id}-${rel.to_id}-${rel.relationship_type}`}
@@ -83,13 +64,13 @@ export function RelationshipList({
         {/* Arrow */}
         <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
 
-        {/* Target entity - styled like EntityMention */}
-        <Link to={getEntityUrl()} className="min-w-0 flex-1 no-underline">
-          <Badge variant={getBadgeVariant()} className="inline-flex items-center gap-1">
-            {getIcon()}
-            {targetId}
-          </Badge>
-        </Link>
+        {/* Target entity with hover card */}
+        <div className="min-w-0 flex-1">
+          <EntityBadge
+            entityId={targetId}
+            entityType={targetType}
+          />
+        </div>
 
         {/* Delete button - only visible on hover */}
         {onDelete && (

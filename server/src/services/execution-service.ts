@@ -8,24 +8,23 @@
  */
 
 import type Database from "better-sqlite3";
-import type { Execution } from "@sudocode-ai/types";
-import { PromptTemplateEngine } from "./prompt-template-engine.js";
+import type { Execution, ExecutionStatus } from "@sudocode-ai/types";
 import { ExecutionLifecycleService } from "./execution-lifecycle.js";
 import {
   createExecution,
   getExecution,
   updateExecution,
 } from "./executions.js";
-import { getDefaultTemplate, getTemplateById } from "./prompt-templates.js";
 import { randomUUID } from "crypto";
+import { execSync } from "child_process";
 import type { ExecutionTask } from "agent-execution-engine/engine";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { broadcastExecutionUpdate } from "./websocket.js";
-import { GitCli } from "../execution/worktree/git-cli.js";
 import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
 import type { AgentType } from "@sudocode-ai/types/agents";
+import { PromptResolver } from "./prompt-resolver.js";
 
 /**
  * Configuration for creating an execution
@@ -35,7 +34,9 @@ export interface ExecutionConfig {
   model?: string;
   timeout?: number;
   baseBranch?: string;
+  createBaseBranch?: boolean;
   branchName?: string;
+  reuseWorktreeId?: string; // If set, reuse existing worktree instead of creating new one
   checkpointInterval?: number;
   continueOnStepFailure?: boolean;
   captureFileChanges?: boolean;
@@ -43,37 +44,9 @@ export interface ExecutionConfig {
 }
 
 /**
- * Template variable context for rendering
- */
-export interface TemplateContext {
-  issueId: string;
-  title: string;
-  description: string;
-  relatedSpecs?: Array<{ id: string; title: string }>;
-  feedback?: Array<{ issueId: string; content: string }>;
-}
-
-/**
- * Result from prepareExecution - preview before starting
- */
-export interface ExecutionPrepareResult {
-  renderedPrompt: string;
-  issue: {
-    id: string;
-    title: string;
-    content: string;
-  };
-  relatedSpecs: Array<{ id: string; title: string }>;
-  defaultConfig: ExecutionConfig;
-  warnings?: string[];
-  errors?: string[];
-}
-
-/**
  * ExecutionService
  *
  * Manages the full lifecycle of issue-based executions:
- * - Preparing execution with template rendering
  * - Creating and starting executions with worktree isolation
  * - Creating follow-up executions that reuse worktrees
  * - Canceling and cleaning up executions
@@ -81,7 +54,6 @@ export interface ExecutionPrepareResult {
 export class ExecutionService {
   private db: Database.Database;
   private projectId: string;
-  private templateEngine: PromptTemplateEngine;
   private lifecycleService: ExecutionLifecycleService;
   private repoPath: string;
   private transportManager?: TransportManager;
@@ -111,137 +83,11 @@ export class ExecutionService {
     this.db = db;
     this.projectId = projectId;
     this.repoPath = repoPath;
-    this.templateEngine = new PromptTemplateEngine();
     this.lifecycleService =
       lifecycleService || new ExecutionLifecycleService(db, repoPath);
     this.transportManager = transportManager;
     this.logsStore = logsStore || new ExecutionLogsStore(db);
     this.workerPool = workerPool;
-  }
-
-  /**
-   * Prepare execution - load issue, render template, return preview
-   *
-   * This method loads the issue and related context, renders the template,
-   * and returns a preview for the user to review before starting execution.
-   *
-   * @param issueId - ID of issue to prepare execution for
-   * @param options - Optional template and config overrides
-   * @returns Execution prepare result with rendered prompt and context
-   */
-  async prepareExecution(
-    issueId: string,
-    options?: {
-      templateId?: string;
-      config?: Partial<ExecutionConfig>;
-    }
-  ): Promise<ExecutionPrepareResult> {
-    // 1. Load issue
-    const issue = this.db
-      .prepare("SELECT * FROM issues WHERE id = ?")
-      .get(issueId) as
-      | { id: string; title: string; content: string }
-      | undefined;
-
-    if (!issue) {
-      throw new Error(`Issue ${issueId} not found`);
-    }
-
-    // 2. Load related specs (via implements/references relationships)
-    const relatedSpecs = this.db
-      .prepare(
-        `
-      SELECT DISTINCT s.id, s.title
-      FROM specs s
-      JOIN relationships r ON r.to_id = s.id AND r.to_type = 'spec'
-      WHERE r.from_id = ? AND r.from_type = 'issue'
-        AND r.relationship_type IN ('implements', 'references')
-      ORDER BY s.title
-    `
-      )
-      .all(issueId) as Array<{ id: string; title: string }>;
-
-    // 3. Build context for template rendering
-    const context: TemplateContext = {
-      issueId: issue.id,
-      title: issue.title,
-      description: issue.content,
-      relatedSpecs:
-        relatedSpecs.length > 0
-          ? relatedSpecs.map((s) => ({
-              id: s.id,
-              title: s.title,
-            }))
-          : undefined,
-    };
-
-    // 4. Get template (use custom template if provided, otherwise default)
-    let template: string;
-    if (options?.templateId) {
-      const customTemplate = getTemplateById(this.db, options.templateId);
-      if (!customTemplate) {
-        throw new Error(`Template ${options.templateId} not found`);
-      }
-      template = customTemplate.template;
-    } else {
-      const defaultTemplate = getDefaultTemplate(this.db, "issue");
-      if (!defaultTemplate) {
-        throw new Error("Default issue template not found");
-      }
-      template = defaultTemplate.template;
-    }
-
-    // 5. Render template
-    const renderedPrompt = this.templateEngine.render(template, context);
-
-    // 6. Get current branch as default base branch
-    let currentBranch = "main"; // Fallback default
-    try {
-      const gitCli = new GitCli();
-      currentBranch = await gitCli.getCurrentBranch(this.repoPath);
-      // If detached HEAD, try to use 'main' as fallback
-      if (currentBranch === "(detached)") {
-        currentBranch = "main";
-      }
-    } catch (error) {
-      console.warn(
-        "Failed to get current branch, using 'main' as fallback:",
-        error
-      );
-    }
-
-    // 7. Get default config
-    const defaultConfig: ExecutionConfig = {
-      mode: "worktree",
-      model: "claude-sonnet-4",
-      baseBranch: currentBranch,
-      checkpointInterval: 1,
-      continueOnStepFailure: false,
-      captureFileChanges: true,
-      captureToolCalls: true,
-      ...options?.config,
-    };
-
-    // 8. Validate
-    const warnings: string[] = [];
-    const errors: string[] = [];
-
-    if (!renderedPrompt.trim()) {
-      errors.push("Rendered prompt is empty");
-    }
-
-    return {
-      renderedPrompt,
-      issue: {
-        id: issue.id,
-        title: issue.title,
-        content: issue.content,
-      },
-      relatedSpecs,
-      defaultConfig,
-      warnings,
-      errors,
-    };
   }
 
   /**
@@ -277,25 +123,57 @@ export class ExecutionService {
     }
 
     // 2. Determine execution mode and create execution with worktree
+    // Store the original (unexpanded) prompt in the database
     const mode = config.mode || "worktree";
     let execution: Execution;
     let workDir: string;
 
     if (mode === "worktree") {
-      // Create execution with isolated worktree
-      const result = await this.lifecycleService.createExecutionWithWorktree({
-        issueId,
-        issueTitle: issue.title,
-        agentType: agentType,
-        targetBranch: config.baseBranch || "main",
-        repoPath: this.repoPath,
-        mode: mode,
-        prompt: prompt,
-        config: JSON.stringify(config),
-      });
+      // Check if we're reusing an existing worktree
+      if (config.reuseWorktreeId) {
+        // Reuse existing worktree
+        const existingExecution = this.db
+          .prepare("SELECT * FROM executions WHERE id = ?")
+          .get(config.reuseWorktreeId) as Execution | undefined;
 
-      execution = result.execution;
-      workDir = result.worktreePath;
+        if (!existingExecution || !existingExecution.worktree_path) {
+          throw new Error(
+            `Cannot reuse worktree: execution ${config.reuseWorktreeId} not found or has no worktree`
+          );
+        }
+
+        // Create execution record with the same worktree path
+        const executionId = randomUUID();
+        execution = createExecution(this.db, {
+          id: executionId,
+          issue_id: issueId,
+          agent_type: agentType,
+          mode: mode,
+          prompt: prompt,
+          config: JSON.stringify(config),
+          target_branch: existingExecution.target_branch,
+          branch_name: existingExecution.branch_name,
+          worktree_path: existingExecution.worktree_path, // Reuse the same worktree path
+        });
+
+        workDir = existingExecution.worktree_path;
+      } else {
+        // Create execution with isolated worktree
+        const result = await this.lifecycleService.createExecutionWithWorktree({
+          issueId,
+          issueTitle: issue.title,
+          agentType: agentType,
+          targetBranch: config.baseBranch || "main",
+          repoPath: this.repoPath,
+          mode: mode,
+          prompt: prompt, // Store original (unexpanded) prompt
+          config: JSON.stringify(config),
+          createTargetBranch: config.createBaseBranch || false,
+        });
+
+        execution = result.execution;
+        workDir = result.worktreePath;
+      }
     } else {
       // Local mode - create execution without worktree
       const executionId = randomUUID();
@@ -304,12 +182,46 @@ export class ExecutionService {
         issue_id: issueId,
         agent_type: agentType,
         mode: mode,
-        prompt: prompt,
+        prompt: prompt, // Store original (unexpanded) prompt
         config: JSON.stringify(config),
         target_branch: config.baseBranch || "main",
         branch_name: config.baseBranch || "main",
       });
       workDir = this.repoPath;
+
+      // Capture current commit as before_commit for local mode
+      try {
+        const beforeCommit = execSync("git rev-parse HEAD", {
+          cwd: this.repoPath,
+          encoding: "utf-8",
+        }).trim();
+        updateExecution(this.db, executionId, {
+          before_commit: beforeCommit,
+        });
+        // Reload execution to get updated before_commit
+        const updatedExecution = getExecution(this.db, executionId);
+        if (updatedExecution) {
+          execution = updatedExecution;
+        }
+      } catch (error) {
+        console.warn(
+          "[ExecutionService] Failed to capture before_commit for local mode:",
+          error instanceof Error ? error.message : String(error)
+        );
+        // Continue - this is supplementary data
+      }
+    }
+
+    // 3. Resolve prompt references for execution (done after storing original)
+    // Pass the issue ID so the issue content is automatically included even if not explicitly mentioned
+    const resolver = new PromptResolver(this.db);
+    const { resolvedPrompt, errors } = await resolver.resolve(
+      prompt,
+      new Set(),
+      issueId
+    );
+    if (errors.length > 0) {
+      console.warn(`[ExecutionService] Prompt resolution warnings:`, errors);
     }
 
     // Initialize empty logs for this execution
@@ -358,12 +270,12 @@ export class ExecutionService {
       }
     );
 
-    // Build execution task
+    // Build execution task (prompt already resolved above)
     const task: ExecutionTask = {
       id: execution.id,
       type: "issue",
       entityId: issueId,
-      prompt: prompt,
+      prompt: resolvedPrompt,
       workDir: workDir,
       config: {
         timeout: config.timeout,
@@ -409,11 +321,16 @@ export class ExecutionService {
    *
    * @param executionId - ID of previous execution to follow up on
    * @param feedback - Additional feedback/context to append to prompt
+   * @param options - Optional configuration
+   * @param options.includeOriginalPrompt - Whether to prepend the original issue content (default: false, assumes session resumption with full history)
    * @returns Created follow-up execution record
    */
   async createFollowUp(
     executionId: string,
-    feedback: string
+    feedback: string,
+    options?: {
+      includeOriginalPrompt?: boolean;
+    }
   ): Promise<Execution> {
     // 1. Get previous execution
     const prevExecution = getExecution(this.db, executionId);
@@ -445,23 +362,33 @@ export class ExecutionService {
       }
     }
 
-    // 2. Validate that previous execution has an issue_id
-    if (!prevExecution.issue_id) {
-      throw new Error("Previous execution must have an issue_id for follow-up");
+    // TODO: Make it so follow-ups don't require an issue id.
+    // 2. Build follow-up prompt (default: just feedback, assumes session resumption)
+    let followUpPrompt = feedback;
+
+    if (options?.includeOriginalPrompt) {
+      // Optional: include original issue content if explicitly requested
+      if (!prevExecution.issue_id) {
+        throw new Error(
+          "Previous execution must have an issue_id to include original prompt"
+        );
+      }
+
+      // Get issue content directly from database
+      const issue = this.db
+        .prepare("SELECT content FROM issues WHERE id = ?")
+        .get(prevExecution.issue_id) as { content: string } | undefined;
+
+      if (!issue) {
+        throw new Error(`Issue ${prevExecution.issue_id} not found`);
+      }
+
+      followUpPrompt = `${issue.content}
+
+${feedback}`;
     }
 
-    // 3. Prepare execution to get rendered prompt
-    const prepareResult = await this.prepareExecution(prevExecution.issue_id);
-
-    // 4. Append feedback to prompt
-    const followUpPrompt = `${prepareResult.renderedPrompt}
-
-## Follow-up Feedback
-${feedback}
-
-Please continue working on this issue, taking into account the feedback above.`;
-
-    // 5. Create new execution record that references previous execution
+    // 3. Create new execution record that references previous execution
     // Default to 'claude-code' if agent_type is null (for backwards compatibility)
     const agentType = (prevExecution.agent_type || "claude-code") as AgentType;
 
@@ -478,7 +405,7 @@ Please continue working on this issue, taking into account the feedback above.`;
       worktree_path: prevExecution.worktree_path || undefined, // Reuse same worktree (undefined for local)
       config: prevExecution.config || undefined, // Preserve config (including cleanupMode) from previous execution
       parent_execution_id: executionId, // Link to parent execution for follow-up chain
-      prompt: feedback, // Store the user's follow-up feedback as the prompt
+      prompt: followUpPrompt, // Store original (unexpanded) follow-up prompt
     });
 
     // Initialize empty logs for this execution
@@ -495,7 +422,25 @@ Please continue working on this issue, taking into account the feedback above.`;
       // Don't fail execution creation - logs are nice-to-have
     }
 
-    // 6. Use executor wrapper with session resumption
+    // Collect already-expanded entities from parent execution chain
+    const alreadyExpandedIds =
+      await this.collectExpandedEntitiesFromChain(executionId);
+
+    // Resolve prompt references for execution (done after storing original)
+    // Skip entities that were already expanded in parent executions
+    const resolver = new PromptResolver(this.db);
+    const { resolvedPrompt, errors } = await resolver.resolve(
+      followUpPrompt,
+      alreadyExpandedIds
+    );
+    if (errors.length > 0) {
+      console.warn(
+        `[ExecutionService] Follow-up prompt resolution warnings:`,
+        errors
+      );
+    }
+
+    // 4. Use executor wrapper with session resumption
     const wrapper = createExecutorForAgent(
       agentType,
       { workDir: this.repoPath },
@@ -524,12 +469,12 @@ Please continue working on this issue, taking into account the feedback above.`;
       ? JSON.parse(prevExecution.config)
       : {};
 
-    // Build execution task for follow-up
+    // Build execution task for follow-up (use resolved prompt for agent)
     const task: ExecutionTask = {
       id: newExecution.id,
       type: "issue",
-      entityId: prevExecution.issue_id,
-      prompt: followUpPrompt,
+      entityId: prevExecution.issue_id ?? undefined,
+      prompt: resolvedPrompt,
       workDir: workDir,
       config: {
         timeout: parsedConfig.timeout,
@@ -538,7 +483,7 @@ Please continue working on this issue, taking into account the feedback above.`;
         model: parsedConfig.model || "claude-sonnet-4",
         captureFileChanges: parsedConfig.captureFileChanges ?? true,
         captureToolCalls: parsedConfig.captureToolCalls ?? true,
-        issueId: prevExecution.issue_id,
+        issueId: prevExecution.issue_id ?? undefined,
         executionId: newExecution.id,
         followUpOf: executionId,
       },
@@ -579,6 +524,17 @@ Please continue working on this issue, taking into account the feedback above.`;
       newExecution,
       newExecution.issue_id || undefined
     );
+
+    // Also broadcast to parent execution channel
+    if (newExecution.parent_execution_id) {
+      broadcastExecutionUpdate(
+        this.projectId,
+        newExecution.parent_execution_id,
+        "updated",
+        newExecution,
+        newExecution.issue_id || undefined
+      );
+    }
 
     return newExecution;
   }
@@ -668,9 +624,13 @@ Please continue working on this issue, taking into account the feedback above.`;
    * when they're configured for manual cleanup.
    *
    * @param executionId - ID of execution whose worktree to delete
+   * @param deleteBranch - Whether to also delete the execution's branch (default: false)
    * @throws Error if execution not found, has no worktree, or worktree doesn't exist
    */
-  async deleteWorktree(executionId: string): Promise<void> {
+  async deleteWorktree(
+    executionId: string,
+    deleteBranch: boolean = false
+  ): Promise<void> {
     const execution = getExecution(this.db, executionId);
     if (!execution) {
       throw new Error(`Execution ${executionId} not found`);
@@ -700,18 +660,57 @@ Please continue working on this issue, taking into account the feedback above.`;
       execution.worktree_path,
       this.repoPath
     );
+
+    // Delete branch if requested and it was created by this execution
+    if (deleteBranch && execution.branch_name) {
+      try {
+        // A branch was created for this execution if:
+        // - branch_name is DIFFERENT from target_branch (autoCreateBranches was true)
+        // - This means a new worktree-specific branch was created
+        const wasCreatedByExecution =
+          execution.branch_name !== execution.target_branch &&
+          execution.branch_name !== "(detached)";
+
+        if (wasCreatedByExecution) {
+          await worktreeManager.git.deleteBranch(
+            this.repoPath,
+            execution.branch_name,
+            true // Force deletion
+          );
+          console.log(
+            `[ExecutionService] Deleted execution-created branch: ${execution.branch_name}`
+          );
+        } else {
+          console.log(
+            `[ExecutionService] Skipping branch deletion - branch ${execution.branch_name} is the target branch (not created by execution)`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to delete branch ${execution.branch_name} during worktree deletion:`,
+          err
+        );
+        // Continue even if branch deletion fails
+      }
+    }
   }
 
   /**
    * Delete an execution and its entire chain
    *
    * Deletes the execution and all its follow-ups (descendants).
-   * Also attempts to clean up the worktree if one exists.
+   * Optionally deletes the worktree and/or branch.
    *
    * @param executionId - ID of execution to delete (can be root or any execution in chain)
+   * @param deleteBranch - Whether to also delete the execution's branch (default: false)
+   * @param deleteWorktree - Whether to also delete the execution's worktree (default: false)
    * @throws Error if execution not found
    */
-  async deleteExecution(executionId: string): Promise<void> {
+  async deleteExecution(
+    executionId: string,
+    deleteBranch: boolean = false,
+    deleteWorktree: boolean = false
+  ): Promise<void> {
     const execution = getExecution(this.db, executionId);
     if (!execution) {
       throw new Error(`Execution ${executionId} not found`);
@@ -759,9 +758,9 @@ Please continue working on this issue, taking into account the feedback above.`;
       }
     }
 
-    // Delete worktree if it exists (only for root execution)
+    // Delete worktree if requested and it exists (only for root execution)
     const rootExecution = chain.find((e) => e.id === rootId);
-    if (rootExecution?.worktree_path) {
+    if (deleteWorktree && rootExecution?.worktree_path) {
       try {
         const fs = await import("fs");
         if (fs.existsSync(rootExecution.worktree_path)) {
@@ -773,6 +772,48 @@ Please continue working on this issue, taking into account the feedback above.`;
           err
         );
         // Continue with deletion even if worktree cleanup fails
+      }
+    }
+
+    // Delete branch if requested and it exists
+    // IMPORTANT: Only delete branches that were created specifically for this execution
+    if (deleteBranch && rootExecution?.branch_name) {
+      try {
+        // A branch was created for this execution if:
+        // - branch_name is DIFFERENT from target_branch (autoCreateBranches was true)
+        // - This means a new worktree-specific branch was created
+        //
+        // A branch was NOT created (reusing existing) if:
+        // - branch_name === target_branch (autoCreateBranches was false)
+        // - This means the worktree reused the target branch directly
+        const wasCreatedByExecution =
+          rootExecution.branch_name !== rootExecution.target_branch &&
+          rootExecution.branch_name !== "(detached)";
+
+        if (wasCreatedByExecution) {
+          // Get worktree manager from lifecycle service to access git operations
+          const worktreeManager = (this.lifecycleService as any)
+            .worktreeManager;
+
+          await worktreeManager.git.deleteBranch(
+            this.repoPath,
+            rootExecution.branch_name,
+            true // Force deletion
+          );
+          console.log(
+            `[ExecutionService] Deleted execution-created branch: ${rootExecution.branch_name}`
+          );
+        } else {
+          console.log(
+            `[ExecutionService] Skipping branch deletion - branch ${rootExecution.branch_name} is the target branch (not created by execution)`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to delete branch ${rootExecution.branch_name} during execution deletion:`,
+          err
+        );
+        // Continue with deletion even if branch deletion fails
       }
     }
 
@@ -858,6 +899,112 @@ Please continue working on this issue, taking into account the feedback above.`;
   }
 
   /**
+   * List all executions with filtering and pagination
+   *
+   * Returns executions across all issues with support for filtering
+   * by status, issueId, and pagination.
+   *
+   * @param options - Filtering and pagination options
+   * @param options.limit - Maximum number of executions to return (default: 50)
+   * @param options.offset - Number of executions to skip (default: 0)
+   * @param options.status - Filter by execution status (single or array)
+   * @param options.issueId - Filter by issue ID
+   * @param options.sortBy - Field to sort by (default: 'created_at')
+   * @param options.order - Sort order (default: 'desc')
+   * @param options.since - Only return executions created after this ISO date
+   * @param options.includeRunning - When used with 'since', also include running executions regardless of age
+   * @returns Object containing executions array, total count, and hasMore flag
+   */
+  listAll(options: {
+    limit?: number;
+    offset?: number;
+    status?: ExecutionStatus | ExecutionStatus[];
+    issueId?: string;
+    sortBy?: "created_at" | "updated_at";
+    order?: "asc" | "desc";
+    since?: string;
+    includeRunning?: boolean;
+  } = {}): {
+    executions: Execution[];
+    total: number;
+    hasMore: boolean;
+  } {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+    const sortBy = options.sortBy ?? "created_at";
+    const order = options.order ?? "desc";
+
+    // Validate inputs
+    if (limit < 0 || offset < 0) {
+      throw new Error("Limit and offset must be non-negative");
+    }
+
+    // Build WHERE clause dynamically
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    // Filter by status (single or array)
+    if (options.status) {
+      const statuses = Array.isArray(options.status)
+        ? options.status
+        : [options.status];
+      const placeholders = statuses.map(() => "?").join(",");
+      whereClauses.push(`status IN (${placeholders})`);
+      params.push(...statuses);
+    }
+
+    // Filter by issueId
+    if (options.issueId) {
+      whereClauses.push("issue_id = ?");
+      params.push(options.issueId);
+    }
+
+    // Filter by since date (with optional includeRunning)
+    if (options.since) {
+      if (options.includeRunning) {
+        // Include executions created after 'since' OR that are currently running
+        whereClauses.push("(created_at >= ? OR status = 'running')");
+        params.push(options.since);
+      } else {
+        // Only include executions created after 'since'
+        whereClauses.push("created_at >= ?");
+        params.push(options.since);
+      }
+    }
+
+    // Build WHERE clause
+    const whereClause =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as count FROM executions ${whereClause}`;
+    const countResult = this.db.prepare(countQuery).get(...params) as {
+      count: number;
+    };
+    const total = countResult.count;
+
+    // Get executions with pagination
+    const query = `
+      SELECT * FROM executions
+      ${whereClause}
+      ORDER BY ${sortBy} ${order.toUpperCase()}
+      LIMIT ? OFFSET ?
+    `;
+    const executions = this.db
+      .prepare(query)
+      .all(...params, limit, offset) as Execution[];
+
+    // Calculate hasMore
+    const hasMore = offset + executions.length < total;
+
+    return {
+      executions,
+      total,
+      hasMore,
+    };
+  }
+
+  /**
    * Check if there are any active executions
    *
    * @returns true if there are active worker pool executions
@@ -877,5 +1024,46 @@ Please continue working on this issue, taking into account the feedback above.`;
       .get() as { count: number };
 
     return runningExecutions.count > 0;
+  }
+
+  /**
+   * Collect entity IDs that were already expanded in parent executions
+   *
+   * Walks the execution chain backwards and resolves each prompt to extract
+   * which entities were referenced (and thus expanded) in previous executions.
+   * This prevents redundant expansion of the same entities in follow-ups.
+   *
+   * @param executionId - ID of the current execution
+   * @returns Set of entity IDs that were already expanded
+   */
+  private async collectExpandedEntitiesFromChain(
+    executionId: string
+  ): Promise<Set<string>> {
+    const expandedIds = new Set<string>();
+    const resolver = new PromptResolver(this.db);
+
+    // Walk backwards through the execution chain
+    let currentExecId: string | null = executionId;
+    while (currentExecId) {
+      const execution = getExecution(this.db, currentExecId);
+      if (!execution || !execution.prompt) break;
+
+      // Resolve the prompt to extract what entities were referenced
+      // Pass empty set so we expand everything in this pass (just to collect IDs)
+      // Pass the execution's issue_id as implicit to track if it was auto-included
+      const { expandedEntityIds } = await resolver.resolve(
+        execution.prompt,
+        new Set(),
+        execution.issue_id || undefined
+      );
+
+      // Add all expanded entity IDs from this execution
+      expandedEntityIds.forEach((id) => expandedIds.add(id));
+
+      // Move to parent execution
+      currentExecId = execution.parent_execution_id || null;
+    }
+
+    return expandedIds;
   }
 }

@@ -120,6 +120,28 @@ export interface IWorktreeManager {
    * @returns Promise resolving to array of branch names
    */
   listBranches(repoPath: string): Promise<string[]>;
+
+  /**
+   * Get the current branch name
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Promise resolving to current branch name
+   */
+  getCurrentBranch(repoPath: string): Promise<string>;
+
+  /**
+   * Create a new branch
+   *
+   * @param repoPath - Path to the git repository
+   * @param branchName - Name of the branch to create
+   * @param baseBranch - Branch or commit to base the new branch on
+   * @returns Promise that resolves when branch is created
+   */
+  createBranch(
+    repoPath: string,
+    branchName: string,
+    baseBranch: string
+  ): Promise<void>;
 }
 
 /**
@@ -169,7 +191,7 @@ export class WorktreeManager implements IWorktreeManager {
       repoPath,
       branchName,
       worktreePath,
-      baseBranch: _baseBranch,
+      baseBranch,
       createBranch,
       commitSha,
     } = params;
@@ -177,9 +199,9 @@ export class WorktreeManager implements IWorktreeManager {
     try {
       // 1. Create branch if requested
       if (createBranch) {
-        // Use the specified commit SHA or the current HEAD commit SHA to branch from
+        // Use the specified commit SHA, or base branch, or current HEAD commit to branch from
         const targetCommit =
-          commitSha || (await this.git.getCurrentCommit(repoPath));
+          commitSha || baseBranch || (await this.git.getCurrentCommit(repoPath));
         await this.git.createBranch(repoPath, branchName, targetCommit);
       }
 
@@ -550,6 +572,18 @@ export class WorktreeManager implements IWorktreeManager {
 
   async listBranches(repoPath: string): Promise<string[]> {
     return this.git.listBranches(repoPath);
+  }
+
+  async getCurrentBranch(repoPath: string): Promise<string> {
+    return this.git.getCurrentBranch(repoPath);
+  }
+
+  async createBranch(
+    repoPath: string,
+    branchName: string,
+    baseBranch: string
+  ): Promise<void> {
+    return this.git.createBranch(repoPath, branchName, baseBranch);
   }
 
   /**

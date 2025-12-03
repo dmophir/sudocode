@@ -15,12 +15,7 @@ import { useProject } from '@/hooks/useProject'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -184,9 +179,6 @@ export default function ProjectsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Manage your Sudocode projects
-          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setOpenDialogOpen(true)}>
@@ -204,11 +196,11 @@ export default function ProjectsPage() {
         <div className="rounded-lg border border-border bg-card p-12 text-center">
           <FolderOpen className="mx-auto h-16 w-16 text-muted-foreground" />
           <h3 className="mt-6 text-xl font-semibold">No projects yet</h3>
-          <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
-            Sudocode helps you manage specifications and issues for your projects.
-            Get started by opening an existing project or creating a new one.
+          <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
+            sudocode helps you manage specifications and issues for your projects. Get started by
+            opening an existing project or creating a new one.
           </p>
-          <div className="mt-6 flex gap-3 justify-center">
+          <div className="mt-6 flex justify-center gap-3">
             <Button variant="outline" onClick={() => setOpenDialogOpen(true)}>
               <FolderOpen className="mr-2 h-4 w-4" />
               Open Existing Project
@@ -275,7 +267,10 @@ export default function ProjectsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -326,9 +321,7 @@ export default function ProjectsPage() {
             </Button>
             <Button
               onClick={handleOpenExistingProject}
-              disabled={
-                !projectPath.trim() || validateProject.isPending || openProject.isPending
-              }
+              disabled={!projectPath.trim() || validateProject.isPending || openProject.isPending}
             >
               {validateProject.isPending || openProject.isPending ? (
                 <>
@@ -379,9 +372,7 @@ export default function ProjectsPage() {
                 className="mt-1"
               />
             </div>
-            {validationError && (
-              <p className="text-sm text-destructive">{validationError}</p>
-            )}
+            {validationError && <p className="text-sm text-destructive">{validationError}</p>}
           </div>
           <DialogFooter>
             <Button
@@ -426,14 +417,21 @@ interface ProjectCardProps {
 }
 
 function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: ProjectCardProps) {
+  const navigate = useNavigate()
   const updateProject = useUpdateProject()
   const [isEditing, setIsEditing] = useState(false)
   const [editedName, setEditedName] = useState(project.name)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleCardClick = () => {
-    // If it's the current project or editing, don't do anything
-    if (isCurrent || isEditing) return
+    // If editing, don't do anything
+    if (isEditing) return
+
+    // If it's the current project, navigate to issues
+    if (isCurrent) {
+      navigate('/issues')
+      return
+    }
 
     // Otherwise, open/switch to this project
     onOpen(project)
@@ -510,11 +508,8 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
 
   return (
     <div className="group flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/50">
-      <div
-        className="flex-1 min-w-0 cursor-pointer"
-        onClick={handleCardClick}
-      >
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={handleCardClick}>
+        <div className="flex flex-wrap items-center gap-2">
           {isEditing ? (
             <div className="flex flex-col gap-1">
               <Input
@@ -526,20 +521,18 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
-              {validationError && (
-                <p className="text-xs text-destructive">{validationError}</p>
-              )}
+              {validationError && <p className="text-xs text-destructive">{validationError}</p>}
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{project.name}</h3>
+              <h3 className="truncate font-semibold">{project.name}</h3>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation()
                         setIsEditing(true)
@@ -572,14 +565,14 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
               Closed
             </Badge>
           )}
-          {project.favorite && <span className="text-yellow-500 text-lg">★</span>}
+          {project.favorite && <span className="text-lg text-yellow-500">★</span>}
         </div>
-        <p className="mt-1 text-sm text-muted-foreground truncate">{project.path}</p>
+        <p className="mt-1 truncate text-sm text-muted-foreground">{project.path}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Last opened: {new Date(project.lastOpenedAt).toLocaleDateString()}
         </p>
       </div>
-      <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
+      <div className="ml-4 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {!isOpen && (
           <Button variant="outline" size="sm" onClick={() => onOpen(project)}>
             <FolderOpen className="mr-2 h-4 w-4" />
@@ -603,11 +596,19 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
             Close
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={() => onDelete(project)}>
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={() => onDelete(project)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Delete Project Reference</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   )
 }
-

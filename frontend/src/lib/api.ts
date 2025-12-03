@@ -6,6 +6,8 @@ import type {
   Relationship,
   IssueFeedback,
   RepositoryInfo,
+  BranchInfo,
+  FileSearchResult,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateSpecRequest,
@@ -19,10 +21,13 @@ import type {
 } from '@/types/api'
 import type {
   Execution,
-  ExecutionPrepareResult,
-  PrepareExecutionRequest,
+  ExecutionStatus,
   CreateExecutionRequest,
   CreateFollowUpRequest,
+  SyncPreviewResult,
+  SyncResult,
+  PerformSyncRequest,
+  ExecutionChangesResult,
 } from '@/types/execution'
 import type {
   ProjectInfo,
@@ -68,7 +73,11 @@ api.interceptors.request.use(
   (config) => {
     // Inject X-Project-ID header if we have a current project
     // Skip for /projects and /agents endpoints which don't require project context
-    if (currentProjectId && !config.url?.startsWith('/projects') && !config.url?.startsWith('/agents')) {
+    if (
+      currentProjectId &&
+      !config.url?.startsWith('/projects') &&
+      !config.url?.startsWith('/agents')
+    ) {
       config.headers['X-Project-ID'] = currentProjectId
     }
     return config
@@ -201,11 +210,32 @@ export interface ExecutionChainResponse {
   executions: Execution[]
 }
 
-export const executionsApi = {
-  // Prepare execution (preview template and gather context)
-  prepare: (issueId: string, request?: PrepareExecutionRequest) =>
-    post<ExecutionPrepareResult>(`/issues/${issueId}/executions/prepare`, request),
+/**
+ * Parameters for listing all executions
+ */
+export interface ListExecutionsParams {
+  limit?: number
+  offset?: number
+  status?: ExecutionStatus | ExecutionStatus[]
+  issueId?: string
+  sortBy?: 'created_at' | 'updated_at'
+  order?: 'asc' | 'desc'
+  /** Only return executions created after this ISO date */
+  since?: string
+  /** When used with 'since', also include running executions regardless of age */
+  includeRunning?: boolean
+}
 
+/**
+ * Response from listing all executions
+ */
+export interface ListExecutionsResponse {
+  executions: Execution[]
+  total: number
+  hasMore: boolean
+}
+
+export const executionsApi = {
   // Create and start execution
   create: (issueId: string, request: CreateExecutionRequest) =>
     post<Execution>(`/issues/${issueId}/executions`, request),
@@ -214,10 +244,34 @@ export const executionsApi = {
   getById: (executionId: string) => get<Execution>(`/executions/${executionId}`),
 
   // Get execution chain (root + all follow-ups)
-  getChain: (executionId: string) => get<ExecutionChainResponse>(`/executions/${executionId}/chain`),
+  getChain: (executionId: string) =>
+    get<ExecutionChainResponse>(`/executions/${executionId}/chain`),
 
   // List executions for issue
   list: (issueId: string) => get<Execution[]>(`/issues/${issueId}/executions`),
+
+  // List all executions across all issues with filtering and pagination
+  listAll: (params?: ListExecutionsParams) => {
+    const queryParams = new URLSearchParams()
+
+    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit))
+    if (params?.offset !== undefined) queryParams.append('offset', String(params.offset))
+    if (params?.status) {
+      if (Array.isArray(params.status)) {
+        queryParams.append('status', params.status.join(','))
+      } else {
+        queryParams.append('status', params.status)
+      }
+    }
+    if (params?.issueId) queryParams.append('issueId', params.issueId)
+    if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
+    if (params?.order) queryParams.append('order', params.order)
+    if (params?.since) queryParams.append('since', params.since)
+    if (params?.includeRunning) queryParams.append('includeRunning', 'true')
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
+    return get<ListExecutionsResponse>(`/executions${query}`)
+  },
 
   // Create follow-up execution
   createFollowUp: (executionId: string, request: CreateFollowUpRequest) =>
@@ -226,15 +280,55 @@ export const executionsApi = {
   // Cancel execution
   cancel: (executionId: string) => post(`/executions/${executionId}/cancel`),
 
-  // Delete execution and its entire chain (including worktree and logs)
-  delete: (executionId: string) => del(`/executions/${executionId}`),
+  // Delete execution and its entire chain
+  delete: (executionId: string, deleteBranch?: boolean, deleteWorktree?: boolean) => {
+    const params = new URLSearchParams()
+    if (deleteBranch) params.append('deleteBranch', 'true')
+    if (deleteWorktree) params.append('deleteWorktree', 'true')
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return del(`/executions/${executionId}${query}`)
+  },
 
   // Check if worktree exists for execution
   worktreeExists: (executionId: string) =>
     get<{ exists: boolean }>(`/executions/${executionId}/worktree`),
 
   // Delete worktree for execution
-  deleteWorktree: (executionId: string) => del(`/executions/${executionId}/worktree`),
+  deleteWorktree: (executionId: string, deleteBranch?: boolean) => {
+    const params = deleteBranch ? `?deleteBranch=true` : ''
+    return del(`/executions/${executionId}/worktree${params}`)
+  },
+
+  // Worktree sync operations
+  syncPreview: (executionId: string) =>
+    get<SyncPreviewResult>(`/executions/${executionId}/sync/preview`),
+
+  syncSquash: (executionId: string, request?: PerformSyncRequest) =>
+    post<SyncResult>(`/executions/${executionId}/sync/squash`, request),
+
+  syncPreserve: (executionId: string, request?: PerformSyncRequest) =>
+    post<SyncResult>(`/executions/${executionId}/sync/preserve`, request),
+
+  // Commit uncommitted changes
+  commit: (executionId: string, request: { message: string }) =>
+    post<{ commitSha: string; filesCommitted: number; branch: string }>(
+      `/executions/${executionId}/commit`,
+      request
+    ),
+
+  // Get code changes for execution
+  getChanges: (executionId: string) =>
+    get<ExecutionChangesResult>(`/executions/${executionId}/changes`),
+
+  // Get diff content for a specific file
+  getFileDiff: (executionId: string, filePath: string) =>
+    get<{ filePath: string; oldContent: string; newContent: string }>(
+      `/executions/${executionId}/changes/file?filePath=${encodeURIComponent(filePath)}`
+    ),
+
+  // Open worktree in IDE
+  openInIde: (worktreePath: string, request?: { editorType?: string }) =>
+    post(`/open-in-ide`, { worktreePath, ...request }),
 }
 
 /**
@@ -242,6 +336,19 @@ export const executionsApi = {
  */
 export const repositoryApi = {
   getInfo: () => get<RepositoryInfo>('/repo-info'),
+  getBranches: () => get<BranchInfo>('/repo-info/branches'),
+  listWorktrees: () => get<Execution[]>('/repo-info/worktrees'),
+}
+
+/**
+ * Files API
+ */
+export const filesApi = {
+  search: (query: string, options?: { limit?: number; includeDirectories?: boolean }) =>
+    get<{ results: FileSearchResult[] }>(
+      `/files/search?q=${encodeURIComponent(query)}${options?.limit ? `&limit=${options.limit}` : ''}${options?.includeDirectories ? `&includeDirectories=${options.includeDirectories}` : ''}`
+    ).then((res) => res.results),
+  listWorktrees: () => get<Execution[]>('/repo-info/worktrees'),
 }
 
 /**
@@ -273,7 +380,8 @@ export const projectsApi = {
   getById: (projectId: string) => get<ProjectInfo | OpenProjectInfo>(`/projects/${projectId}`),
 
   // Validate a project path
-  validate: (data: ValidateProjectRequest) => post<ValidateProjectResponse>('/projects/validate', data),
+  validate: (data: ValidateProjectRequest) =>
+    post<ValidateProjectResponse>('/projects/validate', data),
 
   // Open a project by path
   open: (data: OpenProjectRequest) => post<ProjectInfo>('/projects/open', data),

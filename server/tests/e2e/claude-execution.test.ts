@@ -323,7 +323,7 @@ describe.skipIf(SKIP_E2E)("Claude Code E2E Tests", () => {
 
     it("should expose correct metadata", () => {
       expect(adapter.metadata.name).toBe("claude-code");
-      expect(adapter.metadata.displayName).toBe("Claude Code");
+      expect(adapter.metadata.displayName).toBe("Claude");
       expect(adapter.metadata.supportedModes).toContain("structured");
       expect(adapter.metadata.supportsStreaming).toBe(true);
       expect(adapter.metadata.supportsStructuredOutput).toBe(true);

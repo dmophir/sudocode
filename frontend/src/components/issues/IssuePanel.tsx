@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -17,12 +17,14 @@ import {
   ChevronUp,
   Copy,
   Check,
+  ArrowDown,
 } from 'lucide-react'
 import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { EntityBadge } from '@/components/entities'
 import {
   Select,
   SelectContent,
@@ -43,6 +45,7 @@ import { ActivityTimeline } from './ActivityTimeline'
 import type { IssueFeedback, WebSocketMessage } from '@/types/api'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { toast } from 'sonner'
+import { findLatestExecutionInChain } from '@/utils/executions'
 
 const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
 const DESCRIPTION_COLLAPSED_STORAGE_KEY = 'sudocode:issue:descriptionCollapsed'
@@ -62,6 +65,7 @@ interface IssuePanelProps {
   onViewModeChange?: (mode: 'formatted' | 'markdown') => void
   showViewToggleInline?: boolean
   feedback?: IssueFeedback[]
+  autoFocusAgentConfig?: boolean
 }
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
@@ -95,6 +99,7 @@ export function IssuePanel({
   onViewModeChange,
   showViewToggleInline = true,
   feedback = [],
+  autoFocusAgentConfig = false,
 }: IssuePanelProps) {
   const navigate = useNavigate()
   const [title, setTitle] = useState(issue.title)
@@ -127,6 +132,9 @@ export function IssuePanel({
   const [hasChanges, setHasChanges] = useState(false)
   const [executions, setExecutions] = useState<Execution[]>([])
   const [isCopied, setIsCopied] = useState(false)
+  const [isFollowUpMode, setIsFollowUpMode] = useState(true)
+  const [forceNewExecution, setForceNewExecution] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const isAgentPanelSelectOpenRef = useRef(false)
   const selectCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -134,9 +142,99 @@ export function IssuePanel({
   const activitySectionRef = useRef<HTMLDivElement>(null)
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const shouldScrollToActivityRef = useRef(false)
+  const hasInitializedForIssueRef = useRef<string | null>(null)
+  const executionsLoadedRef = useRef(false)
+  const activityBottomRef = useRef<HTMLDivElement>(null)
+  const lastFeedbackRef = useRef<HTMLDivElement>(null)
+  const escPressedWhileRunningRef = useRef(false)
+
+  // Auto-scroll state and refs (enabled when execution is running)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false)
+  const [isScrollable, setIsScrollable] = useState(false)
+  const lastScrollTopRef = useRef(0)
 
   // WebSocket for real-time updates
   const { subscribe, unsubscribe, addMessageHandler, removeMessageHandler } = useWebSocketContext()
+
+  // Computed values for follow-up mode
+  const latestExecution = useMemo(() => {
+    return findLatestExecutionInChain(executions)
+  }, [executions])
+
+  const canFollowUp = useMemo(() => {
+    if (!latestExecution) return false
+
+    const terminalStatuses: Execution['status'][] = ['completed', 'failed', 'stopped', 'cancelled']
+
+    return terminalStatuses.includes(latestExecution.status)
+  }, [latestExecution])
+
+  const isExecutionRunning = useMemo(() => {
+    if (!latestExecution) return false
+    return latestExecution.status === 'running'
+  }, [latestExecution])
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    // Smooth scroll to bottom (with fallback for environments without scrollTo)
+    if (container.scrollTo) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth',
+      })
+    } else {
+      container.scrollTop = container.scrollHeight
+    }
+  }, [])
+
+  // Handle scroll events to detect manual scrolling
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+    // Check if container has scrollable content
+    const hasScrollableContent = scrollHeight > clientHeight
+    setIsScrollable(hasScrollableContent)
+
+    // Consider "at bottom" if within 50px of the bottom
+    const isAtBottom = distanceFromBottom < 50
+
+    // Detect if user scrolled up (manual scroll)
+    const scrolledUp = scrollTop < lastScrollTopRef.current
+    lastScrollTopRef.current = scrollTop
+
+    if (scrolledUp && !isAtBottom) {
+      // User manually scrolled up - disable auto-scroll
+      setShouldAutoScroll(false)
+    } else if (isAtBottom) {
+      // User scrolled to bottom - enable auto-scroll
+      setShouldAutoScroll(true)
+    }
+  }, [])
+
+  // Check if container is scrollable whenever content changes
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const checkScrollable = () => {
+      const hasScrollableContent = container.scrollHeight > container.clientHeight
+      setIsScrollable(hasScrollableContent)
+    }
+
+    checkScrollable()
+    // Also check on resize
+    const resizeObserver = new ResizeObserver(checkScrollable)
+    resizeObserver.observe(container)
+
+    return () => resizeObserver.disconnect()
+  }, [executions])
 
   // Relationship mutations with cache invalidation
   const { createRelationshipAsync, deleteRelationshipAsync } = useRelationshipMutations()
@@ -161,7 +259,94 @@ export function IssuePanel({
     }
     // Reset hasChanges to prevent saving old content to new issue
     setHasChanges(false)
+    // Reset executions to prevent stale data affecting auto-collapse logic
+    setExecutions([])
+    // Reset initialization ref so auto-collapse can re-evaluate for new issue
+    hasInitializedForIssueRef.current = null
+    // Reset executions loaded flag
+    executionsLoadedRef.current = false
+    // Reset to follow-up mode when issue changes
+    setIsFollowUpMode(true)
+    // Reset force new execution flag
+    setForceNewExecution(false)
+    // Reset ESC pressed flag
+    escPressedWhileRunningRef.current = false
   }, [issue.id])
+
+  // Auto-manage follow-up mode based on whether follow-ups are possible
+  useEffect(() => {
+    if (isFollowUpMode && !canFollowUp) {
+      // Disable follow-up mode when not possible (no terminal executions)
+      setIsFollowUpMode(false)
+    } else if (!isFollowUpMode && canFollowUp) {
+      // Re-enable follow-up mode when it becomes possible
+      setIsFollowUpMode(true)
+    }
+  }, [isFollowUpMode, canFollowUp])
+
+  // Reset ESC pressed flag when execution stops running
+  useEffect(() => {
+    if (!isExecutionRunning) {
+      escPressedWhileRunningRef.current = false
+    }
+  }, [isExecutionRunning])
+
+  // Enable auto-scroll when execution is running
+  useEffect(() => {
+    if (isExecutionRunning) {
+      setShouldAutoScroll(true)
+    }
+  }, [isExecutionRunning])
+
+  // Auto-scroll when executions update and auto-scroll is enabled
+  useEffect(() => {
+    if (!shouldAutoScroll || !isExecutionRunning) return
+
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      scrollToBottom()
+    }, 100)
+  }, [executions, shouldAutoScroll, isExecutionRunning, scrollToBottom])
+
+  // Watch for content changes in scroll container (for real-time execution updates)
+  useEffect(() => {
+    if (!shouldAutoScroll || !isExecutionRunning) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    let scrollTimeout: NodeJS.Timeout | null = null
+
+    // Use MutationObserver to detect content changes
+    const observer = new MutationObserver(() => {
+      if (!shouldAutoScroll || !isExecutionRunning) return
+
+      // Throttle scroll calls to avoid excessive scrolling
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
+
+      scrollTimeout = setTimeout(() => {
+        scrollToBottom()
+        scrollTimeout = null
+      }, 100)
+    })
+
+    // Observe the container for changes to its descendants
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: false,
+    })
+
+    return () => {
+      observer.disconnect()
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
+    }
+  }, [shouldAutoScroll, isExecutionRunning, scrollToBottom])
 
   // Save internal view mode preference to localStorage
   useEffect(() => {
@@ -237,11 +422,13 @@ export function IssuePanel({
         const data = await executionsApi.list(issue.id)
         if (isMounted) {
           setExecutions(data)
+          executionsLoadedRef.current = true
         }
       } catch (error) {
         console.error('Failed to fetch executions:', error)
         if (isMounted) {
           setExecutions([])
+          executionsLoadedRef.current = true
         }
       }
     }
@@ -277,10 +464,11 @@ export function IssuePanel({
 
   // Scroll to activity section when a new execution is created
   useEffect(() => {
-    if (shouldScrollToActivityRef.current && activitySectionRef.current) {
+    if (shouldScrollToActivityRef.current && activityBottomRef.current) {
       // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => {
-        activitySectionRef.current?.scrollIntoView({
+        // Scroll to bottom when a new execution is created
+        activityBottomRef.current?.scrollIntoView({
           behavior: 'smooth',
           block: 'end',
         })
@@ -288,6 +476,64 @@ export function IssuePanel({
       })
     }
   }, [executions])
+
+  // Auto-collapse description and scroll to activity when issue has activity
+  useEffect(() => {
+    // Only run once per issue (wait for executions to load)
+    if (hasInitializedForIssueRef.current === issue.id) return
+
+    // Wait for executions to load before making the initial decision
+    if (!executionsLoadedRef.current) return
+
+    const hasActivity = executions.length > 0 || feedback.length > 0
+
+    // Mark as initialized for this issue
+    hasInitializedForIssueRef.current = issue.id
+
+    if (hasActivity) {
+      // Collapse the description
+      setIsDescriptionCollapsed(true)
+
+      // Determine the last activity item type
+      const allActivities = [
+        ...executions.map((e) => ({
+          ...e,
+          itemType: 'execution' as const,
+          created_at: e.created_at,
+        })),
+        ...feedback.map((f) => ({ ...f, itemType: 'feedback' as const, created_at: f.created_at })),
+      ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+      const lastActivity = allActivities[allActivities.length - 1]
+      const isLastItemExecution = lastActivity?.itemType === 'execution'
+
+      // Scroll to the most recent activity after a brief delay to let the collapse happen
+      requestAnimationFrame(() => {
+        if (isLastItemExecution && activityBottomRef.current) {
+          // If last item is an execution, scroll to bottom
+          activityBottomRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'end',
+          })
+        } else if (lastFeedbackRef.current) {
+          // If last item is feedback, scroll to the last feedback item
+          lastFeedbackRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        } else if (activitySectionRef.current) {
+          // Fallback: scroll to the start of the activity section
+          activitySectionRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        }
+      })
+    } else {
+      // No activity - expand the description
+      setIsDescriptionCollapsed(false)
+    }
+  }, [issue.id, executions, feedback])
 
   // Handle click outside to close panel
   useEffect(() => {
@@ -409,6 +655,16 @@ export function IssuePanel({
       if (showDeleteDialog || showAddRelationship) return
 
       if (event.key === 'Escape') {
+        // If execution is running, first ESC press stops the execution
+        if (isExecutionRunning && !escPressedWhileRunningRef.current) {
+          escPressedWhileRunningRef.current = true
+          if (latestExecution) {
+            handleCancel(latestExecution.id)
+          }
+          return
+        }
+
+        // Second ESC press (or no execution running) closes the panel
         onClose()
       }
     }
@@ -417,7 +673,7 @@ export function IssuePanel({
     return () => {
       document.removeEventListener('keydown', handleEscKey)
     }
-  }, [onClose, showDeleteDialog, showAddRelationship])
+  }, [onClose, showDeleteDialog, showAddRelationship, isExecutionRunning, latestExecution])
 
   // Auto-save effect with debounce
   useEffect(() => {
@@ -544,23 +800,48 @@ export function IssuePanel({
   const handleStartExecution = async (
     config: ExecutionConfig,
     prompt: string,
-    agentType?: string
+    agentType?: string,
+    forceNew?: boolean
   ) => {
+    const shouldFollowUp = isFollowUpMode && latestExecution && !forceNew
+
     try {
       // Set flag to scroll to activity section when execution appears
       shouldScrollToActivityRef.current = true
 
-      await executionsApi.create(issue.id, {
-        config,
-        prompt,
-        agentType,
-      })
+      if (shouldFollowUp) {
+        // Follow-up path: create follow-up from latest execution
+        await executionsApi.createFollowUp(latestExecution.id, {
+          feedback: prompt,
+        })
+      } else {
+        // New conversation path: create fresh execution
+        await executionsApi.create(issue.id, {
+          config,
+          prompt,
+          agentType,
+        })
+      }
       // Execution will appear in activity timeline via WebSocket
       // Scroll will happen when executions state updates
     } catch (error) {
       console.error('Failed to create execution:', error)
       shouldScrollToActivityRef.current = false
-      toast.error('Failed to start execution')
+      toast.error(shouldFollowUp ? 'Failed to create follow-up' : 'Failed to start execution')
+    }
+  }
+
+  const handleCancel = async (executionId: string) => {
+    setCancelling(true)
+    try {
+      await executionsApi.cancel(executionId)
+      // Execution status will update via WebSocket
+      toast.success('Execution cancelled')
+    } catch (error) {
+      console.error('Failed to cancel execution:', error)
+      toast.error('Failed to cancel execution')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -575,6 +856,19 @@ export function IssuePanel({
     } catch (error) {
       console.error('Failed to copy ID:', error)
       toast.error('Failed to copy ID')
+    }
+  }
+
+  /**
+   * Parses execution config JSON string into ExecutionConfig object.
+   */
+  const parseExecutionConfig = (execution: Execution | null): ExecutionConfig | undefined => {
+    if (!execution?.config) return undefined
+    try {
+      return JSON.parse(execution.config)
+    } catch (error) {
+      console.warn('Failed to parse execution config:', error)
+      return undefined
     }
   }
 
@@ -683,6 +977,7 @@ export function IssuePanel({
         <div
           ref={scrollContainerRef}
           className={`w-full flex-1 overflow-y-auto ${hideTopControls ? 'py-4' : 'py-3'}`}
+          onScroll={handleScroll}
         >
           <div className="mx-auto w-full max-w-7xl space-y-4 px-6">
             {/* Issue ID and Title */}
@@ -717,11 +1012,10 @@ export function IssuePanel({
                     <>
                       <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">Parent: </span>
-                      <button onClick={() => navigate(`/issues/${issue.parent_id}`)}>
-                        <Badge variant="issue" className="cursor-pointer hover:opacity-80">
-                          {issue.parent_id}
-                        </Badge>
-                      </button>
+                      <EntityBadge
+                        entityId={issue.parent_id}
+                        entityType="issue"
+                      />
                     </>
                   )}
                 </div>
@@ -917,7 +1211,7 @@ export function IssuePanel({
                           e.stopPropagation()
                           setIsDescriptionCollapsed(false)
                         }}
-                        className="gap-1 shadow-sm"
+                        className="gap-1 text-muted-foreground shadow-sm"
                       >
                         <ChevronDown className="h-4 w-4" />
                         Expand
@@ -951,8 +1245,50 @@ export function IssuePanel({
                     .map((e) => ({ ...e, itemType: 'execution' as const })),
                 ]}
                 currentEntityId={issue.id}
+                lastFeedbackRef={lastFeedbackRef}
               />
+              {/* New conversation button - shown when there's a previous execution and we're in follow-up mode */}
+              {isFollowUpMode && canFollowUp && !forceNewExecution && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForceNewExecution(true)}
+                    className="gap-2 text-muted-foreground"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New conversation
+                  </Button>
+                </div>
+              )}
+              {/* Scroll marker for bottom of activity */}
+              <div ref={activityBottomRef} />
             </div>
+
+            {/* Scroll to Bottom FAB - shows when container is scrollable */}
+            {isScrollable && (
+              <div className="fixed bottom-32 right-10 z-10">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => {
+                        setShouldAutoScroll(true)
+                        scrollToBottom()
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-secondary shadow-lg transition-colors hover:bg-primary hover:text-accent-foreground"
+                      type="button"
+                      data-testid="scroll-to-bottom-fab"
+                      aria-label="Scroll to Bottom"
+                    >
+                      <ArrowDown className="h-5 w-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p>Scroll to Bottom</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
           </div>
         </div>
 
@@ -968,35 +1304,27 @@ export function IssuePanel({
             <AgentConfigPanel
               issueId={issue.id}
               onStart={handleStartExecution}
-              disabled={issue.archived || isUpdating}
-              previousExecution={
-                executions.length > 0
-                  ? (() => {
-                      // Sort executions by created_at to find the most recent one
-                      const sortedExecutions = [...executions].sort(
-                        (a, b) =>
-                          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                      )
-                      const lastExec = sortedExecutions[0]
-                      let parsedConfig: ExecutionConfig | undefined = undefined
-                      if (lastExec.config) {
-                        try {
-                          parsedConfig = JSON.parse(lastExec.config)
-                        } catch (error) {
-                          console.warn('Failed to parse previous execution config:', error)
-                        }
-                      }
-                      return {
-                        id: lastExec.id,
-                        mode: lastExec.mode || undefined,
-                        model: lastExec.model || undefined,
-                        target_branch: lastExec.target_branch,
-                        agent_type: lastExec.agent_type,
-                        config: parsedConfig,
-                      }
-                    })()
+              disabled={issue.archived || isUpdating || isExecutionRunning}
+              autoFocus={autoFocusAgentConfig}
+              isFollowUp={isFollowUpMode && canFollowUp}
+              isRunning={isExecutionRunning}
+              onCancel={latestExecution ? () => handleCancel(latestExecution.id) : undefined}
+              isCancelling={cancelling}
+              currentExecution={latestExecution || undefined}
+              lastExecution={
+                latestExecution
+                  ? {
+                      id: latestExecution.id,
+                      mode: latestExecution.mode || undefined,
+                      model: latestExecution.model || undefined,
+                      target_branch: latestExecution.target_branch,
+                      agent_type: latestExecution.agent_type,
+                      config: parseExecutionConfig(latestExecution),
+                    }
                   : undefined
               }
+              forceNewExecution={forceNewExecution}
+              onForceNewToggle={setForceNewExecution}
               onSelectOpenChange={(open) => {
                 // Clear any pending timeout
                 if (selectCloseTimeoutRef.current) {

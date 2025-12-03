@@ -31,11 +31,13 @@ export interface UpdateExecutionInput {
   completed_at?: string | null;
   exit_code?: number | null;
   error_message?: string | null;
+  before_commit?: string | null;
   after_commit?: string | null;
   target_branch?: string | null;
   worktree_path?: string | null;
   session_id?: string | null;
   summary?: string | null;
+  files_changed?: string | null;
 }
 
 /**
@@ -174,6 +176,11 @@ export function updateExecution(
     values.push(input.error_message);
   }
 
+  if (input.before_commit !== undefined) {
+    updates.push("before_commit = ?");
+    values.push(input.before_commit);
+  }
+
   if (input.after_commit !== undefined) {
     updates.push("after_commit = ?");
     values.push(input.after_commit);
@@ -197,6 +204,11 @@ export function updateExecution(
   if (input.summary !== undefined) {
     updates.push("summary = ?");
     values.push(input.summary);
+  }
+
+  if (input.files_changed !== undefined) {
+    updates.push("files_changed = ?");
+    values.push(input.files_changed);
   }
 
   // Always update updated_at

@@ -7,6 +7,7 @@
  */
 
 import { Router, Request, Response } from "express";
+import { execSync } from "child_process";
 import { NormalizedEntryToAgUiAdapter } from "../execution/output/normalized-to-ag-ui-adapter.js";
 import { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
 import { agentRegistryService } from "../services/agent-registry.js";
@@ -15,6 +16,54 @@ import {
   AgentNotImplementedError,
   AgentError,
 } from "../errors/agent-errors.js";
+import {
+  WorktreeSyncService,
+  WorktreeSyncError,
+  WorktreeSyncErrorCode,
+} from "../services/worktree-sync-service.js";
+import { ExecutionChangesService } from "../services/execution-changes-service.js";
+
+/**
+ * Get WorktreeSyncService instance for a request
+ *
+ * @param req - Express request with project context
+ * @returns WorktreeSyncService instance
+ */
+function getWorktreeSyncService(req: Request): WorktreeSyncService {
+  const db = req.project!.db;
+  const repoPath = req.project!.path;
+  return new WorktreeSyncService(db, repoPath);
+}
+
+/**
+ * Get HTTP status code for WorktreeSyncError
+ *
+ * @param error - WorktreeSyncError instance
+ * @returns HTTP status code
+ */
+function getStatusCodeForSyncError(error: WorktreeSyncError): number {
+  switch (error.code) {
+    case WorktreeSyncErrorCode.NO_WORKTREE:
+    case WorktreeSyncErrorCode.WORKTREE_MISSING:
+    case WorktreeSyncErrorCode.BRANCH_MISSING:
+    case WorktreeSyncErrorCode.TARGET_BRANCH_MISSING:
+    case WorktreeSyncErrorCode.EXECUTION_NOT_FOUND:
+      return 404; // Not found
+
+    case WorktreeSyncErrorCode.DIRTY_WORKING_TREE:
+    case WorktreeSyncErrorCode.CODE_CONFLICTS:
+    case WorktreeSyncErrorCode.NO_COMMON_BASE:
+      return 400; // Bad request (user must fix)
+
+    case WorktreeSyncErrorCode.MERGE_FAILED:
+    case WorktreeSyncErrorCode.JSONL_RESOLUTION_FAILED:
+    case WorktreeSyncErrorCode.DATABASE_SYNC_FAILED:
+      return 500; // Internal error
+
+    default:
+      return 500;
+  }
+}
 
 /**
  * Create executions router
@@ -28,36 +77,125 @@ export function createExecutionsRouter(): Router {
   const router = Router();
 
   /**
-   * POST /api/issues/:issueId/executions/prepare
+   * GET /api/executions
    *
-   * Prepare an execution - render template and show preview
+   * List all executions with filtering and pagination
+   *
+   * Query parameters:
+   * - limit?: number (default: 50)
+   * - offset?: number (default: 0)
+   * - status?: ExecutionStatus | ExecutionStatus[] (comma-separated for multiple)
+   * - issueId?: string
+   * - sortBy?: 'created_at' | 'updated_at' (default: 'created_at')
+   * - order?: 'asc' | 'desc' (default: 'desc')
+   * - since?: ISO date string - only return executions created after this date
+   * - includeRunning?: 'true' - when used with 'since', also include running executions regardless of age
    */
-  router.post(
-    "/issues/:issueId/executions/prepare",
-    async (req: Request, res: Response) => {
-      try {
-        const { issueId } = req.params;
-        const options = req.body || {};
-        const result = await req.project!.executionService!.prepareExecution(
-          issueId,
-          options
-        );
+  router.get("/executions", (req: Request, res: Response) => {
+    try {
+      // Parse query parameters
+      const limit = req.query.limit
+        ? parseInt(req.query.limit as string, 10)
+        : undefined;
+      const offset = req.query.offset
+        ? parseInt(req.query.offset as string, 10)
+        : undefined;
 
-        res.json({
-          success: true,
-          data: result,
-        });
-      } catch (error) {
-        console.error("[API Route] ERROR: Failed to prepare execution:", error);
-        res.status(500).json({
+      // Parse status (can be single value or comma-separated array)
+      let status: any = undefined;
+      if (req.query.status) {
+        const statusParam = req.query.status as string;
+        status = statusParam.includes(",")
+          ? statusParam.split(",").map((s) => s.trim())
+          : statusParam;
+      }
+
+      const issueId = req.query.issueId as string | undefined;
+      const sortBy =
+        (req.query.sortBy as "created_at" | "updated_at") || undefined;
+      const order = (req.query.order as "asc" | "desc") || undefined;
+      const since = req.query.since as string | undefined;
+      const includeRunning = req.query.includeRunning === "true";
+
+      // Validate limit and offset
+      if (limit !== undefined && (isNaN(limit) || limit < 0)) {
+        res.status(400).json({
           success: false,
           data: null,
-          error_data: error instanceof Error ? error.message : String(error),
-          message: "Failed to prepare execution",
+          message: "Invalid limit parameter",
         });
+        return;
       }
+
+      if (offset !== undefined && (isNaN(offset) || offset < 0)) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "Invalid offset parameter",
+        });
+        return;
+      }
+
+      // Validate sortBy
+      if (sortBy && sortBy !== "created_at" && sortBy !== "updated_at") {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message:
+            "Invalid sortBy parameter. Must be 'created_at' or 'updated_at'",
+        });
+        return;
+      }
+
+      // Validate order
+      if (order && order !== "asc" && order !== "desc") {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "Invalid order parameter. Must be 'asc' or 'desc'",
+        });
+        return;
+      }
+
+      // Validate since (should be valid ISO date)
+      if (since) {
+        const sinceDate = new Date(since);
+        if (isNaN(sinceDate.getTime())) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "Invalid since parameter. Must be a valid ISO date string",
+          });
+          return;
+        }
+      }
+
+      // Call service method
+      const result = req.project!.executionService!.listAll({
+        limit,
+        offset,
+        status,
+        issueId,
+        sortBy,
+        order,
+        since,
+        includeRunning,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error listing executions:", error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error_data: error instanceof Error ? error.message : String(error),
+        message: "Failed to list executions",
+      });
     }
-  );
+  });
 
   /**
    * POST /api/issues/:issueId/executions
@@ -353,6 +491,108 @@ export function createExecutionsRouter(): Router {
   );
 
   /**
+   * GET /api/executions/:executionId/changes
+   *
+   * Get code changes (file list + diff statistics) for an execution
+   *
+   * Calculates changes on-demand from commit SHAs. Supports:
+   * - Committed changes (commit-to-commit diff)
+   * - Uncommitted changes (working tree diff)
+   * - Unavailable states with clear error reasons
+   */
+  router.get(
+    "/executions/:executionId/changes",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Create changes service
+        const changesService = new ExecutionChangesService(db, repoPath);
+
+        // Get changes
+        const result = await changesService.getChanges(executionId);
+
+        res.json({
+          success: true,
+          data: result,
+        });
+      } catch (error) {
+        console.error("[GET /executions/:id/changes] Error:", error);
+        res.status(500).json({
+          success: false,
+          data: null,
+          error_data: error instanceof Error ? error.message : String(error),
+          message: "Failed to calculate changes",
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/executions/:executionId/changes/file
+   *
+   * Get diff content for a specific file in an execution
+   *
+   * Query params:
+   * - filePath: Path to the file to get diff for
+   */
+  router.get(
+    "/executions/:executionId/changes/file",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const { filePath } = req.query;
+
+        if (!filePath || typeof filePath !== "string") {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "filePath query parameter is required",
+          });
+          return;
+        }
+
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Create changes service
+        const changesService = new ExecutionChangesService(db, repoPath);
+
+        // Get file diff
+        const result = await changesService.getFileDiff(executionId, filePath);
+
+        if (!result.success) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: result.error || "Failed to get file diff",
+          });
+          return;
+        }
+
+        res.json({
+          success: true,
+          data: {
+            filePath,
+            oldContent: result.oldContent,
+            newContent: result.newContent,
+          },
+        });
+      } catch (error) {
+        console.error("[GET /executions/:id/changes/file] Error:", error);
+        res.status(500).json({
+          success: false,
+          data: null,
+          error_data: error instanceof Error ? error.message : String(error),
+          message: "Failed to get file diff",
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/issues/:issueId/executions
    *
    * List all executions for an issue
@@ -474,13 +714,15 @@ export function createExecutionsRouter(): Router {
    *
    * Query parameters:
    * - cancel: if "true", cancel the execution instead of deleting it
+   * - deleteBranch: if "true", also delete the execution's branch
+   * - deleteWorktree: if "true", also delete the execution's worktree
    */
   router.delete(
     "/executions/:executionId",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
-        const { cancel } = req.query;
+        const { cancel, deleteBranch, deleteWorktree } = req.query;
 
         // If cancel query param is true, cancel the execution
         if (cancel === "true") {
@@ -495,7 +737,11 @@ export function createExecutionsRouter(): Router {
         }
 
         // Otherwise, delete the execution and its chain
-        await req.project!.executionService!.deleteExecution(executionId);
+        await req.project!.executionService!.deleteExecution(
+          executionId,
+          deleteBranch === "true",
+          deleteWorktree === "true"
+        );
 
         res.json({
           success: true,
@@ -555,14 +801,21 @@ export function createExecutionsRouter(): Router {
    * DELETE /api/executions/:executionId/worktree
    *
    * Delete the worktree for an execution
+   *
+   * Query parameters:
+   * - deleteBranch: if "true", also delete the execution's branch
    */
   router.delete(
     "/executions/:executionId/worktree",
     async (req: Request, res: Response) => {
       try {
         const { executionId } = req.params;
+        const { deleteBranch } = req.query;
 
-        await req.project!.executionService!.deleteWorktree(executionId);
+        await req.project!.executionService!.deleteWorktree(
+          executionId,
+          deleteBranch === "true"
+        );
 
         res.json({
           success: true,
@@ -591,6 +844,282 @@ export function createExecutionsRouter(): Router {
           data: null,
           error_data: errorMessage,
           message: "Failed to delete worktree",
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/executions/:executionId/sync/preview
+   *
+   * Preview sync changes and detect conflicts
+   *
+   * Returns preview of what would happen if sync is performed,
+   * including conflicts, diff, commits, and warnings.
+   */
+  router.get(
+    "/executions/:executionId/sync/preview",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+
+        // Get worktree sync service
+        const syncService = getWorktreeSyncService(req);
+
+        // Preview sync
+        const preview = await syncService.previewSync(executionId);
+
+        res.json({
+          success: true,
+          data: preview,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to preview sync for execution ${req.params.executionId}:`,
+          error
+        );
+
+        if (error instanceof WorktreeSyncError) {
+          const statusCode = getStatusCodeForSyncError(error);
+          res.status(statusCode).json({
+            success: false,
+            data: null,
+            error: error.message,
+            code: error.code,
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            data: null,
+            error: "Internal server error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+  );
+
+  /**
+   * POST /api/executions/:executionId/sync/squash
+   *
+   * Perform squash sync operation
+   *
+   * Combines all worktree changes into a single commit on the target branch.
+   * Automatically resolves JSONL conflicts using merge-resolver.
+   *
+   * Request body:
+   * - commitMessage?: string - Optional custom commit message
+   */
+  router.post(
+    "/executions/:executionId/sync/squash",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const { commitMessage } = req.body || {};
+
+        // Get worktree sync service
+        const syncService = getWorktreeSyncService(req);
+
+        // Check if squashSync method exists
+        if (typeof (syncService as any).squashSync !== "function") {
+          res.status(501).json({
+            success: false,
+            data: null,
+            error: "Squash sync not yet implemented",
+            message: "The squashSync operation is not available yet",
+          });
+          return;
+        }
+
+        // Perform squash sync
+        const result = await (syncService as any).squashSync(
+          executionId,
+          commitMessage
+        );
+
+        res.json({
+          success: true,
+          data: result,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to squash sync execution ${req.params.executionId}:`,
+          error
+        );
+
+        if (error instanceof WorktreeSyncError) {
+          const statusCode = getStatusCodeForSyncError(error);
+          res.status(statusCode).json({
+            success: false,
+            data: null,
+            error: error.message,
+            code: error.code,
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            data: null,
+            error: "Internal server error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+  );
+
+  /**
+   * POST /api/executions/:executionId/commit
+   *
+   * Commit uncommitted changes for an execution
+   *
+   * Commits changes to the appropriate branch based on execution mode:
+   * - Local mode: Commits to target_branch (current branch)
+   * - Worktree mode: Commits to branch_name (temp branch) in worktree
+   *
+   * Request body:
+   * - message: string (required) - Commit message
+   */
+  router.post(
+    "/executions/:executionId/commit",
+    async (req: Request, res: Response) => {
+      try {
+        const { executionId } = req.params;
+        const { message } = req.body;
+
+        // Validate commit message
+        if (!message || typeof message !== "string" || !message.trim()) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "Commit message is required and must be non-empty",
+          });
+          return;
+        }
+
+        const db = req.project!.db;
+        const repoPath = req.project!.path;
+
+        // Load execution from database
+        const execution = db
+          .prepare("SELECT * FROM executions WHERE id = ?")
+          .get(executionId) as any;
+
+        if (!execution) {
+          res.status(404).json({
+            success: false,
+            data: null,
+            message: "Execution not found",
+          });
+          return;
+        }
+
+        // Parse files_changed
+        let filesChanged: string[] = [];
+        try {
+          if (execution.files_changed) {
+            const parsed =
+              typeof execution.files_changed === "string"
+                ? JSON.parse(execution.files_changed)
+                : execution.files_changed;
+            filesChanged = Array.isArray(parsed) ? parsed : [parsed];
+          }
+        } catch (error) {
+          console.error("Failed to parse files_changed:", error);
+        }
+
+        // Validate has uncommitted changes
+        if (filesChanged.length === 0) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: "No files to commit",
+          });
+          return;
+        }
+
+        // Determine working directory and target branch based on mode
+        const mode = execution.mode || "local";
+        const workingDir =
+          mode === "worktree" && execution.worktree_path
+            ? execution.worktree_path
+            : repoPath;
+        const targetBranch =
+          mode === "worktree"
+            ? execution.branch_name
+            : execution.target_branch || "main";
+
+        console.log(
+          `[Commit] Execution ${executionId}: mode=${mode}, workingDir=${workingDir}, targetBranch=${targetBranch}`
+        );
+
+        // Escape commit message for shell
+        const escapedMessage = message.replace(/"/g, '\\"');
+
+        // Execute git operations
+        try {
+          // Add files
+          const addCommand = `git add ${filesChanged.map((f) => `"${f}"`).join(" ")}`;
+          execSync(addCommand, {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          });
+
+          // Commit with message
+          const commitCommand = `git commit -m "${escapedMessage}"`;
+          execSync(commitCommand, {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          });
+
+          // Get commit SHA
+          const commitSha = execSync("git rev-parse HEAD", {
+            cwd: workingDir,
+            encoding: "utf-8",
+            stdio: "pipe",
+          }).trim();
+
+          console.log(
+            `[Commit] Successfully committed ${filesChanged.length} files: ${commitSha}`
+          );
+
+          // Note: We do NOT update execution.after_commit here
+          // That field represents the state at execution completion time
+          // Manual commits after execution are tracked separately
+
+          res.json({
+            success: true,
+            data: {
+              commitSha,
+              filesCommitted: filesChanged.length,
+              branch: targetBranch,
+            },
+            message: `Successfully committed ${filesChanged.length} file${filesChanged.length !== 1 ? "s" : ""}`,
+          });
+        } catch (gitError) {
+          console.error("Git operation failed:", gitError);
+          const errorMessage =
+            gitError instanceof Error ? gitError.message : String(gitError);
+
+          res.status(500).json({
+            success: false,
+            data: null,
+            message: "Git commit failed",
+            error: errorMessage,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `Failed to commit for execution ${req.params.executionId}:`,
+          error
+        );
+
+        res.status(500).json({
+          success: false,
+          data: null,
+          error: "Internal server error",
+          message: error instanceof Error ? error.message : String(error),
         });
       }
     }

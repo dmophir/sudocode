@@ -284,3 +284,10 @@ export interface Execution {
   step_index: number | null;
   step_config: string | null;
 }
+
+// Re-export execution artifact types
+export type {
+  FileChangeStat,
+  ExecutionChangesResult,
+  ChangesSnapshot,
+} from './artifacts.js';

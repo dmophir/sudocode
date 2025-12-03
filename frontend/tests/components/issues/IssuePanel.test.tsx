@@ -1,9 +1,68 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/test-utils'
 import { IssuePanel } from '@/components/issues/IssuePanel'
 import type { Issue } from '@sudocode-ai/types'
+import { executionsApi } from '@/lib/api'
+
+// Mock the executionsApi, repositoryApi, and agentsApi
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual('@/lib/api')
+  return {
+    ...actual,
+    executionsApi: {
+      list: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      createFollowUp: vi.fn(),
+      get: vi.fn(),
+    },
+    repositoryApi: {
+      getInfo: vi.fn().mockResolvedValue({
+        name: 'test-repo',
+        path: '/test/path',
+        branch: 'main',
+      }),
+      getBranches: vi.fn().mockResolvedValue({
+        current: 'main',
+        branches: ['main', 'develop', 'feature/test'],
+      }),
+    },
+    agentsApi: {
+      getAll: vi.fn().mockResolvedValue([
+        {
+          type: 'claude-code',
+          displayName: 'Claude',
+          supportedModes: ['structured', 'interactive', 'hybrid'],
+          supportsStreaming: true,
+          supportsStructuredOutput: true,
+          implemented: true,
+        },
+      ]),
+    },
+    filesApi: {
+      search: vi.fn().mockResolvedValue([]),
+    },
+    specsApi: {
+      getAll: vi.fn().mockResolvedValue([]),
+    },
+    issuesApi: {
+      getAll: vi.fn().mockResolvedValue([]),
+    },
+  }
+})
+
+// Mock caret position utility for ContextSearchTextarea
+vi.mock('@/lib/caret-position', () => ({
+  getCaretClientRect: vi.fn(() => ({
+    top: 100,
+    left: 100,
+    bottom: 120,
+    right: 200,
+    width: 100,
+    height: 20,
+  })),
+}))
 
 const mockIssue: Issue = {
   id: 'ISSUE-001',
@@ -20,6 +79,12 @@ const mockIssue: Issue = {
 }
 
 describe('IssuePanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Reset to default empty array for executions
+    vi.mocked(executionsApi.list).mockResolvedValue([])
+  })
+
   it('should render issue details with editable fields', async () => {
     renderWithProviders(<IssuePanel issue={mockIssue} />)
 
@@ -304,6 +369,61 @@ describe('IssuePanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('should cancel execution on first ESC press, then close panel on second ESC press', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+
+    // Mock a running execution
+    vi.mocked(executionsApi.list).mockResolvedValue([
+      {
+        id: 'exec-123',
+        issue_id: 'ISSUE-001',
+        status: 'running',
+        created_at: '2024-01-01T10:00:00Z',
+        updated_at: '2024-01-01T11:00:00Z',
+        mode: 'worktree',
+        target_branch: 'main',
+        agent_type: 'claude-code',
+        parent_execution_id: null,
+      } as any,
+    ])
+
+    // Mock cancel API
+    const mockCancel = vi.fn().mockResolvedValue({})
+    vi.mocked(executionsApi).cancel = mockCancel
+
+    renderWithProviders(<IssuePanel issue={mockIssue} onClose={onClose} />)
+
+    // Wait for execution to load
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Execution is running (esc to cancel)')).toBeDisabled()
+    })
+
+    // First ESC press should cancel the execution
+    await user.keyboard('{Escape}')
+    expect(mockCancel).toHaveBeenCalledWith('exec-123')
+    expect(onClose).not.toHaveBeenCalled()
+
+    // Mock the execution as stopped after cancel
+    vi.mocked(executionsApi.list).mockResolvedValue([
+      {
+        id: 'exec-123',
+        issue_id: 'ISSUE-001',
+        status: 'cancelled',
+        created_at: '2024-01-01T10:00:00Z',
+        updated_at: '2024-01-01T11:00:00Z',
+        mode: 'worktree',
+        target_branch: 'main',
+        agent_type: 'claude-code',
+        parent_execution_id: null,
+      } as any,
+    ])
+
+    // Second ESC press should close the panel
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('should not call onClose when ESC is pressed while delete dialog is open', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
@@ -319,5 +439,187 @@ describe('IssuePanel', () => {
     await user.keyboard('{Escape}')
 
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  describe('Follow-up Mode and New Execution Button', () => {
+    it('should show "New conversation" button when there is a completed execution', async () => {
+      // Mock executions API to return a completed execution
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-123',
+          issue_id: 'ISSUE-001',
+          status: 'completed',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('New conversation')).toBeInTheDocument()
+      })
+    })
+
+    it('should not show "New conversation" button when there are no executions', async () => {
+      vi.mocked(executionsApi.list).mockResolvedValue([])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      await waitFor(() => {
+        expect(screen.queryByText('New conversation')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should not show "New conversation" button when execution is still running', async () => {
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-123',
+          issue_id: 'ISSUE-001',
+          status: 'running',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      await waitFor(() => {
+        expect(screen.queryByText('New conversation')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should hide "New conversation" button after clicking it', async () => {
+      const user = userEvent.setup()
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-123',
+          issue_id: 'ISSUE-001',
+          status: 'completed',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      const newExecutionButton = await screen.findByText('New conversation')
+      await user.click(newExecutionButton)
+
+      await waitFor(() => {
+        expect(screen.queryByText('New conversation')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should update placeholder text when clicking "New conversation" button', async () => {
+      const user = userEvent.setup()
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-123',
+          issue_id: 'ISSUE-001',
+          status: 'completed',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      // Initial placeholder should be for continuing
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new, @ for context)')
+        ).toBeInTheDocument()
+      })
+
+      const newExecutionButton = await screen.findByText('New conversation')
+      await user.click(newExecutionButton)
+
+      // After clicking, placeholder should change to new execution mode
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Start a new execution... (ctrl+k to continue previous, @ for context)')
+        ).toBeInTheDocument()
+      })
+    })
+
+    it('should follow the latest execution in chain', async () => {
+      // Parent execution with a follow-up
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-parent',
+          issue_id: 'ISSUE-001',
+          status: 'completed',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+        {
+          id: 'exec-child',
+          issue_id: 'ISSUE-001',
+          status: 'completed',
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-01T13:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: 'exec-parent',
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      // Should show follow-up placeholder (meaning it found the child execution to continue)
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Continue the previous conversation... (ctrl+k for new, @ for context)')
+        ).toBeInTheDocument()
+      })
+
+      // "New conversation" button should be present
+      expect(screen.getByText('New conversation')).toBeInTheDocument()
+    })
+
+    it('should disable input when execution is running', async () => {
+      vi.mocked(executionsApi.list).mockResolvedValue([
+        {
+          id: 'exec-123',
+          issue_id: 'ISSUE-001',
+          status: 'running',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T11:00:00Z',
+          mode: 'worktree',
+          target_branch: 'main',
+          agent_type: 'claude-code',
+          parent_execution_id: null,
+        } as any,
+      ])
+
+      renderWithProviders(<IssuePanel issue={mockIssue} />)
+
+      await waitFor(() => {
+        const textarea = screen.getByPlaceholderText('Execution is running (esc to cancel)')
+        expect(textarea).toBeDisabled()
+      })
+    })
   })
 })

@@ -10,6 +10,7 @@
 import path from "path";
 import type Database from "better-sqlite3";
 import type { AgentType, Execution } from "@sudocode-ai/types";
+import { execSync } from "child_process";
 import {
   WorktreeManager,
   type IWorktreeManager,
@@ -30,6 +31,7 @@ export interface CreateExecutionWithWorktreeParams {
   mode?: string;
   prompt?: string;
   config?: string; // JSON string of execution configuration
+  createTargetBranch?: boolean; // If true, create targetBranch from current HEAD
 }
 
 /**
@@ -92,7 +94,14 @@ export class ExecutionLifecycleService {
   async createExecutionWithWorktree(
     params: CreateExecutionWithWorktreeParams
   ): Promise<CreateExecutionWithWorktreeResult> {
-    const { issueId, issueTitle, agentType, targetBranch, repoPath } = params;
+    const {
+      issueId,
+      issueTitle,
+      agentType,
+      targetBranch,
+      repoPath,
+      createTargetBranch,
+    } = params;
 
     // Validation 1: Check for existing active execution for this issue
     const existingExecution = this.db
@@ -116,10 +125,25 @@ export class ExecutionLifecycleService {
       throw new Error(`Not a git repository: ${repoPath}`);
     }
 
-    // Validation 3: Validate target branch exists
+    // Validation 3: Validate target branch exists (or create it if requested)
     const branches = await this.worktreeManager.listBranches(repoPath);
     if (!branches.includes(targetBranch)) {
-      throw new Error(`Target branch does not exist: ${targetBranch}`);
+      if (createTargetBranch) {
+        // Create the branch from current HEAD
+        const currentBranch = await this.worktreeManager.getCurrentBranch(
+          repoPath
+        );
+        await this.worktreeManager.createBranch(
+          repoPath,
+          targetBranch,
+          currentBranch
+        );
+        console.log(
+          `[ExecutionLifecycle] Created new branch '${targetBranch}' from '${currentBranch}'`
+        );
+      } else {
+        throw new Error(`Target branch does not exist: ${targetBranch}`);
+      }
     }
 
     const config = this.worktreeManager.getConfig();
@@ -148,7 +172,23 @@ export class ExecutionLifecycleService {
     let worktreeCreated = false;
 
     try {
-      // Step 1: Create worktree
+      // Step 1: Capture current commit before creating worktree
+      let beforeCommit: string | undefined;
+      try {
+        beforeCommit = execSync("git rev-parse HEAD", {
+          cwd: repoPath,
+          encoding: "utf-8",
+        }).trim();
+        console.log(`[ExecutionLifecycle] Captured before_commit: ${beforeCommit}`);
+      } catch (error) {
+        console.warn(
+          "[ExecutionLifecycle] Failed to capture before_commit:",
+          error instanceof Error ? error.message : String(error)
+        );
+        // Continue - this is supplementary data
+      }
+
+      // Step 2: Create worktree
       await this.worktreeManager.createWorktree({
         repoPath,
         branchName,
@@ -159,7 +199,7 @@ export class ExecutionLifecycleService {
 
       worktreeCreated = true;
 
-      // Step 2: Create execution record in database
+      // Step 3: Create execution record in database
       const execution = createExecution(this.db, {
         id: executionId,
         issue_id: issueId,
@@ -167,6 +207,7 @@ export class ExecutionLifecycleService {
         mode: params.mode,
         prompt: params.prompt,
         config: params.config,
+        before_commit: beforeCommit,
         target_branch: targetBranch,
         branch_name: branchName,
         worktree_path: worktreePath,
@@ -264,14 +305,24 @@ export class ExecutionLifecycleService {
           execution.worktree_path,
           this.repoPath
         );
+        console.log(
+          `Successfully cleaned up worktree for execution ${executionId}`
+        );
         // NOTE: We do NOT set worktree_path to null in the database
         // Follow-up executions need this path to recreate the worktree
-      } catch (error) {
-        // Log error but don't fail - cleanup is best-effort
-        console.error(
-          `Failed to cleanup worktree for execution ${executionId}:`,
-          error
-        );
+      } catch (error: any) {
+        // Check if error is due to worktree already being deleted
+        if (error.code === "ENOENT" || error.message?.includes("does not exist")) {
+          console.log(
+            `Worktree already deleted for execution ${executionId}, skipping cleanup`
+          );
+        } else {
+          // Log other errors but don't fail - cleanup is best-effort
+          console.error(
+            `Failed to cleanup worktree for execution ${executionId}:`,
+            error
+          );
+        }
       }
     }
   }

@@ -6,22 +6,56 @@ export function createAgentsRouter(): Router {
 
   /**
    * GET /api/agents
-   * Returns list of available agents with their metadata and implementation status
+   * Returns list of available agents with their metadata, implementation status,
+   * and executable availability
+   *
+   * Query parameters:
+   * - verify: If 'false', skips verification (default: true)
+   * - skipCache: If 'true', bypasses cache and performs fresh verification (default: false)
    */
-  router.get("/", (_req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     try {
-      const agents = agentRegistryService.getAvailableAgents();
+      // Default to verifying agents unless explicitly disabled
+      const shouldVerify = req.query.verify !== 'false';
+      const skipCache = req.query.skipCache === 'true';
 
-      res.status(200).json({
-        agents: agents.map((agent) => ({
-          type: agent.name,
-          displayName: agent.displayName,
-          supportedModes: agent.supportedModes,
-          supportsStreaming: agent.supportsStreaming,
-          supportsStructuredOutput: agent.supportsStructuredOutput,
-          implemented: agent.implemented,
-        })),
-      });
+      if (shouldVerify) {
+        // Clear cache if skipCache is requested
+        if (skipCache) {
+          agentRegistryService.clearVerificationCache();
+        }
+
+        // Get agents with verification
+        const agents = await agentRegistryService.getAvailableAgentsWithVerification();
+
+        res.status(200).json({
+          agents: agents.map((agent) => ({
+            type: agent.name,
+            displayName: agent.displayName,
+            supportedModes: agent.supportedModes,
+            supportsStreaming: agent.supportsStreaming,
+            supportsStructuredOutput: agent.supportsStructuredOutput,
+            implemented: agent.implemented,
+            available: agent.available,
+            executablePath: agent.executablePath,
+            verificationError: agent.verificationError,
+          })),
+        });
+      } else {
+        // Get agents without verification (faster, but no availability info)
+        const agents = agentRegistryService.getAvailableAgents();
+
+        res.status(200).json({
+          agents: agents.map((agent) => ({
+            type: agent.name,
+            displayName: agent.displayName,
+            supportedModes: agent.supportedModes,
+            supportsStreaming: agent.supportsStreaming,
+            supportsStructuredOutput: agent.supportsStructuredOutput,
+            implemented: agent.implemented,
+          })),
+        });
+      }
     } catch (error) {
       console.error("Failed to get agents:", error);
       res.status(500).json({ error: "Failed to retrieve agents" });

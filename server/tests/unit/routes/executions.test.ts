@@ -9,7 +9,12 @@ import type { Execution } from "@sudocode-ai/types";
 // Mock agent registry service
 vi.mock("../../../src/services/agent-registry.js", () => {
   const implementedAgents = new Set(["claude-code"]);
-  const registeredAgents = new Set(["claude-code", "codex", "copilot", "cursor"]);
+  const registeredAgents = new Set([
+    "claude-code",
+    "codex",
+    "copilot",
+    "cursor",
+  ]);
 
   return {
     agentRegistryService: {
@@ -20,8 +25,8 @@ vi.mock("../../../src/services/agent-registry.js", () => {
         return implementedAgents.has(agentType);
       },
       getAvailableAgents: () => [
-        { name: "claude-code", displayName: "Claude Code", implemented: true },
-        { name: "codex", displayName: "OpenAI Codex", implemented: false },
+        { name: "claude-code", displayName: "Claude", implemented: true },
+        { name: "codex", displayName: "Codex", implemented: false },
         { name: "copilot", displayName: "GitHub Copilot", implemented: false },
         { name: "cursor", displayName: "Cursor", implemented: false },
       ],
@@ -52,6 +57,11 @@ describe("Executions API Routes - Agent Type Validation", () => {
       } as Execution),
       getExecution: vi.fn(),
       listExecutions: vi.fn().mockReturnValue([]),
+      listAll: vi.fn().mockReturnValue({
+        executions: [],
+        total: 0,
+        hasMore: false,
+      }),
       getExecutionChain: vi.fn().mockReturnValue([]),
       createFollowUp: vi.fn().mockResolvedValue({} as Execution),
     };
@@ -138,7 +148,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.code).toBe("AGENT_NOT_IMPLEMENTED");
       expect(response.body.details).toBeDefined();
       expect(response.body.details.agentType).toBe("codex");
-      expect(response.body.details.message).toContain("not yet fully implemented");
+      expect(response.body.details.message).toContain(
+        "not yet fully implemented"
+      );
       expect(mockExecutionService.createExecution).not.toHaveBeenCalled();
     });
 
@@ -250,7 +262,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
         status: "completed",
       } as Execution;
 
-      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockExecution);
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockReturnValue(mockExecution);
 
       const response = await request(app).get("/api/executions/exec-123");
 
@@ -353,7 +367,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
         },
       ] as Execution[];
 
-      mockExecutionService.listExecutions = vi.fn().mockReturnValue(mockExecutions);
+      mockExecutionService.listExecutions = vi
+        .fn()
+        .mockReturnValue(mockExecutions);
 
       const response = await request(app).get("/api/issues/i-abc/executions");
 
@@ -375,11 +391,15 @@ describe("Executions API Routes - Agent Type Validation", () => {
         created_at: "2025-01-01T00:00:00.000Z",
       } as Execution;
 
-      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockRootExecution);
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockReturnValue(mockRootExecution);
       // Mock the database chain query to return just the root
       mockDbAll.mockReturnValue([mockRootExecution]);
 
-      const response = await request(app).get("/api/executions/exec-root/chain");
+      const response = await request(app).get(
+        "/api/executions/exec-root/chain"
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -410,16 +430,20 @@ describe("Executions API Routes - Agent Type Validation", () => {
 
       // When getting the follow-up, return it
       // When getting the root (via parent_execution_id), return root
-      mockExecutionService.getExecution = vi.fn().mockImplementation((id: string) => {
-        if (id === "exec-followup") return mockFollowUpExecution;
-        if (id === "exec-root") return mockRootExecution;
-        return null;
-      });
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockImplementation((id: string) => {
+          if (id === "exec-followup") return mockFollowUpExecution;
+          if (id === "exec-root") return mockRootExecution;
+          return null;
+        });
 
       // Mock the database chain query to return the full chain
       mockDbAll.mockReturnValue([mockRootExecution, mockFollowUpExecution]);
 
-      const response = await request(app).get("/api/executions/exec-followup/chain");
+      const response = await request(app).get(
+        "/api/executions/exec-followup/chain"
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -455,7 +479,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
       // Mock the database chain query to return the full chain
       mockDbAll.mockReturnValue(mockChain);
 
-      const response = await request(app).get("/api/executions/exec-root/chain");
+      const response = await request(app).get(
+        "/api/executions/exec-root/chain"
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -499,8 +525,12 @@ describe("Executions API Routes - Agent Type Validation", () => {
         mode: "worktree",
       } as Execution;
 
-      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
-      mockExecutionService.createFollowUp = vi.fn().mockResolvedValue(mockFollowUpExecution);
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockReturnValue(mockPreviousExecution);
+      mockExecutionService.createFollowUp = vi
+        .fn()
+        .mockResolvedValue(mockFollowUpExecution);
 
       const response = await request(app)
         .post("/api/executions/exec-root/follow-up")
@@ -534,8 +564,12 @@ describe("Executions API Routes - Agent Type Validation", () => {
         parent_execution_id: "exec-root",
       } as Execution;
 
-      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
-      mockExecutionService.createFollowUp = vi.fn().mockResolvedValue(mockFollowUpExecution);
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockReturnValue(mockPreviousExecution);
+      mockExecutionService.createFollowUp = vi
+        .fn()
+        .mockResolvedValue(mockFollowUpExecution);
 
       const response = await request(app)
         .post("/api/executions/exec-root/follow-up")
@@ -566,7 +600,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
-      expect(response.body.message).toBe("Failed to create follow-up execution");
+      expect(response.body.message).toBe(
+        "Failed to create follow-up execution"
+      );
       expect(response.body.error_data).toContain("not found");
     });
 
@@ -577,7 +613,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
         status: "completed",
       } as Execution;
 
-      mockExecutionService.getExecution = vi.fn().mockReturnValue(mockPreviousExecution);
+      mockExecutionService.getExecution = vi
+        .fn()
+        .mockReturnValue(mockPreviousExecution);
 
       const response = await request(app)
         .post("/api/executions/exec-root/follow-up")
@@ -592,7 +630,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
 
   describe("POST /api/executions/:executionId/cancel", () => {
     beforeEach(() => {
-      mockExecutionService.cancelExecution = vi.fn().mockResolvedValue(undefined);
+      mockExecutionService.cancelExecution = vi
+        .fn()
+        .mockResolvedValue(undefined);
     });
 
     it("should cancel a running execution", async () => {
@@ -604,7 +644,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe("Execution cancelled successfully");
       expect(response.body.data.executionId).toBe("exec-123");
-      expect(mockExecutionService.cancelExecution).toHaveBeenCalledWith("exec-123");
+      expect(mockExecutionService.cancelExecution).toHaveBeenCalledWith(
+        "exec-123"
+      );
     });
 
     it("should return 404 when execution not found", async () => {
@@ -639,42 +681,57 @@ describe("Executions API Routes - Agent Type Validation", () => {
 
   describe("DELETE /api/executions/:executionId", () => {
     beforeEach(() => {
-      mockExecutionService.cancelExecution = vi.fn().mockResolvedValue(undefined);
-      mockExecutionService.deleteExecution = vi.fn().mockResolvedValue(undefined);
+      mockExecutionService.cancelExecution = vi
+        .fn()
+        .mockResolvedValue(undefined);
+      mockExecutionService.deleteExecution = vi
+        .fn()
+        .mockResolvedValue(undefined);
     });
 
     it("should delete an execution when no query param provided", async () => {
-      const response = await request(app)
-        .delete("/api/executions/exec-123");
+      const response = await request(app).delete("/api/executions/exec-123");
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe("Execution deleted successfully");
       expect(response.body.data.executionId).toBe("exec-123");
-      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith("exec-123");
+      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
+        "exec-123",
+        false,
+        false
+      );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });
 
     it("should cancel execution when cancel=true query param provided", async () => {
-      const response = await request(app)
-        .delete("/api/executions/exec-123?cancel=true");
+      const response = await request(app).delete(
+        "/api/executions/exec-123?cancel=true"
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe("Execution cancelled successfully");
       expect(response.body.data.executionId).toBe("exec-123");
-      expect(mockExecutionService.cancelExecution).toHaveBeenCalledWith("exec-123");
+      expect(mockExecutionService.cancelExecution).toHaveBeenCalledWith(
+        "exec-123"
+      );
       expect(mockExecutionService.deleteExecution).not.toHaveBeenCalled();
     });
 
     it("should delete execution when cancel=false query param provided", async () => {
-      const response = await request(app)
-        .delete("/api/executions/exec-123?cancel=false");
+      const response = await request(app).delete(
+        "/api/executions/exec-123?cancel=false"
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe("Execution deleted successfully");
-      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith("exec-123");
+      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
+        "exec-123",
+        false,
+        false
+      );
       expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
     });
 
@@ -683,8 +740,7 @@ describe("Executions API Routes - Agent Type Validation", () => {
         .fn()
         .mockRejectedValue(new Error("Execution exec-999 not found"));
 
-      const response = await request(app)
-        .delete("/api/executions/exec-999");
+      const response = await request(app).delete("/api/executions/exec-999");
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
@@ -697,8 +753,9 @@ describe("Executions API Routes - Agent Type Validation", () => {
         .fn()
         .mockRejectedValue(new Error("Execution exec-999 not found"));
 
-      const response = await request(app)
-        .delete("/api/executions/exec-999?cancel=true");
+      const response = await request(app).delete(
+        "/api/executions/exec-999?cancel=true"
+      );
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
@@ -706,17 +763,360 @@ describe("Executions API Routes - Agent Type Validation", () => {
       expect(response.body.error_data).toContain("not found");
     });
 
+    it("should delete execution with branch when deleteBranch=true query param provided", async () => {
+      const response = await request(app).delete(
+        "/api/executions/exec-123?deleteBranch=true"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe("Execution deleted successfully");
+      expect(mockExecutionService.deleteExecution).toHaveBeenCalledWith(
+        "exec-123",
+        true,
+        false
+      );
+      expect(mockExecutionService.cancelExecution).not.toHaveBeenCalled();
+    });
+
     it("should return 500 on service error", async () => {
       mockExecutionService.deleteExecution = vi
         .fn()
         .mockRejectedValue(new Error("Service error"));
 
-      const response = await request(app)
-        .delete("/api/executions/exec-123");
+      const response = await request(app).delete("/api/executions/exec-123");
 
       expect(response.status).toBe(500);
       expect(response.body.success).toBe(false);
       expect(response.body.message).toBe("Failed to delete/cancel execution");
+    });
+  });
+
+  describe("GET /api/executions", () => {
+    it("should list all executions with default parameters", async () => {
+      const mockExecutions = [
+        {
+          id: "exec-1",
+          issue_id: "i-abc",
+          agent_type: "claude-code",
+          status: "completed",
+          created_at: "2025-01-01T00:02:00.000Z",
+        },
+        {
+          id: "exec-2",
+          issue_id: "i-def",
+          agent_type: "claude-code",
+          status: "running",
+          created_at: "2025-01-01T00:01:00.000Z",
+        },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 2,
+        hasMore: false,
+      });
+
+      const response = await request(app).get("/api/executions");
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.executions).toEqual(mockExecutions);
+      expect(response.body.data.total).toBe(2);
+      expect(response.body.data.hasMore).toBe(false);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: undefined,
+        issueId: undefined,
+        sortBy: undefined,
+        order: undefined,
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should filter by single status", async () => {
+      const mockExecutions = [
+        {
+          id: "exec-1",
+          issue_id: "i-abc",
+          status: "running",
+        },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 1,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?status=running"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.executions).toEqual(mockExecutions);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: "running",
+        issueId: undefined,
+        sortBy: undefined,
+        order: undefined,
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should filter by multiple statuses (comma-separated)", async () => {
+      const mockExecutions = [
+        { id: "exec-1", status: "running" },
+        { id: "exec-2", status: "completed" },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 2,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?status=running,completed"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: ["running", "completed"],
+        issueId: undefined,
+        sortBy: undefined,
+        order: undefined,
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should filter by issueId", async () => {
+      const mockExecutions = [
+        {
+          id: "exec-1",
+          issue_id: "i-abc",
+        },
+        {
+          id: "exec-2",
+          issue_id: "i-abc",
+        },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 2,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?issueId=i-abc"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: undefined,
+        issueId: "i-abc",
+        sortBy: undefined,
+        order: undefined,
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should support pagination with limit and offset", async () => {
+      const mockExecutions = [
+        { id: "exec-11", created_at: "2025-01-01T00:10:00.000Z" },
+        { id: "exec-12", created_at: "2025-01-01T00:09:00.000Z" },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 25,
+        hasMore: true,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?limit=10&offset=10"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.executions).toEqual(mockExecutions);
+      expect(response.body.data.total).toBe(25);
+      expect(response.body.data.hasMore).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: 10,
+        offset: 10,
+        status: undefined,
+        issueId: undefined,
+        sortBy: undefined,
+        order: undefined,
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should support sorting by created_at descending", async () => {
+      const mockExecutions = [
+        { id: "exec-2", created_at: "2025-01-01T00:02:00.000Z" },
+        { id: "exec-1", created_at: "2025-01-01T00:01:00.000Z" },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 2,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?sortBy=created_at&order=desc"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: undefined,
+        issueId: undefined,
+        sortBy: "created_at",
+        order: "desc",
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should support sorting by updated_at ascending", async () => {
+      const mockExecutions = [
+        { id: "exec-1", updated_at: "2025-01-01T00:01:00.000Z" },
+        { id: "exec-2", updated_at: "2025-01-01T00:02:00.000Z" },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 2,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?sortBy=updated_at&order=asc"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: undefined,
+        offset: undefined,
+        status: undefined,
+        issueId: undefined,
+        sortBy: "updated_at",
+        order: "asc",
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should support combined filters", async () => {
+      const mockExecutions = [
+        {
+          id: "exec-1",
+          issue_id: "i-abc",
+          status: "completed",
+        },
+      ] as Execution[];
+
+      mockExecutionService.listAll = vi.fn().mockReturnValue({
+        executions: mockExecutions,
+        total: 1,
+        hasMore: false,
+      });
+
+      const response = await request(app).get(
+        "/api/executions?status=completed&issueId=i-abc&limit=20&offset=0&sortBy=created_at&order=desc"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockExecutionService.listAll).toHaveBeenCalledWith({
+        limit: 20,
+        offset: 0,
+        status: "completed",
+        issueId: "i-abc",
+        sortBy: "created_at",
+        order: "desc",
+        since: undefined,
+        includeRunning: false,
+      });
+    });
+
+    it("should return 400 for invalid limit parameter", async () => {
+      const response = await request(app).get("/api/executions?limit=-1");
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe("Invalid limit parameter");
+      expect(mockExecutionService.listAll).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 for invalid offset parameter", async () => {
+      const response = await request(app).get("/api/executions?offset=-5");
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe("Invalid offset parameter");
+      expect(mockExecutionService.listAll).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 for invalid sortBy parameter", async () => {
+      const response = await request(app).get(
+        "/api/executions?sortBy=invalid"
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "Invalid sortBy parameter. Must be 'created_at' or 'updated_at'"
+      );
+      expect(mockExecutionService.listAll).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 for invalid order parameter", async () => {
+      const response = await request(app).get("/api/executions?order=invalid");
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "Invalid order parameter. Must be 'asc' or 'desc'"
+      );
+      expect(mockExecutionService.listAll).not.toHaveBeenCalled();
+    });
+
+    it("should return 500 on service error", async () => {
+      mockExecutionService.listAll = vi
+        .fn()
+        .mockImplementation(() => {
+          throw new Error("Database error");
+        });
+
+      const response = await request(app).get("/api/executions");
+
+      expect(response.status).toBe(500);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe("Failed to list executions");
+      expect(response.body.error_data).toBe("Database error");
     });
   });
 });

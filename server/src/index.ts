@@ -1,10 +1,9 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import * as path from "path";
 import * as http from "http";
 import { fileURLToPath } from "url";
-import { readFileSync, existsSync } from "fs";
+import { existsSync } from "fs";
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -15,10 +14,13 @@ import { createRelationshipsRouter } from "./routes/relationships.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { createExecutionsRouter } from "./routes/executions.js";
 import { createExecutionStreamRoutes } from "./routes/executions-stream.js";
+import { createEditorsRouter } from "./routes/editors.js";
 import { createProjectsRouter } from "./routes/projects.js";
 import { createConfigRouter } from "./routes/config.js";
+import { createFilesRouter } from "./routes/files.js";
 import { createRepoInfoRouter } from "./routes/repo-info.js";
 import { createAgentsRouter } from "./routes/agents.js";
+import { createVersionRouter } from "./routes/version.js";
 import { TransportManager } from "./execution/transport/transport-manager.js";
 import { ProjectRegistry } from "./services/project-registry.js";
 import { ProjectManager } from "./services/project-manager.js";
@@ -29,9 +31,6 @@ import {
   shutdownWebSocketServer,
   getWebSocketServer,
 } from "./services/websocket.js";
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const DEFAULT_PORT = 3000;
@@ -44,8 +43,8 @@ let transportManager!: TransportManager;
 let projectRegistry!: ProjectRegistry;
 let projectManager!: ProjectManager;
 
-// Start file watcher (enabled by default, disable with WATCH=false)
-const WATCH_ENABLED = process.env.WATCH !== "false";
+// Start file watcher (enabled by default, disable with SUDOCODE_WATCH=false)
+const WATCH_ENABLED = process.env.SUDOCODE_WATCH !== "false";
 
 // Async initialization function
 async function initialize() {
@@ -69,7 +68,9 @@ async function initialize() {
     const hasLocalProject = existsSync(sudocodeDir);
 
     if (hasLocalProject) {
-      console.log(`Found .sudocode in current directory, opening: ${currentDir}`);
+      console.log(
+        `Found .sudocode in current directory, opening: ${currentDir}`
+      );
       const openResult = await projectManager.openProject(currentDir);
       if (!openResult.ok) {
         const errorMsg =
@@ -80,14 +81,18 @@ async function initialize() {
         console.log("Server will start with no projects open");
       } else {
         const projectInfo = projectRegistry.getProject(openResult.value!.id);
-        console.log(`Auto-opened local project: ${projectInfo?.name || path.basename(currentDir)}`);
+        console.log(
+          `Auto-opened local project: ${projectInfo?.name || path.basename(currentDir)}`
+        );
       }
     } else {
       // No local project, try most recent
       const recentProjects = projectRegistry.getRecentProjects();
       if (recentProjects.length > 0) {
         const mostRecent = recentProjects[0];
-        console.log(`Auto-opening most recent project: ${mostRecent.name} (${mostRecent.path})`);
+        console.log(
+          `Auto-opening most recent project: ${mostRecent.name} (${mostRecent.path})`
+        );
         const openResult = await projectManager.openProject(mostRecent.path);
         if (!openResult.ok) {
           const errorMsg =
@@ -100,7 +105,9 @@ async function initialize() {
           console.log(`Auto-opened project: ${mostRecent.name}`);
         }
       } else {
-        console.log("No recent projects found. Server will start with no projects open");
+        console.log(
+          "No recent projects found. Server will start with no projects open"
+        );
       }
     }
 
@@ -139,18 +146,29 @@ app.use(
   createFeedbackRouter()
 );
 app.use("/api/config", requireProject(projectManager), createConfigRouter());
-app.use("/api/repo-info", requireProject(projectManager), createRepoInfoRouter());
+app.use(
+  "/api/repo-info",
+  requireProject(projectManager),
+  createRepoInfoRouter()
+);
+
+// File search endpoint (requires project context)
+app.use("/api/files", requireProject(projectManager), createFilesRouter());
 
 // Agents endpoint - global, not project-specific
 app.use("/api/agents", createAgentsRouter());
 
 // Mount execution routes (must be before stream routes to avoid conflicts)
+// TODO: Make these all relative to /executions
 app.use("/api", requireProject(projectManager), createExecutionsRouter());
 app.use(
   "/api/executions",
   requireProject(projectManager),
   createExecutionStreamRoutes()
 );
+
+// Mount editor routes
+app.use("/api", requireProject(projectManager), createEditorsRouter());
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
@@ -174,37 +192,7 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 // Version endpoint - returns versions of all packages
-app.get("/api/version", (_req: Request, res: Response) => {
-  try {
-    // Read package.json files - going up from server/dist to project root
-    const projectRoot = path.join(__dirname, "../..");
-    const cliPackagePath = path.join(projectRoot, "cli/package.json");
-    const serverPackagePath = path.join(projectRoot, "server/package.json");
-    const frontendPackagePath = path.join(projectRoot, "frontend/package.json");
-
-    const cliPackage = JSON.parse(readFileSync(cliPackagePath, "utf-8"));
-    const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf-8"));
-    const frontendPackage = JSON.parse(
-      readFileSync(frontendPackagePath, "utf-8")
-    );
-
-    res.status(200).json({
-      success: true,
-      data: {
-        cli: cliPackage.version,
-        server: serverPackage.version,
-        frontend: frontendPackage.version,
-      },
-    });
-  } catch (error) {
-    console.error("Failed to read version information:", error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: "Failed to read version information",
-    });
-  }
-});
+app.use("/api/version", createVersionRouter());
 
 // WebSocket stats endpoint
 app.get("/ws/stats", (_req: Request, res: Response) => {
@@ -252,7 +240,7 @@ async function startServer(
   initialPort: number,
   maxAttempts: number
 ): Promise<number> {
-  const explicitPort = process.env.PORT;
+  const explicitPort = process.env.SUDOCODE_PORT;
   const shouldScan = !explicitPort;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const port = initialPort + attempt;
@@ -328,7 +316,7 @@ async function startServer(
         if (!shouldScan) {
           // Explicit port was specified and it's in use - fail immediately
           throw new Error(
-            `Port ${port} is already in use or WebSocket initialization failed. Please specify a different PORT.`
+            `Port ${port} is already in use or WebSocket initialization failed. Please specify a different SUDOCODE_PORT.`
           );
         }
 
@@ -359,8 +347,8 @@ async function startServer(
 }
 
 // Start listening with port scanning (includes both HTTP and WebSocket)
-const startPort = process.env.PORT
-  ? parseInt(process.env.PORT, 10)
+const startPort = process.env.SUDOCODE_PORT
+  ? parseInt(process.env.SUDOCODE_PORT, 10)
   : DEFAULT_PORT;
 const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 

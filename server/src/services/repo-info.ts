@@ -11,6 +11,11 @@ export interface RepositoryInfo {
   path: string;
 }
 
+export interface BranchInfo {
+  current: string;
+  branches: string[];
+}
+
 /**
  * Get repository information for a given repository path
  *
@@ -67,5 +72,62 @@ export async function getRepositoryInfo(
     name: repoName,
     branch,
     path: repoPath,
+  };
+}
+
+/**
+ * Get branch information for a given repository path
+ *
+ * @param repoPath - Absolute path to the repository root
+ * @returns Current branch and list of all local branches
+ * @throws Error if the path is not a valid git repository
+ */
+export async function getRepositoryBranches(
+  repoPath: string
+): Promise<BranchInfo> {
+  const gitCli = new GitCli();
+
+  // Check if repoPath is a valid git repository
+  const isValidRepo = await gitCli.isValidRepo(repoPath);
+  if (!isValidRepo) {
+    throw new Error("Not a git repository");
+  }
+
+  // Get current branch
+  let currentBranch = "(detached)";
+  try {
+    const output = gitCli["execGit"](
+      "git rev-parse --abbrev-ref HEAD",
+      repoPath
+    );
+    currentBranch = output.trim();
+  } catch (error) {
+    console.error("Failed to get current branch:", error);
+  }
+
+  // Get all local branches
+  const branches: string[] = [];
+  try {
+    const output = gitCli["execGit"](
+      "git branch --format='%(refname:short)'",
+      repoPath
+    );
+    const branchList = output
+      .trim()
+      .split("\n")
+      .map((b) => b.trim())
+      .filter((b) => b.length > 0);
+    branches.push(...branchList);
+  } catch (error) {
+    console.error("Failed to get branches:", error);
+    // Fallback to just current branch if we can't list branches
+    if (currentBranch !== "(detached)") {
+      branches.push(currentBranch);
+    }
+  }
+
+  return {
+    current: currentBranch,
+    branches,
   };
 }

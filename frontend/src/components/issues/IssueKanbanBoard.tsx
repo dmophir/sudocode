@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/kanban'
 import { IssueCard } from './IssueCard'
 import type { Issue, IssueStatus } from '@sudocode-ai/types'
+import type { Execution } from '@/types/execution'
 
 const columnOrder: IssueStatus[] = ['blocked', 'open', 'in_progress', 'needs_review', 'closed']
 
@@ -36,6 +37,7 @@ interface IssueKanbanBoardProps {
   onArchiveAllClosed?: () => void
   collapsedColumns?: Set<IssueStatus>
   onToggleColumnCollapse?: (status: IssueStatus) => void
+  latestExecutions?: Record<string, Execution | null> // Pre-fetched executions by issue ID
 }
 
 function IssueKanbanBoard({
@@ -46,6 +48,7 @@ function IssueKanbanBoard({
   onArchiveAllClosed,
   collapsedColumns = new Set(),
   onToggleColumnCollapse,
+  latestExecutions,
 }: IssueKanbanBoardProps) {
   const renderDragOverlay = (activeId: string | null) => {
     if (!activeId) return null
@@ -62,7 +65,8 @@ function IssueKanbanBoard({
             status={status}
             onViewDetails={onViewIssueDetails}
             isOpen={false}
-            showExecutionPreview={false}
+            showExecutionPreview={true}
+            latestExecution={latestExecutions?.[issue.id]}
           />
         )
       }
@@ -101,7 +105,8 @@ function IssueKanbanBoard({
                   status={status}
                   onViewDetails={onViewIssueDetails}
                   isOpen={selectedIssue?.id === issue.id}
-                  showExecutionPreview={false}
+                  showExecutionPreview={true}
+                  latestExecution={latestExecutions?.[issue.id]}
                 />
               ))}
             </KanbanCards>

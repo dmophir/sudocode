@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { Settings, AlertCircle, Info, ArrowDown, Loader2, Square } from 'lucide-react'
+import {
+  Settings,
+  ArrowDown,
+  Loader2,
+  Square,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { ContextSearchTextarea } from '@/components/ui/context-search-textarea'
 import {
   Select,
   SelectContent,
@@ -9,38 +17,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { executionsApi } from '@/lib/api'
-import type { ExecutionConfig, ExecutionPrepareResult, ExecutionMode } from '@/types/execution'
+import { repositoryApi } from '@/lib/api'
+import type { ExecutionConfig, ExecutionMode, Execution } from '@/types/execution'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
+import { CommitChangesDialog } from './CommitChangesDialog'
+import { CleanupWorktreeDialog } from './CleanupWorktreeDialog'
+import { SyncPreviewDialog } from './SyncPreviewDialog'
+import { BranchSelector } from './BranchSelector'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAgents } from '@/hooks/useAgents'
+import { useProject } from '@/hooks/useProject'
+import { useAgentActions } from '@/hooks/useAgentActions'
+import { useWorktrees } from '@/hooks/useWorktrees'
 import type { CodexConfig } from './CodexConfigForm'
 import type { CopilotConfig } from './CopilotConfigForm'
 
 interface AgentConfigPanelProps {
   issueId: string
-  onStart: (config: ExecutionConfig, prompt: string, agentType?: string) => void
+  onStart: (config: ExecutionConfig, prompt: string, agentType?: string, forceNew?: boolean) => void
   disabled?: boolean
   onSelectOpenChange?: (isOpen: boolean) => void
+  /**
+   * Display variant:
+   * - 'full': Show all configuration options (agent, mode, branch, settings)
+   * - 'compact': Show only textarea and submit/cancel buttons inline
+   */
+  variant?: 'full' | 'compact'
   /**
    * Follow-up mode: locks config options and shows inherited values
    */
   isFollowUp?: boolean
   /**
-   * Parent execution for follow-up mode - provides locked config values
+   * Latest execution to reference.
+   * - In follow-up mode: provides locked config values for continuation
+   * - In new execution mode: used to default config to last execution's settings
    */
-  parentExecution?: {
-    id: string
-    mode?: string
-    model?: string
-    target_branch?: string
-    agent_type?: string
-    config?: ExecutionConfig
-  }
-  /**
-   * Previous execution (not for follow-up) - used to default config to last execution's settings
-   */
-  previousExecution?: {
+  lastExecution?: {
     id: string
     mode?: string
     model?: string
@@ -64,6 +76,37 @@ interface AgentConfigPanelProps {
    * Whether a cancel operation is in progress
    */
   isCancelling?: boolean
+  /**
+   * Auto-focus the prompt textarea when the panel mounts or issue changes
+   */
+  autoFocus?: boolean
+  /**
+   * Whether to allow toggling between follow-up and new execution modes
+   * When false, disables Ctrl+K shortcut and hides toggle UI hints
+   * Defaults to true
+   */
+  allowModeToggle?: boolean
+  /**
+   * Callback to expose the force new execution toggle function
+   * Allows external components to trigger mode switching
+   */
+  onForceNewToggle?: (forceNew: boolean) => void
+  /**
+   * Controlled value for forcing a new execution instead of following up
+   * When true, creates a new execution even in follow-up mode
+   */
+  forceNewExecution?: boolean
+  /**
+   * Current execution to analyze for contextual actions
+   * Used by useAgentActions hook to determine available actions
+   */
+  currentExecution?: Execution | null
+  /**
+   * Whether to disable contextual actions (Commit Changes, Squash & Merge, Cleanup Worktree)
+   * When true, contextual action buttons will not be rendered
+   * Defaults to false
+   */
+  disableContextualActions?: boolean
 }
 
 // TODO: Move this somewhere more central.
@@ -87,6 +130,46 @@ const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
 // localStorage keys for persisting config
 const LAST_EXECUTION_CONFIG_KEY = 'sudocode:lastExecutionConfig'
 const LAST_AGENT_TYPE_KEY = 'sudocode:lastAgentType'
+
+/**
+ * Get verification status icon and color for an agent
+ */
+function getAgentVerificationStatus(agent: any) {
+  // Not implemented agents
+  if (!agent.implemented) {
+    return {
+      icon: AlertCircle,
+      color: 'text-muted-foreground',
+      tooltip: 'Coming soon',
+    }
+  }
+
+  // Implemented but verification not yet run (still loading)
+  if (agent.available === undefined) {
+    return {
+      icon: Loader2,
+      color: 'text-muted-foreground',
+      tooltip: 'Checking availability...',
+      spin: true,
+    }
+  }
+
+  // Available
+  if (agent.available) {
+    return {
+      icon: CheckCircle2,
+      color: 'text-green-600',
+      tooltip: agent.executablePath ? `Available at ${agent.executablePath}` : 'Available',
+    }
+  }
+
+  // Not available
+  return {
+    icon: XCircle,
+    color: 'text-destructive',
+    tooltip: agent.verificationError || 'Warning: Agent CLI not found in PATH',
+  }
+}
 
 /**
  * Validates that a config object has the expected shape and valid values.
@@ -157,42 +240,50 @@ export function AgentConfigPanel({
   onStart,
   disabled = false,
   onSelectOpenChange,
+  variant = 'full',
   isFollowUp = false,
-  parentExecution,
-  previousExecution,
+  lastExecution,
   promptPlaceholder,
   isRunning = false,
   onCancel,
   isCancelling = false,
+  autoFocus = false,
+  allowModeToggle = true,
+  onForceNewToggle,
+  forceNewExecution: controlledForceNewExecution,
+  currentExecution,
+  disableContextualActions = true,
 }: AgentConfigPanelProps) {
-  const [loading, setLoading] = useState(!isFollowUp) // Skip loading for follow-ups
-  const [prepareResult, setPrepareResult] = useState<ExecutionPrepareResult | null>(null)
+  const [loading, setLoading] = useState(false)
   const [prompt, setPrompt] = useState('')
-  const [config, setConfig] = useState<ExecutionConfig>(() => {
-    // For follow-ups, inherit config from parent execution
-    if (isFollowUp && parentExecution?.config) {
-      const inheritedConfig = {
-        ...parentExecution.config,
-        mode: (parentExecution.mode as ExecutionMode) || 'worktree',
-        baseBranch: parentExecution.target_branch,
-      }
-      if (isValidExecutionConfig(inheritedConfig)) {
-        return inheritedConfig
-      }
-      console.warn('Parent execution config is invalid, using defaults')
-    }
+  const [internalForceNewExecution, setInternalForceNewExecution] = useState(false)
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = useState<string>('')
 
-    // For new executions, try to use previous execution config
-    if (previousExecution?.config) {
-      const previousConfig = {
-        ...previousExecution.config,
-        mode: (previousExecution.mode as ExecutionMode) || 'worktree',
-        baseBranch: previousExecution.target_branch,
+  // Use controlled value if provided, otherwise use internal state
+  const forceNewExecution =
+    controlledForceNewExecution !== undefined
+      ? controlledForceNewExecution
+      : internalForceNewExecution
+  const setForceNewExecution = (value: boolean) => {
+    if (controlledForceNewExecution === undefined) {
+      setInternalForceNewExecution(value)
+    }
+    onForceNewToggle?.(value)
+  }
+
+  const [config, setConfig] = useState<ExecutionConfig>(() => {
+    // Try to use last execution config (works for both follow-up and new execution modes)
+    if (lastExecution?.config) {
+      const executionConfig = {
+        ...lastExecution.config,
+        mode: (lastExecution.mode as ExecutionMode) || 'worktree',
+        baseBranch: lastExecution.target_branch,
       }
-      if (isValidExecutionConfig(previousConfig)) {
-        return previousConfig
+      if (isValidExecutionConfig(executionConfig)) {
+        return executionConfig
       }
-      console.warn('Previous execution config is invalid, trying localStorage')
+      console.warn('Last execution config is invalid, trying localStorage')
     }
 
     // Otherwise, try localStorage
@@ -224,14 +315,9 @@ export function AgentConfigPanel({
   })
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [selectedAgentType, setSelectedAgentType] = useState<string>(() => {
-    // For follow-ups, inherit agent type from parent execution
-    if (isFollowUp && parentExecution?.agent_type) {
-      return parentExecution.agent_type
-    }
-
-    // For new executions, try to use previous execution's agent type
-    if (previousExecution?.agent_type) {
-      return previousExecution.agent_type
+    // Try to use last execution's agent type
+    if (lastExecution?.agent_type) {
+      return lastExecution.agent_type
     }
 
     // Otherwise, try localStorage
@@ -253,24 +339,55 @@ export function AgentConfigPanel({
   // Fetch available agents
   const { agents, loading: agentsLoading } = useAgents()
 
-  // Reset config when issue or previousExecution changes (issue switching)
+  // Get contextual actions based on execution state
+  // Actions are handled internally by the hook
+  const {
+    actions,
+    hasActions,
+    isCommitDialogOpen,
+    setIsCommitDialogOpen,
+    isCleanupDialogOpen,
+    setIsCleanupDialogOpen,
+    isCommitting,
+    isCleaning,
+    handleCommitChanges,
+    handleCleanupWorktree,
+    // Sync dialog state
+    syncPreview,
+    isSyncPreviewOpen,
+    setIsSyncPreviewOpen,
+    performSync,
+    isPreviewing,
+  } = useAgentActions({
+    execution: currentExecution,
+    issueId,
+    disabled: disabled || isRunning,
+  })
+
+  // Get current project ID for context search
+  const { currentProjectId } = useProject()
+
+  // Fetch available worktrees for worktree-based creation
+  const { worktrees } = useWorktrees()
+
+  // Reset config when issue or lastExecution changes (issue switching)
   useEffect(() => {
     // Skip for follow-ups - they use parent execution
     if (isFollowUp) return
 
     // Helper to load config with priority
     const loadConfigForIssue = (): ExecutionConfig => {
-      // Try previous execution config first
-      if (previousExecution?.config) {
-        const previousConfig = {
-          ...previousExecution.config,
-          mode: (previousExecution.mode as ExecutionMode) || 'worktree',
-          baseBranch: previousExecution.target_branch,
+      // Try last execution config first
+      if (lastExecution?.config) {
+        const executionConfig = {
+          ...lastExecution.config,
+          mode: (lastExecution.mode as ExecutionMode) || 'worktree',
+          baseBranch: lastExecution.target_branch,
         }
-        if (isValidExecutionConfig(previousConfig)) {
-          return previousConfig
+        if (isValidExecutionConfig(executionConfig)) {
+          return executionConfig
         }
-        console.warn('Previous execution config is invalid, trying localStorage')
+        console.warn('Last execution config is invalid, trying localStorage')
       }
 
       // Otherwise, try localStorage
@@ -301,16 +418,16 @@ export function AgentConfigPanel({
     }
 
     setConfig(loadConfigForIssue())
-  }, [issueId, previousExecution?.id, isFollowUp])
+  }, [issueId, lastExecution?.id, isFollowUp])
 
-  // Reset agent type when issue or previousExecution changes
+  // Reset agent type when issue or lastExecution changes
   useEffect(() => {
     if (isFollowUp) return
 
     const loadAgentTypeForIssue = (): string => {
-      // Try previous execution's agent type first
-      if (previousExecution?.agent_type) {
-        return previousExecution.agent_type
+      // Try last execution's agent type first
+      if (lastExecution?.agent_type) {
+        return lastExecution.agent_type
       }
 
       // Otherwise, try localStorage
@@ -328,27 +445,44 @@ export function AgentConfigPanel({
     }
 
     setSelectedAgentType(loadAgentTypeForIssue())
-  }, [issueId, previousExecution?.id, isFollowUp])
+  }, [issueId, lastExecution?.id, isFollowUp])
 
-  // Load template preview on mount (skip for follow-ups)
+  // Load branches and repository info (skip for follow-ups and compact mode)
   useEffect(() => {
-    // Skip prepare API call for follow-ups - we use parent execution config
-    if (isFollowUp) return
+    // Skip for follow-ups - we use parent execution config
+    // Skip for compact mode - we don't show config options
+    if (isFollowUp || variant === 'compact') {
+      setLoading(false) // Ensure loading is false
+      return
+    }
 
     let isMounted = true
 
-    const loadPreview = async () => {
+    const loadRepoInfo = async () => {
       if (!isMounted) return
       setLoading(true)
       try {
-        const result = await executionsApi.prepare(issueId)
+        // Load branches and repo info in parallel
+        const [branchInfo, repoInfo] = await Promise.all([
+          repositoryApi.getBranches(),
+          repositoryApi.getInfo(),
+        ])
+
         if (isMounted) {
-          setPrepareResult(result)
-          // setPrompt(result.renderedPrompt)
-          setConfig({ ...config, ...result.defaultConfig })
+          // Store available branches and current branch
+          setAvailableBranches(branchInfo.branches)
+          setCurrentBranch(branchInfo.current)
+
+          // Set baseBranch to current branch if not already set
+          if (repoInfo.branch) {
+            setConfig((prev) => ({
+              ...prev,
+              baseBranch: prev.baseBranch || repoInfo.branch,
+            }))
+          }
         }
       } catch (error) {
-        console.error('Failed to prepare execution:', error)
+        console.error('Failed to get repository info:', error)
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -356,25 +490,23 @@ export function AgentConfigPanel({
       }
     }
 
-    loadPreview()
+    loadRepoInfo()
 
     return () => {
       isMounted = false
     }
-  }, [issueId, isFollowUp])
+  }, [issueId, isFollowUp, variant])
 
-  // Auto-resize textarea based on content
+  // Auto-focus textarea when panel opens or issue changes
   useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto'
-
-    // Calculate new height (max 300px to prevent it from getting too tall)
-    const newHeight = Math.min(textarea.scrollHeight, 300)
-    textarea.style.height = `${newHeight}px`
-  }, [prompt])
+    if (autoFocus && textareaRef.current && !loading) {
+      // Small delay to ensure the component is fully rendered
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [autoFocus, issueId, loading])
 
   const updateConfig = (updates: Partial<ExecutionConfig>) => {
     setConfig({ ...config, ...updates })
@@ -404,11 +536,26 @@ export function AgentConfigPanel({
       console.warn('Config is invalid, not saving to localStorage')
     }
 
-    onStart(config, prompt, selectedAgentType)
+    // Use default prompt for first messages when no prompt is provided
+    const finalPrompt = prompt.trim() || (!isFollowUp ? `Implement issue [[${issueId}]]` : '')
+
+    onStart(config, finalPrompt, selectedAgentType, forceNewExecution)
     setPrompt('') // Clear the prompt after submission
+    setForceNewExecution(false) // Reset the flag after submission
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Toggle between new execution and follow-up mode with Ctrl+K (only if allowed)
+    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      if (isFollowUp && allowModeToggle) {
+        const newValue = !forceNewExecution
+        setForceNewExecution(newValue)
+        onForceNewToggle?.(newValue)
+      }
+      return
+    }
+
     // Submit on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -419,89 +566,132 @@ export function AgentConfigPanel({
     // Shift+Enter creates newline (default behavior, no need to handle)
   }
 
-  const hasErrors = prepareResult?.errors && prepareResult.errors.length > 0
-  const hasWarnings = prepareResult?.warnings && prepareResult.warnings.length > 0
-  const canStart = !loading && !hasErrors && prompt.trim().length > 0 && !disabled
+  // Allow empty prompts for first messages (not follow-ups)
+  // For follow-ups, require a prompt
+  // Note: We don't block based on agent availability - we just show warnings
+  // Users can still attempt to run unavailable agents (will fail at execution time)
+  const canStart = !loading && (prompt.trim().length > 0 || !isFollowUp) && !disabled
+
+  // Compact mode: inline textarea with submit/cancel button
+  if (variant === 'compact') {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <ContextSearchTextarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={setPrompt}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              isRunning
+                ? 'Execution is running (esc to cancel)'
+                : promptPlaceholder || 'Send feedback to the agent... (@ for context)'
+            }
+            disabled={loading || disabled}
+            className="max-h-[150px] min-h-0 resize-none overflow-y-auto border-none bg-muted/80 py-2 text-sm shadow-none transition-[height] duration-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+            projectId={currentProjectId || ''}
+            autoResize
+            maxHeight={150}
+          />
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={isRunning && isHoveringButton ? onCancel : handleStart}
+                disabled={isRunning ? isCancelling : !canStart}
+                size="sm"
+                onMouseEnter={() => setIsHoveringButton(true)}
+                onMouseLeave={() => setIsHoveringButton(false)}
+                className="h-7 w-7 shrink-0 rounded-full p-0"
+                variant={isRunning && isHoveringButton ? 'destructive' : 'default'}
+                aria-label={isRunning ? (isHoveringButton ? 'Cancel' : 'Running...') : 'Submit'}
+              >
+                {isRunning ? (
+                  isHoveringButton ? (
+                    <Square className="h-3 w-3" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )
+                ) : (
+                  <ArrowDown className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isRunning ? (isHoveringButton ? 'Cancel' : 'Running...') : 'Submit'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3 p-4">
-      {/* Errors */}
-      {hasErrors && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-2">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
-            <div className="flex-1 space-y-1">
-              <p className="text-xs font-medium text-destructive">Errors</p>
-              {prepareResult!.errors!.map((error, i) => (
-                <p key={i} className="text-xs text-destructive/90">
-                  {error}
-                </p>
-              ))}
-            </div>
-          </div>
+    <div className="space-y-2 py-2">
+      {/* Contextual Actions */}
+      {!disableContextualActions && hasActions && (
+        <div className="flex items-center justify-end gap-2">
+          {actions.map((action) => {
+            const Icon = action.icon
+            return (
+              <Button
+                key={action.id}
+                variant={action.variant || 'outline'}
+                size="sm"
+                onClick={action.onClick}
+                disabled={action.disabled}
+                className="h-8 text-xs"
+                title={action.description}
+              >
+                <Icon className="mr-1.5 h-3.5 w-3.5" />
+                {action.label}
+                {action.badge && (
+                  <span className="ml-1.5 rounded-full bg-muted px-1.5 text-xs">
+                    {action.badge}
+                  </span>
+                )}
+              </Button>
+            )
+          })}
         </div>
       )}
-
-      {/* Warnings */}
-      {hasWarnings && (
-        <div className="rounded-lg border border-yellow-500 bg-yellow-500/10 p-2">
-          <div className="flex items-start gap-2">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600" />
-            <div className="flex-1 space-y-1">
-              <p className="text-xs font-medium text-yellow-600">Warnings</p>
-              {prepareResult!.warnings!.map((warning, i) => (
-                <p key={i} className="text-xs text-yellow-600/90">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Related Context Info */}
-      {/* TODO: Re-enable */}
-      {/* {prepareResult &&
-          ((prepareResult.relatedSpecs?.length ?? 0) > 0 ||
-            (prepareResult.relatedFeedback?.length ?? 0) > 0) && (
-            <div className="rounded-lg border bg-muted/50 p-2 text-xs text-muted-foreground">
-              {(prepareResult.relatedSpecs?.length ?? 0) > 0 && (
-                <span>{prepareResult.relatedSpecs.length} spec(s)</span>
-              )}
-              {(prepareResult.relatedSpecs?.length ?? 0) > 0 &&
-                (prepareResult.relatedFeedback?.length ?? 0) > 0 && <span> • </span>}
-              {(prepareResult.relatedFeedback?.length ?? 0) > 0 && (
-                <span>{prepareResult.relatedFeedback.length} feedback item(s)</span>
-              )}
-            </div>
-          )} */}
 
       {/* Prompt Input */}
       <div>
-        <Textarea
+        <ContextSearchTextarea
           ref={textareaRef}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={setPrompt}
           onKeyDown={handleKeyDown}
           placeholder={
-            promptPlaceholder ||
-            (loading
-              ? 'Loading prompt...'
-              : isFollowUp
-                ? 'Enter feedback to continue the execution...'
-                : 'Enter prompt for the agent...')
+            isRunning
+              ? 'Execution is running (esc to cancel)'
+              : promptPlaceholder ||
+                (loading
+                  ? 'Loading prompt...'
+                  : isFollowUp
+                    ? forceNewExecution
+                      ? allowModeToggle
+                        ? 'Start a new execution... (ctrl+k to continue previous, @ for context)'
+                        : 'Start a new execution... (@ for context)'
+                      : allowModeToggle
+                        ? 'Continue the previous conversation... (ctrl+k for new, @ for context)'
+                        : 'Continue the previous conversation... (@ for context)'
+                    : 'Add additional context (optional) for the agent... (@ for context)')
           }
-          disabled={loading}
+          disabled={loading || disabled}
           className="max-h-[300px] min-h-0 resize-none overflow-y-auto border-none bg-muted/80 py-2 text-sm shadow-none transition-[height] duration-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-          style={{ height: 'auto' }}
-          rows={1}
+          projectId={currentProjectId || ''}
+          autoResize
+          maxHeight={300}
         />
       </div>
 
       {/* Configuration Row */}
       <TooltipProvider>
         <div className="flex items-center gap-2">
-          {/* Agent Selection - disabled in follow-up mode */}
+          {/* Agent Selection - disabled in follow-up mode (unless forcing new execution) */}
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
@@ -509,32 +699,69 @@ export function AgentConfigPanel({
                   value={selectedAgentType}
                   onValueChange={setSelectedAgentType}
                   onOpenChange={onSelectOpenChange}
-                  disabled={loading || agentsLoading || isFollowUp}
+                  disabled={loading || agentsLoading || (isFollowUp && !forceNewExecution)}
                 >
                   <SelectTrigger className="h-8 w-[140px] text-xs">
                     <SelectValue placeholder={agentsLoading ? 'Loading...' : 'Agent'}>
-                      {agents?.find((a) => a.type === selectedAgentType)?.displayName ||
-                        'Select agent'}
+                      {(() => {
+                        const selectedAgent = agents?.find((a) => a.type === selectedAgentType)
+                        if (!selectedAgent) return 'Select agent'
+
+                        const status = getAgentVerificationStatus(selectedAgent)
+                        const StatusIcon = status.icon
+                        // Only show icon for unavailable agents to keep UI clean
+                        const showIcon =
+                          !selectedAgent.available && selectedAgent.available !== undefined
+
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            {showIcon && (
+                              <StatusIcon
+                                className={`h-3 w-3 ${status.color} ${status.spin ? 'animate-spin' : ''}`}
+                              />
+                            )}
+                            <span>{selectedAgent.displayName}</span>
+                          </div>
+                        )
+                      })()}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {agents
                       ?.filter((agent) => agent.implemented)
-                      .map((agent) => (
-                        <SelectItem key={agent.type} value={agent.type} className="text-xs">
-                          {agent.displayName}
-                        </SelectItem>
-                      ))}
+                      .map((agent) => {
+                        const status = getAgentVerificationStatus(agent)
+                        const StatusIcon = status.icon
+                        // Only show icon for unavailable agents to keep UI clean
+                        const showIcon = !agent.available && agent.available !== undefined
+                        return (
+                          <SelectItem key={agent.type} value={agent.type} className="text-xs">
+                            <div className="flex items-center gap-2">
+                              {showIcon && (
+                                <StatusIcon
+                                  className={`h-3.5 w-3.5 ${status.color} ${status.spin ? 'animate-spin' : ''}`}
+                                />
+                              )}
+                              <span>{agent.displayName}</span>
+                              {showIcon && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  (not installed)
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
                   </SelectContent>
                 </Select>
               </span>
             </TooltipTrigger>
-            {isFollowUp && (
+            {isFollowUp && !forceNewExecution && (
               <TooltipContent>Agent type is inherited from parent execution</TooltipContent>
             )}
           </Tooltip>
 
-          {/* Execution Mode - disabled in follow-up mode */}
+          {/* Execution Mode - disabled in follow-up mode (unless forcing new execution) */}
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
@@ -542,7 +769,7 @@ export function AgentConfigPanel({
                   value={config.mode}
                   onValueChange={(value) => updateConfig({ mode: value as ExecutionMode })}
                   onOpenChange={onSelectOpenChange}
-                  disabled={loading || isFollowUp}
+                  disabled={loading || (isFollowUp && !forceNewExecution)}
                 >
                   <SelectTrigger className="h-8 w-[140px] text-xs">
                     <SelectValue />
@@ -552,70 +779,67 @@ export function AgentConfigPanel({
                       Run in worktree
                     </SelectItem>
                     <SelectItem value="local" className="text-xs">
-                      Run directly
+                      Run local
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </span>
             </TooltipTrigger>
-            {isFollowUp && (
+            {isFollowUp && !forceNewExecution && (
               <TooltipContent>Execution mode is inherited from parent execution</TooltipContent>
             )}
           </Tooltip>
 
-          {/* Base Branch (only for worktree mode) - disabled in follow-up mode */}
-          {config.mode === 'worktree' && (prepareResult?.availableBranches || isFollowUp) && (
+          {/* Branch Selector - enabled for worktree mode, disabled for local mode and follow-ups */}
+          {config.baseBranch && config.mode === 'worktree' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
-                  <Select
+                  <BranchSelector
+                    branches={
+                      availableBranches.length > 0 ? availableBranches : [config.baseBranch]
+                    }
                     value={config.baseBranch}
-                    onValueChange={(value) => updateConfig({ baseBranch: value })}
-                    onOpenChange={onSelectOpenChange}
-                    disabled={loading || isFollowUp}
-                  >
-                    <SelectTrigger className="h-8 w-[120px] text-xs">
-                      <SelectValue placeholder="Branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isFollowUp && config.baseBranch ? (
-                        <SelectItem value={config.baseBranch} className="text-xs">
-                          {config.baseBranch}
-                        </SelectItem>
-                      ) : (
-                        prepareResult?.availableBranches?.map((branch) => (
-                          <SelectItem key={branch} value={branch} className="text-xs">
-                            {branch}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    onChange={(branch, isNew, worktreeId) => {
+                      updateConfig({
+                        baseBranch: branch,
+                        createBaseBranch: isNew || false,
+                        reuseWorktreeId: worktreeId, // If worktreeId is set, reuse that worktree
+                      })
+                    }}
+                    disabled={loading || (isFollowUp && !forceNewExecution)}
+                    allowCreate={!isFollowUp || forceNewExecution}
+                    className="w-[180px]"
+                    currentBranch={currentBranch}
+                    worktrees={worktrees}
+                  />
                 </span>
               </TooltipTrigger>
-              {isFollowUp && (
-                <TooltipContent>Branch is inherited from parent execution</TooltipContent>
+              {isFollowUp && !forceNewExecution && (
+                <TooltipContent>Base branch is inherited from parent execution</TooltipContent>
               )}
             </Tooltip>
           )}
 
           <div className="ml-auto" />
 
-          {/* Settings Button - disabled in follow-up mode */}
+          {/* Settings Button - disabled in follow-up mode (unless forcing new execution) */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowSettingsDialog(true)}
-                disabled={loading || isFollowUp}
+                disabled={loading || (isFollowUp && !forceNewExecution)}
                 className="h-8 px-2"
               >
                 <Settings className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {isFollowUp ? 'Settings are inherited from parent execution' : 'Advanced settings'}
+              {isFollowUp && !forceNewExecution
+                ? 'Settings are inherited from parent execution'
+                : 'Advanced settings'}
             </TooltipContent>
           </Tooltip>
 
@@ -658,6 +882,51 @@ export function AgentConfigPanel({
         onClose={() => setShowSettingsDialog(false)}
         agentType={selectedAgentType}
       />
+
+      {/* Commit Changes Dialog */}
+      {currentExecution && (
+        <CommitChangesDialog
+          execution={currentExecution}
+          isOpen={isCommitDialogOpen}
+          onClose={() => setIsCommitDialogOpen(false)}
+          onConfirm={handleCommitChanges}
+          isCommitting={isCommitting}
+        />
+      )}
+
+      {/* Cleanup Worktree Dialog */}
+      {currentExecution && (
+        <CleanupWorktreeDialog
+          execution={currentExecution}
+          isOpen={isCleanupDialogOpen}
+          onClose={() => setIsCleanupDialogOpen(false)}
+          onConfirm={handleCleanupWorktree}
+          isCleaning={isCleaning}
+        />
+      )}
+
+      {/* Sync Preview Dialog */}
+      {currentExecution && syncPreview && (
+        <SyncPreviewDialog
+          execution={currentExecution}
+          preview={syncPreview}
+          isOpen={isSyncPreviewOpen}
+          onClose={() => setIsSyncPreviewOpen(false)}
+          onConfirmSync={(mode, commitMessage) => {
+            performSync(currentExecution.id, mode, commitMessage)
+          }}
+          onOpenIDE={() => {
+            // Open worktree path in IDE (copy to clipboard for now)
+            if (currentExecution.worktree_path) {
+              navigator.clipboard.writeText(currentExecution.worktree_path)
+              alert(
+                `Worktree path copied to clipboard:\n${currentExecution.worktree_path}\n\nOpen it manually in your IDE.`
+              )
+            }
+          }}
+          isPreviewing={isPreviewing}
+        />
+      )}
     </div>
   )
 }

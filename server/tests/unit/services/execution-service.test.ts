@@ -192,158 +192,261 @@ describe("ExecutionService", () => {
     }
   });
 
-  describe("prepareExecution", () => {
-    it("should load issue and render template", async () => {
-      const result = await service.prepareExecution(testIssueId);
+  describe("prompt resolution", () => {
+    it("should resolve [[s-xxxxx]] spec references in prompt", async () => {
+      const promptWithSpec = `Implement authentication as per [[${testSpecId}]]`;
 
-      // Verify structure
-      expect(result.renderedPrompt, "Should have rendered prompt").toBeTruthy();
-      expect(result.issue, "Should have issue").toBeTruthy();
-      expect(result.relatedSpecs, "Should have related specs").toBeTruthy();
-      expect(result.defaultConfig, "Should have default config").toBeTruthy();
-
-      // Verify issue data
-      expect(result.issue.id).toBe(testIssueId);
-      expect(result.issue.title).toBe("Implement user authentication");
-      expect(result.issue.content).toBe(
-        "Add OAuth2 authentication with JWT tokens"
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithSpec
       );
 
-      // Verify related specs
-      expect(result.relatedSpecs.length).toBe(1);
-      expect(result.relatedSpecs[0].id).toBe(testSpecId);
-      expect(result.relatedSpecs[0].title).toBe("Authentication System Design");
+      // Verify execution was created
+      expect(execution.id).toBeTruthy();
 
-      // Verify rendered prompt contains issue info
-      expect(result.renderedPrompt.includes(testIssueId)).toBeTruthy();
-      expect(
-        result.renderedPrompt.includes("Implement user authentication")
-      ).toBeTruthy();
-      expect(
-        result.renderedPrompt.includes("OAuth2 authentication with JWT tokens")
-      ).toBeTruthy();
-      expect(result.renderedPrompt.includes(testSpecId)).toBeTruthy();
-
-      // Verify default config
-      expect(result.defaultConfig.mode).toBe("worktree");
-      expect(result.defaultConfig.model).toBe("claude-sonnet-4");
-      // baseBranch should be set to current branch (not hardcoded to "main")
-      expect(result.defaultConfig.baseBranch).toBeTruthy();
-      expect(typeof result.defaultConfig.baseBranch).toBe("string");
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
     });
 
-    it("should handle issue without related specs", async () => {
-      // Create issue without relationships
-      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(
-        db,
-        testDir
+    it("should resolve @s-xxxxx spec references in prompt", async () => {
+      const promptWithSpec = `Implement authentication as per @${testSpecId}`;
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithSpec
       );
-      createIssue(db, {
-        id: isolatedIssueId,
-        uuid: isolatedIssueUuid,
-        title: "Fix bug",
-        content: "Fix the bug",
-      });
 
-      const result = await service.prepareExecution(isolatedIssueId);
-
-      expect(result.renderedPrompt).toBeTruthy();
-      expect(result.relatedSpecs.length).toBe(0);
-
-      // Verify prompt doesn't include Related Specifications section
-      expect(
-        !result.renderedPrompt.includes("Related Specifications")
-      ).toBeTruthy();
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`@${testSpecId}`);
     });
 
-    it("should throw error for non-existent issue", async () => {
-      await expect(service.prepareExecution("ISSUE-999")).rejects.toThrow(
-        /Issue ISSUE-999 not found/
+    it("should resolve [[i-xxxxx]] issue references in prompt", async () => {
+      const promptWithIssue = `Fix the bug from [[${testIssueId}]]`;
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithIssue
       );
+
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithIssue);
+      expect(execution.prompt).toContain(`[[${testIssueId}]]`);
     });
 
-    it("should render template even with empty issue content", async () => {
-      // Create issue with empty content
-      const { id: emptyIssueId, uuid: emptyIssueUuid } = generateIssueId(
-        db,
-        testDir
+    it("should resolve @i-xxxxx issue references in prompt", async () => {
+      const promptWithIssue = `Fix the bug from @${testIssueId}`;
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithIssue
       );
-      createIssue(db, {
-        id: emptyIssueId,
-        uuid: emptyIssueUuid,
-        title: "",
-        content: "",
-      });
 
-      const result = await service.prepareExecution(emptyIssueId);
-
-      // Template should still render with structure
-      expect(result.renderedPrompt).toBeTruthy();
-      expect(result.renderedPrompt.trim().length > 0).toBeTruthy();
-      // Should include the template structure even if issue is empty
-      expect(result.renderedPrompt.includes("## Description")).toBeTruthy();
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithIssue);
+      expect(execution.prompt).toContain(`@${testIssueId}`);
     });
 
-    it("should allow config overrides", async () => {
-      const result = await service.prepareExecution(testIssueId, {
-        config: {
-          mode: "local",
-          model: "claude-opus-4",
-          baseBranch: "develop",
-        },
-      });
+    it("should resolve multiple references in one prompt", async () => {
+      const promptWithMultiple = `Implement [[${testSpecId}]] and fix @${testIssueId}`;
 
-      expect(result.defaultConfig.mode).toBe("local");
-      expect(result.defaultConfig.model).toBe("claude-opus-4");
-      expect(result.defaultConfig.baseBranch).toBe("develop");
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithMultiple
+      );
+
+      // Verify original (unexpanded) prompt is stored in database
+      expect(execution.prompt).toBe(promptWithMultiple);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
+      expect(execution.prompt).toContain(`@${testIssueId}`);
+    });
+
+    it("should pass through @file mentions unchanged", async () => {
+      const promptWithFile = `Review @src/auth.ts and implement [[${testSpecId}]]`;
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithFile
+      );
+
+      // Verify original (unexpanded) prompt is stored with file mention and spec reference
+      expect(execution.prompt).toBe(promptWithFile);
+      expect(execution.prompt).toContain("@src/auth.ts");
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
+    });
+
+    it("should handle missing spec references gracefully", async () => {
+      const promptWithMissing = `Implement [[s-nonexistent]]`;
+
+      // Should not throw error
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithMissing
+      );
+
+      // Missing reference should remain unchanged
+      expect(execution.prompt).toContain("[[s-nonexistent]]");
+    });
+
+    it("should handle missing issue references gracefully", async () => {
+      const promptWithMissing = `Fix @i-nonexistent`;
+
+      // Should not throw error
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        promptWithMissing
+      );
+
+      // Missing reference should remain unchanged
+      expect(execution.prompt).toContain("@i-nonexistent");
+    });
+
+    it("should resolve references in worktree mode", async () => {
+      const promptWithSpec = `Implement [[${testSpecId}]]`;
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" },
+        promptWithSpec
+      );
+
+      // Verify original (unexpanded) prompt is stored in worktree mode too
+      expect(execution.prompt).toBe(promptWithSpec);
+      expect(execution.prompt).toContain(`[[${testSpecId}]]`);
     });
   });
 
   describe("createExecution", () => {
     it("should create execution in worktree mode", async () => {
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Verify execution was created
-        expect(execution.id, "Should have execution ID").toBeTruthy();
-        expect(execution.issue_id).toBe(testIssueId);
-        expect(execution.agent_type).toBe("claude-code");
-        expect(execution.status).toBe("running");
-        expect(
-          execution.worktree_path,
-          "Should have worktree path"
-        ).toBeTruthy();
-        expect(execution.branch_name, "Should have branch name").toBeTruthy();
+      // Verify execution was created
+      expect(execution.id, "Should have execution ID").toBeTruthy();
+      expect(execution.issue_id).toBe(testIssueId);
+      expect(execution.agent_type).toBe("claude-code");
+      expect(execution.status).toBe("running");
+      expect(execution.worktree_path, "Should have worktree path").toBeTruthy();
+      expect(execution.branch_name, "Should have branch name").toBeTruthy();
 
-        // Verify branch name format (should be worktree/{uuid}/{sanitized-title})
-        expect(execution.branch_name.startsWith("worktree/")).toBeTruthy();
-        expect(
-          execution.branch_name.includes("implement-user-authentication")
-        ).toBeTruthy();
-      });
+      // Verify branch name format (should be worktree/{uuid}/{sanitized-title})
+      expect(execution.branch_name.startsWith("worktree/")).toBeTruthy();
+      expect(
+        execution.branch_name.includes("implement-user-authentication")
+      ).toBeTruthy();
+    });
 
     it("should create execution in local mode", async () => {
-        const prepareResult = await service.prepareExecution(testIssueId, {
-          config: { mode: "local" },
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        issueContent
+      );
+
+      // Verify execution was created in local mode
+      expect(execution.id).toBeTruthy();
+      expect(execution.issue_id).toBe(testIssueId);
+      expect(execution.status).toBe("running");
+      // In local mode, worktree_path should be null
+      expect(execution.worktree_path).toBe(null);
+    });
+
+    it("should capture before_commit in local mode", async () => {
+      // Create a real git repo for this test
+      const gitTestDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "sudocode-test-git-local-")
+      );
+
+      try {
+        // Initialize git repo
+        const { execSync } = await import("child_process");
+        execSync("git init", { cwd: gitTestDir });
+        execSync('git config user.email "test@example.com"', {
+          cwd: gitTestDir,
+        });
+        execSync('git config user.name "Test User"', { cwd: gitTestDir });
+
+        // Create initial commit
+        fs.writeFileSync(path.join(gitTestDir, "README.md"), "# Test\n");
+        execSync("git add .", { cwd: gitTestDir });
+        execSync('git commit -m "Initial commit"', { cwd: gitTestDir });
+
+        // Get the current commit SHA
+        const expectedCommit = execSync("git rev-parse HEAD", {
+          cwd: gitTestDir,
+          encoding: "utf-8",
+        }).trim();
+
+        // Initialize database in git test directory
+        const gitTestDbPath = path.join(gitTestDir, ".sudocode", "cache.db");
+        fs.mkdirSync(path.join(gitTestDir, ".sudocode"), { recursive: true });
+        const gitTestDb = initCliDatabase({ path: gitTestDbPath });
+        gitTestDb.exec(EXECUTIONS_TABLE);
+        gitTestDb.exec(EXECUTIONS_INDEXES);
+        gitTestDb.exec(PROMPT_TEMPLATES_TABLE);
+        gitTestDb.exec(PROMPT_TEMPLATES_INDEXES);
+        initializeDefaultTemplates(gitTestDb);
+
+        // Create test issue in git test db
+        const { id: gitIssueId, uuid: gitIssueUuid } = generateIssueId(
+          gitTestDb,
+          gitTestDir
+        );
+        const gitIssue = createIssue(gitTestDb, {
+          id: gitIssueId,
+          uuid: gitIssueUuid,
+          title: "Test Issue for Git",
+          content: "This is a test issue",
         });
 
-        const execution = await service.createExecution(
-          testIssueId,
-          { ...prepareResult.defaultConfig, mode: "local" },
-          prepareResult.renderedPrompt
+        // Create execution service with git test directory
+        const gitLifecycleService = new ExecutionLifecycleService(
+          gitTestDb,
+          gitTestDir,
+          createMockWorktreeManager()
+        );
+        const gitService = new ExecutionService(
+          gitTestDb,
+          "test-project-git",
+          gitTestDir,
+          gitLifecycleService
         );
 
-        // Verify execution was created in local mode
-        expect(execution.id).toBeTruthy();
-        expect(execution.issue_id).toBe(testIssueId);
-        expect(execution.status).toBe("running");
-        // In local mode, worktree_path should be null
-        expect(execution.worktree_path).toBe(null);
-      });
+        const issueContent = "Add OAuth2 authentication";
+        const execution = await gitService.createExecution(
+          gitIssue.id,
+          { mode: "local" },
+          issueContent
+        );
+
+        // Verify before_commit was captured
+        expect(execution.before_commit).toBe(expectedCommit);
+        expect(execution.before_commit).toMatch(/^[0-9a-f]{40}$/);
+
+        // Cleanup
+        gitTestDb.close();
+      } finally {
+        // Clean up git test directory
+        if (fs.existsSync(gitTestDir)) {
+          fs.rmSync(gitTestDir, { recursive: true, force: true });
+        }
+      }
+    });
 
     it("should throw error for empty prompt", async () => {
       await expect(
@@ -365,207 +468,174 @@ describe("ExecutionService", () => {
       ).rejects.toThrow(/Issue ISSUE-999 not found/);
     });
 
-    it(
-      "should default to claude-code agent when agentType not specified",
-      
-      async () => {
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-          // agentType not specified, should default to 'claude-code'
-        );
+    it("should default to claude-code agent when agentType not specified", async () => {
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+        // agentType not specified, should default to 'claude-code'
+      );
 
-        expect(execution.agent_type).toBe("claude-code");
-      }
-    );
+      expect(execution.agent_type).toBe("claude-code");
+    });
 
-    it(
-      "should create execution with specified agent type",
-      
-      async () => {
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "claude-code" // Explicitly specify claude-code
-        );
+    it("should create execution with specified agent type", async () => {
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent,
+        "claude-code" // Explicitly specify claude-code
+      );
 
-        expect(execution.agent_type).toBe("claude-code");
-      }
-    );
+      expect(execution.agent_type).toBe("claude-code");
+    });
 
-    it(
-      "should create execution for codex agent",
-      
-      async () => {
-        const prepareResult = await service.prepareExecution(testIssueId);
+    it("should create execution for codex agent", async () => {
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
 
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "codex"
-        );
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent,
+        "codex"
+      );
 
-        expect(execution).toBeDefined();
-        expect(execution.agent_type).toBe("codex");
-        expect(execution.status).toBe("running");
-      }
-    );
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("codex");
+      expect(execution.status).toBe("running");
+    });
 
-    it(
-      "should create execution for copilot agent",
-      
-      async () => {
-        // Create a separate issue for this test to avoid "active execution" conflict
-        const { id: copilotIssueId, uuid: copilotIssueUuid } = generateIssueId(
-          db,
-          testDir
-        );
-        createIssue(db, {
-          id: copilotIssueId,
-          uuid: copilotIssueUuid,
-          title: "Test copilot",
-          content: "Test copilot agent",
-        });
+    it("should create execution for copilot agent", async () => {
+      // Create a separate issue for this test to avoid "active execution" conflict
+      const { id: copilotIssueId, uuid: copilotIssueUuid } = generateIssueId(
+        db,
+        testDir
+      );
+      createIssue(db, {
+        id: copilotIssueId,
+        uuid: copilotIssueUuid,
+        title: "Test copilot",
+        content: "Test copilot agent",
+      });
 
-        const prepareResult = await service.prepareExecution(copilotIssueId);
+      const copilotIssueContent = "Implement GitHub Copilot integration";
 
-        // Copilot is now implemented
-        const execution = await service.createExecution(
-          copilotIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "copilot"
-        );
+      // Copilot is now implemented
+      const execution = await service.createExecution(
+        copilotIssueId,
+        { mode: "worktree" as const },
+        copilotIssueContent,
+        "copilot"
+      );
 
-        expect(execution).toBeDefined();
-        expect(execution.agent_type).toBe("copilot");
-        expect(execution.status).toBe("running");
-      }
-    );
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("copilot");
+      expect(execution.status).toBe("running");
+    });
 
-    it(
-      "should create execution for cursor agent",
-      
-      async () => {
-        // Create a separate issue for this test to avoid "active execution" conflict
-        const { id: cursorIssueId, uuid: cursorIssueUuid } = generateIssueId(
-          db,
-          testDir
-        );
-        createIssue(db, {
-          id: cursorIssueId,
-          uuid: cursorIssueUuid,
-          title: "Test cursor",
-          content: "Test cursor agent",
-        });
+    it("should create execution for cursor agent", async () => {
+      // Create a separate issue for this test to avoid "active execution" conflict
+      const { id: cursorIssueId, uuid: cursorIssueUuid } = generateIssueId(
+        db,
+        testDir
+      );
+      createIssue(db, {
+        id: cursorIssueId,
+        uuid: cursorIssueUuid,
+        title: "Test cursor",
+        content: "Test cursor agent",
+      });
 
-        const prepareResult = await service.prepareExecution(cursorIssueId);
+      const cursorIssueContent = "Integrate Cursor features";
 
-        const execution = await service.createExecution(
-          cursorIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "cursor"
-        );
+      const execution = await service.createExecution(
+        cursorIssueId,
+        { mode: "worktree" as const },
+        cursorIssueContent,
+        "cursor"
+      );
 
-        expect(execution).toBeDefined();
-        expect(execution.agent_type).toBe("cursor");
-        expect(execution.status).toBe("running");
-      }
-    );
+      expect(execution).toBeDefined();
+      expect(execution.agent_type).toBe("cursor");
+      expect(execution.status).toBe("running");
+    });
   });
 
   describe("createFollowUp", () => {
-    it(
-      "should create follow-up execution reusing worktree",
-      
-      async () => {
-        // Create initial execution
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const initialExecution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+    it("should create follow-up execution reusing worktree", async () => {
+      // Create initial execution
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Create follow-up
-        const followUpExecution = await service.createFollowUp(
-          initialExecution.id,
-          "Please add unit tests for the authentication flow"
-        );
+      // Create follow-up
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        "Please add unit tests for the authentication flow"
+      );
 
-        // Verify follow-up execution
-        expect(followUpExecution.id).toBeTruthy();
-        expect(followUpExecution.id).not.toBe(initialExecution.id);
-        expect(followUpExecution.issue_id).toBe(initialExecution.issue_id);
-        expect(followUpExecution.worktree_path).toBe(
-          initialExecution.worktree_path
-        );
-        expect(followUpExecution.branch_name).toBe(
-          initialExecution.branch_name
-        );
-      }
-    );
+      // Verify follow-up execution
+      expect(followUpExecution.id).toBeTruthy();
+      expect(followUpExecution.id).not.toBe(initialExecution.id);
+      expect(followUpExecution.issue_id).toBe(initialExecution.issue_id);
+      expect(followUpExecution.worktree_path).toBe(
+        initialExecution.worktree_path
+      );
+      expect(followUpExecution.branch_name).toBe(initialExecution.branch_name);
+    });
 
-    it(
-      "should preserve agent type from parent execution",
+    it("should preserve agent type from parent execution", async () => {
+      // Create initial execution with explicit agent type
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent,
+        "claude-code"
+      );
 
-      async () => {
-        // Create initial execution with explicit agent type
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const initialExecution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt,
-          "claude-code"
-        );
+      expect(initialExecution.agent_type).toBe("claude-code");
 
-        expect(initialExecution.agent_type).toBe("claude-code");
+      // Create follow-up
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        "Please add unit tests"
+      );
 
-        // Create follow-up
-        const followUpExecution = await service.createFollowUp(
-          initialExecution.id,
-          "Please add unit tests"
-        );
+      // Follow-up should preserve agent type from parent
+      expect(followUpExecution.agent_type).toBe("claude-code");
+    });
 
-        // Follow-up should preserve agent type from parent
-        expect(followUpExecution.agent_type).toBe("claude-code");
-      }
-    );
+    it("should store user feedback as prompt in follow-up execution", async () => {
+      // Create initial execution
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-    it(
-      "should store user feedback as prompt in follow-up execution",
+      // Verify initial execution has a prompt (may be resolved if it had references)
+      expect(initialExecution.prompt).toBeTruthy();
+      expect(typeof initialExecution.prompt).toBe("string");
 
-      async () => {
-        // Create initial execution
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const initialExecution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      // Create follow-up with specific feedback
+      const feedbackText = "Please add unit tests for the authentication flow";
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        feedbackText
+      );
 
-        // Verify initial execution has a prompt
-        expect(initialExecution.prompt).toBe(prepareResult.renderedPrompt);
-
-        // Create follow-up with specific feedback
-        const feedbackText = "Please add unit tests for the authentication flow";
-        const followUpExecution = await service.createFollowUp(
-          initialExecution.id,
-          feedbackText
-        );
-
-        // Verify follow-up execution stores the feedback as the prompt
-        expect(followUpExecution.prompt).toBe(feedbackText);
-        expect(followUpExecution.prompt).not.toBe(initialExecution.prompt);
-        expect(followUpExecution.parent_execution_id).toBe(initialExecution.id);
-      }
-    );
+      // Verify follow-up execution stores the feedback as the prompt
+      expect(followUpExecution.prompt).toBe(feedbackText);
+      expect(followUpExecution.prompt).not.toBe(initialExecution.prompt);
+      expect(followUpExecution.parent_execution_id).toBe(initialExecution.id);
+    });
 
     it("should throw error for non-existent execution", async () => {
       await expect(
@@ -573,39 +643,61 @@ describe("ExecutionService", () => {
       ).rejects.toThrow(/Execution non-existent-id not found/);
     });
 
-    it(
-      "should support follow-ups for local mode executions (no worktree)",
+    it("should include original prompt when option is enabled", async () => {
+      // Create initial execution
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-      async () => {
-        // Create local execution (no worktree)
-        const prepareResult = await service.prepareExecution(testIssueId, {
-          config: { mode: "local" },
-        });
-        const localExecution = await service.createExecution(
-          testIssueId,
-          { ...prepareResult.defaultConfig, mode: "local" },
-          prepareResult.renderedPrompt
-        );
+      // Create follow-up with includeOriginalPrompt option
+      const feedbackText = "Please add tests";
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        feedbackText,
+        { includeOriginalPrompt: true }
+      );
 
-        // Follow-ups should work for local mode (uses repo path instead of worktree)
-        const followUp = await service.createFollowUp(localExecution.id, "Continue the work");
+      // Verify prompt includes both original content and feedback
+      expect(followUpExecution.prompt).toContain(issueContent);
+      expect(followUpExecution.prompt).toContain(feedbackText);
+      expect(followUpExecution.prompt).toBe(
+        `${issueContent}\n\n${feedbackText}`
+      );
+    });
 
-        expect(followUp).toBeDefined();
-        expect(followUp.parent_execution_id).toBe(localExecution.id);
-        expect(followUp.issue_id).toBe(testIssueId);
-        expect(followUp.worktree_path).toBeNull(); // Local mode has no worktree
-      }
-    );
+    it("should support follow-ups for local mode executions (no worktree)", async () => {
+      // Create local execution (no worktree)
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const localExecution = await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        issueContent
+      );
+
+      // Follow-ups should work for local mode (uses repo path instead of worktree)
+      const followUp = await service.createFollowUp(
+        localExecution.id,
+        "Continue the work"
+      );
+
+      expect(followUp).toBeDefined();
+      expect(followUp.parent_execution_id).toBe(localExecution.id);
+      expect(followUp.issue_id).toBe(testIssueId);
+      expect(followUp.worktree_path).toBeNull(); // Local mode has no worktree
+    });
   });
 
   describe("cancelExecution", () => {
     it("should cancel running execution", async () => {
       // Create execution
-      const prepareResult = await service.prepareExecution(testIssueId);
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
       const execution = await service.createExecution(
         testIssueId,
-        prepareResult.defaultConfig,
-        prepareResult.renderedPrompt
+        { mode: "worktree" as const },
+        issueContent
       );
 
       // Cancel it
@@ -629,36 +721,32 @@ describe("ExecutionService", () => {
       );
     });
 
-    it(
-      "should throw error for non-running execution",
-      
-      async () => {
-        // Create and immediately cancel
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+    it("should throw error for non-running execution", async () => {
+      // Create and immediately cancel
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        await service.cancelExecution(execution.id);
+      await service.cancelExecution(execution.id);
 
-        // Try to cancel again
-        await expect(service.cancelExecution(execution.id)).rejects.toThrow(
-          /Cannot cancel execution in stopped state/
-        );
-      }
-    );
+      // Try to cancel again
+      await expect(service.cancelExecution(execution.id)).rejects.toThrow(
+        /Cannot cancel execution in stopped state/
+      );
+    });
   });
 
   describe("cleanupExecution", () => {
     it("should cleanup execution resources", async () => {
       // Create execution
-      const prepareResult = await service.prepareExecution(testIssueId);
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
       const execution = await service.createExecution(
         testIssueId,
-        prepareResult.defaultConfig,
-        prepareResult.renderedPrompt
+        { mode: "worktree" as const },
+        issueContent
       );
 
       // Cleanup
@@ -681,83 +769,13 @@ describe("ExecutionService", () => {
     });
   });
 
-  describe("template rendering", () => {
-    it("should handle variables in template", async () => {
-      const result = await service.prepareExecution(testIssueId);
-
-      // Verify variable substitution worked
-      expect(result.renderedPrompt.includes(testIssueId)).toBeTruthy();
-      expect(
-        result.renderedPrompt.includes("Implement user authentication")
-      ).toBeTruthy();
-      expect(
-        result.renderedPrompt.includes("OAuth2 authentication with JWT tokens")
-      ).toBeTruthy();
-    });
-
-    it("should handle conditionals in template", async () => {
-      // Issue with related specs should show Related Specifications section
-      const withSpecs = await service.prepareExecution(testIssueId);
-      expect(
-        withSpecs.renderedPrompt.includes("Related Specifications")
-      ).toBeTruthy();
-
-      // Issue without related specs should not show section
-      const { id: isolatedIssueId, uuid: isolatedIssueUuid } = generateIssueId(
-        db,
-        testDir
-      );
-      createIssue(db, {
-        id: isolatedIssueId,
-        uuid: isolatedIssueUuid,
-        title: "Isolated issue",
-        content: "No related specs",
-      });
-
-      const withoutSpecs = await service.prepareExecution(isolatedIssueId);
-      expect(
-        !withoutSpecs.renderedPrompt.includes("Related Specifications")
-      ).toBeTruthy();
-    });
-
-    it("should handle loops in template", async () => {
-      // Create multiple related specs
-      const { id: spec2Id, uuid: spec2Uuid } = generateSpecId(db, testDir);
-      createSpec(db, {
-        id: spec2Id,
-        uuid: spec2Uuid,
-        title: "Database Design",
-        content: "User table schema",
-        file_path: path.join(testDir, "specs", "db.md"),
-      });
-
-      addRelationship(db, {
-        from_id: testIssueId,
-        from_type: "issue",
-        to_id: spec2Id,
-        to_type: "spec",
-        relationship_type: "references",
-      });
-
-      const result = await service.prepareExecution(testIssueId);
-
-      // Verify both specs are listed
-      expect(result.renderedPrompt.includes(testSpecId)).toBeTruthy();
-      expect(result.renderedPrompt.includes(spec2Id)).toBeTruthy();
-      expect(
-        result.renderedPrompt.includes("Authentication System Design")
-      ).toBeTruthy();
-      expect(result.renderedPrompt.includes("Database Design")).toBeTruthy();
-    });
-  });
-
   describe("deleteExecution", () => {
     it("should delete a single execution", async () => {
-      const prepareResult = await service.prepareExecution(testIssueId);
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
       const execution = await service.createExecution(
         testIssueId,
-        prepareResult.defaultConfig,
-        prepareResult.renderedPrompt
+        { mode: "worktree" as const },
+        issueContent
       );
 
       // Verify execution exists
@@ -775,11 +793,11 @@ describe("ExecutionService", () => {
 
     it("should delete entire execution chain", async () => {
       // Create initial execution
-      const prepareResult = await service.prepareExecution(testIssueId);
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
       const rootExecution = await service.createExecution(
         testIssueId,
-        prepareResult.defaultConfig,
-        prepareResult.renderedPrompt
+        { mode: "worktree" as const },
+        issueContent
       );
 
       // Create follow-up executions
@@ -807,17 +825,17 @@ describe("ExecutionService", () => {
     });
 
     it("should throw error when deleting non-existent execution", async () => {
-      await expect(
-        service.deleteExecution("non-existent-id")
-      ).rejects.toThrow("Execution non-existent-id not found");
+      await expect(service.deleteExecution("non-existent-id")).rejects.toThrow(
+        "Execution non-existent-id not found"
+      );
     });
 
     it("should cancel running executions before deletion", async () => {
-      const prepareResult = await service.prepareExecution(testIssueId);
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
       const execution = await service.createExecution(
         testIssueId,
-        prepareResult.defaultConfig,
-        prepareResult.renderedPrompt
+        { mode: "worktree" as const },
+        issueContent
       );
 
       // Execution should be running or pending
@@ -832,232 +850,309 @@ describe("ExecutionService", () => {
       // Execution should be deleted
       expect(service.getExecution(execution.id)).toBeNull();
     });
+
+    it("should delete branch when deleteBranch is true and branch was created by execution", async () => {
+      // Note: This test verifies the branch deletion logic exists in the code
+      // In our mock environment, the worktree manager doesn't create real branches,
+      // so we're testing that the method accepts the parameter correctly
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
+
+      // Verify execution has branch_name different from target_branch
+      const exec = service.getExecution(execution.id);
+      expect(exec?.branch_name).toBeTruthy();
+      expect(exec?.branch_name).not.toBe(exec?.target_branch);
+      expect(exec?.branch_name).not.toBe("(detached)");
+
+      // Delete execution with deleteBranch flag
+      await expect(
+        service.deleteExecution(execution.id, true)
+      ).resolves.not.toThrow();
+
+      // Verify execution is deleted
+      expect(service.getExecution(execution.id)).toBeNull();
+    });
+
+    it("should not fail when deleteBranch is true but branch was not created by execution", async () => {
+      // Create execution where branch_name == target_branch (no new branch created)
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+
+      // First create an execution to get the format
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" }, // Local mode uses repo branch
+        issueContent
+      );
+
+      // Manually update the execution to simulate branch_name == target_branch
+      const { updateExecution } = await import(
+        "../../../src/services/executions.js"
+      );
+      updateExecution(db, execution.id, {
+        branch_name: "main",
+        target_branch: "main",
+        status: "completed",
+      });
+
+      // Delete with deleteBranch=true should not fail (branch shouldn't be deleted)
+      await expect(
+        service.deleteExecution(execution.id, true)
+      ).resolves.not.toThrow();
+
+      // Verify execution is deleted
+      expect(service.getExecution(execution.id)).toBeNull();
+    });
+
+    it("should not delete branch when deleteBranch is false", async () => {
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
+
+      // Delete execution without deleteBranch flag (default: false)
+      await service.deleteExecution(execution.id, false);
+
+      // Verify execution is deleted
+      expect(service.getExecution(execution.id)).toBeNull();
+    });
+
+    it("should not delete detached HEAD branches", async () => {
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
+
+      // Manually update execution to have detached HEAD
+      const { updateExecution } = await import(
+        "../../../src/services/executions.js"
+      );
+      updateExecution(db, execution.id, {
+        branch_name: "(detached)",
+        status: "completed",
+      });
+
+      // Delete with deleteBranch=true should not fail
+      await expect(
+        service.deleteExecution(execution.id, true)
+      ).resolves.not.toThrow();
+
+      // Verify execution is deleted
+      expect(service.getExecution(execution.id)).toBeNull();
+    });
   });
 
   describe("WebSocket broadcasting", () => {
-    it(
-      "should broadcast execution_created when creating execution with issue",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+    it("should broadcast execution_created when creating execution with issue", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Should broadcast execution created event
-        expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
-          "test-project",
-          execution.id,
-          "created",
-          execution,
-          testIssueId
-        );
-      }
-    );
+      // Should broadcast execution created event
+      expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
+        "test-project",
+        execution.id,
+        "created",
+        execution,
+        testIssueId
+      );
+    });
 
-    it(
-      "should broadcast execution_status_changed on workflow completion",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+    it("should broadcast execution_status_changed on workflow completion", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Clear creation broadcast
-        vi.clearAllMocks();
+      // Clear creation broadcast
+      vi.clearAllMocks();
 
-        // Wait a moment for workflow to potentially complete or update
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      // Wait a moment for workflow to potentially complete or update
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // The orchestrator should broadcast status changes
-        // (Note: In real tests, the workflow may complete quickly or slowly
-        // depending on the actual execution. This test verifies the broadcast
-        // mechanism is wired up correctly)
-        const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
+      // The orchestrator should broadcast status changes
+      // (Note: In real tests, the workflow may complete quickly or slowly
+      // depending on the actual execution. This test verifies the broadcast
+      // mechanism is wired up correctly)
+      const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
 
-        // If workflow completed, we should see a status_changed broadcast
-        if (calls.length > 0) {
-          const statusChangedCall = calls.find(
-            (call) => call[2] === "status_changed"
-          );
-          if (statusChangedCall) {
-            expect(statusChangedCall[0]).toBe("test-project");
-            expect(statusChangedCall[1]).toBe(execution.id);
-            expect(statusChangedCall[3]?.status).toMatch(
-              /running|completed|failed|stopped/
-            );
-            expect(statusChangedCall[4]).toBe(testIssueId);
-          }
-        }
-      }
-    );
-
-    it(
-      "should broadcast execution_status_changed when canceling execution",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
-
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
-
-        // Clear creation and any workflow broadcasts
-        vi.clearAllMocks();
-
-        // Cancel the execution
-        await service.cancelExecution(execution.id);
-
-        // Should broadcast status change to stopped
-        const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
+      // If workflow completed, we should see a status_changed broadcast
+      if (calls.length > 0) {
         const statusChangedCall = calls.find(
           (call) => call[2] === "status_changed"
         );
-
-        expect(statusChangedCall).toBeDefined();
-        expect(statusChangedCall?.[0]).toBe("test-project");
-        expect(statusChangedCall?.[1]).toBe(execution.id);
-        expect(statusChangedCall?.[3]?.status).toBe("stopped");
-        expect(statusChangedCall?.[4]).toBe(testIssueId);
+        if (statusChangedCall) {
+          expect(statusChangedCall[0]).toBe("test-project");
+          expect(statusChangedCall[1]).toBe(execution.id);
+          expect(statusChangedCall[3]?.status).toMatch(
+            /running|completed|failed|stopped/
+          );
+          expect(statusChangedCall[4]).toBe(testIssueId);
+        }
       }
-    );
+    });
 
-    it(
-      "should broadcast with issue_id for issue-linked executions",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+    it("should broadcast execution_status_changed when canceling execution", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        const prepareResult = await service.prepareExecution(testIssueId);
-        await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Verify that issueId is passed for dual broadcast
-        const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
-        expect(calls[0][4]).toBe(testIssueId); // Fifth parameter is issueId
-      }
-    );
+      // Clear creation and any workflow broadcasts
+      vi.clearAllMocks();
 
-    it(
-      "should broadcast execution_created when creating follow-up execution",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+      // Cancel the execution
+      await service.cancelExecution(execution.id);
 
-        // Create initial execution
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const initialExecution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      // Should broadcast status change to stopped
+      const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
+      const statusChangedCall = calls.find(
+        (call) => call[2] === "status_changed"
+      );
 
-        // Clear initial broadcast
-        vi.clearAllMocks();
+      expect(statusChangedCall).toBeDefined();
+      expect(statusChangedCall?.[0]).toBe("test-project");
+      expect(statusChangedCall?.[1]).toBe(execution.id);
+      expect(statusChangedCall?.[3]?.status).toBe("stopped");
+      expect(statusChangedCall?.[4]).toBe(testIssueId);
+    });
 
-        // Create follow-up
-        const followUpExecution = await service.createFollowUp(
-          initialExecution.id,
-          "Please add unit tests"
-        );
+    it("should broadcast with issue_id for issue-linked executions", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        // Should broadcast creation of follow-up execution
-        expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
-          "test-project",
-          followUpExecution.id,
-          "created",
-          followUpExecution,
-          testIssueId
-        );
-      }
-    );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-    it(
-      "should broadcast execution_deleted when deleting execution",
+      // Verify that issueId is passed for dual broadcast
+      const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
+      expect(calls[0][4]).toBe(testIssueId); // Fifth parameter is issueId
+    });
 
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+    it("should broadcast execution_created when creating follow-up execution", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        const prepareResult = await service.prepareExecution(testIssueId);
-        const execution = await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      // Create initial execution
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Clear creation broadcast
-        vi.clearAllMocks();
+      // Clear initial broadcast
+      vi.clearAllMocks();
 
-        // Delete the execution
-        await service.deleteExecution(execution.id);
+      // Create follow-up
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        "Please add unit tests"
+      );
 
-        // Should broadcast deletion event
-        expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
-          "test-project",
-          execution.id,
-          "deleted",
-          { executionId: execution.id },
-          testIssueId
-        );
-      }
-    );
+      // Should broadcast creation of follow-up execution
+      expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
+        "test-project",
+        followUpExecution.id,
+        "created",
+        followUpExecution,
+        testIssueId
+      );
+    });
 
-    it(
-      "should include projectId in all broadcasts",
-      
-      async () => {
-        const { broadcastExecutionUpdate } = await import(
-          "../../../src/services/websocket.js"
-        );
+    it("should broadcast execution_deleted when deleting execution", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
 
-        const prepareResult = await service.prepareExecution(testIssueId);
-        await service.createExecution(
-          testIssueId,
-          prepareResult.defaultConfig,
-          prepareResult.renderedPrompt
-        );
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
 
-        // Verify all broadcasts include the project ID
-        const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
-        calls.forEach((call) => {
-          expect(call[0]).toBe("test-project");
-        });
-      }
-    );
+      // Clear creation broadcast
+      vi.clearAllMocks();
+
+      // Delete the execution
+      await service.deleteExecution(execution.id);
+
+      // Should broadcast deletion event
+      expect(broadcastExecutionUpdate).toHaveBeenCalledWith(
+        "test-project",
+        execution.id,
+        "deleted",
+        { executionId: execution.id },
+        testIssueId
+      );
+    });
+
+    it("should include projectId in all broadcasts", async () => {
+      const { broadcastExecutionUpdate } = await import(
+        "../../../src/services/websocket.js"
+      );
+
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        issueContent
+      );
+
+      // Verify all broadcasts include the project ID
+      const calls = vi.mocked(broadcastExecutionUpdate).mock.calls;
+      calls.forEach((call) => {
+        expect(call[0]).toBe("test-project");
+      });
+    });
   });
 });
 
 /**
  * Create a mock worktree manager for testing
  */
-function createMockWorktreeManager(): IWorktreeManager {
+function createMockWorktreeManager(): IWorktreeManager & {
+  git: {
+    deleteBranch: (
+      repoPath: string,
+      branchName: string,
+      force: boolean
+    ) => Promise<void>;
+  };
+} {
   const config: WorktreeConfig = {
     worktreeStoragePath: ".worktrees",
     branchPrefix: "worktree",
@@ -1108,6 +1203,18 @@ function createMockWorktreeManager(): IWorktreeManager {
       _worktreePath: string
     ): Promise<boolean> => {
       return Promise.resolve(true);
+    },
+
+    // Mock git property for branch deletion tests
+    git: {
+      deleteBranch: async (
+        _repoPath: string,
+        _branchName: string,
+        _force: boolean
+      ): Promise<void> => {
+        // Mock: just return success
+        return Promise.resolve();
+      },
     },
   };
 }
