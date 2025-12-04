@@ -22,6 +22,7 @@ import {
 import {
   addRelationship,
   removeAllRelationships,
+  removeOutgoingRelationships,
 } from "./operations/relationships.js";
 import { setTags } from "./operations/tags.js";
 import {
@@ -472,12 +473,12 @@ export function importSpecs(
     }
   }
 
-  // Update relationships
+  // Update relationships (only remove outgoing to preserve incoming relationships)
   if (!skipRelationships) {
     for (const id of changes.updated) {
       const spec = specs.find((s) => s.id === id);
       if (spec) {
-        removeAllRelationships(db, spec.id, "spec");
+        removeOutgoingRelationships(db, spec.id, "spec");
         for (const rel of spec.relationships || []) {
           addRelationship(db, {
             from_id: rel.from,
@@ -629,12 +630,12 @@ export function importIssues(
     }
   }
 
-  // Update relationships
+  // Update relationships (only remove outgoing to preserve incoming relationships)
   if (!skipRelationships) {
     for (const id of changes.updated) {
       const issue = issues.find((i) => i.id === id);
       if (issue) {
-        removeAllRelationships(db, issue.id, "issue");
+        removeOutgoingRelationships(db, issue.id, "issue");
         for (const rel of issue.relationships || []) {
           addRelationship(db, {
             from_id: rel.from,
@@ -816,11 +817,11 @@ export async function importFromJSONL(
         }
       }
 
-      // Import spec relationships for updated specs
+      // Import spec relationships for updated specs (only remove outgoing to preserve incoming)
       for (const id of specChanges.updated) {
         const spec = incomingSpecs.find((s) => s.id === id);
         if (spec) {
-          removeAllRelationships(db, spec.id, "spec");
+          removeOutgoingRelationships(db, spec.id, "spec");
           for (const rel of spec.relationships || []) {
             addRelationship(db, {
               from_id: rel.from,
@@ -849,11 +850,11 @@ export async function importFromJSONL(
         }
       }
 
-      // Import issue relationships for updated issues
+      // Import issue relationships for updated issues (only remove outgoing to preserve incoming)
       for (const id of issueChanges.updated) {
         const issue = incomingIssues.find((i) => i.id === id);
         if (issue) {
-          removeAllRelationships(db, issue.id, "issue");
+          removeOutgoingRelationships(db, issue.id, "issue");
           for (const rel of issue.relationships || []) {
             addRelationship(db, {
               from_id: rel.from,
