@@ -9,7 +9,6 @@ import type Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getSpecByFilePath } from "../../src/operations/specs.js";
 
 describe("File Watcher", () => {
   let db: Database.Database;
@@ -272,13 +271,16 @@ Content version: `;
       const errors: Error[] = [];
 
       // First create the spec in the database (DB is source of truth for entity existence)
-      const { createSpec, getSpec } = await import("../../src/operations/specs.js");
+      const { createSpec, getSpec } = await import(
+        "../../src/operations/specs.js"
+      );
       createSpec(db, {
         id: "spec-delete-001",
         uuid: "test-uuid-delete-001",
         title: "Test Delete Spec",
         file_path: "specs/test-delete.md",
-        content: "This spec will have its markdown deleted but DB entry preserved.",
+        content:
+          "This spec will have its markdown deleted but DB entry preserved.",
         priority: 2,
       });
 
@@ -328,8 +330,12 @@ This spec will have its markdown deleted but DB entry preserved.
       expect(spec?.title).toBe("Test Delete Spec");
 
       // Verify deletion was logged (informational only, no DB deletion)
-      expect(logs.some((log) => log.includes("Markdown file deleted"))).toBe(true);
-      expect(logs.some((log) => log.includes("DB/JSONL is source of truth"))).toBe(true);
+      expect(logs.some((log) => log.includes("Markdown file deleted"))).toBe(
+        true
+      );
+      expect(
+        logs.some((log) => log.includes("DB/JSONL is source of truth"))
+      ).toBe(true);
 
       // No errors should occur
       expect(errors.length).toBe(0);
@@ -367,12 +373,10 @@ This spec has no frontmatter and no DB entry, so it should be deleted as orphane
       expect(fs.existsSync(specPath)).toBe(false);
 
       // Verify orphaned file deletion was logged
-      expect(
-        logs.some((log) => log.includes("Orphaned file detected"))
-      ).toBe(true);
-      expect(
-        logs.some((log) => log.includes("Deleted orphaned"))
-      ).toBe(true);
+      expect(logs.some((log) => log.includes("Orphaned file detected"))).toBe(
+        true
+      );
+      expect(logs.some((log) => log.includes("Deleted orphaned"))).toBe(true);
 
       // No errors should occur
       expect(errors.length).toBe(0);
@@ -440,7 +444,11 @@ This spec has no frontmatter and no DB entry, so it should be deleted as orphane
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       // Verify markdown file was created with unified naming scheme
-      const issueMdPath = path.join(tempDir, "issues", "issue-001_test_issue_from_jsonl.md");
+      const issueMdPath = path.join(
+        tempDir,
+        "issues",
+        "issue-001_test_issue_from_jsonl.md"
+      );
       expect(fs.existsSync(issueMdPath)).toBe(true);
 
       // Verify markdown content
@@ -762,7 +770,11 @@ Updated content.
         expect(syncCount).toBe(0);
 
         // Verify the file exists and has correct content with unified naming scheme
-        const issueMdPath = path.join(tempDir, "issues", "issue-osc-001_test_no_oscillation.md");
+        const issueMdPath = path.join(
+          tempDir,
+          "issues",
+          "issue-osc-001_test_no_oscillation.md"
+        );
         expect(fs.existsSync(issueMdPath)).toBe(true);
 
         expect(errors.length).toBe(0);
@@ -1079,8 +1091,7 @@ Updated content.
       expect(
         logs.some(
           (log) =>
-            log.includes("database is newer") ||
-            log.includes("Skipping sync")
+            log.includes("database is newer") || log.includes("Skipping sync")
         )
       ).toBe(true);
 
@@ -1199,7 +1210,9 @@ Updated content.
       // First create the issue in the database with an OLD timestamp (DB is source of truth for entity existence)
       // Use an old timestamp so the markdown file will be considered newer
       const pastTime = new Date(Date.now() - 60000).toISOString(); // 1 minute ago
-      const { createIssue, getIssue, updateIssue } = await import("../../src/operations/issues.js");
+      const { createIssue, getIssue, updateIssue } = await import(
+        "../../src/operations/issues.js"
+      );
       createIssue(db, {
         id: "issue-timestamp-001",
         uuid: "test-uuid-timestamp-001",
@@ -1268,7 +1281,9 @@ Updated content.
 
         // First create the issue in the database with an OLD timestamp (DB is source of truth for entity existence)
         const pastTime = new Date(Date.now() - 60000).toISOString(); // 1 minute ago
-        const { createIssue, getIssue, updateIssue } = await import("../../src/operations/issues.js");
+        const { createIssue, getIssue, updateIssue } = await import(
+          "../../src/operations/issues.js"
+        );
         createIssue(db, {
           id: "issue-multi-edit-001",
           uuid: "test-uuid-multi-001",
@@ -1281,7 +1296,11 @@ Updated content.
         updateIssue(db, "issue-multi-edit-001", { updated_at: pastTime });
 
         // Create initial markdown file
-        const issuePath = path.join(tempDir, "issues", "issue-multi-edit-001.md");
+        const issuePath = path.join(
+          tempDir,
+          "issues",
+          "issue-multi-edit-001.md"
+        );
         const initialContent = `---
 id: issue-multi-edit-001
 title: Multi Edit Test
@@ -1315,7 +1334,9 @@ Version 1
 
         let issue = getIssue(db, "issue-multi-edit-001");
         expect(issue?.content).toContain("Version 2");
-        expect(logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))).toBe(true);
+        expect(
+          logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))
+        ).toBe(true);
 
         // Second edit (shortly after)
         logs.length = 0;
@@ -1325,7 +1346,9 @@ Version 1
 
         issue = getIssue(db, "issue-multi-edit-001");
         expect(issue?.content).toContain("Version 3");
-        expect(logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))).toBe(true);
+        expect(
+          logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))
+        ).toBe(true);
 
         // Third edit
         logs.length = 0;
@@ -1335,7 +1358,9 @@ Version 1
 
         issue = getIssue(db, "issue-multi-edit-001");
         expect(issue?.content).toContain("Version 4");
-        expect(logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))).toBe(true);
+        expect(
+          logs.some((log) => log.includes("Synced issue issue-multi-edit-001"))
+        ).toBe(true);
 
         expect(errors.length).toBe(0);
       },
@@ -1347,7 +1372,9 @@ Version 1
       const errors: Error[] = [];
 
       // First create the issue in the database (DB is source of truth for entity existence)
-      const { createIssue, updateIssue, getIssue } = await import("../../src/operations/issues.js");
+      const { createIssue, updateIssue, getIssue } = await import(
+        "../../src/operations/issues.js"
+      );
       createIssue(db, {
         id: "issue-db-newer-001",
         uuid: "test-uuid-db-newer-001",
@@ -1406,7 +1433,9 @@ OLD file content.
 
       // First create the spec in the database with an OLD timestamp (DB is source of truth for entity existence)
       const pastTime = new Date(Date.now() - 60000).toISOString(); // 1 minute ago
-      const { createSpec, getSpec, updateSpec } = await import("../../src/operations/specs.js");
+      const { createSpec, getSpec, updateSpec } = await import(
+        "../../src/operations/specs.js"
+      );
       createSpec(db, {
         id: "spec-timestamp-chain",
         uuid: "test-uuid-chain-001",
@@ -1460,7 +1489,10 @@ Test content.
         // Check JSONL file contains the same timestamp
         const jsonlPath = path.join(tempDir, "specs.jsonl");
         const jsonlContent = fs.readFileSync(jsonlPath, "utf8");
-        const lines = jsonlContent.trim().split("\n").filter((l) => l.trim());
+        const lines = jsonlContent
+          .trim()
+          .split("\n")
+          .filter((l) => l.trim());
         const specLine = lines.find((l) => l.includes("spec-timestamp-chain"));
 
         expect(specLine).toBeDefined();
@@ -1484,7 +1516,9 @@ Test content.
       // Create spec and issue in database with initial feedback
       const { createSpec } = await import("../../src/operations/specs.js");
       const { createIssue } = await import("../../src/operations/issues.js");
-      const { createFeedback } = await import("../../src/operations/feedback.js");
+      const { createFeedback } = await import(
+        "../../src/operations/feedback.js"
+      );
 
       createSpec(db, {
         id: "s-fb001",
@@ -2033,7 +2067,10 @@ Test content.
       // Modify JSONL to set parent_id
       const issuesJsonlPath = path.join(tempDir, "issues.jsonl");
       const content = fs.readFileSync(issuesJsonlPath, "utf8");
-      const lines = content.trim().split("\n").filter((l) => l.trim());
+      const lines = content
+        .trim()
+        .split("\n")
+        .filter((l) => l.trim());
       const updatedLines = lines.map((line) => {
         const issue = JSON.parse(line);
         if (issue.id === "issue-child-001") {

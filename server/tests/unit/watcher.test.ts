@@ -13,6 +13,7 @@ import {
 import { startServerWatcher } from "../../src/services/watcher.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 describe("File Watcher Service", () => {
   let db: Database.Database;
