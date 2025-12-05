@@ -1179,7 +1179,7 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Determine worktree configuration
-      let reuseWorktreeId: string | undefined;
+      let reuseWorktreePath: string | undefined;
       if (worktree_mode === "use_root" || worktree_mode === "use_branch") {
         if (!worktree_id) {
           res.status(400).json({
@@ -1189,7 +1189,23 @@ export function createWorkflowsRouter(): Router {
           });
           return;
         }
-        reuseWorktreeId = worktree_id;
+        // Look up the execution to get the worktree path
+        const existingExecution = req.project!.db
+          .prepare("SELECT worktree_path FROM executions WHERE id = ?")
+          .get(worktree_id) as { worktree_path: string | null } | undefined;
+        if (!existingExecution?.worktree_path) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: `Execution ${worktree_id} not found or has no worktree`,
+          });
+          return;
+        }
+        reuseWorktreePath = existingExecution.worktree_path;
+      } else if (worktree_mode === "create_root" && workflow.config.reuseWorktreePath) {
+        // For the first execution, use workflow config's reuseWorktreePath if set
+        // (e.g., when user selected an existing worktree when creating the workflow)
+        reuseWorktreePath = workflow.config.reuseWorktreePath;
       }
 
       // Build execution config
@@ -1199,7 +1215,7 @@ export function createWorkflowsRouter(): Router {
         mode: "worktree" as const,
         model: model || workflow.config.orchestratorModel,
         baseBranch: workflow.baseBranch,
-        reuseWorktreeId,
+        reuseWorktreePath,
       };
 
       // Create prompt from issue content

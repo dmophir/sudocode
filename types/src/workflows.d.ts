@@ -219,6 +219,19 @@ export interface WorkflowConfig {
    */
   baseBranch?: string;
 
+  /**
+   * Whether to create baseBranch if it doesn't exist
+   * @default false
+   */
+  createBaseBranch?: boolean;
+
+  /**
+   * Reuse an existing worktree by path
+   * If set, the workflow will use this worktree instead of creating a new one
+   * The path must exist and be a valid git worktree
+   */
+  reuseWorktreePath?: string;
+
   // === Metadata Options ===
 
   /**

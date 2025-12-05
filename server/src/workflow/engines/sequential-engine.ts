@@ -573,12 +573,16 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     const config: ExecutionConfig = {
       mode: "worktree",
       baseBranch: workflow.baseBranch,
+      createBaseBranch: workflow.config.createBaseBranch,
     };
 
-    // Reuse worktree if we have a previous execution
-    const previousExecutionId = this.getFirstCompletedExecutionId(workflow);
-    if (previousExecutionId) {
-      config.reuseWorktreeId = previousExecutionId;
+    // Reuse worktree if we have a previous execution in this workflow
+    const previousWorktreePath = this.getFirstWorktreePath(workflow);
+    if (previousWorktreePath) {
+      config.reuseWorktreePath = previousWorktreePath;
+    } else if (workflow.config.reuseWorktreePath) {
+      // For the first step, use user-specified worktree from config
+      config.reuseWorktreePath = workflow.config.reuseWorktreePath;
     }
 
     // 3. Build prompt
@@ -707,15 +711,21 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   }
 
   /**
-   * Get the first completed execution ID for worktree reuse.
+   * Get the worktree path from the first completed step's execution.
+   * Used for reusing the same worktree across workflow steps.
    *
    * @param workflow - The workflow to search
-   * @returns The execution ID or undefined
+   * @returns The worktree path or undefined
    */
-  private getFirstCompletedExecutionId(workflow: Workflow): string | undefined {
+  private getFirstWorktreePath(workflow: Workflow): string | undefined {
     for (const step of workflow.steps) {
       if (step.status === "completed" && step.executionId) {
-        return step.executionId;
+        const execution = this.db
+          .prepare("SELECT worktree_path FROM executions WHERE id = ?")
+          .get(step.executionId) as { worktree_path: string | null } | undefined;
+        if (execution?.worktree_path) {
+          return execution.worktree_path;
+        }
       }
     }
     return undefined;

@@ -10,6 +10,14 @@ import * as useIssuesHook from '@/hooks/useIssues'
 // Mock the hooks
 vi.mock('@/hooks/useSpecs')
 vi.mock('@/hooks/useIssues')
+vi.mock('@/hooks/useWorktrees', () => ({
+  useWorktrees: () => ({
+    worktrees: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}))
 vi.mock('@/hooks/useWorkflows', () => ({
   useWorkflows: () => ({
     data: [],

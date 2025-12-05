@@ -7,6 +7,8 @@
  * @module services/execution-service
  */
 
+import fs from "fs";
+import path from "path";
 import type Database from "better-sqlite3";
 import type { Execution, ExecutionStatus } from "@sudocode-ai/types";
 import { ExecutionLifecycleService } from "./execution-lifecycle.js";
@@ -36,7 +38,7 @@ export interface ExecutionConfig {
   baseBranch?: string;
   createBaseBranch?: boolean;
   branchName?: string;
-  reuseWorktreeId?: string; // If set, reuse existing worktree instead of creating new one
+  reuseWorktreePath?: string; // If set, reuse existing worktree at this path
   checkpointInterval?: number;
   continueOnStepFailure?: boolean;
   captureFileChanges?: boolean;
@@ -162,19 +164,36 @@ export class ExecutionService {
 
     if (mode === "worktree" && issueId && issue) {
       // Check if we're reusing an existing worktree
-      if (config.reuseWorktreeId) {
-        // Reuse existing worktree
-        const existingExecution = this.db
-          .prepare("SELECT * FROM executions WHERE id = ?")
-          .get(config.reuseWorktreeId) as Execution | undefined;
-
-        if (!existingExecution || !existingExecution.worktree_path) {
+      if (config.reuseWorktreePath) {
+        // Validate worktree exists
+        if (!fs.existsSync(config.reuseWorktreePath)) {
           throw new Error(
-            `Cannot reuse worktree: execution ${config.reuseWorktreeId} not found or has no worktree`
+            `Cannot reuse worktree: path does not exist: ${config.reuseWorktreePath}`
           );
         }
 
-        // Create execution record with the same worktree path
+        // Validate it's a git worktree by checking for .git
+        const gitPath = path.join(config.reuseWorktreePath, ".git");
+        if (!fs.existsSync(gitPath)) {
+          throw new Error(
+            `Cannot reuse worktree: not a valid git worktree: ${config.reuseWorktreePath}`
+          );
+        }
+
+        // Get branch name from the worktree
+        let branchName: string;
+        try {
+          branchName = execSync("git rev-parse --abbrev-ref HEAD", {
+            cwd: config.reuseWorktreePath,
+            encoding: "utf-8",
+          }).trim();
+        } catch {
+          throw new Error(
+            `Cannot reuse worktree: failed to get branch name from: ${config.reuseWorktreePath}`
+          );
+        }
+
+        // Create execution record with the reused worktree path
         const executionId = randomUUID();
         execution = createExecution(this.db, {
           id: executionId,
@@ -183,12 +202,12 @@ export class ExecutionService {
           mode: mode,
           prompt: prompt,
           config: JSON.stringify(config),
-          target_branch: existingExecution.target_branch,
-          branch_name: existingExecution.branch_name,
-          worktree_path: existingExecution.worktree_path, // Reuse the same worktree path
+          target_branch: config.baseBranch || branchName,
+          branch_name: branchName,
+          worktree_path: config.reuseWorktreePath,
         });
 
-        workDir = existingExecution.worktree_path;
+        workDir = config.reuseWorktreePath;
       } else {
         // Create execution with isolated worktree
         const result = await this.lifecycleService.createExecutionWithWorktree({

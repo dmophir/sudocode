@@ -3,7 +3,7 @@
  * Allows selection of workflow source and configuration
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   FileText,
   ListTodo,
@@ -40,6 +40,9 @@ import {
 } from '@/components/ui/collapsible'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+import { repositoryApi } from '@/lib/api'
+import { BranchSelector } from '@/components/executions/BranchSelector'
+import { useWorktrees } from '@/hooks/useWorktrees'
 import type {
   WorkflowSource,
   CreateWorkflowOptions,
@@ -75,6 +78,9 @@ interface FormState {
   issueIds: string
   rootIssueId: string
   goal: string
+  baseBranch: string
+  createBaseBranch: boolean
+  reuseWorktreePath: string | undefined
   parallelism: WorkflowParallelism
   maxConcurrency: number
   onFailure: WorkflowFailureStrategy
@@ -137,6 +143,9 @@ export function CreateWorkflowDialog({
     issueIds: defaultSource?.type === 'issues' ? defaultSource.issueIds.join(', ') : '',
     rootIssueId: defaultSource?.type === 'root_issue' ? defaultSource.issueId : '',
     goal: defaultSource?.type === 'goal' ? defaultSource.goal : '',
+    baseBranch: '',
+    createBaseBranch: false,
+    reuseWorktreePath: undefined,
     parallelism: DEFAULT_WORKFLOW_CONFIG.parallelism,
     maxConcurrency: 2,
     onFailure: DEFAULT_WORKFLOW_CONFIG.onFailure,
@@ -145,6 +154,47 @@ export function CreateWorkflowDialog({
   }))
 
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = useState<string>('')
+  const [loadingBranches, setLoadingBranches] = useState(false)
+
+  // Fetch worktrees for branch selector
+  const { worktrees } = useWorktrees()
+
+  // Fetch branches when dialog opens
+  useEffect(() => {
+    if (!open) return
+
+    let isMounted = true
+
+    const loadBranches = async () => {
+      setLoadingBranches(true)
+      try {
+        const branchInfo = await repositoryApi.getBranches()
+        if (isMounted) {
+          setAvailableBranches(branchInfo.branches)
+          setCurrentBranch(branchInfo.current)
+
+          // Set default baseBranch to current branch if not already set
+          if (!form.baseBranch) {
+            setForm((prev) => ({ ...prev, baseBranch: branchInfo.current }))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch branches:', error)
+      } finally {
+        if (isMounted) {
+          setLoadingBranches(false)
+        }
+      }
+    }
+
+    loadBranches()
+
+    return () => {
+      isMounted = false
+    }
+  }, [open])
 
   // Update form field
   const updateForm = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -183,6 +233,9 @@ export function CreateWorkflowDialog({
       onFailure: form.onFailure,
       autoCommitAfterStep: form.autoCommit,
       defaultAgentType: form.agentType as WorkflowConfig['defaultAgentType'],
+      baseBranch: form.baseBranch.trim() || undefined,
+      createBaseBranch: form.createBaseBranch || undefined,
+      reuseWorktreePath: form.reuseWorktreePath,
     }
   }, [form])
 
@@ -206,7 +259,7 @@ export function CreateWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Create Workflow</DialogTitle>
           <DialogDescription>
@@ -214,7 +267,7 @@ export function CreateWorkflowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="flex-1 space-y-6 overflow-y-auto py-4">
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title (optional)</Label>
@@ -341,6 +394,35 @@ export function CreateWorkflowDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pt-4">
+              {/* Base Branch / Worktree Selection */}
+              <div className="space-y-2">
+                <Label>Base Branch or Worktree</Label>
+                <BranchSelector
+                  branches={availableBranches}
+                  value={form.baseBranch}
+                  onChange={(branch, isNew, worktreePath) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      baseBranch: branch,
+                      createBaseBranch: isNew || false,
+                      reuseWorktreePath: worktreePath,
+                    }))
+                  }}
+                  disabled={loadingBranches || isCreating}
+                  allowCreate={true}
+                  className="w-full"
+                  currentBranch={currentBranch}
+                  worktrees={worktrees}
+                  placeholder={loadingBranches ? 'Loading branches...' : 'Select branch or worktree...'}
+                  inModal={true}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {form.reuseWorktreePath
+                    ? 'Reusing existing worktree from a previous execution.'
+                    : 'Select a branch to create the workflow from, or reuse an existing worktree.'}
+                </p>
+              </div>
+
               {/* Execution Mode */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
