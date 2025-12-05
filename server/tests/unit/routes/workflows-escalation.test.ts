@@ -45,6 +45,9 @@ describe("Workflow Escalation API", () => {
         id: "test-project",
         db,
         workflowEngine: null, // No engine for unit tests
+        sequentialWorkflowEngine: null,
+        orchestratorWorkflowEngine: null,
+        getWorkflowEngine: () => null,
       };
       next();
     });
@@ -71,10 +74,11 @@ describe("Workflow Escalation API", () => {
       base_branch: "main",
       current_step_index: 0,
       config: JSON.stringify({
+        engineType: "sequential",
         parallelism: "sequential",
         onFailure: "pause",
         defaultAgentType: "claude-code",
-        autonomyLevel: "human_in_loop",
+        autonomyLevel: "human_in_the_loop",
       }),
     };
 

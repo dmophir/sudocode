@@ -132,14 +132,21 @@ describe.skipIf(SKIP_E2E)("Orchestrator Workflow E2E", () => {
 
     it("should create goal-based workflow with empty steps", async () => {
       // Create workflow from goal (no predefined issues)
-      const workflow = await testServer.api.createWorkflow({
-        type: "goal",
-        goal: "Build a user authentication system",
-      });
+      // Goal-based workflows require orchestrator engine
+      const workflow = await testServer.api.createWorkflow(
+        {
+          type: "goal",
+          goal: "Build a user authentication system",
+        },
+        {
+          engineType: "orchestrator",
+        }
+      );
 
       expect(workflow.status).toBe("pending");
       expect(workflow.steps).toHaveLength(0);
       expect(workflow.source.type).toBe("goal");
+      expect(workflow.config.engineType).toBe("orchestrator");
     });
 
     it("should include workflow context in orchestrator prompt", async () => {

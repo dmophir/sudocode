@@ -43,12 +43,19 @@ import { cn } from '@/lib/utils'
 import { repositoryApi } from '@/lib/api'
 import { BranchSelector } from '@/components/executions/BranchSelector'
 import { useWorktrees } from '@/hooks/useWorktrees'
+import { useIssues } from '@/hooks/useIssues'
+import { useSpecs } from '@/hooks/useSpecs'
+import { IssueSelector } from '@/components/ui/issue-selector'
+import { SpecSelector } from '@/components/ui/spec-selector'
+import { MultiIssueSelector } from '@/components/ui/multi-issue-selector'
 import type {
   WorkflowSource,
   CreateWorkflowOptions,
   WorkflowConfig,
+  WorkflowEngineType,
   WorkflowParallelism,
   WorkflowFailureStrategy,
+  WorkflowAutonomyLevel,
 } from '@/types/workflow'
 import { DEFAULT_WORKFLOW_CONFIG } from '@/types/workflow'
 
@@ -73,9 +80,10 @@ type SourceType = 'spec' | 'issues' | 'root_issue' | 'goal'
 
 interface FormState {
   title: string
+  engineType: WorkflowEngineType
   sourceType: SourceType
   specId: string
-  issueIds: string
+  issueIds: string[]
   rootIssueId: string
   goal: string
   baseBranch: string
@@ -86,6 +94,9 @@ interface FormState {
   onFailure: WorkflowFailureStrategy
   autoCommit: boolean
   agentType: string
+  // Orchestrator-specific options
+  autonomyLevel: WorkflowAutonomyLevel
+  orchestratorModel: string
 }
 
 // =============================================================================
@@ -97,6 +108,8 @@ const SOURCE_TYPE_OPTIONS: Array<{
   label: string
   description: string
   icon: typeof FileText
+  /** Whether this source type requires orchestrator engine */
+  orchestratorOnly?: boolean
 }> = [
   {
     value: 'spec',
@@ -119,8 +132,9 @@ const SOURCE_TYPE_OPTIONS: Array<{
   {
     value: 'goal',
     label: 'From Goal',
-    description: 'Describe what you want to achieve',
+    description: 'AI orchestrator creates and manages issues dynamically',
     icon: MessageSquare,
+    orchestratorOnly: true,
   },
 ]
 
@@ -138,9 +152,10 @@ export function CreateWorkflowDialog({
   // Form state
   const [form, setForm] = useState<FormState>(() => ({
     title: '',
+    engineType: defaultSource?.type === 'goal' ? 'orchestrator' : DEFAULT_WORKFLOW_CONFIG.engineType,
     sourceType: defaultSource?.type || 'spec',
     specId: defaultSource?.type === 'spec' ? defaultSource.specId : '',
-    issueIds: defaultSource?.type === 'issues' ? defaultSource.issueIds.join(', ') : '',
+    issueIds: defaultSource?.type === 'issues' ? defaultSource.issueIds : [],
     rootIssueId: defaultSource?.type === 'root_issue' ? defaultSource.issueId : '',
     goal: defaultSource?.type === 'goal' ? defaultSource.goal : '',
     baseBranch: '',
@@ -151,6 +166,9 @@ export function CreateWorkflowDialog({
     onFailure: DEFAULT_WORKFLOW_CONFIG.onFailure,
     autoCommit: DEFAULT_WORKFLOW_CONFIG.autoCommitAfterStep,
     agentType: DEFAULT_WORKFLOW_CONFIG.defaultAgentType,
+    // Orchestrator-specific options
+    autonomyLevel: DEFAULT_WORKFLOW_CONFIG.autonomyLevel,
+    orchestratorModel: '',
   }))
 
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -160,6 +178,10 @@ export function CreateWorkflowDialog({
 
   // Fetch worktrees for branch selector
   const { worktrees } = useWorktrees()
+
+  // Fetch issues and specs for selectors
+  const { issues, isLoading: isLoadingIssues } = useIssues(false)
+  const { specs, isLoading: isLoadingSpecs } = useSpecs(false)
 
   // Fetch branches when dialog opens
   useEffect(() => {
@@ -208,12 +230,8 @@ export function CreateWorkflowDialog({
         if (!form.specId.trim()) return null
         return { type: 'spec', specId: form.specId.trim() }
       case 'issues':
-        const issueIds = form.issueIds
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-        if (issueIds.length === 0) return null
-        return { type: 'issues', issueIds }
+        if (form.issueIds.length === 0) return null
+        return { type: 'issues', issueIds: form.issueIds }
       case 'root_issue':
         if (!form.rootIssueId.trim()) return null
         return { type: 'root_issue', issueId: form.rootIssueId.trim() }
@@ -227,7 +245,8 @@ export function CreateWorkflowDialog({
 
   // Build config from form
   const buildConfig = useCallback((): Partial<WorkflowConfig> => {
-    return {
+    const config: Partial<WorkflowConfig> = {
+      engineType: form.engineType,
       parallelism: form.parallelism,
       maxConcurrency: form.parallelism === 'parallel' ? form.maxConcurrency : undefined,
       onFailure: form.onFailure,
@@ -237,6 +256,16 @@ export function CreateWorkflowDialog({
       createBaseBranch: form.createBaseBranch || undefined,
       reuseWorktreePath: form.reuseWorktreePath,
     }
+
+    // Add orchestrator-specific options when using orchestrator engine
+    if (form.engineType === 'orchestrator') {
+      config.autonomyLevel = form.autonomyLevel
+      if (form.orchestratorModel.trim()) {
+        config.orchestratorModel = form.orchestratorModel.trim()
+      }
+    }
+
+    return config
   }, [form])
 
   // Handle form submission
@@ -279,6 +308,56 @@ export function CreateWorkflowDialog({
             />
           </div>
 
+          {/* Engine Type Selection */}
+          <div className="space-y-3">
+            <Label>Execution Mode</Label>
+            <RadioGroup
+              value={form.engineType}
+              onValueChange={(v) => {
+                const newEngineType = v as WorkflowEngineType
+                updateForm('engineType', newEngineType)
+                // If switching to sequential and current source is orchestrator-only, reset to spec
+                if (newEngineType === 'sequential' && form.sourceType === 'goal') {
+                  updateForm('sourceType', 'spec')
+                }
+              }}
+              className="grid grid-cols-2 gap-3"
+            >
+              <label
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                  form.engineType === 'sequential'
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:border-muted-foreground/50'
+                )}
+              >
+                <RadioGroupItem value="sequential" className="mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm">Sequential</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Server executes steps in dependency order
+                  </p>
+                </div>
+              </label>
+              <label
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                  form.engineType === 'orchestrator'
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:border-muted-foreground/50'
+                )}
+              >
+                <RadioGroupItem value="orchestrator" className="mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm">AI Orchestrator</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    AI agent manages workflow execution
+                  </p>
+                </div>
+              </label>
+            </RadioGroup>
+          </div>
+
           {/* Source Type Selection */}
           <div className="space-y-3">
             <Label>Workflow Source</Label>
@@ -290,21 +369,30 @@ export function CreateWorkflowDialog({
               {SOURCE_TYPE_OPTIONS.map((option) => {
                 const Icon = option.icon
                 const isSelected = form.sourceType === option.value
+                const isDisabled = option.orchestratorOnly && form.engineType === 'sequential'
                 return (
                   <label
                     key={option.value}
                     className={cn(
-                      'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                      isSelected
+                      'flex items-start gap-3 rounded-lg border p-3 transition-colors',
+                      isDisabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'cursor-pointer',
+                      isSelected && !isDisabled
                         ? 'border-primary bg-primary/5'
-                        : 'hover:border-muted-foreground/50'
+                        : !isDisabled && 'hover:border-muted-foreground/50'
                     )}
                   >
-                    <RadioGroupItem value={option.value} className="mt-0.5" />
+                    <RadioGroupItem value={option.value} className="mt-0.5" disabled={isDisabled} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium text-sm">{option.label}</span>
+                        {option.orchestratorOnly && (
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                            AI Only
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {option.description}
@@ -320,45 +408,51 @@ export function CreateWorkflowDialog({
           <div className="space-y-2">
             {form.sourceType === 'spec' && (
               <>
-                <Label htmlFor="specId">Spec ID</Label>
-                <Input
-                  id="specId"
-                  placeholder="s-xxxx"
+                <Label>Spec</Label>
+                <SpecSelector
+                  specs={specs}
                   value={form.specId}
-                  onChange={(e) => updateForm('specId', e.target.value)}
+                  onChange={(value) => updateForm('specId', value)}
+                  disabled={isLoadingSpecs || isCreating}
+                  placeholder={isLoadingSpecs ? 'Loading specs...' : 'Select spec...'}
+                  inModal={true}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter the spec ID to run all implementing issues
+                  Select the spec to run all implementing issues
                 </p>
               </>
             )}
 
             {form.sourceType === 'issues' && (
               <>
-                <Label htmlFor="issueIds">Issue IDs</Label>
-                <Input
-                  id="issueIds"
-                  placeholder="i-xxxx, i-yyyy, i-zzzz"
+                <Label>Issues</Label>
+                <MultiIssueSelector
+                  issues={issues}
                   value={form.issueIds}
-                  onChange={(e) => updateForm('issueIds', e.target.value)}
+                  onChange={(value) => updateForm('issueIds', value)}
+                  disabled={isLoadingIssues || isCreating}
+                  placeholder={isLoadingIssues ? 'Loading issues...' : 'Select issues...'}
+                  inModal={true}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Comma-separated list of issue IDs to include
+                  Select the issues to include in the workflow
                 </p>
               </>
             )}
 
             {form.sourceType === 'root_issue' && (
               <>
-                <Label htmlFor="rootIssueId">Root Issue ID</Label>
-                <Input
-                  id="rootIssueId"
-                  placeholder="i-xxxx"
+                <Label>Root Issue</Label>
+                <IssueSelector
+                  issues={issues}
                   value={form.rootIssueId}
-                  onChange={(e) => updateForm('rootIssueId', e.target.value)}
+                  onChange={(value) => updateForm('rootIssueId', value)}
+                  disabled={isLoadingIssues || isCreating}
+                  placeholder={isLoadingIssues ? 'Loading issues...' : 'Select root issue...'}
+                  inModal={true}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter issue ID to include it and all blocking issues
+                  Select issue to include it and all blocking issues
                 </p>
               </>
             )}
@@ -380,6 +474,35 @@ export function CreateWorkflowDialog({
             )}
           </div>
 
+          {/* Base Branch / Worktree Selection */}
+          <div className="space-y-2">
+            <Label>Base Branch or Worktree</Label>
+            <BranchSelector
+              branches={availableBranches}
+              value={form.baseBranch}
+              onChange={(branch, isNew, worktreePath) => {
+                setForm((prev) => ({
+                  ...prev,
+                  baseBranch: branch,
+                  createBaseBranch: isNew || false,
+                  reuseWorktreePath: worktreePath,
+                }))
+              }}
+              disabled={loadingBranches || isCreating}
+              allowCreate={true}
+              className="w-full"
+              currentBranch={currentBranch}
+              worktrees={worktrees}
+              placeholder={loadingBranches ? 'Loading branches...' : 'Select branch or worktree...'}
+              inModal={true}
+            />
+            <p className="text-xs text-muted-foreground">
+              {form.reuseWorktreePath
+                ? 'Reusing existing worktree from a previous execution.'
+                : 'Select a branch to create the workflow from, or reuse an existing worktree.'}
+            </p>
+          </div>
+
           {/* Advanced Configuration */}
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger asChild>
@@ -394,35 +517,6 @@ export function CreateWorkflowDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pt-4">
-              {/* Base Branch / Worktree Selection */}
-              <div className="space-y-2">
-                <Label>Base Branch or Worktree</Label>
-                <BranchSelector
-                  branches={availableBranches}
-                  value={form.baseBranch}
-                  onChange={(branch, isNew, worktreePath) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      baseBranch: branch,
-                      createBaseBranch: isNew || false,
-                      reuseWorktreePath: worktreePath,
-                    }))
-                  }}
-                  disabled={loadingBranches || isCreating}
-                  allowCreate={true}
-                  className="w-full"
-                  currentBranch={currentBranch}
-                  worktrees={worktrees}
-                  placeholder={loadingBranches ? 'Loading branches...' : 'Select branch or worktree...'}
-                  inModal={true}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {form.reuseWorktreePath
-                    ? 'Reusing existing worktree from a previous execution.'
-                    : 'Select a branch to create the workflow from, or reuse an existing worktree.'}
-                </p>
-              </div>
-
               {/* Execution Mode */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -492,6 +586,44 @@ export function CreateWorkflowDialog({
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Orchestrator-specific options */}
+              {form.engineType === 'orchestrator' && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Autonomy Level</Label>
+                    <Select
+                      value={form.autonomyLevel}
+                      onValueChange={(v) => updateForm('autonomyLevel', v as WorkflowAutonomyLevel)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="human_in_the_loop">Human in the Loop</SelectItem>
+                        <SelectItem value="full_auto">Full Auto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {form.autonomyLevel === 'full_auto'
+                        ? 'AI makes all decisions without pausing for user input'
+                        : 'AI pauses for user input on important decisions'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Orchestrator Model (optional)</Label>
+                    <Input
+                      placeholder="e.g., claude-sonnet-4-20250514"
+                      value={form.orchestratorModel}
+                      onChange={(e) => updateForm('orchestratorModel', e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Specific model for the orchestrator agent (uses default if empty)
+                    </p>
+                  </div>
+                </>
+              )}
 
               {/* Auto-commit */}
               <div className="flex items-center gap-2">

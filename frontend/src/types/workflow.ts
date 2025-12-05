@@ -14,6 +14,7 @@ import type {
   WorkflowSourceRootIssue,
   WorkflowSourceGoal,
   WorkflowConfig,
+  WorkflowEngineType,
   WorkflowParallelism,
   WorkflowFailureStrategy,
   WorkflowAutonomyLevel,
@@ -40,6 +41,7 @@ export type {
   WorkflowSourceRootIssue,
   WorkflowSourceGoal,
   WorkflowConfig,
+  WorkflowEngineType,
   WorkflowParallelism,
   WorkflowFailureStrategy,
   WorkflowAutonomyLevel,
@@ -217,6 +219,7 @@ export const STEP_STATUS_LABELS: Record<WorkflowStepStatus, string> = {
  * Default workflow configuration for the frontend
  */
 export const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
+  engineType: 'sequential',
   parallelism: 'sequential',
   onFailure: 'pause',
   autoCommitAfterStep: true,

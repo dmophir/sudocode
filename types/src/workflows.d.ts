@@ -119,6 +119,13 @@ export interface EscalationData {
 // =============================================================================
 
 /**
+ * Workflow engine type
+ * - sequential: Steps are executed in order by the server, no agent orchestration
+ * - orchestrator: An AI agent orchestrates the workflow, making decisions dynamically
+ */
+export type WorkflowEngineType = "sequential" | "orchestrator";
+
+/**
  * Workflow parallelism mode
  */
 export type WorkflowParallelism = "sequential" | "parallel";
@@ -141,6 +148,16 @@ export type WorkflowAutonomyLevel = "full_auto" | "human_in_the_loop";
  * Workflow configuration options
  */
 export interface WorkflowConfig {
+  // === Engine Selection ===
+
+  /**
+   * Which engine to use for workflow execution
+   * - sequential: Server-managed step execution (default)
+   * - orchestrator: AI agent orchestrates the workflow
+   * @default "sequential"
+   */
+  engineType: WorkflowEngineType;
+
   // === Sequential Engine Options ===
 
   /**

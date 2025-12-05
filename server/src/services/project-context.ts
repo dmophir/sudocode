@@ -7,6 +7,7 @@ import type { WorktreeManager } from "../execution/worktree/manager.js";
 import type { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import type { IWorkflowEngine } from "../workflow/workflow-engine.js";
 import type { WorkflowBroadcastService } from "./workflow-broadcast-service.js";
+import type { WorkflowEngineType } from "@sudocode-ai/types/workflows";
 
 /**
  * ProjectContext encapsulates all services and resources for a single open project.
@@ -49,8 +50,21 @@ export class ProjectContext {
   /** Worker pool for isolated execution processes (optional) */
   readonly workerPool: ExecutionWorkerPool | undefined;
 
-  /** Workflow engine for multi-issue orchestration (optional) */
-  workflowEngine: IWorkflowEngine | undefined;
+  /** Sequential workflow engine for server-managed step execution */
+  sequentialWorkflowEngine: IWorkflowEngine | undefined;
+
+  /** Orchestrator workflow engine for AI-managed workflow execution */
+  orchestratorWorkflowEngine: IWorkflowEngine | undefined;
+
+  /** @deprecated Use sequentialWorkflowEngine or orchestratorWorkflowEngine instead */
+  get workflowEngine(): IWorkflowEngine | undefined {
+    return this.sequentialWorkflowEngine;
+  }
+
+  /** @deprecated Use sequentialWorkflowEngine or orchestratorWorkflowEngine instead */
+  set workflowEngine(engine: IWorkflowEngine | undefined) {
+    this.sequentialWorkflowEngine = engine;
+  }
 
   /** Workflow broadcast service for WebSocket events (optional) */
   workflowBroadcastService: WorkflowBroadcastService | undefined;
@@ -160,5 +174,27 @@ export class ProjectContext {
       hasWatcher: this.watcher !== null,
       hasActiveExecutions: this.hasActiveExecutions(),
     };
+  }
+
+  /**
+   * Get the appropriate workflow engine based on engine type
+   * @param engineType - The type of engine to use (defaults to "sequential")
+   * @returns The workflow engine for the specified type
+   * @throws Error if the requested engine is not available
+   */
+  getWorkflowEngine(
+    engineType: WorkflowEngineType = "sequential"
+  ): IWorkflowEngine {
+    if (engineType === "orchestrator") {
+      if (!this.orchestratorWorkflowEngine) {
+        throw new Error("Orchestrator workflow engine is not available");
+      }
+      return this.orchestratorWorkflowEngine;
+    }
+
+    if (!this.sequentialWorkflowEngine) {
+      throw new Error("Sequential workflow engine is not available");
+    }
+    return this.sequentialWorkflowEngine;
   }
 }

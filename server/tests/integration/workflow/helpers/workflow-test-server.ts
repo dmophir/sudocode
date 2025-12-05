@@ -237,7 +237,12 @@ export async function createTestServer(
       path: options.repoPath,
       db,
       workflowEngine,
+      // Support both engine types - for tests we use the same engine for both
+      sequentialWorkflowEngine: workflowEngine,
+      orchestratorWorkflowEngine: workflowEngine,
       executionService,
+      // Add getWorkflowEngine method for route compatibility
+      getWorkflowEngine: (_engineType?: "sequential" | "orchestrator") => workflowEngine,
     };
     next();
   };

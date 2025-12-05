@@ -130,13 +130,19 @@ describe("Workflow REST API", () => {
       });
 
       it("should create workflow from goal", async () => {
-        const workflow = await testServer.api.createWorkflow({
-          type: "goal",
-          goal: "Build a new feature",
-        });
+        const workflow = await testServer.api.createWorkflow(
+          {
+            type: "goal",
+            goal: "Build a new feature",
+          },
+          {
+            engineType: "orchestrator", // Goal-based workflows require orchestrator engine
+          }
+        );
 
         expect(workflow.id).toBeDefined();
         expect(workflow.source.type).toBe("goal");
+        expect(workflow.config.engineType).toBe("orchestrator");
       });
 
       it("should apply custom config", async () => {

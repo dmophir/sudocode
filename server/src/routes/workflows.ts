@@ -12,7 +12,9 @@ import type {
   WorkflowConfig,
   WorkflowStatus,
   WorkflowStep,
-} from "@sudocode-ai/types";
+  WorkflowEngineType,
+} from "@sudocode-ai/types/workflows";
+import type { IWorkflowEngine } from "../workflow/workflow-engine.js";
 import {
   WorkflowNotFoundError,
   WorkflowStepNotFoundError,
@@ -23,6 +25,39 @@ import {
   broadcastWorkflowUpdate,
   broadcastWorkflowStepUpdate,
 } from "../services/websocket.js";
+
+/**
+ * Get the appropriate workflow engine based on engine type
+ */
+function getEngine(
+  req: Request,
+  engineType: WorkflowEngineType = "sequential"
+): IWorkflowEngine | null {
+  return req.project?.getWorkflowEngine(engineType) ?? null;
+}
+
+/**
+ * Get the workflow engine for an existing workflow by looking up its config
+ */
+function getEngineForWorkflow(
+  req: Request,
+  workflowId: string
+): IWorkflowEngine | null {
+  const db = req.project?.db;
+  if (!db) return null;
+
+  const row = db
+    .prepare("SELECT config FROM workflows WHERE id = ?")
+    .get(workflowId) as { config: string } | undefined;
+  if (!row) return null;
+
+  try {
+    const config = JSON.parse(row.config) as WorkflowConfig;
+    return getEngine(req, config.engineType ?? "sequential");
+  } catch {
+    return getEngine(req, "sequential");
+  }
+}
 
 /**
  * Helper to map workflow errors to HTTP status codes
@@ -90,7 +125,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.get("/", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      // Use sequential engine for listing (just for the engine availability check)
+      const engine = getEngine(req, "sequential");
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -185,20 +221,34 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
-      if (!engine) {
-        res.status(503).json({
-          success: false,
-          data: null,
-          message: "Workflow engine not available",
-        });
-        return;
-      }
-
       const { source, config } = req.body as {
         source?: WorkflowSource;
         config?: Partial<WorkflowConfig>;
       };
+
+      // Determine engine type from config (default to sequential)
+      const engineType: WorkflowEngineType = config?.engineType ?? "sequential";
+
+      // Validate: "goal" source requires orchestrator engine
+      if (source?.type === "goal" && engineType !== "orchestrator") {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message:
+            "Goal-based workflows require the orchestrator engine. Set config.engineType to 'orchestrator'.",
+        });
+        return;
+      }
+
+      const engine = getEngine(req, engineType);
+      if (!engine) {
+        res.status(503).json({
+          success: false,
+          data: null,
+          message: `Workflow engine not available for type: ${engineType}`,
+        });
+        return;
+      }
 
       // Validate source
       if (!source || !source.type) {
@@ -283,17 +333,32 @@ export function createWorkflowsRouter(): Router {
    */
   router.get("/:id", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
-        res.status(503).json({
-          success: false,
-          data: null,
-          message: "Workflow engine not available",
-        });
+        // Try sequential engine as fallback for listing
+        const fallbackEngine = getEngine(req, "sequential");
+        if (!fallbackEngine) {
+          res.status(503).json({
+            success: false,
+            data: null,
+            message: "Workflow engine not available",
+          });
+          return;
+        }
+        const workflow = await fallbackEngine.getWorkflow(id);
+        if (!workflow) {
+          res.status(404).json({
+            success: false,
+            data: null,
+            message: `Workflow not found: ${id}`,
+          });
+          return;
+        }
+        res.json({ success: true, data: workflow });
         return;
       }
 
-      const { id } = req.params;
       const workflow = await engine.getWorkflow(id);
 
       if (!workflow) {
@@ -319,7 +384,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.delete("/:id", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -328,8 +394,6 @@ export function createWorkflowsRouter(): Router {
         });
         return;
       }
-
-      const { id } = req.params;
 
       // Check if workflow exists
       const workflow = await engine.getWorkflow(id);
@@ -369,7 +433,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/start", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -379,7 +444,6 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      const { id } = req.params;
       await engine.startWorkflow(id);
 
       const workflow = await engine.getWorkflow(id);
@@ -399,7 +463,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/pause", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -409,7 +474,6 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      const { id } = req.params;
       await engine.pauseWorkflow(id);
 
       const workflow = await engine.getWorkflow(id);
@@ -429,7 +493,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/resume", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -439,7 +504,6 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      const { id } = req.params;
       await engine.resumeWorkflow(id);
 
       const workflow = await engine.getWorkflow(id);
@@ -459,7 +523,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/cancel", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -469,7 +534,6 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      const { id } = req.params;
       await engine.cancelWorkflow(id);
 
       const workflow = await engine.getWorkflow(id);
@@ -491,7 +555,8 @@ export function createWorkflowsRouter(): Router {
     "/:id/steps/:stepId/retry",
     async (req: Request, res: Response) => {
       try {
-        const engine = req.project!.workflowEngine;
+        const { id, stepId } = req.params;
+        const engine = getEngineForWorkflow(req, id);
         if (!engine) {
           res.status(503).json({
             success: false,
@@ -501,7 +566,6 @@ export function createWorkflowsRouter(): Router {
           return;
         }
 
-        const { id, stepId } = req.params;
         await engine.retryStep(id, stepId);
 
         const workflow = await engine.getWorkflow(id);
@@ -534,7 +598,10 @@ export function createWorkflowsRouter(): Router {
     "/:id/steps/:stepId/skip",
     async (req: Request, res: Response) => {
       try {
-        const engine = req.project!.workflowEngine;
+        const { id, stepId } = req.params;
+        const { reason } = req.body as { reason?: string };
+
+        const engine = getEngineForWorkflow(req, id);
         if (!engine) {
           res.status(503).json({
             success: false,
@@ -543,9 +610,6 @@ export function createWorkflowsRouter(): Router {
           });
           return;
         }
-
-        const { id, stepId } = req.params;
-        const { reason } = req.body as { reason?: string };
 
         await engine.skipStep(id, stepId, reason);
 
@@ -579,7 +643,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.get("/:id/events", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -588,8 +653,6 @@ export function createWorkflowsRouter(): Router {
         });
         return;
       }
-
-      const { id } = req.params;
 
       // Check if workflow exists
       const workflow = await engine.getWorkflow(id);
@@ -819,7 +882,7 @@ export function createWorkflowsRouter(): Router {
         );
 
         // Emit escalation resolved event for WebSocket broadcast
-        const engine = req.project!.workflowEngine;
+        const engine = getEngineForWorkflow(req, id);
         if (engine) {
           engine.emitEscalationResolved(
             id,
@@ -829,7 +892,7 @@ export function createWorkflowsRouter(): Router {
           );
         }
 
-        // Trigger orchestrator wakeup if available
+        // Trigger orchestrator wakeup if available (only on orchestrator engine)
         if (engine && "triggerEscalationWakeup" in engine) {
           try {
             await (
@@ -932,7 +995,7 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Emit escalation requested event for WebSocket broadcast
-      const engine = req.project!.workflowEngine;
+      const engine = getEngineForWorkflow(req, id);
       if (engine) {
         engine.emitEscalationRequested(
           id,
@@ -966,7 +1029,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.get("/:id/status", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id } = req.params;
+      const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -976,7 +1040,6 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      const { id } = req.params;
       const workflow = await engine.getWorkflow(id);
 
       if (!workflow) {
@@ -1080,7 +1143,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/execute", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id: workflowId } = req.params;
+      const engine = getEngineForWorkflow(req, workflowId);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -1089,8 +1153,6 @@ export function createWorkflowsRouter(): Router {
         });
         return;
       }
-
-      const { id: workflowId } = req.params;
       const { issue_id, agent_type, model, worktree_mode, worktree_id } =
         req.body as {
           issue_id?: string;
@@ -1190,8 +1252,10 @@ export function createWorkflowsRouter(): Router {
           return;
         }
         // Look up the execution to get the worktree path
-        const existingExecution = req.project!.db
-          .prepare("SELECT worktree_path FROM executions WHERE id = ?")
+        const existingExecution = req
+          .project!.db.prepare(
+            "SELECT worktree_path FROM executions WHERE id = ?"
+          )
           .get(worktree_id) as { worktree_path: string | null } | undefined;
         if (!existingExecution?.worktree_path) {
           res.status(400).json({
@@ -1202,7 +1266,10 @@ export function createWorkflowsRouter(): Router {
           return;
         }
         reuseWorktreePath = existingExecution.worktree_path;
-      } else if (worktree_mode === "create_root" && workflow.config.reuseWorktreePath) {
+      } else if (
+        worktree_mode === "create_root" &&
+        workflow.config.reuseWorktreePath
+      ) {
         // For the first execution, use workflow config's reuseWorktreePath if set
         // (e.g., when user selected an existing worktree when creating the workflow)
         reuseWorktreePath = workflow.config.reuseWorktreePath;
@@ -1289,7 +1356,8 @@ export function createWorkflowsRouter(): Router {
    */
   router.post("/:id/complete", async (req: Request, res: Response) => {
     try {
-      const engine = req.project!.workflowEngine;
+      const { id: workflowId } = req.params;
+      const engine = getEngineForWorkflow(req, workflowId);
       if (!engine) {
         res.status(503).json({
           success: false,
@@ -1298,8 +1366,6 @@ export function createWorkflowsRouter(): Router {
         });
         return;
       }
-
-      const { id: workflowId } = req.params;
       const { summary, status = "completed" } = req.body as {
         summary?: string;
         status?: "completed" | "failed";
@@ -1491,7 +1557,7 @@ export function createWorkflowsRouter(): Router {
       );
 
       // Emit escalation requested event for WebSocket broadcast
-      const engine = req.project!.workflowEngine;
+      const engine = getEngineForWorkflow(req, workflowId);
       if (engine) {
         engine.emitEscalationRequested(
           workflowId,

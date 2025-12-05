@@ -736,13 +736,20 @@ describe.skipIf(SKIP_E2E)("Sequential Workflow E2E", () => {
   describe("Edge Cases", () => {
     it("should handle empty workflow gracefully", async () => {
       // Create workflow with no issues (goal-based with no initial work)
-      const workflow = await testServer.api.createWorkflow({
-        type: "goal",
-        goal: "Build something",
-      });
+      // Goal-based workflows require orchestrator engine
+      const workflow = await testServer.api.createWorkflow(
+        {
+          type: "goal",
+          goal: "Build something",
+        },
+        {
+          engineType: "orchestrator",
+        }
+      );
 
       expect(workflow.status).toBe("pending");
       expect(workflow.steps).toHaveLength(0);
+      expect(workflow.config.engineType).toBe("orchestrator");
     });
 
     it("should handle single-step workflow", { timeout: 30000 }, async () => {

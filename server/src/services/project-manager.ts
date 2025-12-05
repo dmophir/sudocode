@@ -22,7 +22,9 @@ import {
 } from "@sudocode-ai/cli/dist/cli/init-commands.js";
 import { WorkflowEventEmitter } from "../workflow/workflow-event-emitter.js";
 import { SequentialWorkflowEngine } from "../workflow/engines/sequential-engine.js";
-import type { IWorkflowEngine } from "../workflow/workflow-engine.js";
+import { OrchestratorWorkflowEngine } from "../workflow/engines/orchestrator-engine.js";
+import { WorkflowWakeupService } from "../workflow/services/wakeup-service.js";
+import { WorkflowPromptBuilder } from "../workflow/services/prompt-builder.js";
 import { WorkflowBroadcastService } from "./workflow-broadcast-service.js";
 
 interface CachedDatabase {
@@ -129,31 +131,51 @@ export class ProjectManager {
 
       await context.initialize();
 
-      // 7. Initialize workflow engine and broadcast service
+      // 7. Initialize workflow engines and broadcast service
       const workflowEventEmitter = new WorkflowEventEmitter();
-      const workflowEngine = new SequentialWorkflowEngine(
+
+      // Create sequential workflow engine
+      const sequentialWorkflowEngine = new SequentialWorkflowEngine(
         db,
         executionService,
         projectPath,
         workflowEventEmitter
       );
 
+      // Create orchestrator workflow engine with its dependencies
+      const promptBuilder = new WorkflowPromptBuilder();
+      const wakeupService = new WorkflowWakeupService({
+        db,
+        executionService,
+        promptBuilder,
+        eventEmitter: workflowEventEmitter,
+      });
+      const orchestratorWorkflowEngine = new OrchestratorWorkflowEngine({
+        db,
+        executionService,
+        wakeupService,
+        eventEmitter: workflowEventEmitter,
+        config: {
+          repoPath: projectPath,
+          dbPath: path.join(projectPath, ".sudocode", "cache.db"),
+        },
+      });
+
       const workflowBroadcastService = new WorkflowBroadcastService(
         workflowEventEmitter,
         () => projectId // Simple lookup - this project owns all its workflows
       );
 
-      context.workflowEngine = workflowEngine;
+      context.sequentialWorkflowEngine = sequentialWorkflowEngine;
+      context.orchestratorWorkflowEngine = orchestratorWorkflowEngine;
       context.workflowBroadcastService = workflowBroadcastService;
 
       // 7b. Run workflow recovery (for OrchestratorWorkflowEngine)
-      // Use interface type to access optional methods
-      const engine = workflowEngine as IWorkflowEngine;
-      if (engine.markStaleExecutionsAsFailed) {
-        await engine.markStaleExecutionsAsFailed();
+      if (orchestratorWorkflowEngine.markStaleExecutionsAsFailed) {
+        await orchestratorWorkflowEngine.markStaleExecutionsAsFailed();
       }
-      if (engine.recoverOrphanedWorkflows) {
-        await engine.recoverOrphanedWorkflows();
+      if (orchestratorWorkflowEngine.recoverOrphanedWorkflows) {
+        await orchestratorWorkflowEngine.recoverOrphanedWorkflows();
       }
 
       // 8. Start file watcher if enabled

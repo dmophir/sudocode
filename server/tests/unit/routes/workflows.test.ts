@@ -46,6 +46,7 @@ describe("Workflow Routes", () => {
     baseBranch: "main",
     currentStepIndex: 0,
     config: {
+      engineType: "sequential",
       parallelism: "sequential",
       onFailure: "pause",
       autoCommitAfterStep: true,
@@ -85,6 +86,9 @@ describe("Workflow Routes", () => {
       prepare: vi.fn().mockReturnValue({
         all: vi.fn().mockReturnValue([]),
         run: vi.fn(),
+        get: vi.fn().mockReturnValue({
+          config: JSON.stringify({ engineType: "sequential" }),
+        }),
       }),
     };
 
@@ -97,7 +101,10 @@ describe("Workflow Routes", () => {
       (req as any).project = {
         id: "project-123",
         workflowEngine: mockEngine,
+        sequentialWorkflowEngine: mockEngine,
+        orchestratorWorkflowEngine: mockEngine,
         db: mockDb,
+        getWorkflowEngine: () => mockEngine,
       };
       next();
     });
@@ -153,6 +160,7 @@ describe("Workflow Routes", () => {
           id: "project-123",
           workflowEngine: undefined,
           db: mockDb,
+          getWorkflowEngine: () => null,
         };
         next();
       });
@@ -431,6 +439,9 @@ describe("Workflow Routes", () => {
 
       mockDb.prepare.mockReturnValue({
         all: vi.fn().mockReturnValue([eventRow]),
+        get: vi.fn().mockReturnValue({
+          config: JSON.stringify({ engineType: "sequential" }),
+        }),
       });
 
       const response = await request(app).get("/api/workflows/wf-123/events");
@@ -491,6 +502,7 @@ describe("Workflow Routes", () => {
           id: "project-123",
           workflowEngine: undefined,
           db: mockDb,
+          getWorkflowEngine: () => null,
         };
         next();
       });
@@ -524,6 +536,7 @@ describe("Workflow Routes", () => {
           workflowEngine: mockEngine,
           executionService: mockExecutionService,
           db: mockDb,
+          getWorkflowEngine: () => mockEngine,
         };
         next();
       });
@@ -613,6 +626,7 @@ describe("Workflow Routes", () => {
           id: "project-123",
           workflowEngine: undefined,
           db: mockDb,
+          getWorkflowEngine: () => null,
         };
         next();
       });
@@ -627,11 +641,17 @@ describe("Workflow Routes", () => {
   });
 
   describe("POST /api/workflows/:id/complete (MCP)", () => {
-    it("should complete workflow with summary", async () => {
+    beforeEach(() => {
+      // Mock database to return workflow config for getEngineForWorkflow
       mockDb.prepare.mockReturnValue({
+        get: vi.fn().mockReturnValue({
+          config: JSON.stringify({ engineType: "sequential" }),
+        }),
         run: vi.fn(),
       });
+    });
 
+    it("should complete workflow with summary", async () => {
       const response = await request(app)
         .post("/api/workflows/wf-123/complete")
         .send({ summary: "All done!" });
@@ -643,10 +663,6 @@ describe("Workflow Routes", () => {
     });
 
     it("should mark workflow as failed when specified", async () => {
-      mockDb.prepare.mockReturnValue({
-        run: vi.fn(),
-      });
-
       const response = await request(app)
         .post("/api/workflows/wf-123/complete")
         .send({ summary: "Failed due to error", status: "failed" });
@@ -682,6 +698,7 @@ describe("Workflow Routes", () => {
           id: "project-123",
           workflowEngine: undefined,
           db: mockDb,
+          getWorkflowEngine: () => null,
         };
         next();
       });

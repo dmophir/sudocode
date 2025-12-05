@@ -100,6 +100,7 @@ const mockWorkflows: Workflow[] = [
     baseBranch: 'main',
     currentStepIndex: 1,
     config: {
+      engineType: 'sequential',
       parallelism: 'sequential',
       onFailure: 'pause',
       autoCommitAfterStep: true,
@@ -130,6 +131,7 @@ const mockWorkflows: Workflow[] = [
     baseBranch: 'main',
     currentStepIndex: 0,
     config: {
+      engineType: 'sequential',
       parallelism: 'sequential',
       onFailure: 'pause',
       autoCommitAfterStep: true,
@@ -160,6 +162,7 @@ const mockWorkflows: Workflow[] = [
     baseBranch: 'main',
     currentStepIndex: 1,
     config: {
+      engineType: 'sequential',
       parallelism: 'sequential',
       onFailure: 'pause',
       autoCommitAfterStep: true,

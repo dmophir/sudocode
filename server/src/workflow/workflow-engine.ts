@@ -95,6 +95,9 @@ export class WorkflowStateError extends Error {
  * Default workflow configuration values.
  */
 export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = {
+  // Engine selection
+  engineType: "sequential",
+
   // Sequential engine options
   parallelism: "sequential",
   maxConcurrency: 1,
