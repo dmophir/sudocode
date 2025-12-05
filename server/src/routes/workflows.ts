@@ -181,8 +181,7 @@ export function createWorkflowsRouter(): Router {
    *
    * Request body:
    * - source: WorkflowSource (required)
-   * - config: Partial<WorkflowConfig> (optional)
-   * - title: string (optional override)
+   * - config: Partial<WorkflowConfig>
    */
   router.post("/", async (req: Request, res: Response) => {
     try {
@@ -263,7 +262,12 @@ export function createWorkflowsRouter(): Router {
       const workflow = await engine.createWorkflow(source, config);
 
       // Broadcast creation
-      broadcastWorkflowUpdate(req.project!.id, workflow.id, "created", workflow);
+      broadcastWorkflowUpdate(
+        req.project!.id,
+        workflow.id,
+        "created",
+        workflow
+      );
 
       res.status(201).json({
         success: true,
@@ -483,39 +487,42 @@ export function createWorkflowsRouter(): Router {
   /**
    * POST /api/workflows/:id/steps/:stepId/retry - Retry a failed step
    */
-  router.post("/:id/steps/:stepId/retry", async (req: Request, res: Response) => {
-    try {
-      const engine = req.project!.workflowEngine;
-      if (!engine) {
-        res.status(503).json({
-          success: false,
-          data: null,
-          message: "Workflow engine not available",
+  router.post(
+    "/:id/steps/:stepId/retry",
+    async (req: Request, res: Response) => {
+      try {
+        const engine = req.project!.workflowEngine;
+        if (!engine) {
+          res.status(503).json({
+            success: false,
+            data: null,
+            message: "Workflow engine not available",
+          });
+          return;
+        }
+
+        const { id, stepId } = req.params;
+        await engine.retryStep(id, stepId);
+
+        const workflow = await engine.getWorkflow(id);
+        const step = workflow?.steps.find((s: WorkflowStep) => s.id === stepId);
+
+        if (step) {
+          broadcastWorkflowStepUpdate(req.project!.id, id, "started", {
+            workflow,
+            step,
+          });
+        }
+
+        res.json({
+          success: true,
+          data: workflow,
         });
-        return;
+      } catch (error) {
+        handleWorkflowError(error, res);
       }
-
-      const { id, stepId } = req.params;
-      await engine.retryStep(id, stepId);
-
-      const workflow = await engine.getWorkflow(id);
-      const step = workflow?.steps.find((s: WorkflowStep) => s.id === stepId);
-
-      if (step) {
-        broadcastWorkflowStepUpdate(req.project!.id, id, "started", {
-          workflow,
-          step,
-        });
-      }
-
-      res.json({
-        success: true,
-        data: workflow,
-      });
-    } catch (error) {
-      handleWorkflowError(error, res);
     }
-  });
+  );
 
   /**
    * POST /api/workflows/:id/steps/:stepId/skip - Skip a step
@@ -523,42 +530,45 @@ export function createWorkflowsRouter(): Router {
    * Request body:
    * - reason: string (optional)
    */
-  router.post("/:id/steps/:stepId/skip", async (req: Request, res: Response) => {
-    try {
-      const engine = req.project!.workflowEngine;
-      if (!engine) {
-        res.status(503).json({
-          success: false,
-          data: null,
-          message: "Workflow engine not available",
+  router.post(
+    "/:id/steps/:stepId/skip",
+    async (req: Request, res: Response) => {
+      try {
+        const engine = req.project!.workflowEngine;
+        if (!engine) {
+          res.status(503).json({
+            success: false,
+            data: null,
+            message: "Workflow engine not available",
+          });
+          return;
+        }
+
+        const { id, stepId } = req.params;
+        const { reason } = req.body as { reason?: string };
+
+        await engine.skipStep(id, stepId, reason);
+
+        const workflow = await engine.getWorkflow(id);
+        const step = workflow?.steps.find((s: WorkflowStep) => s.id === stepId);
+
+        if (step) {
+          broadcastWorkflowStepUpdate(req.project!.id, id, "skipped", {
+            workflow,
+            step,
+            reason,
+          });
+        }
+
+        res.json({
+          success: true,
+          data: workflow,
         });
-        return;
+      } catch (error) {
+        handleWorkflowError(error, res);
       }
-
-      const { id, stepId } = req.params;
-      const { reason } = req.body as { reason?: string };
-
-      await engine.skipStep(id, stepId, reason);
-
-      const workflow = await engine.getWorkflow(id);
-      const step = workflow?.steps.find((s: WorkflowStep) => s.id === stepId);
-
-      if (step) {
-        broadcastWorkflowStepUpdate(req.project!.id, id, "skipped", {
-          workflow,
-          step,
-          reason,
-        });
-      }
-
-      res.json({
-        success: true,
-        data: workflow,
-      });
-    } catch (error) {
-      handleWorkflowError(error, res);
     }
-  });
+  );
 
   /**
    * GET /api/workflows/:id/events - Get workflow event history
@@ -714,42 +724,46 @@ export function createWorkflowsRouter(): Router {
    * - action: 'approve' | 'reject' | 'custom' (required)
    * - message: string (optional)
    */
-  router.post("/:id/escalation/respond", async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { action, message } = req.body as {
-        action?: string;
-        message?: string;
-      };
+  router.post(
+    "/:id/escalation/respond",
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        const { action, message } = req.body as {
+          action?: string;
+          message?: string;
+        };
 
-      // Validate action
-      const validActions = ["approve", "reject", "custom"];
-      if (!action || !validActions.includes(action)) {
-        res.status(400).json({
-          success: false,
-          data: null,
-          message: `action is required and must be one of: ${validActions.join(", ")}`,
-        });
-        return;
-      }
+        // Validate action
+        const validActions = ["approve", "reject", "custom"];
+        if (!action || !validActions.includes(action)) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: `action is required and must be one of: ${validActions.join(", ")}`,
+          });
+          return;
+        }
 
-      // Get workflow from database
-      const db = req.project!.db;
-      const workflowRow = db
-        .prepare("SELECT * FROM workflows WHERE id = ?")
-        .get(id) as any;
+        // Get workflow from database
+        const db = req.project!.db;
+        const workflowRow = db
+          .prepare("SELECT * FROM workflows WHERE id = ?")
+          .get(id) as any;
 
-      if (!workflowRow) {
-        res.status(404).json({
-          success: false,
-          data: null,
-          message: `Workflow not found: ${id}`,
-        });
-        return;
-      }
+        if (!workflowRow) {
+          res.status(404).json({
+            success: false,
+            data: null,
+            message: `Workflow not found: ${id}`,
+          });
+          return;
+        }
 
-      // Check for pending escalation by querying events
-      const pendingEscalation = db.prepare(`
+        // Check for pending escalation by querying events
+        const pendingEscalation = db
+          .prepare(
+            `
         SELECT payload FROM workflow_events
         WHERE workflow_id = ?
           AND type = 'escalation_requested'
@@ -761,106 +775,115 @@ export function createWorkflowsRouter(): Router {
           )
         ORDER BY created_at DESC
         LIMIT 1
-      `).get(id, id) as { payload: string } | undefined;
+      `
+          )
+          .get(id, id) as { payload: string } | undefined;
 
-      if (!pendingEscalation) {
-        res.status(400).json({
-          success: false,
-          data: null,
-          message: `No pending escalation for workflow: ${id}`,
-        });
-        return;
-      }
+        if (!pendingEscalation) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: `No pending escalation for workflow: ${id}`,
+          });
+          return;
+        }
 
-      // Parse escalation data from event
-      const escalationPayload = JSON.parse(pendingEscalation.payload) as {
-        escalation_id: string;
-        message: string;
-        options?: string[];
-        context?: Record<string, unknown>;
-      };
+        // Parse escalation data from event
+        const escalationPayload = JSON.parse(pendingEscalation.payload) as {
+          escalation_id: string;
+          message: string;
+          options?: string[];
+          context?: Record<string, unknown>;
+        };
 
-      const now = new Date().toISOString();
+        const now = new Date().toISOString();
 
-      // Record escalation_resolved event
-      const eventId = randomUUID();
-      db.prepare(`
+        // Record escalation_resolved event
+        const eventId = randomUUID();
+        db.prepare(
+          `
         INSERT INTO workflow_events (id, workflow_id, type, payload, created_at)
         VALUES (?, ?, ?, ?, ?)
-      `).run(
-        eventId,
-        id,
-        "escalation_resolved",
-        JSON.stringify({
-          escalation_id: escalationPayload.escalation_id,
-          action,
-          message,
-          responded_at: now,
-        }),
-        now
-      );
-
-      // Emit escalation resolved event for WebSocket broadcast
-      const engine = req.project!.workflowEngine;
-      if (engine) {
-        engine.emitEscalationResolved(
+      `
+        ).run(
+          eventId,
           id,
-          escalationPayload.escalation_id,
-          action as "approve" | "reject" | "custom",
-          message
-        );
-      }
-
-      // Trigger orchestrator wakeup if available
-      if (engine && "triggerEscalationWakeup" in engine) {
-        try {
-          await (engine as { triggerEscalationWakeup: (id: string) => Promise<void> }).triggerEscalationWakeup(id);
-        } catch (wakeupError) {
-          console.error("Failed to trigger escalation wakeup:", wakeupError);
-          // Don't fail the response - escalation is still resolved
-        }
-      }
-
-      // Parse and return workflow
-      const workflow: Workflow = {
-        id: workflowRow.id,
-        title: workflowRow.title,
-        source: JSON.parse(workflowRow.source),
-        status: workflowRow.status,
-        steps: JSON.parse(workflowRow.steps || "[]"),
-        worktreePath: workflowRow.worktree_path,
-        branchName: workflowRow.branch_name,
-        baseBranch: workflowRow.base_branch,
-        currentStepIndex: workflowRow.current_step_index,
-        orchestratorExecutionId: workflowRow.orchestrator_execution_id,
-        orchestratorSessionId: workflowRow.orchestrator_session_id,
-        config: JSON.parse(workflowRow.config),
-        createdAt: workflowRow.created_at,
-        updatedAt: workflowRow.updated_at,
-        startedAt: workflowRow.started_at,
-        completedAt: workflowRow.completed_at,
-      };
-
-      // Broadcast update
-      broadcastWorkflowUpdate(req.project!.id, id, "updated", workflow);
-
-      res.json({
-        success: true,
-        data: {
-          workflow,
-          escalation: {
-            id: escalationPayload.escalation_id,
+          "escalation_resolved",
+          JSON.stringify({
+            escalation_id: escalationPayload.escalation_id,
             action,
             message,
-            resolvedAt: now,
+            responded_at: now,
+          }),
+          now
+        );
+
+        // Emit escalation resolved event for WebSocket broadcast
+        const engine = req.project!.workflowEngine;
+        if (engine) {
+          engine.emitEscalationResolved(
+            id,
+            escalationPayload.escalation_id,
+            action as "approve" | "reject" | "custom",
+            message
+          );
+        }
+
+        // Trigger orchestrator wakeup if available
+        if (engine && "triggerEscalationWakeup" in engine) {
+          try {
+            await (
+              engine as {
+                triggerEscalationWakeup: (id: string) => Promise<void>;
+              }
+            ).triggerEscalationWakeup(id);
+          } catch (wakeupError) {
+            console.error("Failed to trigger escalation wakeup:", wakeupError);
+            // Don't fail the response - escalation is still resolved
+          }
+        }
+
+        // Parse and return workflow
+        const workflow: Workflow = {
+          id: workflowRow.id,
+          title: workflowRow.title,
+          source: JSON.parse(workflowRow.source),
+          status: workflowRow.status,
+          steps: JSON.parse(workflowRow.steps || "[]"),
+          worktreePath: workflowRow.worktree_path,
+          branchName: workflowRow.branch_name,
+          baseBranch: workflowRow.base_branch,
+          currentStepIndex: workflowRow.current_step_index,
+          orchestratorExecutionId: workflowRow.orchestrator_execution_id,
+          orchestratorSessionId: workflowRow.orchestrator_session_id,
+          config: JSON.parse(workflowRow.config),
+          createdAt: workflowRow.created_at,
+          updatedAt: workflowRow.updated_at,
+          startedAt: workflowRow.started_at,
+          completedAt: workflowRow.completed_at,
+        };
+
+        // Broadcast update
+        broadcastWorkflowUpdate(req.project!.id, id, "updated", workflow);
+
+        res.json({
+          success: true,
+          data: {
+            workflow,
+            escalation: {
+              id: escalationPayload.escalation_id,
+              action,
+              message,
+              resolvedAt: now,
+            },
           },
-        },
-        message: `Escalation resolved with action: ${action}`,
-      });
-    } catch (error) {
-      handleWorkflowError(error, res);
+          message: `Escalation resolved with action: ${action}`,
+        });
+      } catch (error) {
+        handleWorkflowError(error, res);
+      }
     }
-  });
+  );
 
   /**
    * POST /api/workflows/:id/escalation/notify - Internal endpoint for MCP tool to notify of new escalation
@@ -911,7 +934,13 @@ export function createWorkflowsRouter(): Router {
       // Emit escalation requested event for WebSocket broadcast
       const engine = req.project!.workflowEngine;
       if (engine) {
-        engine.emitEscalationRequested(id, escalation_id, message, options, context);
+        engine.emitEscalationRequested(
+          id,
+          escalation_id,
+          message,
+          options,
+          context
+        );
       }
 
       res.json({
@@ -979,7 +1008,9 @@ export function createWorkflowsRouter(): Router {
       for (const execId of activeExecutionIds) {
         const exec = db
           .prepare("SELECT id, status, started_at FROM executions WHERE id = ?")
-          .get(execId) as { id: string; status: string; started_at: string } | undefined;
+          .get(execId) as
+          | { id: string; status: string; started_at: string }
+          | undefined;
         if (exec) {
           const step = workflow.steps.find((s) => s.executionId === execId);
           activeExecutions.push({
@@ -1060,19 +1091,14 @@ export function createWorkflowsRouter(): Router {
       }
 
       const { id: workflowId } = req.params;
-      const {
-        issue_id,
-        agent_type,
-        model,
-        worktree_mode,
-        worktree_id,
-      } = req.body as {
-        issue_id?: string;
-        agent_type?: string;
-        model?: string;
-        worktree_mode?: string;
-        worktree_id?: string;
-      };
+      const { issue_id, agent_type, model, worktree_mode, worktree_id } =
+        req.body as {
+          issue_id?: string;
+          agent_type?: string;
+          model?: string;
+          worktree_mode?: string;
+          worktree_id?: string;
+        };
 
       // Validate required params
       if (!issue_id) {
@@ -1139,7 +1165,9 @@ export function createWorkflowsRouter(): Router {
       const db = req.project!.db;
       const issue = db
         .prepare("SELECT id, title, content FROM issues WHERE id = ?")
-        .get(issue_id) as { id: string; title: string; content: string } | undefined;
+        .get(issue_id) as
+        | { id: string; title: string; content: string }
+        | undefined;
 
       if (!issue) {
         res.status(404).json({
@@ -1165,7 +1193,8 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Build execution config
-      const agentTypeToUse = agent_type || workflow.config.defaultAgentType || "claude-code";
+      const agentTypeToUse =
+        agent_type || workflow.config.defaultAgentType || "claude-code";
       const executionConfig = {
         mode: "worktree" as const,
         model: model || workflow.config.orchestratorModel,
@@ -1192,15 +1221,15 @@ export function createWorkflowsRouter(): Router {
           ? { ...s, status: "running" as const, executionId: execution.id }
           : s
       );
-      db.prepare("UPDATE workflows SET steps = ?, updated_at = ? WHERE id = ?").run(
-        JSON.stringify(updatedSteps),
-        new Date().toISOString(),
-        workflowId
-      );
+      db.prepare(
+        "UPDATE workflows SET steps = ?, updated_at = ? WHERE id = ?"
+      ).run(JSON.stringify(updatedSteps), new Date().toISOString(), workflowId);
 
       // Store worktree path on workflow for create_root mode
       if (worktree_mode === "create_root" && execution.worktree_path) {
-        db.prepare("UPDATE workflows SET worktree_path = ?, branch_name = ?, updated_at = ? WHERE id = ?").run(
+        db.prepare(
+          "UPDATE workflows SET worktree_path = ?, branch_name = ?, updated_at = ? WHERE id = ?"
+        ).run(
           execution.worktree_path,
           execution.branch_name,
           new Date().toISOString(),
@@ -1209,7 +1238,11 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Emit step started event
-      engine.emitStepStarted(workflowId, { ...step, status: "running", executionId: execution.id });
+      engine.emitStepStarted(workflowId, {
+        ...step,
+        status: "running",
+        executionId: execution.id,
+      });
 
       console.log(
         `[workflows/:id/execute] Started execution ${execution.id} for issue ${issue_id} in workflow ${workflowId}`
@@ -1279,11 +1312,13 @@ export function createWorkflowsRouter(): Router {
       // Update workflow status
       const now = new Date().toISOString();
       const db = req.project!.db;
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE workflows
         SET status = ?, completed_at = ?, updated_at = ?
         WHERE id = ?
-      `).run(status, now, now, workflowId);
+      `
+      ).run(status, now, now, workflowId);
 
       // Emit workflow completed/failed event
       const updatedWorkflow = await engine.getWorkflow(workflowId);
@@ -1294,7 +1329,12 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Broadcast update
-      broadcastWorkflowUpdate(req.project!.id, workflowId, status, updatedWorkflow);
+      broadcastWorkflowUpdate(
+        req.project!.id,
+        workflowId,
+        status,
+        updatedWorkflow
+      );
 
       res.json({
         success: true,
@@ -1323,7 +1363,11 @@ export function createWorkflowsRouter(): Router {
   router.post("/:id/escalate", async (req: Request, res: Response) => {
     try {
       const { id: workflowId } = req.params;
-      const { message, options, context: escalationContext } = req.body as {
+      const {
+        message,
+        options,
+        context: escalationContext,
+      } = req.body as {
         message?: string;
         options?: string[];
         context?: Record<string, unknown>;
@@ -1376,7 +1420,9 @@ export function createWorkflowsRouter(): Router {
       }
 
       // Check for existing pending escalation
-      const pendingEscalation = db.prepare(`
+      const pendingEscalation = db
+        .prepare(
+          `
         SELECT payload FROM workflow_events
         WHERE workflow_id = ?
           AND type = 'escalation_requested'
@@ -1388,7 +1434,9 @@ export function createWorkflowsRouter(): Router {
           )
         ORDER BY created_at DESC
         LIMIT 1
-      `).get(workflowId, workflowId) as { payload: string } | undefined;
+      `
+        )
+        .get(workflowId, workflowId) as { payload: string } | undefined;
 
       if (pendingEscalation) {
         const payload = JSON.parse(pendingEscalation.payload);
@@ -1408,10 +1456,12 @@ export function createWorkflowsRouter(): Router {
 
       // Record escalation_requested event
       const eventId = randomUUID();
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO workflow_events (id, workflow_id, type, payload, created_at)
         VALUES (?, ?, ?, ?, ?)
-      `).run(
+      `
+      ).run(
         eventId,
         workflowId,
         "escalation_requested",
@@ -1427,7 +1477,13 @@ export function createWorkflowsRouter(): Router {
       // Emit escalation requested event for WebSocket broadcast
       const engine = req.project!.workflowEngine;
       if (engine) {
-        engine.emitEscalationRequested(workflowId, escalationId, message, options, escalationContext);
+        engine.emitEscalationRequested(
+          workflowId,
+          escalationId,
+          message,
+          options,
+          escalationContext
+        );
       }
 
       console.log(
@@ -1496,10 +1552,12 @@ export function createWorkflowsRouter(): Router {
       // Record notification event (for audit trail)
       const eventId = randomUUID();
       const now = new Date().toISOString();
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO workflow_events (id, workflow_id, type, payload, created_at)
         VALUES (?, ?, ?, ?, ?)
-      `).run(
+      `
+      ).run(
         eventId,
         workflowId,
         "user_notification",

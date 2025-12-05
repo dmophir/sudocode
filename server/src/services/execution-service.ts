@@ -138,6 +138,17 @@ export class ExecutionService {
       }
     }
 
+    // Get the current branch as default (instead of hardcoding "main")
+    let defaultBranch = "main";
+    try {
+      defaultBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+        cwd: this.repoPath,
+        encoding: "utf-8",
+      }).trim();
+    } catch {
+      // Fall back to "main" if we can't determine current branch
+    }
+
     // 2. Determine execution mode and create execution with worktree
     // Store the original (unexpanded) prompt in the database
     const mode = config.mode || "worktree";
@@ -184,7 +195,7 @@ export class ExecutionService {
           issueId,
           issueTitle: issue.title,
           agentType: agentType,
-          targetBranch: config.baseBranch || "main",
+          targetBranch: config.baseBranch || defaultBranch,
           repoPath: this.repoPath,
           mode: mode,
           prompt: prompt, // Store original (unexpanded) prompt
@@ -205,8 +216,8 @@ export class ExecutionService {
         mode: mode,
         prompt: prompt, // Store original (unexpanded) prompt
         config: JSON.stringify(config),
-        target_branch: config.baseBranch || "main",
-        branch_name: config.baseBranch || "main",
+        target_branch: config.baseBranch || defaultBranch,
+        branch_name: config.baseBranch || defaultBranch,
       });
       workDir = this.repoPath;
 

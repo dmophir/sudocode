@@ -176,8 +176,8 @@ describe("SequentialWorkflowEngine", () => {
     mockExecutionService = createMockExecutionService();
     eventEmitter = new WorkflowEventEmitter();
 
-    // Create engine
-    engine = new SequentialWorkflowEngine(db, mockExecutionService, eventEmitter);
+    // Create engine (repoPath is required as 3rd param)
+    engine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo", eventEmitter);
 
     // Default mock behavior
     mockGetIncomingRelationships.mockReturnValue([]);
@@ -194,7 +194,7 @@ describe("SequentialWorkflowEngine", () => {
 
   describe("constructor", () => {
     it("should create engine with execution service", () => {
-      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService);
+      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo");
       expect(newEngine).toBeInstanceOf(SequentialWorkflowEngine);
     });
 
@@ -203,7 +203,7 @@ describe("SequentialWorkflowEngine", () => {
       const listener = vi.fn();
       customEmitter.on(listener);
 
-      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, customEmitter);
+      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo", customEmitter);
       expect(customEmitter.listenerCount).toBe(1);
     });
   });

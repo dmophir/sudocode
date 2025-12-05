@@ -134,6 +134,7 @@ export class ProjectManager {
       const workflowEngine = new SequentialWorkflowEngine(
         db,
         executionService,
+        projectPath,
         workflowEventEmitter
       );
 

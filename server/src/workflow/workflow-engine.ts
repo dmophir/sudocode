@@ -117,7 +117,6 @@ export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = {
 // Interface
 // =============================================================================
 
-
 /**
  * Interface for workflow engine implementations.
  *

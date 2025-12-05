@@ -982,12 +982,11 @@ describe("BaseWorkflowEngine", () => {
   describe("buildWorkflow", () => {
     it("should create workflow object with defaults", () => {
       const workflow = engine.testBuildWorkflow({
-        title: "Test Workflow",
         source: { type: "issues", issueIds: ["i-1"] },
         steps: [
           { id: "step-1", issueId: "i-1", index: 0, dependencies: [], status: "ready" },
         ],
-        config: {},
+        config: { title: "Test Workflow" },
       });
 
       expect(workflow.id).toMatch(/^wf-/);
@@ -1000,7 +999,6 @@ describe("BaseWorkflowEngine", () => {
 
     it("should merge config with defaults", () => {
       const workflow = engine.testBuildWorkflow({
-        title: "Test",
         source: { type: "issues", issueIds: ["i-1"] },
         steps: [],
         config: { maxConcurrency: 5, onFailure: "continue" },
@@ -1013,11 +1011,9 @@ describe("BaseWorkflowEngine", () => {
 
     it("should use provided base branch", () => {
       const workflow = engine.testBuildWorkflow({
-        title: "Test",
         source: { type: "issues", issueIds: ["i-1"] },
         steps: [],
-        config: {},
-        baseBranch: "develop",
+        config: { baseBranch: "develop" },
       });
 
       expect(workflow.baseBranch).toBe("develop");

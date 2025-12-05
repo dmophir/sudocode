@@ -16,7 +16,10 @@ import type {
   Issue,
   Execution,
 } from "@sudocode-ai/types";
-import { getIssue, updateIssue } from "@sudocode-ai/cli/dist/operations/issues.js";
+import {
+  getIssue,
+  updateIssue,
+} from "@sudocode-ai/cli/dist/operations/issues.js";
 
 const execAsync = promisify(exec);
 
@@ -62,7 +65,7 @@ interface WorkflowState {
  *
  * @example
  * ```typescript
- * const engine = new SequentialWorkflowEngine(db, executionService);
+ * const engine = new SequentialWorkflowEngine(db, executionService, repoPath);
  *
  * // Create workflow from a spec
  * const workflow = await engine.createWorkflow({
@@ -81,15 +84,18 @@ interface WorkflowState {
  */
 export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   private executionService: ExecutionService;
+  private repoPath: string;
   private activeWorkflows = new Map<string, WorkflowState>();
 
   constructor(
     db: Database.Database,
     executionService: ExecutionService,
+    repoPath: string,
     eventEmitter?: WorkflowEventEmitter
   ) {
     super(db, eventEmitter);
     this.executionService = executionService;
+    this.repoPath = repoPath;
   }
 
   // ===========================================================================
@@ -100,7 +106,7 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
    * Create a new workflow from a source definition.
    *
    * @param source - How to determine workflow scope (spec, issues, root_issue, or goal)
-   * @param config - Optional configuration overrides
+   * @param config - Optional configuration overrides (includes baseBranch, title)
    * @returns The created workflow
    * @throws WorkflowCycleError if dependency cycles are detected
    */
@@ -115,10 +121,10 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     if (source.type === "goal" && issueIds.length === 0) {
       // Goal workflows start with no steps - orchestrator creates them
       const workflow = this.buildWorkflow({
-        title: this.generateTitle(source),
         source,
         steps: [],
         config: config || {},
+        repoPath: this.repoPath,
       });
       this.saveWorkflow(workflow);
       return workflow;
@@ -136,12 +142,11 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     const steps = this.createStepsFromGraph(graph);
 
     // 6. Build workflow object
-    const title = this.generateTitle(source);
     const workflow = this.buildWorkflow({
-      title,
       source,
       steps,
       config: config || {},
+      repoPath: this.repoPath,
     });
 
     // 7. Save to database
@@ -463,7 +468,9 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
           break;
         }
         // Should not happen - safeguard against infinite loop
-        console.warn(`Workflow ${workflowId}: No ready steps but workflow not complete`);
+        console.warn(
+          `Workflow ${workflowId}: No ready steps but workflow not complete`
+        );
         break;
       }
 
@@ -550,7 +557,10 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
    * @param workflow - The workflow containing the step
    * @param step - The step to execute
    */
-  private async executeStep(workflow: Workflow, step: WorkflowStep): Promise<void> {
+  private async executeStep(
+    workflow: Workflow,
+    step: WorkflowStep
+  ): Promise<void> {
     const state = this.activeWorkflows.get(workflow.id);
 
     // 1. Get issue details for prompt
@@ -650,7 +660,9 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
 
       // Check timeout
       if (Date.now() - startTime > maxWaitMs) {
-        throw new Error(`Execution ${executionId} timed out after ${maxWaitMs}ms`);
+        throw new Error(
+          `Execution ${executionId} timed out after ${maxWaitMs}ms`
+        );
       }
 
       // Wait before next poll
@@ -687,7 +699,9 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
 
     // Add workflow context
     parts.push("## Workflow Context");
-    parts.push(`This is step ${workflow.currentStepIndex + 1} of ${workflow.steps.length} in workflow "${workflow.title}".`);
+    parts.push(
+      `This is step ${workflow.currentStepIndex + 1} of ${workflow.steps.length} in workflow "${workflow.title}".`
+    );
 
     return parts.join("\n");
   }
@@ -873,7 +887,10 @@ Step: ${stepNum} of ${totalSteps}`;
     // Handle based on failure strategy
     switch (workflow.config.onFailure) {
       case "stop":
-        await this.failWorkflow(workflow.id, `Step ${step.id} failed: ${errorMessage}`);
+        await this.failWorkflow(
+          workflow.id,
+          `Step ${step.id} failed: ${errorMessage}`
+        );
         break;
 
       case "pause":
@@ -881,7 +898,11 @@ Step: ${stepNum} of ${totalSteps}`;
         break;
 
       case "skip_dependents":
-        await this.skipDependentSteps(workflow, step, `Dependency ${step.issueId} failed`);
+        await this.skipDependentSteps(
+          workflow,
+          step,
+          `Dependency ${step.issueId} failed`
+        );
         break;
 
       case "continue":
@@ -898,10 +919,7 @@ Step: ${stepNum} of ${totalSteps}`;
   /**
    * Mark workflow as failed.
    */
-  private async failWorkflow(
-    workflowId: string,
-    error: string
-  ): Promise<void> {
+  private async failWorkflow(workflowId: string, error: string): Promise<void> {
     this.updateWorkflow(workflowId, {
       status: "failed",
       completedAt: new Date().toISOString(),

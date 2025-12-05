@@ -221,7 +221,8 @@ export async function createTestServer(
   } else {
     workflowEngine = new SequentialWorkflowEngine(
       db,
-      executionService as ExecutionService
+      executionService as ExecutionService,
+      options.repoPath
     );
   }
 
@@ -371,8 +372,8 @@ function createApiClient(baseUrl: string, projectId: string): TestServerApi {
   }
 
   return {
-    async createWorkflow(source, config, title) {
-      return request("POST", "/api/workflows", { source, config, title });
+    async createWorkflow(source, config) {
+      return request("POST", "/api/workflows", { source, config });
     },
 
     async getWorkflow(id) {

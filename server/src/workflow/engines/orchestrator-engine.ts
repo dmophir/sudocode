@@ -232,10 +232,10 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
     // 2. Handle goal-based workflows (no initial issues)
     if (source.type === "goal" && issueIds.length === 0) {
       const workflow = this.buildWorkflow({
-        title: this.generateTitle(source),
         source,
         steps: [],
         config: config || {},
+        repoPath: this.config.repoPath,
       });
       this.saveWorkflow(workflow);
       return workflow;
@@ -253,12 +253,11 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
     const steps = this.createStepsFromGraph(graph);
 
     // 6. Build workflow object
-    const title = this.generateTitle(source);
     const workflow = this.buildWorkflow({
-      title,
       source,
       steps,
       config: config || {},
+      repoPath: this.config.repoPath,
     });
 
     // 7. Save to database
@@ -578,8 +577,7 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
 
     // Add workflow MCP server
     const mcpServerPath =
-      this.config.mcpServerPath ||
-      path.join(__dirname, "../mcp/index.js");
+      this.config.mcpServerPath || path.join(__dirname, "../mcp/index.js");
 
     config.mcpServers = {
       "sudocode-workflow": {

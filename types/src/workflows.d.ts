@@ -13,24 +13,24 @@ import type { AgentType } from "./agents.js";
  * Workflow lifecycle status
  */
 export type WorkflowStatus =
-  | "pending"    // Created, not yet started
-  | "running"    // Actively executing steps (includes planning phase)
-  | "paused"     // Paused by user or orchestrator
-  | "completed"  // All steps finished successfully
-  | "failed"     // Workflow failed (unrecoverable)
+  | "pending" // Created, not yet started
+  | "running" // Actively executing steps (includes planning phase)
+  | "paused" // Paused by user or orchestrator
+  | "completed" // All steps finished successfully
+  | "failed" // Workflow failed (unrecoverable)
   | "cancelled"; // User cancelled
 
 /**
  * Individual workflow step status
  */
 export type WorkflowStepStatus =
-  | "pending"    // Not yet ready (dependencies not met)
-  | "ready"      // Dependencies met, can be executed
-  | "running"    // Currently executing
-  | "completed"  // Finished successfully
-  | "failed"     // Execution failed
-  | "skipped"    // Skipped by orchestrator
-  | "blocked";   // Blocked by failed dependency
+  | "pending" // Not yet ready (dependencies not met)
+  | "ready" // Dependencies met, can be executed
+  | "running" // Currently executing
+  | "completed" // Finished successfully
+  | "failed" // Execution failed
+  | "skipped" // Skipped by orchestrator
+  | "blocked"; // Blocked by failed dependency
 
 // =============================================================================
 // Source Types
@@ -127,10 +127,10 @@ export type WorkflowParallelism = "sequential" | "parallel";
  * Failure handling strategy
  */
 export type WorkflowFailureStrategy =
-  | "stop"            // Stop workflow immediately
-  | "pause"           // Pause for user intervention
+  | "stop" // Stop workflow immediately
+  | "pause" // Pause for user intervention
   | "skip_dependents" // Skip this step and all dependents
-  | "continue";       // Continue with other independent steps
+  | "continue"; // Continue with other independent steps
 
 /**
  * Autonomy level for orchestrator-managed workflows
@@ -210,6 +210,22 @@ export interface WorkflowConfig {
    * Multiple events within this window are batched into one wakeup
    */
   wakeupBatchWindowMs?: number;
+
+  // === Worktree Options ===
+
+  /**
+   * Base branch for worktree creation
+   * Defaults to current working branch if not specified
+   */
+  baseBranch?: string;
+
+  // === Metadata Options ===
+
+  /**
+   * Custom workflow title
+   * Auto-generated from source if not specified
+   */
+  title?: string;
 }
 
 // =============================================================================
@@ -384,16 +400,16 @@ export interface WorkflowEvent {
 export interface WorkflowRow {
   id: string;
   title: string;
-  source: string;           // JSON (WorkflowSource)
+  source: string; // JSON (WorkflowSource)
   status: WorkflowStatus;
-  steps: string;            // JSON (WorkflowStep[])
+  steps: string; // JSON (WorkflowStep[])
   worktree_path: string | null;
   branch_name: string | null;
   base_branch: string;
   current_step_index: number;
   orchestrator_execution_id: string | null;
   orchestrator_session_id: string | null;
-  config: string;           // JSON (WorkflowConfig)
+  config: string; // JSON (WorkflowConfig)
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -409,7 +425,7 @@ export interface WorkflowEventRow {
   type: WorkflowEventType;
   step_id: string | null;
   execution_id: string | null;
-  payload: string;          // JSON
+  payload: string; // JSON
   created_at: string;
   processed_at: string | null;
 }

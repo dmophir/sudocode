@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { execSync } from "child_process";
 import type Database from "better-sqlite3";
 import type {
   Workflow,
@@ -130,6 +131,24 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
     source: WorkflowSource,
     config?: Partial<WorkflowConfig>
   ): Promise<Workflow>;
+
+  /**
+   * Generate a title from the workflow source.
+   */
+  protected generateTitle(source: WorkflowSource): string {
+    switch (source.type) {
+      case "spec":
+        return `Workflow for spec ${source.specId}`;
+      case "issues":
+        return `Workflow for ${source.issueIds.length} issues`;
+      case "root_issue":
+        return `Workflow for issue ${source.issueId}`;
+      case "goal":
+        return source.goal.slice(0, 100);
+      default:
+        return "Workflow";
+    }
+  }
 
   abstract startWorkflow(workflowId: string): Promise<void>;
   abstract pauseWorkflow(workflowId: string): Promise<void>;
@@ -673,44 +692,42 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
    * Used by subclasses to build the workflow before saving.
    */
   protected buildWorkflow(options: {
-    title: string;
     source: WorkflowSource;
     steps: WorkflowStep[];
     config: Partial<WorkflowConfig>;
-    baseBranch?: string;
+    repoPath?: string;
   }): Workflow {
     const now = new Date().toISOString();
 
+    // Get title from config, or generate from source
+    const title = options.config.title || this.generateTitle(options.source);
+
+    // Get baseBranch from config, or default to current branch
+    let baseBranch = options.config.baseBranch;
+    if (!baseBranch && options.repoPath) {
+      try {
+        baseBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd: options.repoPath,
+          encoding: "utf-8",
+        }).trim();
+      } catch {
+        // Fall back to "main" if we can't determine current branch
+      }
+    }
+    baseBranch = baseBranch || "main";
+
     return {
       id: generateWorkflowId(),
-      title: options.title,
+      title,
       source: options.source,
       status: "pending",
       steps: options.steps,
-      baseBranch: options.baseBranch ?? "main",
+      baseBranch,
       currentStepIndex: 0,
       config: mergeConfig(options.config),
       createdAt: now,
       updatedAt: now,
     };
-  }
-
-  /**
-   * Generate a title from the workflow source.
-   */
-  protected generateTitle(source: WorkflowSource): string {
-    switch (source.type) {
-      case "spec":
-        return `Workflow for spec ${source.specId}`;
-      case "issues":
-        return `Workflow for ${source.issueIds.length} issues`;
-      case "root_issue":
-        return `Workflow for issue ${source.issueId}`;
-      case "goal":
-        return source.goal.slice(0, 100);
-      default:
-        return "Workflow";
-    }
   }
 
   // ===========================================================================

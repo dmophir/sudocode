@@ -156,6 +156,30 @@ describe("Workflow REST API", () => {
         expect(workflow.config.autonomyLevel).toBe("full_auto");
       });
 
+      it("should use baseBranch from config", async () => {
+        const issueIds = createIssues(2);
+
+        const workflow = await testServer.api.createWorkflow(
+          { type: "issues", issueIds },
+          {
+            baseBranch: "feature-branch",
+          }
+        );
+
+        expect(workflow.baseBranch).toBe("feature-branch");
+      });
+
+      it("should use custom title when provided", async () => {
+        const issueIds = createIssues(2);
+
+        const workflow = await testServer.api.createWorkflow(
+          { type: "issues", issueIds },
+          { title: "My Custom Workflow Title" }
+        );
+
+        expect(workflow.title).toBe("My Custom Workflow Title");
+      });
+
       it("should respect issue dependencies for step ordering", async () => {
         const issueIds = createIssues(3);
         // i-3 depends on i-2, i-2 depends on i-1
