@@ -80,7 +80,15 @@ interface FormattedToolCall {
 }
 
 function formatToolCall(toolCall: ToolCallTracking): FormattedToolCall {
-  const args = toolCall.args ? JSON.parse(toolCall.args) : {}
+  let args: Record<string, unknown> = {}
+  if (toolCall.args) {
+    try {
+      args = JSON.parse(toolCall.args)
+    } catch {
+      // Args may be incomplete (still streaming) or malformed - use empty object
+      args = {}
+    }
+  }
 
   switch (toolCall.toolCallName) {
     case 'execute_issue':
@@ -92,7 +100,14 @@ function formatToolCall(toolCall: ToolCallTracking): FormattedToolCall {
       }
 
     case 'execution_status':
-      const result = toolCall.result ? JSON.parse(toolCall.result) : null
+      let result = null
+      if (toolCall.result) {
+        try {
+          result = JSON.parse(toolCall.result)
+        } catch {
+          // Result may be malformed - use null
+        }
+      }
       const status = result?.data?.status || 'checking'
       return {
         icon: <Activity className="h-4 w-4" />,

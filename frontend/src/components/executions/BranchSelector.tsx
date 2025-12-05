@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { Execution } from '@/types/execution'
+import { TooltipProvider } from '@radix-ui/react-tooltip'
 
 interface BranchSelectorProps {
   branches: string[]
@@ -123,28 +124,30 @@ export function BranchSelector({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={inModal}>
-      <Tooltip open={open ? false : undefined}>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              className={cn('h-8 justify-between text-xs font-normal', className)}
-              disabled={disabled}
-            >
-              <div className="flex min-w-0 items-center gap-1.5">
-                <GitBranch className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">{value || placeholder}</span>
-              </div>
-              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-[300px] break-all">{value}</p>
-        </TooltipContent>
-      </Tooltip>
+      <TooltipProvider>
+        <Tooltip open={open ? false : undefined}>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className={cn('h-8 justify-between text-xs font-normal', className)}
+                disabled={disabled}
+              >
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <GitBranch className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{value || placeholder}</span>
+                </div>
+                <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="max-w-[300px] break-all">{value}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <PopoverContent className="w-[280px] p-0" align="start">
         <div className="flex flex-col">
           <div className="border-b p-2">

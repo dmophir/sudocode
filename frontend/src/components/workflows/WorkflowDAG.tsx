@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css'
 import type { WorkflowStep } from '@/types/workflow'
 import type { Issue } from '@/types/api'
 import { WorkflowStepNode } from './WorkflowStepNode'
+import { useTheme } from '@/contexts/ThemeContext'
 
 // =============================================================================
 // Types
@@ -186,6 +187,10 @@ export function WorkflowDAG({
   showControls = true,
   className,
 }: WorkflowDAGProps) {
+  // Get current theme for dark mode support
+  const { actualTheme } = useTheme()
+  const isDark = actualTheme === 'dark'
+
   // Convert steps to flow elements
   const { initialNodes, initialEdges } = useMemo(() => {
     const { nodes, edges } = stepsToFlowElements(steps, issues, selectedStepId)
@@ -239,6 +244,7 @@ export function WorkflowDAG({
         onEdgesChange={interactive ? onEdgesChange : undefined}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
+        colorMode={actualTheme}
         fitView
         fitViewOptions={{
           padding: 0.2,
@@ -257,7 +263,7 @@ export function WorkflowDAG({
         preventScrolling={interactive}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="#e2e8f0" gap={16} size={1} />
+        <Background color={isDark ? '#334155' : '#e2e8f0'} gap={16} size={1} />
         {showControls && <Controls showInteractive={false} />}
         {showMinimap && (
           <MiniMap
@@ -281,7 +287,7 @@ export function WorkflowDAG({
                   return '#94a3b8'
               }
             }}
-            maskColor="rgba(0, 0, 0, 0.1)"
+            maskColor={isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.1)'}
             className="rounded-lg border bg-background"
           />
         )}
