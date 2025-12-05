@@ -491,6 +491,41 @@ export function AgentConfigPanel({
     setSelectedAgentType(loadAgentTypeForIssue())
   }, [issueId, lastExecution?.id, isFollowUp])
 
+  // Function to refresh branch information
+  const refreshBranches = async () => {
+    try {
+      const branchInfo = await repositoryApi.getBranches()
+
+      // Store available branches and current branch
+      setAvailableBranches(branchInfo.branches)
+      setCurrentBranch(branchInfo.current)
+
+      // Validate and set baseBranch
+      // Use current branch if stored baseBranch is not valid for this project
+      setConfig((prev) => {
+        const storedBranch = prev.baseBranch
+        const isStoredBranchValid = storedBranch && branchInfo.branches.includes(storedBranch)
+
+        if (isStoredBranchValid) {
+          // Keep the stored branch - it's valid for this project
+          return prev
+        }
+
+        // Fall back to current branch
+        const fallbackBranch = branchInfo.current
+        if (fallbackBranch) {
+          return {
+            ...prev,
+            baseBranch: fallbackBranch,
+          }
+        }
+        return prev
+      })
+    } catch (error) {
+      console.error('Failed to get repository info:', error)
+    }
+  }
+
   // Load branches and repository info (skip for follow-ups and compact mode)
   useEffect(() => {
     // Skip for follow-ups - we use parent execution config
@@ -506,38 +541,7 @@ export function AgentConfigPanel({
       if (!isMounted) return
       setLoading(true)
       try {
-        // Load branches
-        const branchInfo = await repositoryApi.getBranches()
-
-        if (isMounted) {
-          // Store available branches and current branch
-          setAvailableBranches(branchInfo.branches)
-          setCurrentBranch(branchInfo.current)
-
-          // Validate and set baseBranch
-          // Use current branch if stored baseBranch is not valid for this project
-          setConfig((prev) => {
-            const storedBranch = prev.baseBranch
-            const isStoredBranchValid = storedBranch && branchInfo.branches.includes(storedBranch)
-
-            if (isStoredBranchValid) {
-              // Keep the stored branch - it's valid for this project
-              return prev
-            }
-
-            // Fall back to current branch
-            const fallbackBranch = branchInfo.current
-            if (fallbackBranch) {
-              return {
-                ...prev,
-                baseBranch: fallbackBranch,
-              }
-            }
-            return prev
-          })
-        }
-      } catch (error) {
-        console.error('Failed to get repository info:', error)
+        await refreshBranches()
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -888,6 +892,7 @@ export function AgentConfigPanel({
                     className="w-[180px]"
                     currentBranch={currentBranch}
                     worktrees={worktrees}
+                    onOpen={refreshBranches}
                   />
                 </span>
               </TooltipTrigger>
