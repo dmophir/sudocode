@@ -215,6 +215,7 @@ export default function IssuesPage() {
       ? issues.filter((issue) => {
           const searchText = filterText.toLowerCase()
           return (
+            issue.id.toLowerCase().includes(searchText) ||
             issue.title.toLowerCase().includes(searchText) ||
             (issue.content && issue.content.toLowerCase().includes(searchText))
           )
