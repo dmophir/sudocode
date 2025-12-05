@@ -1015,6 +1015,7 @@ export function IssuePanel({
                       <EntityBadge
                         entityId={issue.parent_id}
                         entityType="issue"
+                        showTitle
                       />
                     </>
                   )}

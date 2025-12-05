@@ -672,7 +672,7 @@ export default function SpecDetailPage() {
                         <>
                           <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Parent: </span>
-                          <EntityBadge entityId={spec.parent_id} entityType="spec" />
+                          <EntityBadge entityId={spec.parent_id} entityType="spec" showTitle />
                         </>
                       )}
                       {childSpecs.length > 0 && (
