@@ -23,6 +23,7 @@ import { WorkflowEventEmitter } from "../../../../src/workflow/workflow-event-em
 import { WorkflowWakeupService } from "../../../../src/workflow/services/wakeup-service.js";
 import { WorkflowPromptBuilder } from "../../../../src/workflow/services/prompt-builder.js";
 import type { ExecutionService } from "../../../../src/services/execution-service.js";
+import type { ExecutionLifecycleService } from "../../../../src/services/execution-lifecycle.js";
 
 // =============================================================================
 // Test Setup
@@ -88,6 +89,15 @@ function createMockExecutionService(): ExecutionService {
   } as unknown as ExecutionService;
 }
 
+function createMockLifecycleService(): ExecutionLifecycleService {
+  return {
+    createWorkflowWorktree: vi.fn().mockResolvedValue({
+      worktreePath: "/test/worktrees/workflow-test",
+      branchName: "sudocode/workflow/test/test-workflow",
+    }),
+  } as unknown as ExecutionLifecycleService;
+}
+
 function createTestIssue(
   db: Database.Database,
   id: string,
@@ -105,6 +115,7 @@ function createTestIssue(
 describe("OrchestratorWorkflowEngine", () => {
   let db: Database.Database;
   let executionService: ExecutionService;
+  let lifecycleService: ExecutionLifecycleService;
   let wakeupService: WorkflowWakeupService;
   let eventEmitter: WorkflowEventEmitter;
   let engine: OrchestratorWorkflowEngine;
@@ -112,6 +123,7 @@ describe("OrchestratorWorkflowEngine", () => {
   beforeEach(() => {
     db = createTestDb();
     executionService = createMockExecutionService();
+    lifecycleService = createMockLifecycleService();
     eventEmitter = new WorkflowEventEmitter();
     const promptBuilder = new WorkflowPromptBuilder();
 
@@ -126,11 +138,14 @@ describe("OrchestratorWorkflowEngine", () => {
     engine = new OrchestratorWorkflowEngine({
       db,
       executionService,
+      lifecycleService,
       wakeupService,
       eventEmitter,
       config: {
         repoPath: "/test/repo",
         dbPath: "/test/.sudocode/cache.db",
+        serverUrl: "http://localhost:3000",
+        projectId: "test-project",
       },
     });
   });
@@ -211,7 +226,8 @@ describe("OrchestratorWorkflowEngine", () => {
       expect(executionService.createExecution).toHaveBeenCalledWith(
         null, // No issue for orchestrator
         expect.objectContaining({
-          mode: "local",
+          mode: "worktree",
+          reuseWorktreePath: expect.any(String),
           mcpServers: expect.objectContaining({
             "sudocode-workflow": expect.any(Object),
           }),
@@ -553,6 +569,39 @@ describe("OrchestratorWorkflowEngine", () => {
 
       // Both should be ready (no dependencies)
       expect(readySteps.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("setServerUrl", () => {
+    it("should update the server URL in config", () => {
+      // Engine was created with no serverUrl in config
+      // Now update it with the actual URL - should not throw
+      expect(() => engine.setServerUrl("http://localhost:3001")).not.toThrow();
+    });
+
+    it("should allow updating server URL multiple times", () => {
+      // Create engine with initial URL
+      const engineWithUrl = new OrchestratorWorkflowEngine({
+        db,
+        executionService,
+        lifecycleService,
+        wakeupService,
+        eventEmitter,
+        config: {
+          repoPath: "/test/repo",
+          dbPath: "/test/.sudocode/cache.db",
+          serverUrl: "http://localhost:3000",
+          projectId: "test-project",
+        },
+      });
+
+      // Should be able to update URL multiple times (simulating port changes)
+      expect(() =>
+        engineWithUrl.setServerUrl("http://localhost:3001")
+      ).not.toThrow();
+      expect(() =>
+        engineWithUrl.setServerUrl("http://localhost:3005")
+      ).not.toThrow();
     });
   });
 });

@@ -11,10 +11,12 @@ import { WorkflowWakeupService } from "../../../../src/workflow/services/wakeup-
 import { WorkflowPromptBuilder } from "../../../../src/workflow/services/prompt-builder.js";
 import { WorkflowEventEmitter } from "../../../../src/workflow/workflow-event-emitter.js";
 import type { ExecutionService } from "../../../../src/services/execution-service.js";
+import type { ExecutionLifecycleService } from "../../../../src/services/execution-lifecycle.js";
 
 describe("Crash Recovery", () => {
   let db: Database.Database;
   let mockExecutionService: ExecutionService;
+  let mockLifecycleService: ExecutionLifecycleService;
   let wakeupService: WorkflowWakeupService;
   let eventEmitter: WorkflowEventEmitter;
   let engine: OrchestratorWorkflowEngine;
@@ -122,6 +124,14 @@ describe("Crash Recovery", () => {
       }),
     } as unknown as ExecutionService;
 
+    // Mock lifecycle service
+    mockLifecycleService = {
+      createWorkflowWorktree: vi.fn().mockResolvedValue({
+        worktreePath: "/test/worktrees/workflow-test",
+        branchName: "sudocode/workflow/test/test-workflow",
+      }),
+    } as unknown as ExecutionLifecycleService;
+
     eventEmitter = new WorkflowEventEmitter();
 
     wakeupService = new WorkflowWakeupService({
@@ -135,11 +145,14 @@ describe("Crash Recovery", () => {
     engine = new OrchestratorWorkflowEngine({
       db,
       executionService: mockExecutionService,
+      lifecycleService: mockLifecycleService,
       wakeupService,
       eventEmitter,
       config: {
         repoPath: "/test/repo",
         dbPath: "/test/.sudocode/cache.db",
+        serverUrl: "http://localhost:3000",
+        projectId: "test-project",
       },
     });
   });

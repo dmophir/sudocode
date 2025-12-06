@@ -197,4 +197,20 @@ export class ProjectContext {
     }
     return this.sequentialWorkflowEngine;
   }
+
+  /**
+   * Update the server URL for workflow engines that need it.
+   * Called after dynamic port discovery.
+   */
+  updateServerUrl(serverUrl: string): void {
+    // Only OrchestratorWorkflowEngine needs the server URL
+    const engine = this.orchestratorWorkflowEngine;
+    if (
+      engine &&
+      "setServerUrl" in engine &&
+      typeof engine.setServerUrl === "function"
+    ) {
+      engine.setServerUrl(serverUrl);
+    }
+  }
 }

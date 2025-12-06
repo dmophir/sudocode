@@ -358,6 +358,11 @@ const startPort = process.env.SUDOCODE_PORT
   : DEFAULT_PORT;
 const actualPort = await startServer(startPort, MAX_PORT_ATTEMPTS);
 
+// Update all open projects with the actual server URL
+// This is needed because projects are opened before the port is known
+const actualServerUrl = `http://localhost:${actualPort}`;
+projectManager.updateServerUrl(actualServerUrl);
+
 // Format URLs as clickable links with color
 const httpUrl = `http://localhost:${actualPort}`;
 const wsUrl = `ws://localhost:${actualPort}/ws`;

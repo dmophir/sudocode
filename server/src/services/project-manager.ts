@@ -158,8 +158,7 @@ export class ProjectManager {
         promptBuilder,
         eventEmitter: workflowEventEmitter,
       });
-      // Get server URL from environment or use default
-      // TODO: Extract this from in-memory reference to the running port.
+      // Initial server URL - will be updated after port discovery via updateServerUrl()
       const serverPort = process.env.SUDOCODE_PORT || "3000";
       const serverUrl = `http://localhost:${serverPort}`;
 
@@ -533,6 +532,19 @@ export class ProjectManager {
     this.dbCache.set(projectId, cached);
     console.log(
       `Database cached for ${projectId} (TTL: ${this.DB_CACHE_TTL}ms)`
+    );
+  }
+
+  /**
+   * Update the server URL for all open projects.
+   * Called after dynamic port discovery to propagate the actual server URL.
+   */
+  updateServerUrl(serverUrl: string): void {
+    for (const project of this.openProjects.values()) {
+      project.updateServerUrl(serverUrl);
+    }
+    console.log(
+      `Server URL updated to ${serverUrl} for ${this.openProjects.size} projects`
     );
   }
 

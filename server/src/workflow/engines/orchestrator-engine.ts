@@ -133,6 +133,18 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
   }
 
   // ===========================================================================
+  // Configuration
+  // ===========================================================================
+
+  /**
+   * Update the server URL after dynamic port discovery.
+   * Called by ProjectContext when the actual server port is known.
+   */
+  setServerUrl(serverUrl: string): void {
+    this.config.serverUrl = serverUrl;
+  }
+
+  // ===========================================================================
   // Execution Event Callbacks
   // ===========================================================================
 

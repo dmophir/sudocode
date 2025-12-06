@@ -211,17 +211,21 @@ export async function createTestServer(
     workflowEngine = new OrchestratorWorkflowEngine({
       db,
       executionService: executionService as ExecutionService,
+      lifecycleService,
       wakeupService,
       eventEmitter,
       config: {
         repoPath: options.repoPath,
         dbPath: options.dbPath || ":memory:",
+        serverUrl: "http://localhost:3000",
+        projectId,
       },
     });
   } else {
     workflowEngine = new SequentialWorkflowEngine(
       db,
       executionService as ExecutionService,
+      lifecycleService,
       options.repoPath
     );
   }

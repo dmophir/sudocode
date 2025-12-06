@@ -20,6 +20,7 @@ import { SequentialWorkflowEngine } from "../../../src/workflow/engines/sequenti
 import { WorkflowEventEmitter } from "../../../src/workflow/workflow-event-emitter.js";
 import { WorkflowStateError } from "../../../src/workflow/workflow-engine.js";
 import type { ExecutionService } from "../../../src/services/execution-service.js";
+import type { ExecutionLifecycleService } from "../../../src/services/execution-lifecycle.js";
 
 // Mock CLI operations
 vi.mock("@sudocode-ai/cli/dist/operations/issues.js", () => ({
@@ -114,6 +115,15 @@ function createMockExecutionService(): ExecutionService {
   } as unknown as ExecutionService;
 }
 
+function createMockLifecycleService(): ExecutionLifecycleService {
+  return {
+    createWorkflowWorktree: vi.fn().mockResolvedValue({
+      worktreePath: "/test/worktrees/workflow-test",
+      branchName: "sudocode/workflow/test/test-workflow",
+    }),
+  } as unknown as ExecutionLifecycleService;
+}
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -122,6 +132,7 @@ describe("SequentialWorkflowEngine", () => {
   let db: Database.Database;
   let engine: SequentialWorkflowEngine;
   let mockExecutionService: ExecutionService;
+  let mockLifecycleService: ExecutionLifecycleService;
   let eventEmitter: WorkflowEventEmitter;
 
   beforeEach(() => {
@@ -174,10 +185,11 @@ describe("SequentialWorkflowEngine", () => {
 
     // Setup mocks
     mockExecutionService = createMockExecutionService();
+    mockLifecycleService = createMockLifecycleService();
     eventEmitter = new WorkflowEventEmitter();
 
-    // Create engine (repoPath is required as 3rd param)
-    engine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo", eventEmitter);
+    // Create engine (lifecycleService is required as 3rd param)
+    engine = new SequentialWorkflowEngine(db, mockExecutionService, mockLifecycleService, "/test/repo", eventEmitter);
 
     // Default mock behavior
     mockGetIncomingRelationships.mockReturnValue([]);
@@ -194,7 +206,7 @@ describe("SequentialWorkflowEngine", () => {
 
   describe("constructor", () => {
     it("should create engine with execution service", () => {
-      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo");
+      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, mockLifecycleService, "/test/repo");
       expect(newEngine).toBeInstanceOf(SequentialWorkflowEngine);
     });
 
@@ -203,7 +215,7 @@ describe("SequentialWorkflowEngine", () => {
       const listener = vi.fn();
       customEmitter.on(listener);
 
-      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, "/test/repo", customEmitter);
+      const newEngine = new SequentialWorkflowEngine(db, mockExecutionService, mockLifecycleService, "/test/repo", customEmitter);
       expect(customEmitter.listenerCount).toBe(1);
     });
   });
