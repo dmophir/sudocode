@@ -16,6 +16,7 @@ import {
   Square,
   Trash2,
   MoreVertical,
+  GitBranch,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -289,13 +290,22 @@ export function WorkflowCard({
         )}
 
         {/* Meta info */}
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <span className="font-medium">Agent:</span>
             <span className="rounded bg-muted px-1.5 py-0.5">
               {config?.defaultAgentType || 'claude-code'}
             </span>
           </span>
+          {workflow.branchName && (
+            <span
+              className="inline-flex items-center gap-1.5 truncate max-w-[180px]"
+              title={workflow.branchName}
+            >
+              <GitBranch className="h-3 w-3 shrink-0" />
+              <span className="font-mono truncate">{workflow.branchName}</span>
+            </span>
+          )}
           <span className="inline-flex items-center gap-1.5">
             <Clock className="h-3 w-3" />
             {timeAgo}

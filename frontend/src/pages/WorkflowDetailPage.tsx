@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ListTree,
   Bot,
+  GitBranch,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -159,6 +160,12 @@ export default function WorkflowDetailPage() {
               </span>
               {progress.percentage > 0 && (
                 <span>({progress.percentage}% complete)</span>
+              )}
+              {workflow.branchName && (
+                <span className="inline-flex items-center gap-1.5" title={workflow.worktreePath || undefined}>
+                  <GitBranch className="h-3.5 w-3.5" />
+                  <span className="font-mono text-xs">{workflow.branchName}</span>
+                </span>
               )}
             </div>
           </div>
