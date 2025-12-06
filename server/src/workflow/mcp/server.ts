@@ -24,6 +24,7 @@ import type {
   ExecutionChangesParams,
   EscalateToUserParams,
   NotifyUserParams,
+  MergeBranchParams,
 } from "./types.js";
 import { WorkflowAPIClient } from "./api-client.js";
 
@@ -270,6 +271,39 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ["message"],
     },
   },
+
+  // Git operations
+  {
+    name: "merge_branch",
+    description:
+      "Merge a branch into the workflow's worktree. Use this to merge parallel execution branches " +
+      "back into the main workflow branch. Returns merge result with commit SHA or conflict info.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        source_branch: {
+          type: "string",
+          description: "Branch name to merge from",
+        },
+        target_branch: {
+          type: "string",
+          description:
+            "Branch to merge into (default: current workflow branch)",
+        },
+        strategy: {
+          type: "string",
+          enum: ["auto", "squash"],
+          description:
+            "Merge strategy: auto (fast-forward if possible, else merge) or squash",
+        },
+        message: {
+          type: "string",
+          description: "Custom commit message for the merge",
+        },
+      },
+      required: ["source_branch"],
+    },
+  },
 ];
 
 // =============================================================================
@@ -430,6 +464,9 @@ export class WorkflowMCPServer {
       case "notify_user":
         return this.handleNotifyUser(args);
 
+      case "merge_branch":
+        return this.handleMergeBranch(args);
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -528,6 +565,18 @@ export class WorkflowMCPServer {
       level: args.level as "info" | "warning" | "error" | undefined,
     };
     return handleNotifyUser(this.context, params);
+  }
+
+  private async handleMergeBranch(
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    const params: MergeBranchParams = {
+      source_branch: args.source_branch as string,
+      target_branch: args.target_branch as string | undefined,
+      strategy: args.strategy as "auto" | "squash" | undefined,
+      message: args.message as string | undefined,
+    };
+    return this.context.apiClient.mergeBranch(params);
   }
 
   // ===========================================================================

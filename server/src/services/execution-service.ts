@@ -172,12 +172,14 @@ export class ExecutionService {
     let execution: Execution;
     let workDir: string;
 
-    // Worktree mode requires an issue
-    if (mode === "worktree" && !issueId) {
-      throw new Error("Worktree mode requires an issueId");
+    // Worktree mode requires either an issue or a reuseWorktreePath
+    if (mode === "worktree" && !issueId && !config.reuseWorktreePath) {
+      throw new Error(
+        "Worktree mode requires either an issueId or reuseWorktreePath"
+      );
     }
 
-    if (mode === "worktree" && issueId && issue) {
+    if (mode === "worktree" && (issueId || config.reuseWorktreePath)) {
       // Check if we're reusing an existing worktree
       if (config.reuseWorktreePath) {
         // Validate worktree exists
@@ -225,6 +227,12 @@ export class ExecutionService {
         workDir = config.reuseWorktreePath;
       } else {
         // Create execution with isolated worktree
+        // This path requires issueId and issue (reuseWorktreePath not provided)
+        if (!issueId || !issue) {
+          throw new Error(
+            "Creating new worktree requires an issueId (use reuseWorktreePath for issue-less executions)"
+          );
+        }
         const result = await this.lifecycleService.createExecutionWithWorktree({
           issueId,
           issueTitle: issue.title,

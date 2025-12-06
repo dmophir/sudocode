@@ -134,10 +134,18 @@ export class ProjectManager {
       // 7. Initialize workflow engines and broadcast service
       const workflowEventEmitter = new WorkflowEventEmitter();
 
+      // Create lifecycle service for workflow worktree management
+      const lifecycleService = new ExecutionLifecycleService(
+        db,
+        projectPath,
+        worktreeManager
+      );
+
       // Create sequential workflow engine
       const sequentialWorkflowEngine = new SequentialWorkflowEngine(
         db,
         executionService,
+        lifecycleService,
         projectPath,
         workflowEventEmitter
       );
@@ -151,12 +159,14 @@ export class ProjectManager {
         eventEmitter: workflowEventEmitter,
       });
       // Get server URL from environment or use default
+      // TODO: Extract this from in-memory reference to the running port.
       const serverPort = process.env.SUDOCODE_PORT || "3000";
       const serverUrl = `http://localhost:${serverPort}`;
 
       const orchestratorWorkflowEngine = new OrchestratorWorkflowEngine({
         db,
         executionService,
+        lifecycleService,
         wakeupService,
         eventEmitter: workflowEventEmitter,
         config: {

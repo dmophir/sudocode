@@ -33,6 +33,7 @@ import type { WorkflowEventEmitter } from "../workflow-event-emitter.js";
 import type { ExecutionService } from "../../services/execution-service.js";
 import type { ExecutionConfig } from "../../services/execution-service.js";
 import { getExecution } from "../../services/executions.js";
+import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 
 // =============================================================================
 // Types
@@ -84,17 +85,20 @@ interface WorkflowState {
  */
 export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   private executionService: ExecutionService;
+  private lifecycleService: ExecutionLifecycleService;
   private repoPath: string;
   private activeWorkflows = new Map<string, WorkflowState>();
 
   constructor(
     db: Database.Database,
     executionService: ExecutionService,
+    lifecycleService: ExecutionLifecycleService,
     repoPath: string,
     eventEmitter?: WorkflowEventEmitter
   ) {
     super(db, eventEmitter);
     this.executionService = executionService;
+    this.lifecycleService = lifecycleService;
     this.repoPath = repoPath;
   }
 
@@ -174,6 +178,19 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     // Validate state
     if (workflow.status !== "pending") {
       throw new WorkflowStateError(workflowId, workflow.status, "start");
+    }
+
+    // Create workflow-level worktree if not already present
+    if (!workflow.worktreePath) {
+      const { worktreePath, branchName } =
+        await this.createWorkflowWorktreeHelper(
+          workflow,
+          this.repoPath,
+          this.lifecycleService
+        );
+      // Update local workflow reference with worktree info
+      workflow.worktreePath = worktreePath;
+      workflow.branchName = branchName;
     }
 
     // Initialize workflow state
@@ -569,21 +586,13 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       throw new Error(`Issue ${step.issueId} not found`);
     }
 
-    // 2. Build execution config
+    // 2. Build execution config - always use workflow's worktree
     const config: ExecutionConfig = {
       mode: "worktree",
       baseBranch: workflow.baseBranch,
       createBaseBranch: workflow.config.createBaseBranch,
+      reuseWorktreePath: workflow.worktreePath,
     };
-
-    // Reuse worktree if we have a previous execution in this workflow
-    const previousWorktreePath = this.getFirstWorktreePath(workflow);
-    if (previousWorktreePath) {
-      config.reuseWorktreePath = previousWorktreePath;
-    } else if (workflow.config.reuseWorktreePath) {
-      // For the first step, use user-specified worktree from config
-      config.reuseWorktreePath = workflow.config.reuseWorktreePath;
-    }
 
     // 3. Build prompt
     const prompt = this.buildPrompt(issue, workflow);
@@ -708,27 +717,6 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     );
 
     return parts.join("\n");
-  }
-
-  /**
-   * Get the worktree path from the first completed step's execution.
-   * Used for reusing the same worktree across workflow steps.
-   *
-   * @param workflow - The workflow to search
-   * @returns The worktree path or undefined
-   */
-  private getFirstWorktreePath(workflow: Workflow): string | undefined {
-    for (const step of workflow.steps) {
-      if (step.status === "completed" && step.executionId) {
-        const execution = this.db
-          .prepare("SELECT worktree_path FROM executions WHERE id = ?")
-          .get(step.executionId) as { worktree_path: string | null } | undefined;
-        if (execution?.worktree_path) {
-          return execution.worktree_path;
-        }
-      }
-    }
-    return undefined;
   }
 
   /**

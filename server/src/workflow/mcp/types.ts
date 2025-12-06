@@ -110,6 +110,20 @@ export interface NotifyUserParams {
   level?: NotificationLevel;
 }
 
+/**
+ * Parameters for merge_branch tool.
+ */
+export interface MergeBranchParams {
+  /** Source branch to merge from */
+  source_branch: string;
+  /** Target branch to merge into (defaults to workflow branch) */
+  target_branch?: string;
+  /** Merge strategy: auto (fast-forward if possible, else merge) or squash */
+  strategy?: "auto" | "squash";
+  /** Custom commit message for the merge */
+  message?: string;
+}
+
 // =============================================================================
 // Tool Result Types
 // =============================================================================
@@ -261,6 +275,22 @@ export interface NotifyUserResult {
   delivered: boolean;
 }
 
+/**
+ * Result from merge_branch tool.
+ */
+export interface MergeBranchResult {
+  /** Whether the merge was successful */
+  success: boolean;
+  /** SHA of the merge commit (if successful) */
+  merge_commit?: string;
+  /** Strategy used for the merge */
+  strategy_used: "fast-forward" | "merge" | "squash";
+  /** List of files with conflicts (if merge failed) */
+  conflicting_files?: string[];
+  /** Error message (if merge failed) */
+  error?: string;
+}
+
 // =============================================================================
 // Context and Handler Types
 // =============================================================================
@@ -279,6 +309,7 @@ export interface WorkflowAPIClientInterface {
   getExecutionChanges(params: ExecutionChangesParams): Promise<ExecutionChangesResult>;
   escalateToUser(params: EscalateToUserParams): Promise<EscalateToUserResult>;
   notifyUser(params: NotifyUserParams): Promise<NotifyUserResult>;
+  mergeBranch(params: MergeBranchParams): Promise<MergeBranchResult>;
 }
 
 /**

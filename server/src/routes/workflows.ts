@@ -1761,5 +1761,219 @@ export function createWorkflowsRouter(): Router {
     }
   });
 
+  /**
+   * POST /api/workflows/:id/merge - Merge a branch into the workflow worktree
+   *
+   * Used by merge_branch MCP tool.
+   * Merges a source branch into the workflow's worktree.
+   *
+   * Request body:
+   * - source_branch: string (required)
+   * - target_branch?: string (default: current workflow branch)
+   * - strategy?: 'auto' | 'squash' (default: 'auto')
+   * - message?: string (custom commit message)
+   */
+  router.post("/:id/merge", async (req: Request, res: Response) => {
+    try {
+      const { id: workflowId } = req.params;
+      const { source_branch, target_branch, strategy = "auto", message } =
+        req.body as {
+          source_branch?: string;
+          target_branch?: string;
+          strategy?: "auto" | "squash";
+          message?: string;
+        };
+
+      if (!source_branch) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: "source_branch is required",
+        });
+        return;
+      }
+
+      const db = req.project!.db;
+
+      // Get workflow to find worktree path
+      const workflowRow = db
+        .prepare("SELECT worktree_path, branch_name FROM workflows WHERE id = ?")
+        .get(workflowId) as
+        | { worktree_path: string | null; branch_name: string | null }
+        | undefined;
+
+      if (!workflowRow) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          message: `Workflow not found: ${workflowId}`,
+        });
+        return;
+      }
+
+      if (!workflowRow.worktree_path) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: `Workflow ${workflowId} does not have a worktree`,
+        });
+        return;
+      }
+
+      // If target_branch specified and different from current, checkout target first
+      if (target_branch && target_branch !== workflowRow.branch_name) {
+        try {
+          execSync(`git checkout "${target_branch}"`, {
+            cwd: workflowRow.worktree_path,
+            stdio: "pipe",
+          });
+        } catch (checkoutError) {
+          res.status(400).json({
+            success: false,
+            data: null,
+            message: `Failed to checkout target branch: ${target_branch}`,
+            error:
+              checkoutError instanceof Error
+                ? checkoutError.message
+                : String(checkoutError),
+          });
+          return;
+        }
+      }
+
+      // Perform merge using git commands
+      try {
+        let mergeCommit: string | undefined;
+        let strategyUsed: "fast-forward" | "merge" | "squash";
+
+        if (strategy === "squash") {
+          // Squash merge
+          execSync(`git merge --squash "${source_branch}"`, {
+            cwd: workflowRow.worktree_path,
+            stdio: "pipe",
+          });
+
+          // Commit with custom message or default
+          const commitMessage =
+            message || `Squash merge branch '${source_branch}'`;
+          execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, {
+            cwd: workflowRow.worktree_path,
+            stdio: "pipe",
+          });
+
+          mergeCommit = execSync("git rev-parse HEAD", {
+            cwd: workflowRow.worktree_path,
+            encoding: "utf-8",
+          }).trim();
+          strategyUsed = "squash";
+        } else {
+          // Auto strategy: try fast-forward first
+          try {
+            execSync(
+              `git merge-base --is-ancestor HEAD "${source_branch}"`,
+              {
+                cwd: workflowRow.worktree_path,
+                stdio: "pipe",
+              }
+            );
+            // Fast-forward is possible
+            execSync(`git merge --ff-only "${source_branch}"`, {
+              cwd: workflowRow.worktree_path,
+              stdio: "pipe",
+            });
+            mergeCommit = execSync("git rev-parse HEAD", {
+              cwd: workflowRow.worktree_path,
+              encoding: "utf-8",
+            }).trim();
+            strategyUsed = "fast-forward";
+          } catch {
+            // Fast-forward not possible, do regular merge
+            const commitMessage =
+              message || `Merge branch '${source_branch}'`;
+            execSync(
+              `git merge --no-ff -m "${commitMessage.replace(/"/g, '\\"')}" "${source_branch}"`,
+              {
+                cwd: workflowRow.worktree_path,
+                stdio: "pipe",
+              }
+            );
+            mergeCommit = execSync("git rev-parse HEAD", {
+              cwd: workflowRow.worktree_path,
+              encoding: "utf-8",
+            }).trim();
+            strategyUsed = "merge";
+          }
+        }
+
+        console.log(
+          `[workflows/:id/merge] Merged ${source_branch} into workflow ${workflowId} (${strategyUsed})`
+        );
+
+        res.json({
+          success: true,
+          data: {
+            success: true,
+            merge_commit: mergeCommit,
+            strategy_used: strategyUsed,
+          },
+        });
+      } catch (mergeError) {
+        // Check for merge conflicts
+        let conflictingFiles: string[] = [];
+        try {
+          const conflictOutput = execSync(
+            "git diff --name-only --diff-filter=U",
+            {
+              cwd: workflowRow.worktree_path,
+              encoding: "utf-8",
+            }
+          );
+          conflictingFiles = conflictOutput
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l.length > 0);
+        } catch {
+          // Not in merge state or other issue
+        }
+
+        if (conflictingFiles.length > 0) {
+          // Abort the failed merge
+          try {
+            execSync("git merge --abort", {
+              cwd: workflowRow.worktree_path,
+              stdio: "pipe",
+            });
+          } catch {
+            // Ignore abort errors
+          }
+
+          res.json({
+            success: true,
+            data: {
+              success: false,
+              strategy_used: strategy === "squash" ? "squash" : "merge",
+              conflicting_files: conflictingFiles,
+              error: `Merge conflict in ${conflictingFiles.length} file(s)`,
+            },
+          });
+        } else {
+          res.json({
+            success: true,
+            data: {
+              success: false,
+              strategy_used: strategy === "squash" ? "squash" : "merge",
+              error:
+                mergeError instanceof Error
+                  ? mergeError.message
+                  : String(mergeError),
+            },
+          });
+        }
+      }
+    } catch (error) {
+      handleWorkflowError(error, res);
+    }
+  });
+
   return router;
 }

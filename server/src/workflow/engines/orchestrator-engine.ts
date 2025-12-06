@@ -38,6 +38,7 @@ import type {
   ExecutionService,
   McpServerConfig,
 } from "../../services/execution-service.js";
+import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 import type { WorkflowWakeupService } from "../services/wakeup-service.js";
 import { WorkflowPromptBuilder } from "../services/prompt-builder.js";
 import {
@@ -106,6 +107,7 @@ export interface OrchestratorEngineConfig {
  */
 export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
   private executionService: ExecutionService;
+  private lifecycleService: ExecutionLifecycleService;
   private wakeupService: WorkflowWakeupService;
   private promptBuilder: WorkflowPromptBuilder;
   private config: OrchestratorEngineConfig;
@@ -114,12 +116,14 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
   constructor(deps: {
     db: Database.Database;
     executionService: ExecutionService;
+    lifecycleService: ExecutionLifecycleService;
     wakeupService: WorkflowWakeupService;
     eventEmitter?: WorkflowEventEmitter;
     config: OrchestratorEngineConfig;
   }) {
     super(deps.db, deps.eventEmitter);
     this.executionService = deps.executionService;
+    this.lifecycleService = deps.lifecycleService;
     this.wakeupService = deps.wakeupService;
     this.promptBuilder = new WorkflowPromptBuilder();
     this.config = deps.config;
@@ -300,6 +304,22 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
     // Validate state
     if (workflow.status !== "pending") {
       throw new WorkflowStateError(workflowId, workflow.status, "start");
+    }
+
+    // Create workflow-level worktree if not already present
+    if (!workflow.worktreePath) {
+      console.log(
+        `[OrchestratorWorkflowEngine] Creating workflow worktree for ${workflowId}`
+      );
+      const { worktreePath, branchName } =
+        await this.createWorkflowWorktreeHelper(
+          workflow,
+          this.config.repoPath,
+          this.lifecycleService
+        );
+      // Update local workflow reference with worktree info
+      workflow.worktreePath = worktreePath;
+      workflow.branchName = branchName;
     }
 
     // Update status to running
@@ -558,9 +578,11 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
     const agentType = workflow.config.orchestratorAgentType ?? "claude-code";
 
     // Log the full config being passed to createExecution
+    // Orchestrator runs in the workflow's worktree so it can see step changes
     const fullConfig = {
-      mode: "local" as const,
+      mode: "worktree" as const,
       baseBranch: workflow.baseBranch,
+      reuseWorktreePath: workflow.worktreePath,
       ...agentConfig,
     };
     console.log(

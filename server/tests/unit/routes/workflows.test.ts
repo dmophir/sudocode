@@ -846,4 +846,52 @@ describe("Workflow Routes", () => {
       expect(response.status).toBe(404);
     });
   });
+
+  describe("POST /api/workflows/:id/merge (MCP)", () => {
+    beforeEach(() => {
+      mockDb.prepare.mockReturnValue({
+        get: vi.fn().mockReturnValue({
+          worktree_path: "/test/worktree",
+          branch_name: "workflow-branch",
+        }),
+      });
+    });
+
+    it("should return 400 when source_branch is missing", async () => {
+      const response = await request(app)
+        .post("/api/workflows/wf-123/merge")
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain("source_branch is required");
+    });
+
+    it("should return 404 for non-existent workflow", async () => {
+      mockDb.prepare.mockReturnValue({
+        get: vi.fn().mockReturnValue(undefined),
+      });
+
+      const response = await request(app)
+        .post("/api/workflows/wf-unknown/merge")
+        .send({ source_branch: "feature-branch" });
+
+      expect(response.status).toBe(404);
+    });
+
+    it("should return 400 when workflow has no worktree", async () => {
+      mockDb.prepare.mockReturnValue({
+        get: vi.fn().mockReturnValue({
+          worktree_path: null,
+          branch_name: null,
+        }),
+      });
+
+      const response = await request(app)
+        .post("/api/workflows/wf-123/merge")
+        .send({ source_branch: "feature-branch" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain("does not have a worktree");
+    });
+  });
 });

@@ -14,6 +14,7 @@ import type {
   WorkflowCompleteParams,
   EscalateToUserParams,
   NotifyUserParams,
+  MergeBranchParams,
   WorkflowStatusResult,
   ExecuteIssueResult,
   ExecutionStatusResult,
@@ -23,6 +24,7 @@ import type {
   WorkflowCompleteResult,
   EscalateToUserResult,
   NotifyUserResult,
+  MergeBranchResult,
 } from "./types.js";
 
 // =============================================================================
@@ -278,6 +280,21 @@ export class WorkflowAPIClient {
     return this.request<NotifyUserResult>(
       "POST",
       `/api/workflows/${this.workflowId}/notify`,
+      params
+    );
+  }
+
+  // ===========================================================================
+  // Git Operations
+  // ===========================================================================
+
+  /**
+   * Merge a branch into the workflow's worktree.
+   */
+  async mergeBranch(params: MergeBranchParams): Promise<MergeBranchResult> {
+    return this.request<MergeBranchResult>(
+      "POST",
+      `/api/workflows/${this.workflowId}/merge`,
       params
     );
   }

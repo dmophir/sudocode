@@ -38,6 +38,7 @@ import {
   createWorkflowFailedEvent,
 } from "./workflow-event-emitter.js";
 import { analyzeDependencies } from "./dependency-analyzer.js";
+import type { ExecutionLifecycleService } from "../services/execution-lifecycle.js";
 
 // =============================================================================
 // Helper Functions
@@ -740,5 +741,51 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
    */
   protected analyzeDependencies(issueIds: string[]): DependencyGraph {
     return analyzeDependencies(this.db, issueIds);
+  }
+
+  // ===========================================================================
+  // Worktree Management (protected)
+  // ===========================================================================
+
+  /**
+   * Create a workflow-level worktree.
+   *
+   * Creates a worktree that will be shared across all executions in the workflow.
+   * This ensures the orchestrator and all step executions run in the same isolated
+   * environment and can see each other's changes.
+   *
+   * @param workflow - The workflow to create the worktree for
+   * @param repoPath - Path to the git repository
+   * @param lifecycleService - Execution lifecycle service for worktree creation
+   * @returns Object with worktreePath and branchName
+   */
+  protected async createWorkflowWorktreeHelper(
+    workflow: Workflow,
+    repoPath: string,
+    lifecycleService: ExecutionLifecycleService
+  ): Promise<{ worktreePath: string; branchName: string }> {
+    // Check if reuseWorktreePath is specified in config
+    const reuseWorktreePath = workflow.config.reuseWorktreePath;
+
+    // Create the workflow worktree
+    const result = await lifecycleService.createWorkflowWorktree({
+      workflowId: workflow.id,
+      workflowTitle: workflow.title,
+      baseBranch: workflow.baseBranch,
+      repoPath,
+      reuseWorktreePath,
+    });
+
+    // Update workflow with worktree info
+    this.updateWorkflow(workflow.id, {
+      worktreePath: result.worktreePath,
+      branchName: result.branchName,
+    });
+
+    console.log(
+      `[BaseWorkflowEngine] Created workflow worktree for ${workflow.id}: ${result.worktreePath} (branch: ${result.branchName})`
+    );
+
+    return result;
   }
 }
