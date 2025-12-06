@@ -584,6 +584,7 @@ export default function IssuesPage() {
                 showOpenDetail={true}
                 feedback={feedback}
                 autoFocusAgentConfig
+                issues={issues}
               />
             </Panel>
           </PanelGroup>
