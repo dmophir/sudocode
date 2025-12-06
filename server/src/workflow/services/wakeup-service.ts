@@ -298,6 +298,9 @@ export class WorkflowWakeupService {
    * When the timeout fires, the execution is cancelled and a step_failed
    * event is recorded with reason "timeout".
    *
+   * The timeout deadline is persisted to the database so it can be recovered
+   * after server restart.
+   *
    * @param executionId - The execution to track
    * @param workflowId - The workflow the execution belongs to
    * @param stepId - The workflow step ID
@@ -311,6 +314,28 @@ export class WorkflowWakeupService {
   ): void {
     // Clear any existing timeout for this execution
     this.clearExecutionTimeout(executionId);
+
+    // Calculate absolute timeout deadline
+    const timeoutAt = new Date(Date.now() + timeoutMs).toISOString();
+
+    // Persist the timeout to the database for recovery after restart
+    // Use INSERT OR REPLACE to handle replacing an existing timeout for the same execution
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `
+        INSERT OR REPLACE INTO workflow_events (id, workflow_id, type, execution_id, step_id, payload, created_at)
+        VALUES (?, ?, 'execution_timeout', ?, ?, ?, ?)
+      `
+      )
+      .run(
+        `timeout-${executionId}`,
+        workflowId,
+        executionId,
+        stepId,
+        JSON.stringify({ timeoutAt }),
+        now
+      );
 
     const timeout = setTimeout(() => {
       this.executionTimeouts.delete(executionId);
@@ -327,7 +352,7 @@ export class WorkflowWakeupService {
     this.executionTimeouts.set(executionId, { timeout, workflowId, stepId });
 
     console.log(
-      `[WakeupService] Started ${timeoutMs}ms timeout for execution ${executionId}`
+      `[WakeupService] Started ${timeoutMs}ms timeout for execution ${executionId} (deadline: ${timeoutAt})`
     );
   }
 
@@ -335,7 +360,8 @@ export class WorkflowWakeupService {
    * Clear timeout for an execution.
    *
    * Call this when an execution completes normally to prevent
-   * the timeout from firing.
+   * the timeout from firing. Also marks the persisted timeout
+   * event as processed in the database.
    *
    * @param executionId - The execution to clear timeout for
    */
@@ -344,6 +370,20 @@ export class WorkflowWakeupService {
     if (entry) {
       clearTimeout(entry.timeout);
       this.executionTimeouts.delete(executionId);
+    }
+
+    // Mark the persisted timeout event as processed
+    const result = this.db
+      .prepare(
+        `
+        UPDATE workflow_events
+        SET processed_at = ?
+        WHERE id = ? AND type = 'execution_timeout' AND processed_at IS NULL
+      `
+      )
+      .run(new Date().toISOString(), `timeout-${executionId}`);
+
+    if (entry || result.changes > 0) {
       console.log(
         `[WakeupService] Cleared timeout for execution ${executionId}`
       );
@@ -365,6 +405,17 @@ export class WorkflowWakeupService {
     stepId: string
   ): Promise<void> {
     console.warn(`[WakeupService] Execution ${executionId} timed out`);
+
+    // Mark the persisted timeout event as processed
+    this.db
+      .prepare(
+        `
+        UPDATE workflow_events
+        SET processed_at = ?
+        WHERE id = ? AND type = 'execution_timeout' AND processed_at IS NULL
+      `
+      )
+      .run(new Date().toISOString(), `timeout-${executionId}`);
 
     // Try to cancel the execution
     try {
@@ -495,6 +546,245 @@ export class WorkflowWakeupService {
   }
 
   /**
+   * Recover state from the database after server restart.
+   *
+   * This method:
+   * 1. Recovers pending await conditions from workflow_events
+   * 2. Reschedules await timeouts (calculating remaining time)
+   * 3. Triggers immediate wakeup for expired awaits
+   * 4. Schedules wakeups for workflows with unprocessed events
+   * 5. Recovers execution timeout timers
+   *
+   * Should be called during server startup after the service is constructed.
+   */
+  async recoverState(): Promise<void> {
+    console.log("[WakeupService] Starting state recovery...");
+
+    // 1. Recover pending await conditions
+    await this.recoverPendingAwaits();
+
+    // 2. Schedule wakeups for workflows with unprocessed events
+    await this.recoverPendingWakeups();
+
+    // 3. Recover execution timeouts
+    await this.recoverExecutionTimeouts();
+
+    console.log("[WakeupService] State recovery complete");
+  }
+
+  /**
+   * Recover pending await conditions from the database.
+   */
+  private async recoverPendingAwaits(): Promise<void> {
+    // Find unprocessed await events
+    const awaitRows = this.db
+      .prepare(
+        `
+        SELECT we.*, w.status as workflow_status
+        FROM workflow_events we
+        JOIN workflows w ON we.workflow_id = w.id
+        WHERE we.type = 'orchestrator_wakeup'
+        AND we.processed_at IS NULL
+        AND json_extract(we.payload, '$.awaitType') = 'pending'
+        AND w.status = 'running'
+      `
+      )
+      .all() as Array<{
+      id: string;
+      workflow_id: string;
+      type: string;
+      step_id: string | null;
+      execution_id: string | null;
+      payload: string;
+      created_at: string;
+      processed_at: string | null;
+      workflow_status: string;
+    }>;
+
+    console.log(
+      `[WakeupService] Found ${awaitRows.length} pending awaits to recover`
+    );
+
+    for (const row of awaitRows) {
+      try {
+        const payload = JSON.parse(row.payload) as {
+          awaitType: string;
+          eventTypes: AwaitableEventType[];
+          executionIds?: string[];
+          timeoutAt?: string;
+          message?: string;
+        };
+
+        // Reconstruct pendingAwaits Map entry
+        const pendingAwait: PendingAwait = {
+          id: row.id,
+          workflowId: row.workflow_id,
+          eventTypes: payload.eventTypes,
+          executionIds: payload.executionIds,
+          timeoutAt: payload.timeoutAt,
+          message: payload.message,
+          createdAt: row.created_at,
+        };
+
+        this.pendingAwaits.set(row.workflow_id, pendingAwait);
+
+        // Handle timeout
+        if (payload.timeoutAt) {
+          const remainingMs =
+            new Date(payload.timeoutAt).getTime() - Date.now();
+
+          if (remainingMs > 0) {
+            // Reschedule timeout with remaining time
+            this.scheduleAwaitTimeout(
+              row.workflow_id,
+              row.id,
+              remainingMs / 1000
+            );
+            console.log(
+              `[WakeupService] Rescheduled await ${row.id} timeout (${Math.round(remainingMs / 1000)}s remaining)`
+            );
+          } else {
+            // Already expired - trigger immediately
+            console.log(
+              `[WakeupService] Await ${row.id} expired during downtime, triggering wakeup`
+            );
+            this.resolveAwait(row.workflow_id, "timeout");
+            await this.triggerWakeup(row.workflow_id);
+          }
+        } else {
+          console.log(
+            `[WakeupService] Recovered await ${row.id} (no timeout)`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[WakeupService] Failed to recover await for workflow ${row.workflow_id}:`,
+          error
+        );
+      }
+    }
+  }
+
+  /**
+   * Schedule wakeups for workflows with unprocessed events.
+   */
+  private async recoverPendingWakeups(): Promise<void> {
+    // Find workflows with unprocessed events (excluding await events and execution timeouts
+    // which are handled separately)
+    const workflowRows = this.db
+      .prepare(
+        `
+        SELECT DISTINCT we.workflow_id
+        FROM workflow_events we
+        JOIN workflows w ON we.workflow_id = w.id
+        WHERE we.processed_at IS NULL
+        AND we.type NOT IN ('orchestrator_wakeup', 'execution_timeout')
+        AND w.status = 'running'
+      `
+      )
+      .all() as Array<{ workflow_id: string }>;
+
+    console.log(
+      `[WakeupService] Found ${workflowRows.length} workflows with unprocessed events`
+    );
+
+    for (const row of workflowRows) {
+      // Schedule a wakeup for this workflow
+      this.scheduleWakeup(row.workflow_id);
+      console.log(
+        `[WakeupService] Scheduled wakeup for workflow ${row.workflow_id}`
+      );
+    }
+  }
+
+  /**
+   * Recover execution timeout timers from the database.
+   *
+   * Finds unprocessed execution_timeout events and reschedules the timers
+   * with the remaining time. If the timeout has already expired, handles
+   * the timeout immediately.
+   */
+  private async recoverExecutionTimeouts(): Promise<void> {
+    // Find unprocessed execution timeout events for running executions
+    const timeoutRows = this.db
+      .prepare(
+        `
+        SELECT we.*, e.status as execution_status
+        FROM workflow_events we
+        JOIN executions e ON we.execution_id = e.id
+        JOIN workflows w ON we.workflow_id = w.id
+        WHERE we.type = 'execution_timeout'
+        AND we.processed_at IS NULL
+        AND e.status = 'running'
+        AND w.status = 'running'
+      `
+      )
+      .all() as Array<{
+      id: string;
+      workflow_id: string;
+      step_id: string;
+      execution_id: string;
+      payload: string;
+      created_at: string;
+      execution_status: string;
+    }>;
+
+    console.log(
+      `[WakeupService] Found ${timeoutRows.length} execution timeouts to recover`
+    );
+
+    for (const row of timeoutRows) {
+      try {
+        const payload = JSON.parse(row.payload) as { timeoutAt: string };
+        const remainingMs =
+          new Date(payload.timeoutAt).getTime() - Date.now();
+
+        if (remainingMs > 0) {
+          // Reschedule timeout with remaining time
+          const timeout = setTimeout(() => {
+            this.executionTimeouts.delete(row.execution_id);
+            this.handleExecutionTimeout(
+              row.execution_id,
+              row.workflow_id,
+              row.step_id
+            ).catch((err) => {
+              console.error(
+                `[WakeupService] Error handling recovered execution timeout:`,
+                err
+              );
+            });
+          }, remainingMs);
+
+          this.executionTimeouts.set(row.execution_id, {
+            timeout,
+            workflowId: row.workflow_id,
+            stepId: row.step_id,
+          });
+
+          console.log(
+            `[WakeupService] Rescheduled execution ${row.execution_id} timeout (${Math.round(remainingMs / 1000)}s remaining)`
+          );
+        } else {
+          // Already expired - handle immediately
+          console.log(
+            `[WakeupService] Execution ${row.execution_id} timeout expired during downtime, handling now`
+          );
+          await this.handleExecutionTimeout(
+            row.execution_id,
+            row.workflow_id,
+            row.step_id
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[WakeupService] Failed to recover timeout for execution ${row.execution_id}:`,
+          error
+        );
+      }
+    }
+  }
+
+  /**
    * Stop the wakeup service.
    * Cancels all pending wakeups, execution timeouts, and await conditions.
    */
@@ -529,6 +819,8 @@ export class WorkflowWakeupService {
   /**
    * Register a new await condition.
    * Called by the await-events API endpoint.
+   *
+   * Persists the await to workflow_events for recovery after server restart.
    */
   registerAwait(params: RegisterAwaitParams): { id: string; timeoutAt?: string } {
     const awaitId = randomUUID();
@@ -549,6 +841,28 @@ export class WorkflowWakeupService {
 
     // Store in memory (replaces any existing await for this workflow)
     this.pendingAwaits.set(params.workflowId, pendingAwait);
+
+    // Persist to workflow_events for recovery
+    // Using 'orchestrator_wakeup' type with awaitType in payload
+    this.db
+      .prepare(
+        `
+        INSERT INTO workflow_events (id, workflow_id, type, payload, created_at)
+        VALUES (?, ?, 'orchestrator_wakeup', ?, ?)
+      `
+      )
+      .run(
+        awaitId,
+        params.workflowId,
+        JSON.stringify({
+          awaitType: "pending",
+          eventTypes: params.eventTypes,
+          executionIds: params.executionIds,
+          timeoutAt,
+          message: params.message,
+        }),
+        now
+      );
 
     // Schedule timeout if specified
     if (params.timeoutSeconds) {
@@ -622,6 +936,8 @@ export class WorkflowWakeupService {
 
   /**
    * Resolve an await condition (internal).
+   *
+   * Marks the await event as processed in the database for recovery tracking.
    */
   private resolveAwait(workflowId: string, resolvedBy: string): void {
     const pendingAwait = this.pendingAwaits.get(workflowId);
@@ -632,6 +948,19 @@ export class WorkflowWakeupService {
 
     // Clear from pending
     this.pendingAwaits.delete(workflowId);
+
+    // Mark event as processed in database
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `
+        UPDATE workflow_events
+        SET processed_at = ?,
+            payload = json_set(payload, '$.resolvedBy', ?)
+        WHERE id = ?
+      `
+      )
+      .run(now, resolvedBy, pendingAwait.id);
 
     // Clear timeout if exists
     const timeoutId = this.awaitTimeouts.get(pendingAwait.id);
@@ -703,10 +1032,24 @@ export class WorkflowWakeupService {
 
   /**
    * Clear all await state for a workflow (on cancel/complete).
+   * Marks any pending await events as processed in the database.
    */
   clearAwaitState(workflowId: string): void {
     const pendingAwait = this.pendingAwaits.get(workflowId);
     if (pendingAwait) {
+      // Mark as processed (cancelled) in database
+      const now = new Date().toISOString();
+      this.db
+        .prepare(
+          `
+          UPDATE workflow_events
+          SET processed_at = ?,
+              payload = json_set(payload, '$.resolvedBy', 'cancelled')
+          WHERE id = ?
+        `
+        )
+        .run(now, pendingAwait.id);
+
       const timeoutId = this.awaitTimeouts.get(pendingAwait.id);
       if (timeoutId) {
         clearTimeout(timeoutId);

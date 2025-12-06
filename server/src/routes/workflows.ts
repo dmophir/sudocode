@@ -1418,6 +1418,21 @@ export function createWorkflowsRouter(): Router {
         executionId: execution.id,
       });
 
+      // Start execution timeout if configured (orchestrator workflows only)
+      if (
+        workflow.config.executionTimeoutMs &&
+        "getWakeupService" in engine &&
+        typeof engine.getWakeupService === "function"
+      ) {
+        const wakeupService = engine.getWakeupService();
+        wakeupService.startExecutionTimeout(
+          execution.id,
+          workflowId,
+          step.id,
+          workflow.config.executionTimeoutMs
+        );
+      }
+
       console.log(
         `[workflows/:id/execute] Started execution ${execution.id} for issue ${issue_id} in workflow ${workflowId}`
       );

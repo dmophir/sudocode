@@ -185,13 +185,48 @@ export class ProjectManager {
       context.orchestratorWorkflowEngine = orchestratorWorkflowEngine;
       context.workflowBroadcastService = workflowBroadcastService;
 
-      // 7b. Run workflow recovery (for OrchestratorWorkflowEngine)
-      if (orchestratorWorkflowEngine.markStaleExecutionsAsFailed) {
-        await orchestratorWorkflowEngine.markStaleExecutionsAsFailed();
+      // 7b. Run workflow recovery
+      console.log(`[project-manager] Starting workflow recovery for ${projectId}...`);
+
+      // Sequential engine recovery (must run before wakeup service)
+      try {
+        await sequentialWorkflowEngine.recoverWorkflows();
+      } catch (error) {
+        console.error(
+          `[project-manager] Failed to recover sequential workflows for ${projectId}:`,
+          error
+        );
+        // Don't fail the open operation
       }
-      if (orchestratorWorkflowEngine.recoverOrphanedWorkflows) {
-        await orchestratorWorkflowEngine.recoverOrphanedWorkflows();
+
+      // Orchestrator engine recovery
+      try {
+        if (orchestratorWorkflowEngine.markStaleExecutionsAsFailed) {
+          await orchestratorWorkflowEngine.markStaleExecutionsAsFailed();
+        }
+        if (orchestratorWorkflowEngine.recoverOrphanedWorkflows) {
+          await orchestratorWorkflowEngine.recoverOrphanedWorkflows();
+        }
+      } catch (error) {
+        console.error(
+          `[project-manager] Failed to recover orchestrator workflows for ${projectId}:`,
+          error
+        );
+        // Don't fail the open operation
       }
+
+      // Wakeup service recovery (recovers await conditions and pending wakeups)
+      try {
+        await wakeupService.recoverState();
+      } catch (error) {
+        console.error(
+          `[project-manager] Failed to recover wakeup service state for ${projectId}:`,
+          error
+        );
+        // Don't fail the open operation
+      }
+
+      console.log(`[project-manager] Workflow recovery complete for ${projectId}`);
 
       // 8. Start file watcher if enabled
       if (this.watchEnabled) {

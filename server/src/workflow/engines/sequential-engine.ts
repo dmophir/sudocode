@@ -160,6 +160,342 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   }
 
   // ===========================================================================
+  // Workflow Recovery
+  // ===========================================================================
+
+  /**
+   * Recover workflows that were running when the server crashed.
+   *
+   * This method:
+   * 1. Finds all sequential workflows in 'running' or 'paused' status
+   * 2. Reconstructs the activeWorkflows Map from database state
+   * 3. Handles any steps that were 'running' when the server crashed
+   * 4. Resumes execution loops for 'running' workflows
+   *
+   * Should be called during server startup after engine initialization.
+   */
+  async recoverWorkflows(): Promise<void> {
+    console.log("[SequentialWorkflowEngine] Starting workflow recovery...");
+
+    // Find all sequential workflows that need recovery
+    const rows = this.db
+      .prepare(
+        `
+        SELECT * FROM workflows
+        WHERE status IN ('running', 'paused')
+        AND json_extract(config, '$.engineType') = 'sequential'
+      `
+      )
+      .all() as Array<{
+      id: string;
+      title: string;
+      source: string;
+      status: string;
+      steps: string;
+      worktree_path: string | null;
+      branch_name: string | null;
+      base_branch: string;
+      current_step_index: number;
+      orchestrator_execution_id: string | null;
+      orchestrator_session_id: string | null;
+      config: string;
+      created_at: string;
+      updated_at: string;
+      started_at: string | null;
+      completed_at: string | null;
+    }>;
+
+    console.log(
+      `[SequentialWorkflowEngine] Found ${rows.length} workflows to recover`
+    );
+
+    for (const row of rows) {
+      try {
+        await this.recoverSingleWorkflow(row);
+      } catch (error) {
+        console.error(
+          `[SequentialWorkflowEngine] Failed to recover workflow ${row.id}:`,
+          error
+        );
+        // Continue with other workflows even if one fails
+      }
+    }
+
+    console.log("[SequentialWorkflowEngine] Workflow recovery complete");
+  }
+
+  /**
+   * Recover a single workflow from its database row.
+   */
+  private async recoverSingleWorkflow(row: {
+    id: string;
+    title: string;
+    source: string;
+    status: string;
+    steps: string;
+    worktree_path: string | null;
+    branch_name: string | null;
+    base_branch: string;
+    current_step_index: number;
+    orchestrator_execution_id: string | null;
+    orchestrator_session_id: string | null;
+    config: string;
+    created_at: string;
+    updated_at: string;
+    started_at: string | null;
+    completed_at: string | null;
+  }): Promise<void> {
+    const workflowId = row.id;
+    const isPaused = row.status === "paused";
+
+    console.log(
+      `[SequentialWorkflowEngine] Recovering workflow ${workflowId} (status: ${row.status})`
+    );
+
+    // Reconstruct activeWorkflows entry
+    this.activeWorkflows.set(workflowId, {
+      workflowId,
+      isPaused,
+      isCancelled: false,
+    });
+
+    // Parse steps to find any that were running
+    const steps = JSON.parse(row.steps) as WorkflowStep[];
+    const runningStep = steps.find((s) => s.status === "running");
+
+    if (runningStep) {
+      console.log(
+        `[SequentialWorkflowEngine] Found running step ${runningStep.id} (execution: ${runningStep.executionId})`
+      );
+
+      await this.handleCrashedStep(workflowId, runningStep, row);
+    }
+
+    // Resume execution loop if workflow was running (not paused)
+    if (!isPaused) {
+      console.log(
+        `[SequentialWorkflowEngine] Resuming execution loop for workflow ${workflowId}`
+      );
+
+      this.runExecutionLoop(workflowId).catch((error) => {
+        console.error(
+          `[SequentialWorkflowEngine] Recovered workflow ${workflowId} execution loop failed:`,
+          error
+        );
+        this.failWorkflow(workflowId, error.message).catch(console.error);
+      });
+    } else {
+      console.log(
+        `[SequentialWorkflowEngine] Workflow ${workflowId} is paused, not resuming execution loop`
+      );
+    }
+  }
+
+  /**
+   * Handle a step that was running when the server crashed.
+   */
+  private async handleCrashedStep(
+    workflowId: string,
+    step: WorkflowStep,
+    workflowRow: {
+      config: string;
+      steps: string;
+      worktree_path: string | null;
+      branch_name: string | null;
+      base_branch: string;
+      current_step_index: number;
+      source: string;
+      title: string;
+      status: string;
+    }
+  ): Promise<void> {
+    if (!step.executionId) {
+      // Step was marked running but no execution was created yet
+      // Reset to pending so it can be retried
+      console.log(
+        `[SequentialWorkflowEngine] Step ${step.id} has no execution, resetting to pending`
+      );
+      this.updateStep(workflowId, step.id, {
+        status: "pending",
+        error: undefined,
+      });
+      return;
+    }
+
+    // Check the execution status
+    const execution = getExecution(this.db, step.executionId);
+
+    if (!execution) {
+      // Execution record doesn't exist - this shouldn't happen but handle it
+      console.warn(
+        `[SequentialWorkflowEngine] Execution ${step.executionId} not found, marking step as failed`
+      );
+      this.updateStep(workflowId, step.id, {
+        status: "failed",
+        error: "Execution record not found after server restart",
+      });
+      await this.handleRecoveredStepFailure(workflowId, step, workflowRow);
+      return;
+    }
+
+    // Handle based on execution status
+    switch (execution.status) {
+      case "completed":
+        // Execution completed but we didn't record step success
+        console.log(
+          `[SequentialWorkflowEngine] Execution ${step.executionId} completed, handling success`
+        );
+        await this.handleRecoveredStepSuccess(
+          workflowId,
+          step,
+          execution,
+          workflowRow
+        );
+        break;
+
+      case "failed":
+      case "cancelled":
+      case "stopped":
+        // Execution failed/cancelled but we didn't record step failure
+        console.log(
+          `[SequentialWorkflowEngine] Execution ${step.executionId} ${execution.status}, handling failure`
+        );
+        this.updateStep(workflowId, step.id, {
+          status: "failed",
+          error: execution.error_message || `Execution ${execution.status}`,
+        });
+        await this.handleRecoveredStepFailure(workflowId, step, workflowRow);
+        break;
+
+      case "running":
+      case "pending":
+      case "preparing":
+      case "paused":
+        // Execution was still in progress - it's now orphaned
+        // Mark as failed since the process is gone
+        console.log(
+          `[SequentialWorkflowEngine] Execution ${step.executionId} was ${execution.status}, marking as failed`
+        );
+        this.updateStep(workflowId, step.id, {
+          status: "failed",
+          error: "Server crashed during execution",
+        });
+        await this.handleRecoveredStepFailure(workflowId, step, workflowRow);
+        break;
+
+      default:
+        console.warn(
+          `[SequentialWorkflowEngine] Unknown execution status: ${execution.status}`
+        );
+        this.updateStep(workflowId, step.id, {
+          status: "failed",
+          error: `Unknown execution status: ${execution.status}`,
+        });
+        await this.handleRecoveredStepFailure(workflowId, step, workflowRow);
+    }
+  }
+
+  /**
+   * Handle step success during recovery.
+   */
+  private async handleRecoveredStepSuccess(
+    workflowId: string,
+    step: WorkflowStep,
+    execution: Execution,
+    workflowRow: { current_step_index: number }
+  ): Promise<void> {
+    // Update step status
+    this.updateStep(workflowId, step.id, {
+      status: "completed",
+      commitSha: execution.after_commit ?? undefined,
+    });
+
+    // Update workflow progress
+    this.updateWorkflow(workflowId, {
+      currentStepIndex: workflowRow.current_step_index + 1,
+    });
+
+    // Close the issue
+    try {
+      updateIssue(this.db, step.issueId, { status: "closed" });
+    } catch (error) {
+      console.warn(
+        `[SequentialWorkflowEngine] Failed to close issue ${step.issueId}:`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Handle step failure during recovery.
+   * Applies the workflow's onFailure strategy.
+   */
+  private async handleRecoveredStepFailure(
+    workflowId: string,
+    step: WorkflowStep,
+    workflowRow: {
+      config: string;
+      steps: string;
+      worktree_path: string | null;
+      branch_name: string | null;
+      base_branch: string;
+      current_step_index: number;
+      source: string;
+      title: string;
+      status: string;
+    }
+  ): Promise<void> {
+    const config = JSON.parse(workflowRow.config) as WorkflowConfig;
+    const steps = JSON.parse(workflowRow.steps) as WorkflowStep[];
+
+    // Build a minimal workflow object for helper methods
+    const workflow: Workflow = {
+      id: workflowId,
+      title: workflowRow.title,
+      source: JSON.parse(workflowRow.source),
+      status: workflowRow.status as Workflow["status"],
+      steps,
+      worktreePath: workflowRow.worktree_path ?? undefined,
+      branchName: workflowRow.branch_name ?? undefined,
+      baseBranch: workflowRow.base_branch,
+      currentStepIndex: workflowRow.current_step_index,
+      config,
+      createdAt: "",
+      updatedAt: "",
+    };
+
+    // Apply failure strategy
+    switch (config.onFailure) {
+      case "stop":
+        await this.failWorkflow(
+          workflowId,
+          `Step ${step.id} failed during recovery`
+        );
+        break;
+
+      case "pause":
+        this.updateWorkflow(workflowId, { status: "paused" });
+        const state = this.activeWorkflows.get(workflowId);
+        if (state) {
+          state.isPaused = true;
+        }
+        break;
+
+      case "skip_dependents":
+        await this.skipDependentSteps(
+          workflow,
+          step,
+          `Dependency ${step.issueId} failed during recovery`
+        );
+        break;
+
+      case "continue":
+        await this.blockDependentSteps(workflow, step);
+        break;
+    }
+  }
+
+  // ===========================================================================
   // Workflow Lifecycle
   // ===========================================================================
 

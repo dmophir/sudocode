@@ -190,9 +190,10 @@ describe("Execution Timeout", () => {
       vi.advanceTimersByTime(6000);
       await vi.runAllTimersAsync();
 
-      // Check event was recorded in database
+      // Check step_failed event was recorded in database
+      // Filter for step_failed type since execution_timeout events are also persisted
       const events = db
-        .prepare("SELECT * FROM workflow_events WHERE workflow_id = ?")
+        .prepare("SELECT * FROM workflow_events WHERE workflow_id = ? AND type = 'step_failed'")
         .all("wf-456") as Array<{
           type: string;
           execution_id: string;
@@ -226,9 +227,10 @@ describe("Execution Timeout", () => {
       vi.advanceTimersByTime(6000);
       await vi.runAllTimersAsync();
 
-      // Should still record the event despite cancel failure
+      // Should still record the step_failed event despite cancel failure
+      // Filter for step_failed type since execution_timeout events are also persisted
       const events = db
-        .prepare("SELECT * FROM workflow_events WHERE workflow_id = ?")
+        .prepare("SELECT * FROM workflow_events WHERE workflow_id = ? AND type = 'step_failed'")
         .all("wf-456") as Array<{ type: string }>;
 
       expect(events).toHaveLength(1);
