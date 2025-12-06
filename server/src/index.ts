@@ -220,14 +220,20 @@ console.log(`[server] Serving static frontend from: ${frontendPath}`);
 // Serve static files
 app.use(express.static(frontendPath));
 
+// API 404 handler - catch all unmatched API routes (any HTTP method)
+app.all("/api/*", (req: Request, res: Response) => {
+  console.error(`[server] 404 for API route: ${req.method} ${req.path}`);
+  res.status(404).json({
+    success: false,
+    error: "Not found",
+    message: `API endpoint not found: ${req.method} ${req.path}`,
+  });
+});
+
 // SPA fallback - serve index.html for all non-API/non-WS routes
 app.get("*", (req: Request, res: Response) => {
-  // Skip API and WebSocket routes
-  if (
-    req.path.startsWith("/api") ||
-    req.path.startsWith("/ws") ||
-    req.path.startsWith("/health")
-  ) {
+  // Skip WebSocket and health routes
+  if (req.path.startsWith("/ws") || req.path.startsWith("/health")) {
     res.status(404).json({ error: "Not found" });
   } else {
     res.sendFile(path.join(frontendPath, "index.html"));

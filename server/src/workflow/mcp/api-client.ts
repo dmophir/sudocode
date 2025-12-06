@@ -118,6 +118,12 @@ export class WorkflowAPIClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    console.error(`[WorkflowAPIClient] ${method} ${url}`);
+    console.error(`[WorkflowAPIClient] Headers: X-Project-ID=${this.projectId}`);
+    if (body) {
+      console.error(`[WorkflowAPIClient] Body:`, JSON.stringify(body).substring(0, 200));
+    }
+
     try {
       const response = await fetch(url, {
         method,
@@ -130,6 +136,19 @@ export class WorkflowAPIClient {
       });
 
       clearTimeout(timeoutId);
+
+      console.error(`[WorkflowAPIClient] Response status: ${response.status}`);
+
+      // Check if response is HTML (error page) before trying to parse as JSON
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error(`[WorkflowAPIClient] Non-JSON response (${contentType}):`, text.substring(0, 200));
+        throw new APIError(
+          `Server returned non-JSON response (${contentType}): ${text.substring(0, 100)}`,
+          response.status
+        );
+      }
 
       const data = (await response.json()) as APIResponse<T>;
 
