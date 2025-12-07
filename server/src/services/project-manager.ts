@@ -59,6 +59,9 @@ export class ProjectManager {
   /** Whether file watching is enabled */
   private readonly watchEnabled: boolean;
 
+  /** Actual server URL (updated after dynamic port discovery) */
+  private actualServerUrl: string | null = null;
+
   constructor(registry: ProjectRegistry, options?: { watchEnabled?: boolean }) {
     this.registry = registry;
     this.watchEnabled = options?.watchEnabled ?? true;
@@ -158,9 +161,11 @@ export class ProjectManager {
         promptBuilder,
         eventEmitter: workflowEventEmitter,
       });
-      // Initial server URL - will be updated after port discovery via updateServerUrl()
-      const serverPort = process.env.SUDOCODE_PORT || "3000";
-      const serverUrl = `http://localhost:${serverPort}`;
+      // Use actual server URL if known, otherwise fall back to default
+      // (will be updated after port discovery via updateServerUrl())
+      const serverUrl =
+        this.actualServerUrl ||
+        `http://localhost:${process.env.SUDOCODE_PORT || "3000"}`;
 
       const orchestratorWorkflowEngine = new OrchestratorWorkflowEngine({
         db,
@@ -186,7 +191,9 @@ export class ProjectManager {
       context.workflowBroadcastService = workflowBroadcastService;
 
       // 7b. Run workflow recovery
-      console.log(`[project-manager] Starting workflow recovery for ${projectId}...`);
+      console.log(
+        `[project-manager] Starting workflow recovery for ${projectId}...`
+      );
 
       // Sequential engine recovery (must run before wakeup service)
       try {
@@ -226,7 +233,9 @@ export class ProjectManager {
         // Don't fail the open operation
       }
 
-      console.log(`[project-manager] Workflow recovery complete for ${projectId}`);
+      console.log(
+        `[project-manager] Workflow recovery complete for ${projectId}`
+      );
 
       // 8. Start file watcher if enabled
       if (this.watchEnabled) {
@@ -576,6 +585,9 @@ export class ProjectManager {
    * Called after dynamic port discovery to propagate the actual server URL.
    */
   updateServerUrl(serverUrl: string): void {
+    // Store for newly opened projects
+    this.actualServerUrl = serverUrl;
+
     for (const project of this.openProjects.values()) {
       project.updateServerUrl(serverUrl);
     }
