@@ -166,10 +166,11 @@ export interface IWorkflowEngine {
    * Resume a paused workflow.
    *
    * @param workflowId - The workflow to resume
+   * @param message - Optional message to send to the orchestrator on resume
    * @throws WorkflowNotFoundError if workflow doesn't exist
    * @throws WorkflowStateError if workflow is not paused
    */
-  resumeWorkflow(workflowId: string): Promise<void>;
+  resumeWorkflow(workflowId: string, message?: string): Promise<void>;
 
   /**
    * Cancel a workflow, stopping any running executions.

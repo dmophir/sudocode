@@ -58,6 +58,10 @@ export interface ExecutionConfig {
   appendSystemPrompt?: string;
   /** Skip permission prompts (for automated/orchestrator executions) */
   dangerouslySkipPermissions?: boolean;
+  /** Resume a previous Claude Code session by session ID */
+  resume?: string;
+  /** Parent execution ID to link resumed/follow-up executions */
+  parentExecutionId?: string;
 }
 
 /**
@@ -222,6 +226,7 @@ export class ExecutionService {
           target_branch: config.baseBranch || branchName,
           branch_name: branchName,
           worktree_path: config.reuseWorktreePath,
+          parent_execution_id: config.parentExecutionId,
         });
 
         workDir = config.reuseWorktreePath;
@@ -243,6 +248,7 @@ export class ExecutionService {
           prompt: prompt, // Store original (unexpanded) prompt
           config: JSON.stringify(config),
           createTargetBranch: config.createBaseBranch || false,
+          parentExecutionId: config.parentExecutionId,
         });
 
         execution = result.execution;
@@ -260,6 +266,7 @@ export class ExecutionService {
         config: JSON.stringify(config),
         target_branch: config.baseBranch || defaultBranch,
         branch_name: config.baseBranch || defaultBranch,
+        parent_execution_id: config.parentExecutionId,
       });
       workDir = this.repoPath;
 
@@ -414,6 +421,7 @@ export class ExecutionService {
         mcpServers: config.mcpServers,
         appendSystemPrompt: config.appendSystemPrompt,
         dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+        resume: config.resume,
       },
       priority: 0,
       dependencies: [],

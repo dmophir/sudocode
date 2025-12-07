@@ -410,31 +410,82 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
   /**
    * Resume a paused workflow.
    *
-   * Updates status and triggers immediate wakeup to notify orchestrator.
+   * Uses Claude Code's session resume to continue the orchestrator from where it left off.
+   * This preserves the full conversation history and context.
    *
    * @param workflowId - The workflow to resume
+   * @param message - Optional message to send with the resume (defaults to "Workflow resumed. Continue execution.")
    * @throws WorkflowNotFoundError if workflow doesn't exist
    * @throws WorkflowStateError if workflow is not paused
    */
-  async resumeWorkflow(workflowId: string): Promise<void> {
+  async resumeWorkflow(
+    workflowId: string,
+    message?: string
+  ): Promise<void> {
     const workflow = await this.getWorkflowOrThrow(workflowId);
 
     if (workflow.status !== "paused") {
       throw new WorkflowStateError(workflowId, workflow.status, "resume");
     }
 
-    // Update status
+    // Get the session ID to resume
+    const sessionId = workflow.orchestratorSessionId;
+    if (!sessionId) {
+      throw new Error(
+        `Cannot resume workflow ${workflowId}: no orchestrator session ID found`
+      );
+    }
+
+    // Update status first
     this.updateWorkflow(workflowId, { status: "running" });
 
-    // Record resume event and trigger immediate wakeup
+    // Build the resume prompt
+    const resumePrompt = message || "Workflow resumed. Continue execution.";
+
+    // Build agent config with resume flag
+    const agentConfig = this.buildOrchestratorConfig(workflow);
+    const agentType = workflow.config.orchestratorAgentType ?? "claude-code";
+
+    console.log(
+      `[OrchestratorWorkflowEngine] Resuming workflow ${workflowId} with session ${sessionId}`
+    );
+
+    // Create new execution that resumes the session
+    const execution = await this.executionService.createExecution(
+      null, // No issue - this is the orchestrator
+      {
+        mode: "worktree" as const,
+        baseBranch: workflow.baseBranch,
+        reuseWorktreePath: workflow.worktreePath,
+        resume: sessionId, // Resume the previous session
+        ...agentConfig,
+      },
+      resumePrompt,
+      agentType
+    );
+
+    // Update workflow with new orchestrator execution ID
+    // Note: session_id should remain the same for resumed sessions
+    this.updateWorkflow(workflowId, {
+      orchestratorExecutionId: execution.id,
+      orchestratorSessionId: execution.session_id || sessionId,
+    });
+
+    // Record resume event for tracking
     await this.wakeupService.recordEvent({
       workflowId,
       type: "workflow_resumed",
-      payload: {},
+      payload: {
+        resumedFromSession: sessionId,
+        newExecutionId: execution.id,
+      },
     });
 
-    // Trigger immediate wakeup
-    await this.wakeupService.triggerWakeup(workflowId);
+    // Mark any pending events as processed (they're now part of the resumed session context)
+    const pendingEvents = this.wakeupService.getUnprocessedEvents(workflowId);
+    if (pendingEvents.length > 0) {
+      this.wakeupService.markEventsProcessed(pendingEvents.map((e) => e.id));
+    }
 
     // Emit event
     this.eventEmitter.emit({

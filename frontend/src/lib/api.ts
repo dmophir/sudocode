@@ -477,8 +477,9 @@ export const workflowsApi = {
   // Pause a running workflow
   pause: (id: string) => post<Workflow>(`/workflows/${id}/pause`),
 
-  // Resume a paused workflow
-  resume: (id: string) => post<Workflow>(`/workflows/${id}/resume`),
+  // Resume a paused workflow with optional message
+  resume: (id: string, message?: string) =>
+    post<Workflow>(`/workflows/${id}/resume`, message ? { message } : undefined),
 
   // Cancel a workflow
   cancel: (id: string) => post<Workflow>(`/workflows/${id}/cancel`),

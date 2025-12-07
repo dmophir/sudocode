@@ -560,7 +560,9 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   }
 
   /**
-   * Pause a running workflow after the current step completes.
+   * Pause a running workflow, cancelling the current execution.
+   *
+   * The current step is reset to "pending" so it can be re-executed on resume.
    *
    * @param workflowId - The workflow to pause
    * @throws WorkflowNotFoundError if workflow doesn't exist
@@ -577,6 +579,34 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     const state = this.activeWorkflows.get(workflowId);
     if (state) {
       state.isPaused = true;
+
+      // Cancel current execution if running and reset the step status
+      // Keep the executionId so we can resume the session later
+      if (state.currentExecutionId) {
+        try {
+          await this.executionService.cancelExecution(state.currentExecutionId);
+
+          // Find the running step and reset status to pending (keep executionId for resume)
+          const runningStep = workflow.steps.find((s) => s.status === "running");
+          if (runningStep) {
+            this.updateStep(workflowId, runningStep.id, {
+              status: "pending",
+              // Keep executionId so we can resume the session
+              error: undefined,
+            });
+            console.log(
+              `[SequentialWorkflowEngine] Reset step ${runningStep.id} to pending after pause (keeping executionId for resume)`
+            );
+          }
+        } catch (error) {
+          console.warn(
+            `[SequentialWorkflowEngine] Failed to cancel execution ${state.currentExecutionId}:`,
+            error
+          );
+        }
+
+        state.currentExecutionId = undefined;
+      }
     }
 
     // Update status
@@ -594,10 +624,11 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
    * Resume a paused workflow.
    *
    * @param workflowId - The workflow to resume
+   * @param _message - Optional message (not used in sequential engine, no orchestrator)
    * @throws WorkflowNotFoundError if workflow doesn't exist
    * @throws WorkflowStateError if workflow is not paused
    */
-  async resumeWorkflow(workflowId: string): Promise<void> {
+  async resumeWorkflow(workflowId: string, _message?: string): Promise<void> {
     const workflow = await this.getWorkflowOrThrow(workflowId);
 
     if (workflow.status !== "paused") {
@@ -909,6 +940,9 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
   /**
    * Execute a single workflow step.
    *
+   * If the step has a previous execution (from a pause), attempts to resume
+   * the session. Otherwise creates a new execution.
+   *
    * @param workflow - The workflow containing the step
    * @param step - The step to execute
    */
@@ -924,7 +958,21 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       throw new Error(`Issue ${step.issueId} not found`);
     }
 
-    // 2. Build execution config - always use workflow's worktree
+    // 2. Check if we should resume a previous execution
+    let sessionIdToResume: string | undefined;
+    let parentExecutionId: string | undefined;
+    if (step.executionId) {
+      const previousExecution = getExecution(this.db, step.executionId);
+      if (previousExecution?.session_id) {
+        sessionIdToResume = previousExecution.session_id;
+        parentExecutionId = step.executionId; // Link to previous execution
+        console.log(
+          `[SequentialWorkflowEngine] Resuming step ${step.id} with session ${sessionIdToResume} (parent: ${parentExecutionId})`
+        );
+      }
+    }
+
+    // 3. Build execution config - always use workflow's worktree
     // Workflow-spawned executions run autonomously without terminal interaction
     const config: ExecutionConfig = {
       mode: "worktree",
@@ -935,17 +983,23 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       dangerouslySkipPermissions: true,
       // Use workflow's orchestrator model for consistency if available
       model: workflow.config.orchestratorModel,
+      // Resume previous session if available
+      resume: sessionIdToResume,
+      // Link to parent execution for chain tracking
+      parentExecutionId,
     };
 
-    // 3. Build prompt
-    const prompt = this.buildPrompt(issue, workflow);
+    // 4. Build prompt - use resume message if resuming, otherwise full prompt
+    const prompt = sessionIdToResume
+      ? "Workflow resumed. Continue where you left off."
+      : this.buildPrompt(issue, workflow);
 
-    // 4. Update step status to running
+    // 5. Update step status to running
     this.updateStep(workflow.id, step.id, {
       status: "running",
     });
 
-    // 5. Emit step started event
+    // 6. Emit step started event
     this.eventEmitter.emit({
       type: "step_started",
       workflowId: workflow.id,
@@ -953,7 +1007,7 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       timestamp: Date.now(),
     });
 
-    // 6. Create execution
+    // 7. Create execution (will resume session if config.resume is set)
     const execution = await this.executionService.createExecution(
       step.issueId,
       config,
@@ -966,12 +1020,12 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       state.currentExecutionId = execution.id;
     }
 
-    // Update step with execution ID
+    // Update step with new execution ID
     this.updateStep(workflow.id, step.id, {
       executionId: execution.id,
     });
 
-    // 7. Wait for execution to complete
+    // 8. Wait for execution to complete
     const completedExecution = await this.waitForExecution(execution.id);
 
     // Clear current execution tracking
@@ -979,7 +1033,16 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
       state.currentExecutionId = undefined;
     }
 
-    // 8. Handle result
+    // 9. Check if workflow was paused/cancelled during execution
+    // If so, don't treat the cancelled execution as a failure
+    if (state?.isPaused || state?.isCancelled) {
+      console.log(
+        `[SequentialWorkflowEngine] Step ${step.id} execution ended due to workflow ${state.isPaused ? "pause" : "cancel"}, not treating as failure`
+      );
+      return;
+    }
+
+    // 10. Handle result
     if (completedExecution.status === "completed") {
       await this.handleStepSuccess(workflow, step, completedExecution);
     } else {

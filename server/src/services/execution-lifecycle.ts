@@ -59,6 +59,7 @@ export interface CreateExecutionWithWorktreeParams {
   prompt?: string;
   config?: string; // JSON string of execution configuration
   createTargetBranch?: boolean; // If true, create targetBranch from current HEAD
+  parentExecutionId?: string; // Link to parent execution (for follow-up/resume chains)
 }
 
 /**
@@ -239,6 +240,7 @@ export class ExecutionLifecycleService {
         target_branch: targetBranch,
         branch_name: branchName,
         worktree_path: worktreePath,
+        parent_execution_id: params.parentExecutionId,
       });
 
       return {

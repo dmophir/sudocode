@@ -74,10 +74,12 @@ function createTestDb(): Database.Database {
 }
 
 function createMockExecutionService(db: Database.Database): ExecutionService {
+  let executionCounter = 0;
   return {
     createExecution: vi.fn().mockImplementation(async () => {
+      executionCounter++;
       const execution = {
-        id: "exec-orch",
+        id: executionCounter === 1 ? "exec-orch" : `exec-orch-${executionCounter}`,
         session_id: "session-orch",
         status: "running",
       };
@@ -453,14 +455,41 @@ describe("OrchestratorWorkflowEngine", () => {
 
       await engine.resumeWorkflow(workflow.id);
 
-      // Check database directly since triggerWakeup marks events as processed
+      // Check database directly for resume event
       const allEvents = db
         .prepare("SELECT * FROM workflow_events WHERE workflow_id = ?")
         .all(workflow.id) as Array<{ type: string }>;
       expect(allEvents.some((e) => e.type === "workflow_resumed")).toBe(true);
     });
 
-    it("should trigger immediate wakeup", async () => {
+    it("should create new execution with session resume", async () => {
+      const workflow = await engine.createWorkflow({
+        type: "goal",
+        goal: "Test",
+      });
+      await engine.startWorkflow(workflow.id);
+
+      // Store the session ID before pausing
+      const workflowBeforePause = await engine.getWorkflow(workflow.id);
+      const sessionId = workflowBeforePause!.orchestratorSessionId;
+      expect(sessionId).toBe("session-orch");
+
+      await engine.pauseWorkflow(workflow.id);
+      await engine.resumeWorkflow(workflow.id);
+
+      // Should create a new execution with resume config
+      expect(executionService.createExecution).toHaveBeenLastCalledWith(
+        null,
+        expect.objectContaining({
+          mode: "worktree",
+          resume: sessionId,
+        }),
+        "Workflow resumed. Continue execution.",
+        "claude-code"
+      );
+    });
+
+    it("should use custom message when provided", async () => {
       const workflow = await engine.createWorkflow({
         type: "goal",
         goal: "Test",
@@ -468,14 +497,66 @@ describe("OrchestratorWorkflowEngine", () => {
       await engine.startWorkflow(workflow.id);
       await engine.pauseWorkflow(workflow.id);
 
-      // Clear existing events
-      const pauseEvents = wakeupService.getUnprocessedEvents(workflow.id);
-      wakeupService.markEventsProcessed(pauseEvents.map((e) => e.id));
+      const customMessage = "Please focus on the authentication task next.";
+      await engine.resumeWorkflow(workflow.id, customMessage);
+
+      expect(executionService.createExecution).toHaveBeenLastCalledWith(
+        null,
+        expect.anything(),
+        customMessage,
+        "claude-code"
+      );
+    });
+
+    it("should update orchestrator execution ID after resume", async () => {
+      const workflow = await engine.createWorkflow({
+        type: "goal",
+        goal: "Test",
+      });
+      await engine.startWorkflow(workflow.id);
+      await engine.pauseWorkflow(workflow.id);
+
+      // Reset mock to track resume call separately
+      vi.mocked(executionService.createExecution).mockClear();
+      vi.mocked(executionService.createExecution).mockImplementation(
+        async () => {
+          const execution = {
+            id: "exec-resumed",
+            session_id: "session-orch",
+            status: "running",
+          };
+          db.prepare(
+            `INSERT INTO executions (id, session_id, status, target_branch, branch_name, created_at, updated_at)
+             VALUES (?, ?, ?, 'main', 'test-branch', datetime('now'), datetime('now'))`
+          ).run(execution.id, execution.session_id, execution.status);
+          return execution;
+        }
+      );
 
       await engine.resumeWorkflow(workflow.id);
 
-      // The createFollowUp should be called by triggerWakeup
-      expect(executionService.createFollowUp).toHaveBeenCalled();
+      const updated = await engine.getWorkflow(workflow.id);
+      expect(updated!.orchestratorExecutionId).toBe("exec-resumed");
+    });
+
+    it("should reject if workflow has no session ID", async () => {
+      const workflow = await engine.createWorkflow({
+        type: "goal",
+        goal: "Test",
+      });
+      await engine.startWorkflow(workflow.id);
+
+      // Remove session ID to simulate missing session
+      db.prepare(
+        "UPDATE workflows SET orchestrator_session_id = NULL WHERE id = ?"
+      ).run(workflow.id);
+      db.prepare("UPDATE workflows SET status = 'paused' WHERE id = ?").run(
+        workflow.id
+      );
+
+      await expect(engine.resumeWorkflow(workflow.id)).rejects.toThrow(
+        "no orchestrator session ID found"
+      );
     });
 
     it("should reject if workflow is not paused", async () => {
@@ -487,6 +568,51 @@ describe("OrchestratorWorkflowEngine", () => {
 
       await expect(engine.resumeWorkflow(workflow.id)).rejects.toThrow(
         "Cannot resume"
+      );
+    });
+
+    it("should emit workflow_resumed event", async () => {
+      const workflow = await engine.createWorkflow({
+        type: "goal",
+        goal: "Test",
+      });
+      await engine.startWorkflow(workflow.id);
+      await engine.pauseWorkflow(workflow.id);
+
+      const listener = vi.fn();
+      eventEmitter.on(listener);
+
+      await engine.resumeWorkflow(workflow.id);
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "workflow_resumed",
+          workflowId: workflow.id,
+        })
+      );
+    });
+
+    it("should preserve worktree path on resume", async () => {
+      const workflow = await engine.createWorkflow({
+        type: "goal",
+        goal: "Test",
+      });
+      await engine.startWorkflow(workflow.id);
+
+      const workflowBeforePause = await engine.getWorkflow(workflow.id);
+      const worktreePath = workflowBeforePause!.worktreePath;
+
+      await engine.pauseWorkflow(workflow.id);
+      await engine.resumeWorkflow(workflow.id);
+
+      // Should reuse the same worktree path
+      expect(executionService.createExecution).toHaveBeenLastCalledWith(
+        null,
+        expect.objectContaining({
+          reuseWorktreePath: worktreePath,
+        }),
+        expect.any(String),
+        expect.any(String)
       );
     });
   });

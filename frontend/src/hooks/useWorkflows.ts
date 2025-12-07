@@ -272,7 +272,8 @@ export function useWorkflowMutations() {
   })
 
   const resume = useMutation({
-    mutationFn: (id: string) => workflowsApi.resume(id),
+    mutationFn: ({ id, message }: { id: string; message?: string }) =>
+      workflowsApi.resume(id, message),
     onSuccess: (workflow) => {
       queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflow.id) })
       invalidateWorkflows()
@@ -316,7 +317,7 @@ export function useWorkflowMutations() {
     create: create.mutateAsync,
     start: start.mutateAsync,
     pause: pause.mutateAsync,
-    resume: resume.mutateAsync,
+    resume: (id: string, message?: string) => resume.mutateAsync({ id, message }),
     cancel: cancel.mutateAsync,
     delete: (id: string, options?: { deleteWorktree?: boolean; deleteBranch?: boolean }) =>
       deleteWorkflow.mutateAsync({ id, options }),

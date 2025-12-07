@@ -26,6 +26,7 @@ import {
   EscalationBanner,
   EscalationPanel,
   OrchestratorGuidancePanel,
+  ResumeWorkflowDialog,
 } from '@/components/workflows'
 import { InlineExecutionView } from '@/components/executions/InlineExecutionView'
 import { IssuePanel } from '@/components/issues/IssuePanel'
@@ -45,7 +46,8 @@ export default function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { workflow, issues, isLoading, error } = useWorkflow(id)
-  const { start, pause, resume, cancel, isStarting } = useWorkflowMutations()
+  const { start, pause, resume, cancel, isStarting, isResuming } = useWorkflowMutations()
+  const [showResumeDialog, setShowResumeDialog] = useState(false)
   const progress = useWorkflowProgress(workflow)
 
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
@@ -204,9 +206,10 @@ export default function WorkflowDetailPage() {
           workflow={workflow}
           onStart={() => start(workflow.id)}
           onPause={() => pause(workflow.id)}
-          onResume={() => resume(workflow.id)}
+          onResume={() => setShowResumeDialog(true)}
           onCancel={() => cancel(workflow.id)}
           isStarting={isStarting}
+          isResuming={isResuming}
         />
       </div>
 
@@ -413,6 +416,17 @@ export default function WorkflowDetailPage() {
           )}
         </PanelGroup>
       </div>
+
+      {/* Resume Dialog */}
+      <ResumeWorkflowDialog
+        workflow={workflow}
+        open={showResumeDialog}
+        onOpenChange={setShowResumeDialog}
+        onConfirm={async (message) => {
+          await resume(workflow.id, message)
+        }}
+        isResuming={isResuming}
+      />
     </div>
   )
 }

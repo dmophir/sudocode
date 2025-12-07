@@ -581,10 +581,15 @@ export function createWorkflowsRouter(): Router {
 
   /**
    * POST /api/workflows/:id/resume - Resume a paused workflow
+   *
+   * Body:
+   * - message?: string - Optional message to send to the orchestrator on resume
    */
   router.post("/:id/resume", async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      const { message } = req.body as { message?: string };
+
       const engine = getEngineForWorkflow(req, id);
       if (!engine) {
         res.status(503).json({
@@ -595,7 +600,7 @@ export function createWorkflowsRouter(): Router {
         return;
       }
 
-      await engine.resumeWorkflow(id);
+      await engine.resumeWorkflow(id, message);
 
       const workflow = await engine.getWorkflow(id);
       broadcastWorkflowUpdate(req.project!.id, id, "resumed", workflow);

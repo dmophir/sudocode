@@ -239,6 +239,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       const taskAppendSystemPrompt = (task.metadata as any)?.appendSystemPrompt;
       const taskDangerouslySkipPermissions = (task.metadata as any)
         ?.dangerouslySkipPermissions;
+      const taskResume = (task.metadata as any)?.resume;
 
       // Debug: Log what we received in task metadata
       console.log(
@@ -251,6 +252,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
             : "none",
           hasAppendSystemPrompt: !!taskAppendSystemPrompt,
           dangerouslySkipPermissions: taskDangerouslySkipPermissions,
+          resume: taskResume,
         }
       );
 
@@ -258,7 +260,8 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         this.agentType === "claude-code" &&
         (taskMcpServers ||
           taskAppendSystemPrompt ||
-          taskDangerouslySkipPermissions)
+          taskDangerouslySkipPermissions ||
+          taskResume)
       ) {
         // Create a task-specific executor with merged config
         console.log(
@@ -266,6 +269,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
           {
             mcpServers: taskMcpServers ? Object.keys(taskMcpServers) : "none",
             dangerouslySkipPermissions: taskDangerouslySkipPermissions,
+            resume: taskResume,
           }
         );
         executor = this.createExecutor(this.agentType, {
@@ -273,6 +277,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
           mcpServers: taskMcpServers,
           appendSystemPrompt: taskAppendSystemPrompt,
           dangerouslySkipPermissions: taskDangerouslySkipPermissions,
+          resume: taskResume,
         } as TConfig);
       }
 

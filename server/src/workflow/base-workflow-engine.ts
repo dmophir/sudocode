@@ -153,7 +153,7 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
 
   abstract startWorkflow(workflowId: string): Promise<void>;
   abstract pauseWorkflow(workflowId: string): Promise<void>;
-  abstract resumeWorkflow(workflowId: string): Promise<void>;
+  abstract resumeWorkflow(workflowId: string, message?: string): Promise<void>;
   abstract cancelWorkflow(workflowId: string): Promise<void>;
   abstract retryStep(workflowId: string, stepId: string): Promise<void>;
   abstract skipStep(

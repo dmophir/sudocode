@@ -112,6 +112,7 @@ function createMockExecution(overrides?: Partial<Execution>): Execution {
     model: null,
     mode: "local",
     prompt: "Test prompt",
+    session_id: null,
     ...overrides,
   };
 }
@@ -410,6 +411,225 @@ describe("SequentialWorkflowEngine", () => {
       );
 
       await expect(engine.pauseWorkflow(workflow.id)).rejects.toThrow(WorkflowStateError);
+    });
+
+    it("should cancel current execution when pausing but keep executionId for resume", async () => {
+      // Create a workflow with a step already running
+      const workflow = createTestWorkflow({
+        status: "running",
+        steps: [
+          { id: "step-1", issueId: "i-1", index: 0, dependencies: [], status: "running", executionId: "exec-running" },
+          { id: "step-2", issueId: "i-2", index: 1, dependencies: ["step-1"], status: "pending" },
+        ],
+      });
+      db.prepare(`
+        INSERT INTO workflows (id, title, source, status, steps, base_branch, current_step_index, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        workflow.id,
+        workflow.title,
+        JSON.stringify(workflow.source),
+        workflow.status,
+        JSON.stringify(workflow.steps),
+        workflow.baseBranch,
+        workflow.currentStepIndex,
+        JSON.stringify(workflow.config),
+        workflow.createdAt,
+        workflow.updatedAt
+      );
+
+      // Manually set up the activeWorkflows state to simulate a running workflow
+      // Access the private activeWorkflows map via type assertion
+      const engineAny = engine as any;
+      engineAny.activeWorkflows.set(workflow.id, {
+        workflowId: workflow.id,
+        isPaused: false,
+        isCancelled: false,
+        currentExecutionId: "exec-running",
+      });
+
+      await engine.pauseWorkflow(workflow.id);
+
+      // Verify cancelExecution was called with the execution ID
+      expect(mockExecutionService.cancelExecution).toHaveBeenCalledWith("exec-running");
+
+      // Verify step was reset to pending but KEEPS executionId for resume
+      const updated = await engine.getWorkflow(workflow.id);
+      const step1 = updated?.steps.find((s) => s.id === "step-1");
+      expect(step1?.status).toBe("pending");
+      expect(step1?.executionId).toBe("exec-running"); // Kept for session resume
+    });
+
+    it("should resume session when step has previous execution with session_id", async () => {
+      // Insert execution record with session_id
+      db.prepare(`
+        INSERT INTO executions (id, session_id, status, agent_type, mode, prompt, target_branch, branch_name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run("exec-1", "session-abc123", "cancelled", "claude-code", "worktree", "Original prompt", "main", "test-branch");
+
+      const workflow = createTestWorkflow({
+        status: "running",
+        steps: [
+          { id: "step-1", issueId: "i-1", index: 0, dependencies: [], status: "running", executionId: "exec-1" },
+        ],
+      });
+      db.prepare(`
+        INSERT INTO workflows (id, title, source, status, steps, base_branch, current_step_index, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        workflow.id,
+        workflow.title,
+        JSON.stringify(workflow.source),
+        workflow.status,
+        JSON.stringify(workflow.steps),
+        workflow.baseBranch,
+        workflow.currentStepIndex,
+        JSON.stringify(workflow.config),
+        workflow.createdAt,
+        workflow.updatedAt
+      );
+
+      // Set up active workflow state
+      const engineAny = engine as any;
+      engineAny.activeWorkflows.set(workflow.id, {
+        workflowId: workflow.id,
+        isPaused: false,
+        isCancelled: false,
+        currentExecutionId: "exec-1",
+      });
+
+      // Pause the workflow
+      await engine.pauseWorkflow(workflow.id);
+
+      // Verify step keeps executionId for resume
+      let updated = await engine.getWorkflow(workflow.id);
+      expect(updated?.status).toBe("paused");
+      const step = updated?.steps.find((s) => s.id === "step-1");
+      expect(step?.status).toBe("pending");
+      expect(step?.executionId).toBe("exec-1"); // Kept for session resume
+
+      // Now resume and verify the session is resumed
+      mockGetIssue.mockReturnValue({
+        id: "i-1",
+        title: "Test Issue",
+        content: "Test content",
+        status: "open",
+        priority: 2,
+        uuid: "uuid-1",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      });
+
+      // Mock getExecution to return execution with session_id
+      mockGetExecution.mockImplementation((_db, execId) => {
+        if (execId === "exec-1") {
+          return createMockExecution({
+            id: "exec-1",
+            session_id: "session-abc123",
+            status: "cancelled",
+          });
+        }
+        return createMockExecution({ id: execId, status: "completed" });
+      });
+
+      const mockExec = createMockExecution({ id: "exec-resumed", status: "completed" });
+      (mockExecutionService.createExecution as ReturnType<typeof vi.fn>).mockResolvedValue(mockExec);
+
+      await engine.resumeWorkflow(workflow.id);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify createExecution was called with resume config containing session_id and parentExecutionId
+      expect(mockExecutionService.createExecution).toHaveBeenCalledWith(
+        "i-1",
+        expect.objectContaining({
+          resume: "session-abc123", // Session ID from previous execution
+          parentExecutionId: "exec-1", // Link to parent execution for chain tracking
+        }),
+        "Workflow resumed. Continue where you left off.", // Resume prompt
+        "claude-code"
+      );
+    });
+
+    it("should create fresh execution if step has no previous session_id", async () => {
+      // Insert execution record WITHOUT session_id
+      db.prepare(`
+        INSERT INTO executions (id, status, agent_type, mode, prompt, target_branch, branch_name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run("exec-no-session", "cancelled", "claude-code", "worktree", "Original prompt", "main", "test-branch");
+
+      const workflow = createTestWorkflow({
+        status: "running",
+        steps: [
+          { id: "step-1", issueId: "i-1", index: 0, dependencies: [], status: "running", executionId: "exec-no-session" },
+        ],
+      });
+      db.prepare(`
+        INSERT INTO workflows (id, title, source, status, steps, base_branch, current_step_index, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        workflow.id,
+        workflow.title,
+        JSON.stringify(workflow.source),
+        workflow.status,
+        JSON.stringify(workflow.steps),
+        workflow.baseBranch,
+        workflow.currentStepIndex,
+        JSON.stringify(workflow.config),
+        workflow.createdAt,
+        workflow.updatedAt
+      );
+
+      // Set up active workflow state
+      const engineAny = engine as any;
+      engineAny.activeWorkflows.set(workflow.id, {
+        workflowId: workflow.id,
+        isPaused: false,
+        isCancelled: false,
+        currentExecutionId: "exec-no-session",
+      });
+
+      // Pause the workflow
+      await engine.pauseWorkflow(workflow.id);
+
+      // Now resume
+      mockGetIssue.mockReturnValue({
+        id: "i-1",
+        title: "Test Issue",
+        content: "Test content",
+        status: "open",
+        priority: 2,
+        uuid: "uuid-1",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      });
+
+      // Mock getExecution to return execution WITHOUT session_id
+      mockGetExecution.mockImplementation((_db, execId) => {
+        if (execId === "exec-no-session") {
+          return createMockExecution({
+            id: "exec-no-session",
+            session_id: null, // No session
+            status: "cancelled",
+          });
+        }
+        return createMockExecution({ id: execId, status: "completed" });
+      });
+
+      const mockExec = createMockExecution({ id: "exec-fresh", status: "completed" });
+      (mockExecutionService.createExecution as ReturnType<typeof vi.fn>).mockResolvedValue(mockExec);
+
+      await engine.resumeWorkflow(workflow.id);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify createExecution was called WITHOUT resume config (fresh execution)
+      expect(mockExecutionService.createExecution).toHaveBeenCalledWith(
+        "i-1",
+        expect.objectContaining({
+          resume: undefined, // No session to resume
+        }),
+        expect.stringContaining("Task:"), // Full prompt, not resume prompt
+        "claude-code"
+      );
     });
   });
 
