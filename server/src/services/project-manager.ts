@@ -7,6 +7,7 @@ import { initDatabase } from "./db.js";
 import { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionService } from "./execution-service.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
+import { ExecutionLifecycleService } from "./execution-lifecycle.js";
 import { WorktreeManager } from "../execution/worktree/manager.js";
 import { getWorktreeConfig } from "../execution/worktree/config.js";
 import { startServerWatcher } from "./watcher.js";

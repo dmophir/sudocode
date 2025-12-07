@@ -11,6 +11,7 @@ import type {
   IAgentAdapter,
   NormalizedEntry,
 } from "agent-execution-engine/agents";
+import type { FileChangeStat } from "@sudocode-ai/types";
 import {
   ClaudeCodeExecutor,
   CodexExecutor,
@@ -776,7 +777,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       if (changesResult.available && changesResult.captured) {
         // Extract just the file paths from the changes
-        const filePaths = changesResult.captured.files.map((f) => f.path);
+        const filePaths = changesResult.captured.files.map((f: FileChangeStat) => f.path);
         filesChangedJson = JSON.stringify(filePaths);
         console.log(
           `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for execution ${executionId}`
@@ -844,7 +845,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       const changesResult = await changesService.getChanges(executionId);
 
       if (changesResult.available && changesResult.captured) {
-        const filePaths = changesResult.captured.files.map((f) => f.path);
+        const filePaths = changesResult.captured.files.map((f: FileChangeStat) => f.path);
         filesChangedJson = JSON.stringify(filePaths);
         console.log(
           `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for failed execution ${executionId}`
