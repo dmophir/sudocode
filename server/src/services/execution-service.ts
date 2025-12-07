@@ -577,6 +577,9 @@ ${feedback}`;
       : {};
 
     // Build execution task for follow-up (use resolved prompt for agent)
+    // IMPORTANT: Inherit ALL config from parent execution
+    // This ensures orchestrator follow-ups retain dangerouslySkipPermissions, mcpServers,
+    // appendSystemPrompt, and any other config fields
     const task: ExecutionTask = {
       id: newExecution.id,
       type: "issue",
@@ -587,6 +590,9 @@ ${feedback}`;
         timeout: parsedConfig.timeout,
       },
       metadata: {
+        // Spread all config fields from parent execution first
+        ...parsedConfig,
+        // Then override specific fields for this follow-up
         model: parsedConfig.model || "claude-sonnet-4",
         captureFileChanges: parsedConfig.captureFileChanges ?? true,
         captureToolCalls: parsedConfig.captureToolCalls ?? true,
@@ -598,6 +604,17 @@ ${feedback}`;
       dependencies: [],
       createdAt: new Date(),
     };
+
+    console.log("[ExecutionService] Follow-up task metadata:", {
+      executionId: newExecution.id,
+      parentExecutionId: executionId,
+      inheritedConfigKeys: Object.keys(parsedConfig),
+      hasMcpServers: !!parsedConfig.mcpServers,
+      mcpServerNames: parsedConfig.mcpServers ? Object.keys(parsedConfig.mcpServers) : "none",
+      dangerouslySkipPermissions: parsedConfig.dangerouslySkipPermissions,
+      hasAppendSystemPrompt: !!parsedConfig.appendSystemPrompt,
+      model: parsedConfig.model,
+    });
 
     // Execute follow-up (non-blocking)
     // If we have a session ID, resume the session; otherwise start a new one

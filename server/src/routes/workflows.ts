@@ -1374,6 +1374,8 @@ export function createWorkflowsRouter(): Router {
         model: model || workflow.config.orchestratorModel,
         baseBranch: workflow.baseBranch,
         reuseWorktreePath,
+        // Workflow-spawned executions run autonomously without terminal
+        dangerouslySkipPermissions: true,
       };
 
       // Create prompt from issue content

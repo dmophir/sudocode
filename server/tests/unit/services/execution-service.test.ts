@@ -908,6 +908,50 @@ describe("ExecutionService", () => {
       expect(followUpExecution.mode).toBe("local");
       expect(followUpExecution.worktree_path).toBeNull();
     });
+
+    it("should inherit all config from parent execution including dangerouslySkipPermissions and mcpServers", async () => {
+      // Create initial execution with full config including permissions and MCP servers
+      const issueContent = "Add OAuth2 authentication with JWT tokens";
+      const mcpServerConfig = {
+        "sudocode-mcp": {
+          command: "node",
+          args: ["/path/to/mcp.js"],
+        },
+      };
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        {
+          mode: "worktree" as const,
+          model: "claude-sonnet-4",
+          dangerouslySkipPermissions: true,
+          mcpServers: mcpServerConfig,
+          appendSystemPrompt: "Always be helpful",
+        },
+        issueContent
+      );
+
+      // Verify initial execution has the config stored
+      expect(initialExecution.config).toBeTruthy();
+      const initialConfig = JSON.parse(initialExecution.config!);
+      expect(initialConfig.dangerouslySkipPermissions).toBe(true);
+      expect(initialConfig.mcpServers).toEqual(mcpServerConfig);
+      expect(initialConfig.appendSystemPrompt).toBe("Always be helpful");
+      expect(initialConfig.model).toBe("claude-sonnet-4");
+
+      // Create follow-up
+      const followUpExecution = await service.createFollowUp(
+        initialExecution.id,
+        "Please add unit tests"
+      );
+
+      // Verify follow-up inherits all config
+      expect(followUpExecution.config).toBeTruthy();
+      const followUpConfig = JSON.parse(followUpExecution.config!);
+      expect(followUpConfig.dangerouslySkipPermissions).toBe(true);
+      expect(followUpConfig.mcpServers).toEqual(mcpServerConfig);
+      expect(followUpConfig.appendSystemPrompt).toBe("Always be helpful");
+      expect(followUpConfig.model).toBe("claude-sonnet-4");
+    });
   });
 
   describe("cancelExecution", () => {

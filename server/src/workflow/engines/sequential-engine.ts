@@ -923,11 +923,16 @@ export class SequentialWorkflowEngine extends BaseWorkflowEngine {
     }
 
     // 2. Build execution config - always use workflow's worktree
+    // Workflow-spawned executions run autonomously without terminal interaction
     const config: ExecutionConfig = {
       mode: "worktree",
       baseBranch: workflow.baseBranch,
       createBaseBranch: workflow.config.createBaseBranch,
       reuseWorktreePath: workflow.worktreePath,
+      // Workflow step executions run autonomously - must skip permission prompts
+      dangerouslySkipPermissions: true,
+      // Use workflow's orchestrator model for consistency if available
+      model: workflow.config.orchestratorModel,
     };
 
     // 3. Build prompt
