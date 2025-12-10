@@ -214,6 +214,24 @@ export class ExecutionService {
           );
         }
 
+        // Capture before_commit from the reused worktree
+        let beforeCommit: string | undefined;
+        try {
+          beforeCommit = execSync("git rev-parse HEAD", {
+            cwd: config.reuseWorktreePath,
+            encoding: "utf-8",
+          }).trim();
+          console.log(
+            `[ExecutionService] Captured before_commit for reused worktree: ${beforeCommit}`
+          );
+        } catch (error) {
+          console.warn(
+            "[ExecutionService] Failed to capture before_commit for reused worktree:",
+            error instanceof Error ? error.message : String(error)
+          );
+          // Continue - this is supplementary data
+        }
+
         // Create execution record with the reused worktree path
         const executionId = randomUUID();
         execution = createExecution(this.db, {
@@ -227,6 +245,7 @@ export class ExecutionService {
           branch_name: branchName,
           worktree_path: config.reuseWorktreePath,
           parent_execution_id: config.parentExecutionId,
+          before_commit: beforeCommit,
         });
 
         workDir = config.reuseWorktreePath;

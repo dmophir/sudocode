@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, GitBranch, Search, Filter, Trash2 } from 'lucide-react'
+import { Plus, Search, Filter, Trash2, Network } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -236,7 +236,7 @@ export default function WorkflowsPage() {
         {workflows.length === 0 ? (
           // No workflows at all
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <GitBranch className="mb-4 h-12 w-12 text-muted-foreground/50" />
+            <Network className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h2 className="mb-2 text-lg font-medium">No workflows yet</h2>
             <p className="mb-4 max-w-md text-muted-foreground">
               Workflows let you run multiple issues in sequence with dependency ordering. Create
