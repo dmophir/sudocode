@@ -462,27 +462,30 @@ describe("OrchestratorWorkflowEngine", () => {
       expect(allEvents.some((e) => e.type === "workflow_resumed")).toBe(true);
     });
 
-    it("should create new execution with session resume", async () => {
+    it("should create new execution with session resume and parent link", async () => {
       const workflow = await engine.createWorkflow({
         type: "goal",
         goal: "Test",
       });
       await engine.startWorkflow(workflow.id);
 
-      // Store the session ID before pausing
+      // Store the session ID and execution ID before pausing
       const workflowBeforePause = await engine.getWorkflow(workflow.id);
       const sessionId = workflowBeforePause!.orchestratorSessionId;
+      const previousExecutionId = workflowBeforePause!.orchestratorExecutionId;
       expect(sessionId).toBe("session-orch");
+      expect(previousExecutionId).toBe("exec-orch");
 
       await engine.pauseWorkflow(workflow.id);
       await engine.resumeWorkflow(workflow.id);
 
-      // Should create a new execution with resume config
+      // Should create a new execution with resume config and parent link
       expect(executionService.createExecution).toHaveBeenLastCalledWith(
         null,
         expect.objectContaining({
           mode: "worktree",
           resume: sessionId,
+          parentExecutionId: previousExecutionId, // Links to previous execution in chain
         }),
         "Workflow resumed. Continue execution.",
         "claude-code"

@@ -3,9 +3,10 @@
  * Features filtering by status and search by title
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, GitBranch, Search, Filter } from 'lucide-react'
+import { Plus, GitBranch, Search, Filter, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -15,11 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { WorkflowCard, CreateWorkflowDialog, DeleteWorkflowDialog } from '@/components/workflows'
-import type { DeleteWorkflowOptions } from '@/components/workflows'
-import { useWorkflows, useWorkflowMutations } from '@/hooks/useWorkflows'
+import {
+  WorkflowCard,
+  CreateWorkflowDialog,
+  DeleteWorkflowDialog,
+  DeleteAllWorkflowsDialog,
+} from '@/components/workflows'
+import type { DeleteWorkflowOptions, DeleteAllWorkflowsOptions } from '@/components/workflows'
+import { useWorkflows, useWorkflowMutations, workflowKeys } from '@/hooks/useWorkflows'
+import { workflowsApi } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Workflow, WorkflowStatus } from '@/types/workflow'
 import { Badge } from '@/components/ui/badge'
+
+// Inactive statuses that can be bulk deleted
+const INACTIVE_STATUSES: WorkflowStatus[] = ['completed', 'failed', 'cancelled']
 
 // Status filter options
 const STATUS_FILTER_OPTIONS: Array<{ value: WorkflowStatus | 'all'; label: string }> = [
@@ -34,15 +45,28 @@ const STATUS_FILTER_OPTIONS: Array<{ value: WorkflowStatus | 'all'; label: strin
 
 export default function WorkflowsPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: workflows = [], isLoading } = useWorkflows()
-  const { create, delete: deleteWorkflow, isDeleting } = useWorkflowMutations()
+  const { create, start, delete: deleteWorkflow, isDeleting } = useWorkflowMutations()
 
   // State
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false)
   const [workflowToDelete, setWorkflowToDelete] = useState<Workflow | null>(null)
   const [statusFilter, setStatusFilter] = useState<WorkflowStatus | 'all'>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
+  const [deletionProgress, setDeletionProgress] = useState<
+    { current: number; total: number } | undefined
+  >()
+
+  // Get inactive workflows (completed, failed, cancelled)
+  const inactiveWorkflows = useMemo(() => {
+    return workflows.filter((workflow: Workflow) =>
+      INACTIVE_STATUSES.includes(workflow.status as WorkflowStatus)
+    )
+  }, [workflows])
 
   // Filter workflows
   const filteredWorkflows = useMemo(() => {
@@ -73,8 +97,12 @@ export default function WorkflowsPage() {
   }, [workflows, statusFilter, searchQuery])
 
   const handleCreate = async (options: Parameters<typeof create>[0]) => {
-    await create(options)
+    const workflow = await create(options)
+    // Start the workflow immediately after creation
+    await start(workflow.id)
     setCreateDialogOpen(false)
+    // Navigate to the workflow detail page
+    navigate(`/workflows/${workflow.id}`)
   }
 
   const handleDeleteClick = (workflow: Workflow) => {
@@ -91,6 +119,51 @@ export default function WorkflowsPage() {
     setDeleteDialogOpen(false)
     setWorkflowToDelete(null)
   }
+
+  const handleDeleteAllConfirm = useCallback(
+    async (options: DeleteAllWorkflowsOptions) => {
+      if (inactiveWorkflows.length === 0) return
+
+      setIsDeletingAll(true)
+      setDeletionProgress({ current: 0, total: inactiveWorkflows.length })
+
+      let successCount = 0
+      let failCount = 0
+
+      for (let i = 0; i < inactiveWorkflows.length; i++) {
+        const workflow = inactiveWorkflows[i]
+        setDeletionProgress({ current: i + 1, total: inactiveWorkflows.length })
+
+        try {
+          // Call API directly to avoid individual toasts from mutation
+          await workflowsApi.delete(workflow.id, {
+            deleteWorktree: options.deleteWorktrees,
+            deleteBranch: options.deleteBranches,
+          })
+          successCount++
+        } catch (error) {
+          console.error(`Failed to delete workflow ${workflow.id}:`, error)
+          failCount++
+        }
+      }
+
+      // Invalidate queries after all deletions
+      queryClient.invalidateQueries({ queryKey: workflowKeys.all })
+
+      setIsDeletingAll(false)
+      setDeletionProgress(undefined)
+      setDeleteAllDialogOpen(false)
+
+      if (failCount === 0) {
+        toast.success(`Deleted ${successCount} workflow${successCount !== 1 ? 's' : ''}`)
+      } else {
+        toast.warning(
+          `Deleted ${successCount} workflow${successCount !== 1 ? 's' : ''}, ${failCount} failed`
+        )
+      }
+    },
+    [inactiveWorkflows, queryClient]
+  )
 
   if (isLoading) {
     return (
@@ -139,6 +212,18 @@ export default function WorkflowsPage() {
               ))}
             </SelectContent>
           </Select>
+          {/* Delete All Inactive */}
+          {inactiveWorkflows.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setDeleteAllDialogOpen(true)}
+              className="hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {inactiveWorkflows.length}
+            </Button>
+          )}
+
           <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Create Workflow
@@ -201,6 +286,16 @@ export default function WorkflowsPage() {
         }}
         onConfirm={handleDeleteConfirm}
         isDeleting={isDeleting}
+      />
+
+      {/* Delete All Inactive Workflows Dialog */}
+      <DeleteAllWorkflowsDialog
+        open={deleteAllDialogOpen}
+        onOpenChange={setDeleteAllDialogOpen}
+        onConfirm={handleDeleteAllConfirm}
+        inactiveCount={inactiveWorkflows.length}
+        isDeleting={isDeletingAll}
+        deletionProgress={deletionProgress}
       />
     </div>
   )

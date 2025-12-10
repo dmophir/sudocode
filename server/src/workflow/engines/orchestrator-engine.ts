@@ -451,6 +451,8 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
     );
 
     // Create new execution that resumes the session
+    // Link to the previous orchestrator execution for chain tracking
+    const previousExecutionId = workflow.orchestratorExecutionId;
     const execution = await this.executionService.createExecution(
       null, // No issue - this is the orchestrator
       {
@@ -458,6 +460,7 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
         baseBranch: workflow.baseBranch,
         reuseWorktreePath: workflow.worktreePath,
         resume: sessionId, // Resume the previous session
+        parentExecutionId: previousExecutionId, // Link to previous execution in chain
         ...agentConfig,
       },
       resumePrompt,
@@ -477,6 +480,7 @@ export class OrchestratorWorkflowEngine extends BaseWorkflowEngine {
       type: "workflow_resumed",
       payload: {
         resumedFromSession: sessionId,
+        previousExecutionId,
         newExecutionId: execution.id,
       },
     });

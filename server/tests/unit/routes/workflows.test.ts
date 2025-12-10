@@ -337,7 +337,7 @@ describe("Workflow Routes", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(mockEngine.resumeWorkflow).toHaveBeenCalledWith("wf-123");
+      expect(mockEngine.resumeWorkflow).toHaveBeenCalledWith("wf-123", undefined);
     });
 
     it("should return 400 for non-paused workflow", async () => {

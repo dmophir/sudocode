@@ -3,11 +3,13 @@
  * Displays a badge indicating the issue is part of an active workflow
  */
 
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, Clock, CheckCircle2, XCircle, SkipForward, Lock } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { WorkflowStepStatus } from '@/types/workflow'
+import { getColorFromId } from '@/utils/colors'
 
 export interface WorkflowIndicatorProps {
   /** ID of the workflow */
@@ -76,6 +78,9 @@ const STATUS_CONFIG: Record<
   },
 }
 
+// Statuses that should use the workflow color instead of hardcoded colors
+const WORKFLOW_COLOR_STATUSES: Set<WorkflowStepStatus> = new Set(['running', 'completed'])
+
 export function WorkflowIndicator({
   workflowId,
   workflowTitle,
@@ -86,6 +91,16 @@ export function WorkflowIndicator({
   const navigate = useNavigate()
   const config = STATUS_CONFIG[stepStatus]
   const Icon = config.icon
+
+  // Compute workflow-based color style for running/completed statuses
+  const workflowColorStyle = useMemo(() => {
+    if (!WORKFLOW_COLOR_STATUSES.has(stepStatus)) return undefined
+    const color = getColorFromId(workflowId)
+    return {
+      backgroundColor: `color-mix(in srgb, ${color} 20%, transparent)`,
+      color: color,
+    }
+  }, [workflowId, stepStatus])
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card click
@@ -104,10 +119,12 @@ export function WorkflowIndicator({
             onClick={handleClick}
             className={cn(
               'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors hover:opacity-80',
-              config.bgColor,
-              config.color,
+              // Only apply default colors if not using workflow color
+              !workflowColorStyle && config.bgColor,
+              !workflowColorStyle && config.color,
               className
             )}
+            style={workflowColorStyle}
           >
             <Icon
               className={cn('h-3 w-3', stepStatus === 'running' && 'animate-spin')}

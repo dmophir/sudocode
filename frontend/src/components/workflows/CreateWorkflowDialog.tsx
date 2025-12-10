@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -102,7 +101,8 @@ const SOURCE_TYPE_OPTIONS: Array<{
   {
     value: 'spec',
     label: 'From Spec',
-    description: 'Run all issues implementing a spec',
+    description:
+      "Run all issues implementing a spec (Note: must have issues with 'implements' relationships)",
     icon: FileText,
   },
   {
@@ -140,9 +140,9 @@ export function CreateWorkflowDialog({
   // Form state
   const [form, setForm] = useState<FormState>(() => ({
     title: '',
-    engineType:
-      defaultSource?.type === 'goal' ? 'orchestrator' : DEFAULT_WORKFLOW_CONFIG.engineType,
-    sourceType: defaultSource?.type || 'spec',
+    // Orchestrator disabled for now - always use sequential
+    engineType: 'sequential',
+    sourceType: defaultSource?.type === 'goal' ? 'spec' : defaultSource?.type || 'spec',
     specId: defaultSource?.type === 'spec' ? defaultSource.specId : '',
     issueIds: defaultSource?.type === 'issues' ? defaultSource.issueIds : [],
     rootIssueId: defaultSource?.type === 'root_issue' ? defaultSource.issueId : '',
@@ -150,7 +150,7 @@ export function CreateWorkflowDialog({
     baseBranch: '',
     createBaseBranch: false,
     reuseWorktreePath: undefined,
-    parallelism: DEFAULT_WORKFLOW_CONFIG.parallelism,
+    parallelism: 'sequential', // Parallel disabled for now
     maxConcurrency: 2,
     onFailure: DEFAULT_WORKFLOW_CONFIG.onFailure,
     autoCommit: DEFAULT_WORKFLOW_CONFIG.autoCommitAfterStep,
@@ -286,66 +286,9 @@ export function CreateWorkflowDialog({
         </DialogHeader>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-1">
-          {/* Title */}
-          <div className="flex flex-row items-center space-y-2">
-            <Label htmlFor="title">Title (optional)</Label>
-            <Input
-              id="title"
-              placeholder="Workflow title"
-              value={form.title}
-              onChange={(e) => updateForm('title', e.target.value)}
-            />
-          </div>
+          {/* Title - hidden, using default titles */}
 
-          {/* Engine Type Selection */}
-          <div className="space-y-3">
-            <Label>Execution Mode</Label>
-            <RadioGroup
-              value={form.engineType}
-              onValueChange={(v) => {
-                const newEngineType = v as WorkflowEngineType
-                updateForm('engineType', newEngineType)
-                // If switching to sequential and current source is orchestrator-only, reset to spec
-                if (newEngineType === 'sequential' && form.sourceType === 'goal') {
-                  updateForm('sourceType', 'spec')
-                }
-              }}
-              className="grid grid-cols-2 gap-3"
-            >
-              <label
-                className={cn(
-                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
-                  form.engineType === 'sequential'
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:border-muted-foreground/50'
-                )}
-              >
-                <RadioGroupItem value="sequential" className="mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium">Sequential</span>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Server executes steps in dependency order
-                  </p>
-                </div>
-              </label>
-              <label
-                className={cn(
-                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
-                  form.engineType === 'orchestrator'
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:border-muted-foreground/50'
-                )}
-              >
-                <RadioGroupItem value="orchestrator" className="mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium">AI Orchestrator</span>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    AI agent manages workflow execution
-                  </p>
-                </div>
-              </label>
-            </RadioGroup>
-          </div>
+          {/* Engine Type Selection - hidden, defaulting to sequential */}
 
           {/* Source Type Selection */}
           <div className="space-y-3">
@@ -353,37 +296,44 @@ export function CreateWorkflowDialog({
             <RadioGroup
               value={form.sourceType}
               onValueChange={(v) => updateForm('sourceType', v as SourceType)}
-              className="grid grid-cols-2 gap-3"
+              className="flex flex-col gap-2"
             >
-              {SOURCE_TYPE_OPTIONS.map((option) => {
-                const Icon = option.icon
-                const isSelected = form.sourceType === option.value
-                const isDisabled = option.orchestratorOnly && form.engineType === 'sequential'
-                return (
-                  <label
-                    key={option.value}
-                    className={cn(
-                      'flex items-start gap-3 rounded-lg border p-3 transition-colors',
-                      isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-                      isSelected && !isDisabled
-                        ? 'border-primary bg-primary/5'
-                        : !isDisabled && 'hover:border-muted-foreground/50'
-                    )}
-                  >
-                    <RadioGroupItem value={option.value} className="mt-0.5" disabled={isDisabled} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{option.label}</span>
-                        {option.orchestratorOnly && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs">AI Only</span>
-                        )}
+              {SOURCE_TYPE_OPTIONS
+                // Filter out orchestrator-only options since orchestrator is disabled
+                .filter((option) => !option.orchestratorOnly)
+                .map((option) => {
+                  const Icon = option.icon
+                  const isSelected = form.sourceType === option.value
+                  const isDisabled = false
+                  return (
+                    <label
+                      key={option.value}
+                      className={cn(
+                        'flex items-start gap-3 rounded-lg border p-3 transition-colors',
+                        isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                        isSelected && !isDisabled
+                          ? 'border-primary bg-primary/5'
+                          : !isDisabled && 'hover:border-muted-foreground/50'
+                      )}
+                    >
+                      <RadioGroupItem
+                        value={option.value}
+                        className="mt-0.5"
+                        disabled={isDisabled}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{option.label}</span>
+                          {option.orchestratorOnly && (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-xs">AI Only</span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{option.description}</p>
                       </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{option.description}</p>
-                    </div>
-                  </label>
-                )
-              })}
+                    </label>
+                  )
+                })}
             </RadioGroup>
           </div>
 
@@ -497,37 +447,7 @@ export function CreateWorkflowDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pt-4">
-              {/* Execution Mode */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Execution Mode</Label>
-                  <Select
-                    value={form.parallelism}
-                    onValueChange={(v) => updateForm('parallelism', v as WorkflowParallelism)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sequential">Sequential</SelectItem>
-                      <SelectItem value="parallel">Parallel</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {form.parallelism === 'parallel' && (
-                  <div className="space-y-2">
-                    <Label>Max Concurrency</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={form.maxConcurrency}
-                      onChange={(e) => updateForm('maxConcurrency', parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                )}
-              </div>
+              {/* Execution Mode - parallel disabled for now, only sequential supported */}
 
               {/* On Failure */}
               <div className="space-y-2">
@@ -564,43 +484,7 @@ export function CreateWorkflowDialog({
                 </Select>
               </div>
 
-              {/* Orchestrator-specific options */}
-              {form.engineType === 'orchestrator' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Autonomy Level</Label>
-                    <Select
-                      value={form.autonomyLevel}
-                      onValueChange={(v) => updateForm('autonomyLevel', v as WorkflowAutonomyLevel)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="human_in_the_loop">Human in the Loop</SelectItem>
-                        <SelectItem value="full_auto">Full Auto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {form.autonomyLevel === 'full_auto'
-                        ? 'AI makes all decisions without pausing for user input'
-                        : 'AI pauses for user input on important decisions'}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Orchestrator Model (optional)</Label>
-                    <Input
-                      placeholder="e.g., claude-sonnet-4-20250514"
-                      value={form.orchestratorModel}
-                      onChange={(e) => updateForm('orchestratorModel', e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Specific model for the orchestrator agent (uses default if empty)
-                    </p>
-                  </div>
-                </>
-              )}
+              {/* Orchestrator-specific options - hidden while orchestrator is disabled */}
 
               {/* Auto-commit */}
               <div className="flex items-center gap-2">

@@ -369,13 +369,17 @@ describe('Workflow Integration Tests', () => {
         { timeout: 3000 }
       )
 
-      // Click resume button
+      // Click resume button to open dialog
       const resumeButton = screen.getByRole('button', { name: /resume/i })
       await user.click(resumeButton)
 
+      // Wait for dialog to appear and click confirm button inside dialog
+      const dialogResumeButton = await screen.findByRole('button', { name: /^resume$/i })
+      await user.click(dialogResumeButton)
+
       // Verify API was called
       await waitFor(() => {
-        expect(workflowsApi.resume).toHaveBeenCalledWith('wf-001')
+        expect(workflowsApi.resume).toHaveBeenCalledWith('wf-001', undefined)
       })
 
       // Verify success toast

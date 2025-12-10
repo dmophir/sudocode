@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { KanbanCard } from '@/components/ui/kanban'
 import type { Issue, IssueStatus } from '@sudocode-ai/types'
@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { toast } from 'sonner'
 import { ExecutionPreview } from '@/components/executions/ExecutionPreview'
 import { WorkflowIndicator } from './WorkflowIndicator'
+import { getColorFromId } from '@/utils/colors'
 
 // Priority badge colors - using darker shades for better contrast with white text
 const priorityColors: Record<number, string> = {
@@ -104,6 +105,17 @@ export function IssueCard({
     })
   }, [isOpen])
 
+  // Generate workflow border color from workflow ID
+  const workflowBorderStyle = useMemo(() => {
+    if (!workflowInfo?.workflowId) return undefined
+    const color = getColorFromId(workflowInfo.workflowId)
+    return {
+      borderLeftWidth: '4px',
+      borderLeftStyle: 'solid' as const,
+      borderLeftColor: color,
+    }
+  }, [workflowInfo?.workflowId])
+
   return (
     <KanbanCard
       key={issue.id}
@@ -115,6 +127,7 @@ export function IssueCard({
       isOpen={isOpen}
       forwardedRef={localRef}
       className={issue.archived ? 'opacity-60' : ''}
+      style={workflowBorderStyle}
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
         <div className="flex w-full items-center justify-between gap-2">
@@ -147,7 +160,7 @@ export function IssueCard({
                   <TooltipTrigger asChild>
                     <span className="inline-flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                       {displayStatusOverride === 'in_progress' ? (
-                        <Play className="h-4 w-4 fill-current" />
+                        <Play className="h-3 w-3 fill-current" />
                       ) : (
                         <CheckCircle2 className="h-4 w-4" />
                       )}
