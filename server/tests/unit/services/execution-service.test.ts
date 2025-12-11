@@ -954,6 +954,231 @@ describe("ExecutionService", () => {
     });
   });
 
+  describe("worktree system prompt context", () => {
+    it("should add worktree context to appendSystemPrompt for worktree executions", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      // Capture the task passed to executeWithLifecycle
+      let capturedTask: any = null;
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTask = task;
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => Promise.resolve()),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        "Implement feature"
+      );
+
+      // Wait for async execution to start
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify task was captured
+      expect(capturedTask).toBeTruthy();
+
+      // Verify worktree context is in appendSystemPrompt
+      const appendSystemPrompt = capturedTask.metadata?.appendSystemPrompt;
+      expect(appendSystemPrompt).toBeTruthy();
+      expect(appendSystemPrompt).toContain("## Worktree Context");
+      expect(appendSystemPrompt).toContain("isolated git worktree");
+      expect(appendSystemPrompt).toContain(execution.worktree_path);
+      expect(appendSystemPrompt).toContain("MUST only read and edit files");
+    });
+
+    it("should merge worktree context with existing appendSystemPrompt", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      let capturedTask: any = null;
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTask = task;
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => Promise.resolve()),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      const customPrompt = "You are a helpful coding assistant.";
+      await service.createExecution(
+        testIssueId,
+        {
+          mode: "worktree" as const,
+          appendSystemPrompt: customPrompt,
+        },
+        "Implement feature"
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(capturedTask).toBeTruthy();
+      const appendSystemPrompt = capturedTask.metadata?.appendSystemPrompt;
+
+      // Should contain both worktree context AND custom prompt
+      expect(appendSystemPrompt).toContain("## Worktree Context");
+      expect(appendSystemPrompt).toContain(customPrompt);
+    });
+
+    it("should not add worktree context for local mode executions", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      let capturedTask: any = null;
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTask = task;
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => Promise.resolve()),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      await service.createExecution(
+        testIssueId,
+        { mode: "local" },
+        "Implement feature"
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(capturedTask).toBeTruthy();
+      const appendSystemPrompt = capturedTask.metadata?.appendSystemPrompt;
+
+      // Should NOT contain worktree context for local mode
+      if (appendSystemPrompt) {
+        expect(appendSystemPrompt).not.toContain("## Worktree Context");
+        expect(appendSystemPrompt).not.toContain("isolated git worktree");
+      }
+    });
+
+    it("should add worktree context for follow-up executions in worktree mode", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      let capturedTasks: any[] = [];
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTasks.push(task);
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(
+          async (_execId, _sessionId, task, _workDir) => {
+            capturedTasks.push(task);
+            return Promise.resolve();
+          }
+        ),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      // Create initial worktree execution
+      const initialExecution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        "Implement feature"
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Create follow-up
+      capturedTasks = []; // Reset to capture only follow-up task
+      await service.createFollowUp(initialExecution.id, "Add more tests");
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify follow-up task has worktree context
+      expect(capturedTasks.length).toBeGreaterThan(0);
+      const followUpTask = capturedTasks[capturedTasks.length - 1];
+      const appendSystemPrompt = followUpTask.metadata?.appendSystemPrompt;
+
+      expect(appendSystemPrompt).toBeTruthy();
+      expect(appendSystemPrompt).toContain("## Worktree Context");
+      expect(appendSystemPrompt).toContain("isolated git worktree");
+    });
+
+    it("should include branch name in worktree context", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      let capturedTask: any = null;
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTask = task;
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => Promise.resolve()),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        "Implement feature"
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(capturedTask).toBeTruthy();
+      const appendSystemPrompt = capturedTask.metadata?.appendSystemPrompt;
+
+      // Should include branch info
+      expect(appendSystemPrompt).toContain("**Branch**:");
+      if (execution.branch_name) {
+        expect(appendSystemPrompt).toContain(execution.branch_name);
+      }
+    });
+
+    it("should include main repository path in worktree context", async () => {
+      const { createExecutorForAgent } = await import(
+        "../../../src/execution/executors/executor-factory.js"
+      );
+
+      let capturedTask: any = null;
+      vi.mocked(createExecutorForAgent).mockImplementation(() => ({
+        executeWithLifecycle: vi.fn(async (_execId, task, _workDir) => {
+          capturedTask = task;
+          return Promise.resolve();
+        }),
+        resumeWithLifecycle: vi.fn(async () => Promise.resolve()),
+        cancel: vi.fn(async () => {}),
+        cleanup: vi.fn(async () => {}),
+      }));
+
+      await service.createExecution(
+        testIssueId,
+        { mode: "worktree" as const },
+        "Implement feature"
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(capturedTask).toBeTruthy();
+      const appendSystemPrompt = capturedTask.metadata?.appendSystemPrompt;
+
+      // Should include main repo path and warn against editing it
+      expect(appendSystemPrompt).toContain("**Main repository**:");
+      expect(appendSystemPrompt).toContain(testDir);
+      expect(appendSystemPrompt).toContain(
+        "Do NOT attempt to read or edit files in the main repository"
+      );
+    });
+  });
+
   describe("cancelExecution", () => {
     it("should cancel running execution", async () => {
       // Create execution

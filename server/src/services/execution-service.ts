@@ -75,6 +75,43 @@ export interface WorkflowContext {
 }
 
 /**
+ * Build worktree context string to append to system prompt.
+ *
+ * This helps agents understand they're working in an isolated worktree
+ * and should only edit files within that worktree.
+ *
+ * @param worktreePath - Path to the worktree directory
+ * @param branchName - Name of the branch in the worktree
+ * @param repoPath - Path to the main repository
+ * @returns System prompt context string, or empty string if not in worktree mode
+ */
+function buildWorktreeSystemPromptContext(
+  worktreePath: string | undefined,
+  branchName: string | undefined,
+  repoPath: string
+): string {
+  if (!worktreePath) {
+    return "";
+  }
+
+  return `
+## Worktree Context
+
+You are working in an **isolated git worktree**, not the main repository.
+
+- **Worktree path**: ${worktreePath}
+- **Branch**: ${branchName || "unknown"}
+- **Main repository**: ${repoPath}
+
+**IMPORTANT**: You MUST only read and edit files within the worktree directory (${worktreePath}).
+Do NOT attempt to read or edit files in the main repository (${repoPath}) or any other directory outside the worktree.
+All file paths you use should be relative to or within: ${worktreePath}
+
+This isolation ensures your changes don't affect other work in progress.
+`;
+}
+
+/**
  * ExecutionService
  *
  * Manages the full lifecycle of issue-based executions:
@@ -417,9 +454,25 @@ export class ExecutionService {
         ? Object.keys((agentConfig as any).mcpServers)
         : "none",
       hasAppendSystemPrompt: !!(agentConfig as any).appendSystemPrompt,
-      dangerouslySkipPermissions: (agentConfig as any).dangerouslySkipPermissions,
+      dangerouslySkipPermissions: (agentConfig as any)
+        .dangerouslySkipPermissions,
       allKeys: Object.keys(agentConfig),
     });
+
+    // Build worktree context for system prompt (if in worktree mode)
+    const worktreeContext = buildWorktreeSystemPromptContext(
+      execution.worktree_path ?? undefined,
+      execution.branch_name ?? undefined,
+      this.repoPath
+    );
+
+    // Merge worktree context with any existing appendSystemPrompt
+    const combinedAppendSystemPrompt = [
+      worktreeContext,
+      config.appendSystemPrompt || "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     // Build execution task (prompt already resolved above)
     const task: ExecutionTask = {
@@ -438,7 +491,7 @@ export class ExecutionService {
         issueId: issueId ?? undefined,
         executionId: execution.id,
         mcpServers: config.mcpServers,
-        appendSystemPrompt: config.appendSystemPrompt,
+        appendSystemPrompt: combinedAppendSystemPrompt || undefined,
         dangerouslySkipPermissions: config.dangerouslySkipPermissions,
         resume: config.resume,
       },
@@ -652,6 +705,21 @@ ${feedback}`;
       );
     }
 
+    // Build worktree context for system prompt (if in worktree mode)
+    const followUpWorktreeContext = buildWorktreeSystemPromptContext(
+      newExecution.worktree_path ?? undefined,
+      newExecution.branch_name ?? undefined,
+      this.repoPath
+    );
+
+    // Merge worktree context with any existing appendSystemPrompt from parent config
+    const followUpCombinedAppendSystemPrompt = [
+      followUpWorktreeContext,
+      parsedConfig.appendSystemPrompt || "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     // Build execution task for follow-up (use resolved prompt for agent)
     // IMPORTANT: Inherit ALL config from parent execution
     // This ensures orchestrator follow-ups retain dangerouslySkipPermissions, mcpServers,
@@ -675,6 +743,8 @@ ${feedback}`;
         issueId: prevExecution.issue_id ?? undefined,
         executionId: newExecution.id,
         followUpOf: executionId,
+        // Override appendSystemPrompt with combined worktree context
+        appendSystemPrompt: followUpCombinedAppendSystemPrompt || undefined,
       },
       priority: 0,
       dependencies: [],
