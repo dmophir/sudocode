@@ -1,15 +1,14 @@
 /**
  * Integration configuration validator
  * Validates integration configs from .sudocode/config.json
+ *
+ * Base config fields are validated synchronously.
+ * Provider-specific validation is delegated to plugins asynchronously.
  */
 
 import type {
   IntegrationsConfig,
-  IntegrationConfig,
-  JiraConfig,
-  BeadsConfig,
-  SpecKitConfig,
-  OpenSpecConfig,
+  IntegrationProviderConfig,
 } from "@sudocode-ai/types";
 
 /**
@@ -40,13 +39,15 @@ const VALID_CONFLICT_RESOLUTIONS = [
 ] as const;
 
 /**
- * Validate the base IntegrationConfig fields common to all providers
+ * Validate the base IntegrationProviderConfig fields common to all providers
  */
 function validateBaseConfig(
-  config: IntegrationConfig,
+  config: IntegrationProviderConfig,
   name: string,
-  errors: string[]
+  errors: string[],
+  warnings: string[]
 ): void {
+  // Validate sync direction
   if (
     config.default_sync_direction &&
     !VALID_SYNC_DIRECTIONS.includes(
@@ -58,6 +59,7 @@ function validateBaseConfig(
     );
   }
 
+  // Validate conflict resolution
   if (
     config.conflict_resolution &&
     !VALID_CONFLICT_RESOLUTIONS.includes(
@@ -68,92 +70,19 @@ function validateBaseConfig(
       `${name}.conflict_resolution must be one of: ${VALID_CONFLICT_RESOLUTIONS.join(", ")}`
     );
   }
+
+  // Warn if enabled but no options configured
+  if (config.enabled && (!config.options || Object.keys(config.options).length === 0)) {
+    warnings.push(`${name}: enabled but no options configured`);
+  }
 }
 
 /**
- * Validate Jira integration configuration
- */
-function validateJiraConfig(
-  config: JiraConfig,
-  errors: string[],
-  warnings: string[]
-): void {
-  if (!config.instance_url) {
-    errors.push("jira.instance_url is required");
-  } else if (!config.instance_url.startsWith("https://")) {
-    warnings.push("jira.instance_url should use HTTPS");
-  }
-
-  if (!config.auth_type) {
-    errors.push("jira.auth_type is required (basic or oauth2)");
-  } else if (config.auth_type !== "basic" && config.auth_type !== "oauth2") {
-    errors.push("jira.auth_type must be 'basic' or 'oauth2'");
-  }
-
-  if (config.auth_type === "basic" && !config.credentials_env) {
-    warnings.push("jira.credentials_env recommended for basic auth");
-  }
-
-  validateBaseConfig(config, "jira", errors);
-}
-
-/**
- * Validate Beads integration configuration
- */
-function validateBeadsConfig(
-  config: BeadsConfig,
-  errors: string[],
-  _warnings: string[]
-): void {
-  if (!config.path) {
-    errors.push("beads.path is required");
-  }
-
-  validateBaseConfig(config, "beads", errors);
-}
-
-/**
- * Validate SpecKit integration configuration
- */
-function validateSpecKitConfig(
-  config: SpecKitConfig,
-  errors: string[],
-  warnings: string[]
-): void {
-  if (!config.path) {
-    errors.push("spec-kit.path is required");
-  }
-
-  // At least one import option should be true for useful configuration
-  if (!config.import_specs && !config.import_plans && !config.import_tasks) {
-    warnings.push("spec-kit: no import options enabled");
-  }
-
-  validateBaseConfig(config, "spec-kit", errors);
-}
-
-/**
- * Validate OpenSpec integration configuration
- */
-function validateOpenSpecConfig(
-  config: OpenSpecConfig,
-  errors: string[],
-  warnings: string[]
-): void {
-  if (!config.path) {
-    errors.push("openspec.path is required");
-  }
-
-  // At least one import option should be true for useful configuration
-  if (!config.import_specs && !config.import_changes) {
-    warnings.push("openspec: no import options enabled");
-  }
-
-  validateBaseConfig(config, "openspec", errors);
-}
-
-/**
- * Validate an integrations configuration object
+ * Validate an integrations configuration object (synchronous, base validation only)
+ *
+ * This validates the base config fields that are common to all providers.
+ * Provider-specific validation requires loading plugins asynchronously
+ * via validateProviderConfig() from plugin-loader.
  *
  * @param config - The integrations configuration to validate
  * @returns Validation result with valid flag, errors, and warnings
@@ -161,21 +90,19 @@ function validateOpenSpecConfig(
  * @example
  * ```typescript
  * const result = validateIntegrationsConfig({
- *   jira: {
+ *   beads: {
  *     enabled: true,
  *     auto_sync: true,
  *     default_sync_direction: 'bidirectional',
  *     conflict_resolution: 'newest-wins',
- *     instance_url: 'https://example.atlassian.net',
- *     auth_type: 'basic',
+ *     options: {
+ *       path: '../other-project/.beads',
+ *     },
  *   },
  * });
  *
  * if (!result.valid) {
  *   console.error('Config errors:', result.errors);
- * }
- * if (result.warnings.length > 0) {
- *   console.warn('Config warnings:', result.warnings);
  * }
  * ```
  */
@@ -185,17 +112,13 @@ export function validateIntegrationsConfig(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (config.jira) {
-    validateJiraConfig(config.jira, errors, warnings);
-  }
-  if (config.beads) {
-    validateBeadsConfig(config.beads, errors, warnings);
-  }
-  if (config["spec-kit"]) {
-    validateSpecKitConfig(config["spec-kit"], errors, warnings);
-  }
-  if (config.openspec) {
-    validateOpenSpecConfig(config.openspec, errors, warnings);
+  for (const [providerName, providerConfig] of Object.entries(config)) {
+    if (!providerConfig) {
+      continue;
+    }
+
+    // Validate base config fields
+    validateBaseConfig(providerConfig, providerName, errors, warnings);
   }
 
   return {
@@ -203,4 +126,57 @@ export function validateIntegrationsConfig(
     errors,
     warnings,
   };
+}
+
+/**
+ * Validate an integrations configuration with plugin-level validation
+ *
+ * This loads plugins and delegates validation to them for provider-specific
+ * configuration. If a plugin is not installed, it adds a warning.
+ *
+ * @param config - The integrations configuration to validate
+ * @returns Validation result with valid flag, errors, and warnings
+ *
+ * @example
+ * ```typescript
+ * const result = await validateIntegrationsConfigWithPlugins({
+ *   beads: {
+ *     enabled: true,
+ *     auto_sync: true,
+ *     default_sync_direction: 'bidirectional',
+ *     conflict_resolution: 'newest-wins',
+ *     options: {
+ *       path: '../other-project/.beads',
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export async function validateIntegrationsConfigWithPlugins(
+  config: IntegrationsConfig
+): Promise<ValidationResult> {
+  // Start with base validation
+  const result = validateIntegrationsConfig(config);
+
+  // Dynamically import plugin loader to avoid circular dependencies
+  const { validateProviderConfig } = await import("./plugin-loader.js");
+
+  // Validate each enabled provider with its plugin
+  for (const [providerName, providerConfig] of Object.entries(config)) {
+    if (!providerConfig?.enabled) {
+      continue;
+    }
+
+    // Delegate to plugin validation
+    const pluginResult = await validateProviderConfig(providerName, providerConfig);
+
+    // Merge plugin validation results
+    result.errors.push(...pluginResult.errors);
+    result.warnings.push(...pluginResult.warnings);
+  }
+
+  // Update valid flag based on all errors
+  result.valid = result.errors.length === 0;
+
+  return result;
 }

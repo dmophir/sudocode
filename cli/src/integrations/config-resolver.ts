@@ -1,48 +1,25 @@
 /**
  * Integration configuration path resolver
  * Resolves relative paths in integration configs to absolute paths
+ *
+ * Note: With the plugin architecture, path resolution is typically handled
+ * by each plugin. This module provides generic path resolution for any
+ * provider that has a `path` option in their config.
  */
 
 import * as path from "path";
 import * as fs from "fs";
 import type {
   IntegrationsConfig,
-  JiraConfig,
-  BeadsConfig,
-  SpecKitConfig,
-  OpenSpecConfig,
+  IntegrationProviderConfig,
 } from "@sudocode-ai/types";
 
 /**
- * Jira config with resolution marker
+ * Resolved provider configuration with absolute path
  */
-export interface ResolvedJiraConfig extends JiraConfig {
-  /** Marker indicating config has been processed */
-  resolved: true;
-}
-
-/**
- * Beads config with resolved path
- */
-export interface ResolvedBeadsConfig extends BeadsConfig {
-  /** Absolute path to beads directory */
-  resolvedPath: string;
-}
-
-/**
- * SpecKit config with resolved path
- */
-export interface ResolvedSpecKitConfig extends SpecKitConfig {
-  /** Absolute path to spec-kit directory */
-  resolvedPath: string;
-}
-
-/**
- * OpenSpec config with resolved path
- */
-export interface ResolvedOpenSpecConfig extends OpenSpecConfig {
-  /** Absolute path to openspec directory */
-  resolvedPath: string;
+export interface ResolvedProviderConfig extends IntegrationProviderConfig {
+  /** Absolute path (if the provider has a path option) */
+  resolvedPath?: string;
 }
 
 /**
@@ -50,11 +27,14 @@ export interface ResolvedOpenSpecConfig extends OpenSpecConfig {
  * Contains only enabled integrations with resolved paths
  */
 export interface ResolvedConfig {
-  jira?: ResolvedJiraConfig;
-  beads?: ResolvedBeadsConfig;
-  "spec-kit"?: ResolvedSpecKitConfig;
-  openspec?: ResolvedOpenSpecConfig;
+  [providerName: string]: ResolvedProviderConfig | undefined;
 }
+
+// Legacy type aliases for backwards compatibility
+export type ResolvedJiraConfig = ResolvedProviderConfig;
+export type ResolvedBeadsConfig = ResolvedProviderConfig;
+export type ResolvedSpecKitConfig = ResolvedProviderConfig;
+export type ResolvedOpenSpecConfig = ResolvedProviderConfig;
 
 /**
  * Resolve integration paths from relative to absolute
@@ -72,7 +52,9 @@ export interface ResolvedConfig {
  *     auto_sync: false,
  *     default_sync_direction: 'bidirectional',
  *     conflict_resolution: 'newest-wins',
- *     path: '../other-project/.beads',
+ *     options: {
+ *       path: '../other-project/.beads',
+ *     },
  *   },
  * };
  *
@@ -86,36 +68,27 @@ export function resolveIntegrationPaths(
 ): ResolvedConfig {
   const resolved: ResolvedConfig = {};
 
-  // Jira doesn't have a local path, just mark as resolved
-  if (config.jira?.enabled) {
-    resolved.jira = { ...config.jira, resolved: true };
-  }
-
-  // Beads has a local path that needs resolution
-  if (config.beads?.enabled) {
-    const resolvedPath = path.resolve(projectPath, config.beads.path);
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error(`Beads path not found: ${resolvedPath}`);
+  for (const [providerName, providerConfig] of Object.entries(config)) {
+    if (!providerConfig?.enabled) {
+      continue;
     }
-    resolved.beads = { ...config.beads, resolvedPath };
-  }
 
-  // SpecKit has a local path that needs resolution
-  if (config["spec-kit"]?.enabled) {
-    const resolvedPath = path.resolve(projectPath, config["spec-kit"].path);
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error(`Spec-kit path not found: ${resolvedPath}`);
-    }
-    resolved["spec-kit"] = { ...config["spec-kit"], resolvedPath };
-  }
+    // Start with a copy of the config
+    const resolvedProvider: ResolvedProviderConfig = { ...providerConfig };
 
-  // OpenSpec has a local path that needs resolution
-  if (config.openspec?.enabled) {
-    const resolvedPath = path.resolve(projectPath, config.openspec.path);
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error(`OpenSpec path not found: ${resolvedPath}`);
+    // Check if provider has a path option that needs resolution
+    const pathOption = providerConfig.options?.path;
+    if (typeof pathOption === "string") {
+      const resolvedPath = path.resolve(projectPath, pathOption);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(
+          `${providerName} path not found: ${resolvedPath} (configured: ${pathOption})`
+        );
+      }
+      resolvedProvider.resolvedPath = resolvedPath;
     }
-    resolved.openspec = { ...config.openspec, resolvedPath };
+
+    resolved[providerName] = resolvedProvider;
   }
 
   return resolved;
@@ -128,12 +101,7 @@ export function resolveIntegrationPaths(
  * @returns Array of enabled provider names
  */
 export function getEnabledProviders(config: IntegrationsConfig): string[] {
-  const providers: string[] = [];
-
-  if (config.jira?.enabled) providers.push("jira");
-  if (config.beads?.enabled) providers.push("beads");
-  if (config["spec-kit"]?.enabled) providers.push("spec-kit");
-  if (config.openspec?.enabled) providers.push("openspec");
-
-  return providers;
+  return Object.entries(config)
+    .filter(([, providerConfig]) => providerConfig?.enabled)
+    .map(([providerName]) => providerName);
 }

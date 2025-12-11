@@ -1,12 +1,24 @@
 /**
  * Integration module for sudocode
- * Provides configuration validation, path resolution, provider interfaces,
- * sync coordination, and registry for external integrations
+ * Provides plugin loading, configuration validation, path resolution,
+ * provider interfaces, sync coordination, and registry for external integrations
  */
+
+// Plugin loading (dynamic imports)
+export {
+  loadPlugin,
+  loadConfiguredPlugins,
+  resolvePluginPath,
+  validateProviderConfig,
+  testProviderConnection,
+  getFirstPartyPlugins,
+  clearPluginCache,
+} from "./plugin-loader.js";
 
 // Configuration validation
 export {
   validateIntegrationsConfig,
+  validateIntegrationsConfigWithPlugins,
   type ValidationResult,
 } from "./config-validator.js";
 
@@ -15,6 +27,8 @@ export {
   resolveIntegrationPaths,
   getEnabledProviders,
   type ResolvedConfig,
+  type ResolvedProviderConfig,
+  // Legacy type aliases
   type ResolvedJiraConfig,
   type ResolvedBeadsConfig,
   type ResolvedSpecKitConfig,

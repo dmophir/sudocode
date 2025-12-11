@@ -15,12 +15,13 @@ import type {
   Issue,
 } from "../src/index.js";
 import type {
-  IntegrationConfig,
-  JiraConfig,
-  BeadsConfig,
-  SpecKitConfig,
-  OpenSpecConfig,
+  IntegrationProviderConfig,
   IntegrationsConfig,
+  IntegrationPlugin,
+  IntegrationProvider,
+  PluginValidationResult,
+  PluginTestResult,
+  PluginConfigSchema,
   ExternalEntity,
   ExternalChange,
   SyncResult,
@@ -42,12 +43,14 @@ describe("Integration Types", () => {
       expect(link.sync_direction).toBe("bidirectional");
     });
 
-    it("should support all provider names", () => {
+    it("should support any provider name (plugin architecture)", () => {
       const providers: IntegrationProviderName[] = [
         "jira",
         "beads",
         "spec-kit",
         "openspec",
+        "custom-provider", // Third-party plugins can use any name
+        "my-company-integration",
       ];
 
       providers.forEach((provider) => {
@@ -167,7 +170,7 @@ describe("Integration Types", () => {
     });
   });
 
-  describe("IntegrationConfig", () => {
+  describe("IntegrationProviderConfig", () => {
     it("should support all conflict resolution strategies", () => {
       const strategies: ConflictResolution[] = [
         "newest-wins",
@@ -177,7 +180,7 @@ describe("Integration Types", () => {
       ];
 
       strategies.forEach((strategy) => {
-        const config: IntegrationConfig = {
+        const config: IntegrationProviderConfig = {
           enabled: true,
           auto_sync: true,
           default_sync_direction: "bidirectional",
@@ -186,110 +189,56 @@ describe("Integration Types", () => {
         expect(config.conflict_resolution).toBe(strategy);
       });
     });
-  });
 
-  describe("JiraConfig", () => {
-    it("should validate JiraConfig with required fields", () => {
-      const config: JiraConfig = {
-        enabled: true,
-        auto_sync: true,
-        default_sync_direction: "bidirectional",
-        conflict_resolution: "newest-wins",
-        instance_url: "https://example.atlassian.net",
-        auth_type: "basic",
-      };
-
-      expect(config.instance_url).toContain("atlassian");
-      expect(config.auth_type).toBe("basic");
-    });
-
-    it("should support oauth2 auth type", () => {
-      const config: JiraConfig = {
+    it("should support plugin field for custom plugins", () => {
+      const config: IntegrationProviderConfig = {
+        plugin: "@company/my-integration",
         enabled: true,
         auto_sync: false,
         default_sync_direction: "inbound",
-        conflict_resolution: "external-wins",
-        instance_url: "https://example.atlassian.net",
-        auth_type: "oauth2",
-        credentials_env: "JIRA_OAUTH_TOKEN",
-      };
-
-      expect(config.auth_type).toBe("oauth2");
-      expect(config.credentials_env).toBe("JIRA_OAUTH_TOKEN");
-    });
-
-    it("should support optional Jira-specific fields", () => {
-      const config: JiraConfig = {
-        enabled: true,
-        auto_sync: true,
-        default_sync_direction: "bidirectional",
         conflict_resolution: "newest-wins",
-        instance_url: "https://example.atlassian.net",
-        auth_type: "basic",
-        jql_filter: 'project = "PROJ" AND status != Done',
-        project_key: "PROJ",
-        status_mapping: {
-          "To Do": "open",
-          "In Progress": "in_progress",
-          Done: "closed",
+        options: {
+          apiKey: "secret",
+          endpoint: "https://api.example.com",
         },
       };
 
-      expect(config.jql_filter).toContain("PROJ");
-      expect(config.project_key).toBe("PROJ");
-      expect(config.status_mapping?.["Done"]).toBe("closed");
+      expect(config.plugin).toBe("@company/my-integration");
+      expect(config.options?.apiKey).toBe("secret");
     });
-  });
 
-  describe("BeadsConfig", () => {
-    it("should validate BeadsConfig", () => {
-      const config: BeadsConfig = {
+    it("should support provider-specific options", () => {
+      // Beads-like config
+      const beadsConfig: IntegrationProviderConfig = {
         enabled: true,
         auto_sync: true,
         default_sync_direction: "inbound",
         conflict_resolution: "sudocode-wins",
-        path: ".beads",
-        issue_prefix: "bd",
+        options: {
+          path: ".beads",
+          issue_prefix: "bd",
+        },
       };
 
-      expect(config.path).toBe(".beads");
-      expect(config.issue_prefix).toBe("bd");
-    });
-  });
+      expect(beadsConfig.options?.path).toBe(".beads");
+      expect(beadsConfig.options?.issue_prefix).toBe("bd");
 
-  describe("SpecKitConfig", () => {
-    it("should validate SpecKitConfig", () => {
-      const config: SpecKitConfig = {
-        enabled: true,
-        auto_sync: false,
-        default_sync_direction: "inbound",
-        conflict_resolution: "external-wins",
-        path: ".spec-kit",
-        import_specs: true,
-        import_plans: true,
-        import_tasks: false,
-      };
-
-      expect(config.import_specs).toBe(true);
-      expect(config.import_plans).toBe(true);
-      expect(config.import_tasks).toBe(false);
-    });
-  });
-
-  describe("OpenSpecConfig", () => {
-    it("should validate OpenSpecConfig", () => {
-      const config: OpenSpecConfig = {
+      // Jira-like config
+      const jiraConfig: IntegrationProviderConfig = {
         enabled: true,
         auto_sync: true,
         default_sync_direction: "bidirectional",
-        conflict_resolution: "manual",
-        path: ".openspec",
-        import_specs: true,
-        import_changes: true,
+        conflict_resolution: "newest-wins",
+        options: {
+          instance_url: "https://example.atlassian.net",
+          auth_type: "basic",
+          credentials_env: "JIRA_TOKEN",
+          jql_filter: 'project = "PROJ"',
+        },
       };
 
-      expect(config.import_specs).toBe(true);
-      expect(config.import_changes).toBe(true);
+      expect(jiraConfig.options?.instance_url).toBe("https://example.atlassian.net");
+      expect(jiraConfig.options?.auth_type).toBe("basic");
     });
   });
 
@@ -301,15 +250,19 @@ describe("Integration Types", () => {
           auto_sync: true,
           default_sync_direction: "bidirectional",
           conflict_resolution: "newest-wins",
-          instance_url: "https://example.atlassian.net",
-          auth_type: "basic",
+          options: {
+            instance_url: "https://example.atlassian.net",
+            auth_type: "basic",
+          },
         },
         beads: {
           enabled: true,
           auto_sync: true,
           default_sync_direction: "inbound",
           conflict_resolution: "sudocode-wins",
-          path: ".beads",
+          options: {
+            path: ".beads",
+          },
         },
       };
 
@@ -322,6 +275,88 @@ describe("Integration Types", () => {
     it("should allow empty config", () => {
       const config: IntegrationsConfig = {};
       expect(config.jira).toBeUndefined();
+    });
+
+    it("should allow custom provider names for plugins", () => {
+      const config: IntegrationsConfig = {
+        "my-custom-provider": {
+          plugin: "@company/sudocode-integration-custom",
+          enabled: true,
+          auto_sync: false,
+          default_sync_direction: "outbound",
+          conflict_resolution: "manual",
+          options: {
+            customOption: "value",
+          },
+        },
+      };
+
+      expect(config["my-custom-provider"]?.plugin).toBe("@company/sudocode-integration-custom");
+    });
+  });
+
+  describe("Plugin Types", () => {
+    it("should define PluginValidationResult", () => {
+      const result: PluginValidationResult = {
+        valid: true,
+        errors: [],
+        warnings: ["Consider enabling auto_sync for better experience"],
+      };
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.warnings).toHaveLength(1);
+    });
+
+    it("should define PluginTestResult", () => {
+      const result: PluginTestResult = {
+        success: true,
+        configured: true,
+        enabled: true,
+        details: {
+          version: "1.0.0",
+          apiStatus: "healthy",
+        },
+      };
+
+      expect(result.success).toBe(true);
+      expect(result.details?.version).toBe("1.0.0");
+    });
+
+    it("should define PluginTestResult with error", () => {
+      const result: PluginTestResult = {
+        success: false,
+        configured: true,
+        enabled: true,
+        error: "Connection failed: timeout",
+      };
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("timeout");
+    });
+
+    it("should define PluginConfigSchema", () => {
+      const schema: PluginConfigSchema = {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            title: "Beads Path",
+            description: "Path to the .beads directory",
+            required: true,
+          },
+          issue_prefix: {
+            type: "string",
+            title: "Issue Prefix",
+            default: "bd",
+          },
+        },
+        required: ["path"],
+      };
+
+      expect(schema.type).toBe("object");
+      expect(schema.properties.path.required).toBe(true);
+      expect(schema.required).toContain("path");
     });
   });
 

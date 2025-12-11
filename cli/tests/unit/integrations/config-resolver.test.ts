@@ -18,8 +18,8 @@ describe("resolveIntegrationPaths", () => {
     rmSync(tempDir, { recursive: true });
   });
 
-  describe("beads", () => {
-    it("should resolve relative beads path", () => {
+  describe("providers with path option", () => {
+    it("should resolve relative path in options", () => {
       const beadsDir = join(tempDir, ".beads");
       mkdirSync(beadsDir);
 
@@ -30,7 +30,7 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: false,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            path: ".beads",
+            options: { path: ".beads" },
           },
         },
         tempDir
@@ -48,12 +48,12 @@ describe("resolveIntegrationPaths", () => {
               auto_sync: false,
               default_sync_direction: "bidirectional",
               conflict_resolution: "newest-wins",
-              path: "nonexistent",
+              options: { path: "nonexistent" },
             },
           },
           tempDir
         )
-      ).toThrow("Beads path not found");
+      ).toThrow(/beads path not found/i);
     });
 
     it("should skip disabled integrations", () => {
@@ -64,7 +64,7 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: false,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            path: "nonexistent", // Would fail if enabled
+            options: { path: "nonexistent" }, // Would fail if enabled
           },
         },
         tempDir
@@ -72,10 +72,8 @@ describe("resolveIntegrationPaths", () => {
 
       expect(result.beads).toBeUndefined();
     });
-  });
 
-  describe("spec-kit", () => {
-    it("should resolve relative spec-kit path", () => {
+    it("should resolve spec-kit path in options", () => {
       const specKitDir = join(tempDir, "specs");
       mkdirSync(specKitDir);
 
@@ -86,10 +84,12 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: false,
             default_sync_direction: "inbound",
             conflict_resolution: "newest-wins",
-            path: "specs",
-            import_specs: true,
-            import_plans: true,
-            import_tasks: true,
+            options: {
+              path: "specs",
+              import_specs: true,
+              import_plans: true,
+              import_tasks: true,
+            },
           },
         },
         tempDir
@@ -98,29 +98,7 @@ describe("resolveIntegrationPaths", () => {
       expect(result["spec-kit"]?.resolvedPath).toBe(specKitDir);
     });
 
-    it("should throw for non-existent spec-kit path", () => {
-      expect(() =>
-        resolveIntegrationPaths(
-          {
-            "spec-kit": {
-              enabled: true,
-              auto_sync: false,
-              default_sync_direction: "inbound",
-              conflict_resolution: "newest-wins",
-              path: "nonexistent-specs",
-              import_specs: true,
-              import_plans: true,
-              import_tasks: true,
-            },
-          },
-          tempDir
-        )
-      ).toThrow("Spec-kit path not found");
-    });
-  });
-
-  describe("openspec", () => {
-    it("should resolve relative openspec path", () => {
+    it("should resolve openspec path in options", () => {
       const openspecDir = join(tempDir, "openspec");
       mkdirSync(openspecDir);
 
@@ -131,9 +109,11 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: false,
             default_sync_direction: "inbound",
             conflict_resolution: "newest-wins",
-            path: "openspec",
-            import_specs: true,
-            import_changes: true,
+            options: {
+              path: "openspec",
+              import_specs: true,
+              import_changes: true,
+            },
           },
         },
         tempDir
@@ -141,29 +121,10 @@ describe("resolveIntegrationPaths", () => {
 
       expect(result.openspec?.resolvedPath).toBe(openspecDir);
     });
-
-    it("should throw for non-existent openspec path", () => {
-      expect(() =>
-        resolveIntegrationPaths(
-          {
-            openspec: {
-              enabled: true,
-              auto_sync: false,
-              default_sync_direction: "inbound",
-              conflict_resolution: "newest-wins",
-              path: "nonexistent-openspec",
-              import_specs: true,
-              import_changes: true,
-            },
-          },
-          tempDir
-        )
-      ).toThrow("OpenSpec path not found");
-    });
   });
 
-  describe("jira", () => {
-    it("should mark jira config as resolved", () => {
+  describe("providers without path option", () => {
+    it("should not set resolvedPath when no path option", () => {
       const result = resolveIntegrationPaths(
         {
           jira: {
@@ -171,19 +132,21 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: true,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            instance_url: "https://example.atlassian.net",
-            auth_type: "basic",
+            options: {
+              instance_url: "https://example.atlassian.net",
+              auth_type: "basic",
+            },
           },
         },
         tempDir
       );
 
       expect(result.jira).toBeDefined();
-      expect(result.jira?.resolved).toBe(true);
-      expect(result.jira?.instance_url).toBe("https://example.atlassian.net");
+      expect(result.jira?.resolvedPath).toBeUndefined();
+      expect(result.jira?.options?.instance_url).toBe("https://example.atlassian.net");
     });
 
-    it("should skip disabled jira", () => {
+    it("should skip disabled providers without path", () => {
       const result = resolveIntegrationPaths(
         {
           jira: {
@@ -191,8 +154,10 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: true,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            instance_url: "https://example.atlassian.net",
-            auth_type: "basic",
+            options: {
+              instance_url: "https://example.atlassian.net",
+              auth_type: "basic",
+            },
           },
         },
         tempDir
@@ -216,31 +181,35 @@ describe("resolveIntegrationPaths", () => {
             auto_sync: true,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            instance_url: "https://example.atlassian.net",
-            auth_type: "basic",
+            options: {
+              instance_url: "https://example.atlassian.net",
+              auth_type: "basic",
+            },
           },
           beads: {
             enabled: true,
             auto_sync: false,
             default_sync_direction: "bidirectional",
             conflict_resolution: "newest-wins",
-            path: ".beads",
+            options: { path: ".beads" },
           },
           "spec-kit": {
             enabled: true,
             auto_sync: false,
             default_sync_direction: "inbound",
             conflict_resolution: "newest-wins",
-            path: "specs",
-            import_specs: true,
-            import_plans: true,
-            import_tasks: true,
+            options: {
+              path: "specs",
+              import_specs: true,
+              import_plans: true,
+              import_tasks: true,
+            },
           },
         },
         tempDir
       );
 
-      expect(result.jira?.resolved).toBe(true);
+      expect(result.jira?.resolvedPath).toBeUndefined();
       expect(result.beads?.resolvedPath).toBe(beadsDir);
       expect(result["spec-kit"]?.resolvedPath).toBe(specsDir);
     });
@@ -254,6 +223,33 @@ describe("resolveIntegrationPaths", () => {
       expect(result.beads).toBeUndefined();
       expect(result["spec-kit"]).toBeUndefined();
       expect(result.openspec).toBeUndefined();
+    });
+  });
+
+  describe("custom plugins", () => {
+    it("should resolve path for custom plugin with path option", () => {
+      const customDir = join(tempDir, "custom-data");
+      mkdirSync(customDir);
+
+      const result = resolveIntegrationPaths(
+        {
+          "custom-provider": {
+            plugin: "@company/sudocode-integration-custom",
+            enabled: true,
+            auto_sync: false,
+            default_sync_direction: "outbound",
+            conflict_resolution: "manual",
+            options: {
+              path: "custom-data",
+              otherOption: "value",
+            },
+          },
+        },
+        tempDir
+      );
+
+      expect(result["custom-provider"]?.resolvedPath).toBe(customDir);
+      expect(result["custom-provider"]?.options?.otherOption).toBe("value");
     });
   });
 });
@@ -271,29 +267,35 @@ describe("getEnabledProviders", () => {
         auto_sync: false,
         default_sync_direction: "bidirectional",
         conflict_resolution: "newest-wins",
-        instance_url: "https://example.atlassian.net",
-        auth_type: "basic",
+        options: {
+          instance_url: "https://example.atlassian.net",
+          auth_type: "basic",
+        },
       },
       beads: {
         enabled: false,
         auto_sync: false,
         default_sync_direction: "bidirectional",
         conflict_resolution: "newest-wins",
-        path: ".beads",
+        options: { path: ".beads" },
       },
       "spec-kit": {
         enabled: true,
         auto_sync: false,
         default_sync_direction: "inbound",
         conflict_resolution: "newest-wins",
-        path: "specs",
-        import_specs: true,
-        import_plans: true,
-        import_tasks: true,
+        options: {
+          path: "specs",
+          import_specs: true,
+          import_plans: true,
+          import_tasks: true,
+        },
       },
     });
 
-    expect(result).toEqual(["jira", "spec-kit"]);
+    expect(result).toContain("jira");
+    expect(result).toContain("spec-kit");
+    expect(result).not.toContain("beads");
   });
 
   it("should return all providers when all enabled", () => {
@@ -303,37 +305,68 @@ describe("getEnabledProviders", () => {
         auto_sync: false,
         default_sync_direction: "bidirectional",
         conflict_resolution: "newest-wins",
-        instance_url: "https://example.atlassian.net",
-        auth_type: "basic",
+        options: {
+          instance_url: "https://example.atlassian.net",
+          auth_type: "basic",
+        },
       },
       beads: {
         enabled: true,
         auto_sync: false,
         default_sync_direction: "bidirectional",
         conflict_resolution: "newest-wins",
-        path: ".beads",
+        options: { path: ".beads" },
       },
       "spec-kit": {
         enabled: true,
         auto_sync: false,
         default_sync_direction: "inbound",
         conflict_resolution: "newest-wins",
-        path: "specs",
-        import_specs: true,
-        import_plans: true,
-        import_tasks: true,
+        options: {
+          path: "specs",
+          import_specs: true,
+          import_plans: true,
+          import_tasks: true,
+        },
       },
       openspec: {
         enabled: true,
         auto_sync: false,
         default_sync_direction: "inbound",
         conflict_resolution: "newest-wins",
-        path: "openspec",
-        import_specs: true,
-        import_changes: true,
+        options: {
+          path: "openspec",
+          import_specs: true,
+          import_changes: true,
+        },
       },
     });
 
-    expect(result).toEqual(["jira", "beads", "spec-kit", "openspec"]);
+    expect(result).toContain("jira");
+    expect(result).toContain("beads");
+    expect(result).toContain("spec-kit");
+    expect(result).toContain("openspec");
+  });
+
+  it("should handle custom plugin providers", () => {
+    const result = getEnabledProviders({
+      "custom-provider": {
+        plugin: "@company/sudocode-integration-custom",
+        enabled: true,
+        auto_sync: false,
+        default_sync_direction: "outbound",
+        conflict_resolution: "manual",
+        options: { someOption: "value" },
+      },
+      "disabled-provider": {
+        enabled: false,
+        auto_sync: false,
+        default_sync_direction: "inbound",
+        conflict_resolution: "newest-wins",
+      },
+    });
+
+    expect(result).toContain("custom-provider");
+    expect(result).not.toContain("disabled-provider");
   });
 });

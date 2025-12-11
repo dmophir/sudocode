@@ -23,20 +23,18 @@ export type ConflictResolution =
   | "manual";
 
 /**
- * Supported integration provider names
+ * Integration provider name - any string to support plugins
+ * First-party providers: "beads", "jira", "spec-kit", "openspec"
+ * Third-party plugins can use any unique name
  */
-export type IntegrationProviderName =
-  | "jira"
-  | "beads"
-  | "spec-kit"
-  | "openspec";
+export type IntegrationProviderName = string;
 
 /**
  * Represents a link between a sudocode entity (Spec/Issue) and an external system
  */
 export interface ExternalLink {
-  /** The integration provider this link belongs to */
-  provider: IntegrationProviderName;
+  /** The integration provider this link belongs to (plugin name) */
+  provider: string;
   /** Unique identifier in the external system */
   external_id: string;
   /** URL to view/edit in external system (optional) */
@@ -396,14 +394,16 @@ export type {
  * See integrations.d.ts for detailed integration types
  */
 export type {
-  // Base configuration types
-  IntegrationConfig,
-  // Provider-specific configs
-  JiraConfig,
-  BeadsConfig,
-  SpecKitConfig,
-  OpenSpecConfig,
+  // Configuration types
+  IntegrationProviderConfig,
   IntegrationsConfig,
+  IntegrationConfig, // Deprecated alias
+  // Plugin types
+  IntegrationPlugin,
+  IntegrationProvider,
+  PluginValidationResult,
+  PluginTestResult,
+  PluginConfigSchema,
   // Sync types
   ExternalEntity,
   ExternalChange,

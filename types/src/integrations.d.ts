@@ -1,22 +1,23 @@
 /**
- * Integration types for sudocode
- * Enables sync with external systems like Jira, Beads, SpecKit, and OpenSpec
+ * Integration plugin types for sudocode
+ *
+ * This module defines the plugin interface for external integrations.
+ * Provider-specific implementations should be in separate packages.
  */
 
-import type {
-  SyncDirection,
-  ConflictResolution,
-  IntegrationProviderName,
-} from "./index.js";
+import type { SyncDirection, ConflictResolution, Spec, Issue } from "./index.js";
 
 // =============================================================================
-// Base Configuration Types
+// Plugin Configuration
 // =============================================================================
 
 /**
- * Base configuration interface for all integration providers
+ * Base configuration for any integration provider
+ * Provider-specific options go in the `options` field
  */
-export interface IntegrationConfig {
+export interface IntegrationProviderConfig {
+  /** npm package name or local path to the plugin */
+  plugin?: string;
   /** Whether this integration is enabled */
   enabled: boolean;
   /** Whether to automatically sync changes */
@@ -25,68 +26,8 @@ export interface IntegrationConfig {
   default_sync_direction: SyncDirection;
   /** How to resolve sync conflicts */
   conflict_resolution: ConflictResolution;
-}
-
-// =============================================================================
-// Provider-Specific Configurations
-// =============================================================================
-
-// TODO: Move these to their own package later
-/**
- * Configuration for Jira integration
- */
-export interface JiraConfig extends IntegrationConfig {
-  /** Jira instance URL (e.g., "https://company.atlassian.net") */
-  instance_url: string;
-  /** Authentication type */
-  auth_type: "basic" | "oauth2";
-  /** Environment variable name containing credentials (optional) */
-  credentials_env?: string;
-  /** JQL filter for issues to sync (optional) */
-  jql_filter?: string;
-  /** Jira project key (optional, for scoping) */
-  project_key?: string;
-  /** Map Jira statuses to sudocode statuses (optional) */
-  status_mapping?: Record<string, string>;
-}
-
-/**
- * Configuration for Beads integration
- * Beads is a local file-based issue tracker
- */
-export interface BeadsConfig extends IntegrationConfig {
-  /** Path to beads directory (relative to project root) */
-  path: string;
-  /** Prefix for issue IDs when importing (optional) */
-  issue_prefix?: string;
-}
-
-/**
- * Configuration for SpecKit integration
- * SpecKit is a specification management tool
- */
-export interface SpecKitConfig extends IntegrationConfig {
-  /** Path to spec-kit directory */
-  path: string;
-  /** Whether to import specs from SpecKit */
-  import_specs: boolean;
-  /** Whether to import plans from SpecKit */
-  import_plans: boolean;
-  /** Whether to import tasks from SpecKit as issues */
-  import_tasks: boolean;
-}
-
-/**
- * Configuration for OpenSpec integration
- * OpenSpec is an open specification format
- */
-export interface OpenSpecConfig extends IntegrationConfig {
-  /** Path to openspec directory */
-  path: string;
-  /** Whether to import specs from OpenSpec */
-  import_specs: boolean;
-  /** Whether to import changes/changelog from OpenSpec */
-  import_changes: boolean;
+  /** Provider-specific configuration options */
+  options?: Record<string, unknown>;
 }
 
 /**
@@ -94,14 +35,141 @@ export interface OpenSpecConfig extends IntegrationConfig {
  * Maps provider names to their configurations
  */
 export interface IntegrationsConfig {
-  jira?: JiraConfig;
-  beads?: BeadsConfig;
-  "spec-kit"?: SpecKitConfig;
-  openspec?: OpenSpecConfig;
+  [providerName: string]: IntegrationProviderConfig | undefined;
 }
 
 // =============================================================================
-// Sync Types
+// Plugin Interface
+// =============================================================================
+
+/**
+ * Validation result from plugin
+ */
+export interface PluginValidationResult {
+  /** Whether the configuration is valid (no blocking errors) */
+  valid: boolean;
+  /** Blocking errors that prevent the plugin from working */
+  errors: string[];
+  /** Non-blocking warnings about the configuration */
+  warnings: string[];
+}
+
+/**
+ * Result from testing a plugin's connection/setup
+ */
+export interface PluginTestResult {
+  /** Whether the test passed */
+  success: boolean;
+  /** Whether the plugin is configured */
+  configured: boolean;
+  /** Whether the plugin is enabled */
+  enabled: boolean;
+  /** Error message if test failed */
+  error?: string;
+  /** Additional details about the test */
+  details?: Record<string, unknown>;
+}
+
+/**
+ * JSON Schema for UI form generation (subset of JSON Schema)
+ */
+export interface PluginConfigSchema {
+  type: "object";
+  properties: Record<
+    string,
+    {
+      type: "string" | "boolean" | "number" | "array";
+      title?: string;
+      description?: string;
+      default?: unknown;
+      enum?: unknown[];
+      required?: boolean;
+    }
+  >;
+  required?: string[];
+}
+
+/**
+ * Interface that all integration plugins must implement
+ *
+ * Plugins are loaded dynamically and must export an object conforming to this interface.
+ *
+ * @example
+ * ```typescript
+ * // In @sudocode-ai/integration-beads/src/index.ts
+ * import type { IntegrationPlugin } from '@sudocode-ai/types';
+ *
+ * const plugin: IntegrationPlugin = {
+ *   name: 'beads',
+ *   displayName: 'Beads',
+ *   version: '1.0.0',
+ *   // ... implement required methods
+ * };
+ *
+ * export default plugin;
+ * ```
+ */
+export interface IntegrationPlugin {
+  /** Unique plugin identifier (used as key in config) */
+  name: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Plugin version */
+  version: string;
+  /** Plugin description */
+  description?: string;
+
+  // ===========================================================================
+  // Configuration
+  // ===========================================================================
+
+  /**
+   * JSON Schema describing the plugin's options
+   * Used by UI to generate configuration forms
+   */
+  configSchema?: PluginConfigSchema;
+
+  /**
+   * Validate plugin configuration
+   * Called before saving config and before starting sync
+   *
+   * @param options - The plugin-specific options from config
+   * @returns Validation result with errors and warnings
+   */
+  validateConfig(options: Record<string, unknown>): PluginValidationResult;
+
+  /**
+   * Test the plugin's connection/setup
+   * Called when user clicks "Test" button in UI
+   *
+   * @param options - The plugin-specific options from config
+   * @param projectPath - Path to the sudocode project root
+   * @returns Test result with success status and details
+   */
+  testConnection(
+    options: Record<string, unknown>,
+    projectPath: string
+  ): Promise<PluginTestResult>;
+
+  // ===========================================================================
+  // Provider Factory
+  // ===========================================================================
+
+  /**
+   * Create an IntegrationProvider instance for sync operations
+   *
+   * @param options - The plugin-specific options from config
+   * @param projectPath - Path to the sudocode project root
+   * @returns Provider instance ready for sync operations
+   */
+  createProvider(
+    options: Record<string, unknown>,
+    projectPath: string
+  ): IntegrationProvider;
+}
+
+// =============================================================================
+// Provider Interface (for sync operations)
 // =============================================================================
 
 /**
@@ -166,7 +234,6 @@ export interface SyncResult {
 
 /**
  * Represents a sync conflict between sudocode and external system
- * Requires resolution based on configured strategy
  */
 export interface SyncConflict {
   /** Sudocode entity ID */
@@ -174,9 +241,85 @@ export interface SyncConflict {
   /** External system entity ID */
   external_id: string;
   /** Integration provider name */
-  provider: IntegrationProviderName;
+  provider: string;
   /** When sudocode entity was last updated (ISO 8601) */
   sudocode_updated_at: string;
   /** When external entity was last updated (ISO 8601) */
   external_updated_at: string;
 }
+
+/**
+ * Interface for sync operations with an external system
+ *
+ * Created by IntegrationPlugin.createProvider()
+ */
+export interface IntegrationProvider {
+  /** Provider name (matches plugin name) */
+  readonly name: string;
+  /** Whether this provider supports real-time watching for changes */
+  readonly supportsWatch: boolean;
+  /** Whether this provider supports polling for changes */
+  readonly supportsPolling: boolean;
+
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
+
+  /** Initialize the provider (called once before sync operations) */
+  initialize(): Promise<void>;
+
+  /** Clean up resources when the provider is no longer needed */
+  dispose(): Promise<void>;
+
+  // ===========================================================================
+  // Entity Operations
+  // ===========================================================================
+
+  /** Fetch a single entity from the external system */
+  fetchEntity(externalId: string): Promise<ExternalEntity | null>;
+
+  /** Search for entities in the external system */
+  searchEntities(query?: string): Promise<ExternalEntity[]>;
+
+  /** Create a new entity in the external system */
+  createEntity(entity: Partial<Spec | Issue>): Promise<string>;
+
+  /** Update an existing entity in the external system */
+  updateEntity(externalId: string, entity: Partial<Spec | Issue>): Promise<void>;
+
+  /** Delete an entity from the external system (optional) */
+  deleteEntity?(externalId: string): Promise<void>;
+
+  // ===========================================================================
+  // Change Detection
+  // ===========================================================================
+
+  /** Get changes since a timestamp (for polling) */
+  getChangesSince(timestamp: Date): Promise<ExternalChange[]>;
+
+  /** Start watching for real-time changes (optional) */
+  startWatching?(callback: (changes: ExternalChange[]) => void): void;
+
+  /** Stop watching for real-time changes (optional) */
+  stopWatching?(): void;
+
+  // ===========================================================================
+  // Field Mapping
+  // ===========================================================================
+
+  /** Map an external entity to sudocode format */
+  mapToSudocode(external: ExternalEntity): {
+    spec?: Partial<Spec>;
+    issue?: Partial<Issue>;
+  };
+
+  /** Map a sudocode entity to external format */
+  mapFromSudocode(entity: Spec | Issue): Partial<ExternalEntity>;
+}
+
+// =============================================================================
+// Legacy Exports (for backwards compatibility during migration)
+// =============================================================================
+
+/** @deprecated Use IntegrationProviderConfig instead */
+export type IntegrationConfig = IntegrationProviderConfig;
