@@ -1,0 +1,38 @@
+{
+  "name": "@sudocode-ai/integration-beads",
+  "version": "0.1.0",
+  "description": "Beads integration plugin for sudocode",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "sudocode",
+    "integration",
+    "beads",
+    "plugin"
+  ],
+  "author": "sudocode-ai",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sudocode-ai/types": "^0.1.0"
+  },
+  "devDependencies": {
+    "@sudocode-ai/types": "*",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
