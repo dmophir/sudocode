@@ -401,8 +401,9 @@ describe("Validation failures", () => {
   });
 
   it("should fail if local working tree is dirty", async () => {
-    // Make local tree dirty
-    fs.writeFileSync(path.join(testEnv.repo, "dirty.txt"), "uncommitted");
+    // Make local tree dirty by modifying a tracked file (not untracked)
+    // Note: untracked files are ignored by isWorkingTreeClean()
+    fs.writeFileSync(path.join(testEnv.repo, ".gitkeep"), "modified");
 
     const preview = await service.previewSync(testEnv.execution.id);
     expect(preview.canSync).toBe(false);

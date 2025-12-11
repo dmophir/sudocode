@@ -349,15 +349,23 @@ export class GitSyncCli {
   }
 
   /**
-   * Check if working tree is clean (no uncommitted changes)
+   * Check if working tree is clean (no uncommitted changes to tracked files)
    * Equivalent to: git status --porcelain
+   *
+   * Ignores untracked files (??) since they don't interfere with checkout/merge operations.
+   * Only considers modifications to tracked files (M, A, D, R, C, U prefixes).
    *
    * @returns true if working tree is clean, false otherwise
    */
   isWorkingTreeClean(): boolean {
     try {
       const output = this.execGit('git status --porcelain');
-      return output.trim().length === 0;
+      // Filter out untracked files (??) - they don't cause issues with checkout/merge
+      const trackedChanges = output
+        .trim()
+        .split('\n')
+        .filter((line) => line.length > 0 && !line.startsWith('??'));
+      return trackedChanges.length === 0;
     } catch (error) {
       // If git status fails, assume not clean
       return false;

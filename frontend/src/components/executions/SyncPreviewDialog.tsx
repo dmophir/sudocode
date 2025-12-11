@@ -24,6 +24,7 @@ import {
   Loader2,
   Info,
   XCircle,
+  RefreshCw,
 } from 'lucide-react'
 import type { SyncPreviewResult, SyncMode } from '@/types/execution'
 
@@ -33,7 +34,11 @@ export interface SyncPreviewDialogProps {
   onClose: () => void
   onConfirmSync: (
     mode: SyncMode,
-    options?: { commitMessage?: string; includeUncommitted?: boolean; overrideLocalChanges?: boolean }
+    options?: {
+      commitMessage?: string
+      includeUncommitted?: boolean
+      overrideLocalChanges?: boolean
+    }
   ) => void
   onOpenIDE: () => void
   isPreviewing?: boolean
@@ -41,6 +46,10 @@ export interface SyncPreviewDialogProps {
    * Target branch name to display in merge descriptions
    */
   targetBranch?: string
+  /**
+   * Callback to refresh the preview data
+   */
+  onRefresh?: () => void
 }
 
 export function SyncPreviewDialog({
@@ -51,6 +60,7 @@ export function SyncPreviewDialog({
   onOpenIDE,
   isPreviewing = false,
   targetBranch,
+  onRefresh,
 }: SyncPreviewDialogProps) {
   const [selectedMode, setSelectedMode] = useState<SyncMode>('squash')
   const [commitMessage, setCommitMessage] = useState('')
@@ -121,6 +131,18 @@ export function SyncPreviewDialog({
                       {preview.commits.length} commit{preview.commits.length !== 1 ? 's' : ''}
                     </span>
                   </>
+                )}
+                {onRefresh && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={onRefresh}
+                    disabled={isPreviewing}
+                    title="Refresh preview"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isPreviewing ? 'animate-spin' : ''}`} />
+                  </Button>
                 )}
               </div>
             )}
@@ -308,9 +330,9 @@ export function SyncPreviewDialog({
                                             {preview.potentialLocalConflicts.count} file
                                             {preview.potentialLocalConflicts.count !== 1 ? 's' : ''}
                                           </span>{' '}
-                                          may have merge conflicts with your local changes. Conflicting
-                                          changes will have conflict markers that you'll need to resolve
-                                          manually.
+                                          may have merge conflicts with your local changes.
+                                          Conflicting changes will have conflict markers that you'll
+                                          need to resolve manually.
                                         </p>
                                         <Label
                                           htmlFor="override-local"
@@ -324,7 +346,8 @@ export function SyncPreviewDialog({
                                             }
                                           />
                                           <span className="text-amber-800 dark:text-amber-200">
-                                            Override local changes (skip merge, use worktree version)
+                                            Override local changes (skip merge, use worktree
+                                            version)
                                           </span>
                                         </Label>
                                       </div>
@@ -336,9 +359,7 @@ export function SyncPreviewDialog({
                       </div>
                       <div
                         className={`rounded-md border p-3 ${
-                          hasCommits
-                            ? 'hover:bg-muted/50'
-                            : 'cursor-not-allowed opacity-50'
+                          hasCommits ? 'hover:bg-muted/50' : 'cursor-not-allowed opacity-50'
                         }`}
                       >
                         <Label
@@ -364,7 +385,9 @@ export function SyncPreviewDialog({
                               )}
                             </p>
                             {!hasCommits && (
-                              <p className="mt-1 text-xs text-amber-600">Requires committed changes</p>
+                              <p className="mt-1 text-xs text-amber-600">
+                                Requires committed changes
+                              </p>
                             )}
                           </div>
                         </Label>
@@ -373,16 +396,30 @@ export function SyncPreviewDialog({
                           <div className="ml-7 mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
                             <p className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
                               <AlertCircle className="h-3 w-3 shrink-0" />
-                              Local working tree has uncommitted changes. Stash or commit them first.
+                              <span>
+                                Local working tree has uncommitted changes. Stash or commit them
+                                first.
+                                {onRefresh && (
+                                  <>
+                                    {' '}
+                                    <button
+                                      type="button"
+                                      onClick={onRefresh}
+                                      disabled={isPreviewing}
+                                      className="underline hover:no-underline disabled:opacity-50"
+                                    >
+                                      {isPreviewing ? 'Refreshing...' : 'Refresh'}
+                                    </button>
+                                  </>
+                                )}
+                              </span>
                             </p>
                           </div>
                         )}
                       </div>
                       <div
                         className={`rounded-md border p-3 ${
-                          hasCommits
-                            ? 'hover:bg-muted/50'
-                            : 'cursor-not-allowed opacity-50'
+                          hasCommits ? 'hover:bg-muted/50' : 'cursor-not-allowed opacity-50'
                         }`}
                       >
                         <Label
@@ -409,7 +446,9 @@ export function SyncPreviewDialog({
                               and preserve commit history
                             </p>
                             {!hasCommits && (
-                              <p className="mt-1 text-xs text-amber-600">Requires committed changes</p>
+                              <p className="mt-1 text-xs text-amber-600">
+                                Requires committed changes
+                              </p>
                             )}
                           </div>
                         </Label>
@@ -418,7 +457,23 @@ export function SyncPreviewDialog({
                           <div className="ml-7 mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
                             <p className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
                               <AlertCircle className="h-3 w-3 shrink-0" />
-                              Local working tree has uncommitted changes. Stash or commit them first.
+                              <span>
+                                Local working tree has uncommitted changes. Stash or commit them
+                                first.
+                                {onRefresh && (
+                                  <>
+                                    {' '}
+                                    <button
+                                      type="button"
+                                      onClick={onRefresh}
+                                      disabled={isPreviewing}
+                                      className="underline hover:no-underline disabled:opacity-50"
+                                    >
+                                      {isPreviewing ? 'Refreshing...' : 'Refresh'}
+                                    </button>
+                                  </>
+                                )}
+                              </span>
                             </p>
                           </div>
                         )}
