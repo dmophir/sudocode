@@ -156,7 +156,7 @@ program
 program
   .command("init")
   .description("Initialize .sudocode directory structure")
-  .action(async (options) => {
+  .action(async () => {
     await handleInit({});
   });
 

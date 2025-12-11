@@ -20,12 +20,12 @@ export interface IntegrationProviderConfig {
   plugin?: string;
   /** Whether this integration is enabled */
   enabled: boolean;
-  /** Whether to automatically sync changes */
-  auto_sync: boolean;
-  /** Default sync direction for new links */
-  default_sync_direction: SyncDirection;
-  /** How to resolve sync conflicts */
-  conflict_resolution: ConflictResolution;
+  /** Whether to automatically sync changes (default: false) */
+  auto_sync?: boolean;
+  /** Default sync direction for new links (default: 'bidirectional') */
+  default_sync_direction?: SyncDirection;
+  /** How to resolve sync conflicts (default: 'manual') */
+  conflict_resolution?: ConflictResolution;
   /** Provider-specific configuration options */
   options?: Record<string, unknown>;
 }

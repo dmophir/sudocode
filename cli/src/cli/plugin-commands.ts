@@ -33,7 +33,7 @@ async function isPackageInstalled(packageName: string): Promise<boolean> {
  */
 export async function handlePluginList(
   ctx: CommandContext,
-  options: { all?: boolean }
+  _options: { all?: boolean }
 ): Promise<void> {
   const firstPartyPlugins = getFirstPartyPlugins();
 
