@@ -241,6 +241,29 @@ export function SyncPreviewDialog({
                   </div>
                 )} */}
 
+                {/* Local Uncommitted JSONL Auto-Merge Info */}
+                {preview.localUncommittedJsonl?.willAutoMerge && (
+                  <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <Info className="mt-0.5 h-4 w-4 text-blue-600" />
+                      <div className="flex-1 text-sm">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">
+                          Local JSONL Changes Will Be Auto-Merged
+                        </p>
+                        <p className="mt-1 text-blue-800 dark:text-blue-200">
+                          Your uncommitted changes to{' '}
+                          <span className="font-mono text-xs">
+                            {preview.localUncommittedJsonl.files
+                              .map((f) => f.split('/').pop())
+                              .join(', ')}
+                          </span>{' '}
+                          will be automatically merged with the incoming changes.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Uncommitted Changes Info */}
                 {preview.uncommittedChanges && preview.uncommittedChanges.files.length > 0 && (
                   <div className="rounded-lg border border-muted-foreground/30 bg-muted/30 p-3">
