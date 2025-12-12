@@ -33,7 +33,7 @@ export interface CreateSpecInput {
   archived_at?: string;
   created_at?: string;
   updated_at?: string;
-  external_links?: string; // JSON string of ExternalLink[]
+  external_links?: string | null;
 }
 
 export interface UpdateSpecInput {
@@ -45,7 +45,7 @@ export interface UpdateSpecInput {
   archived?: boolean;
   archived_at?: string;
   updated_at?: string;
-  external_links?: string; // JSON string of ExternalLink[]
+  external_links?: string | null;
 }
 
 export interface ListSpecsOptions {
@@ -319,11 +319,13 @@ export function deleteSpec(db: Database.Database, id: string): boolean {
   db.prepare(`DELETE FROM issue_feedback WHERE to_id = ?`).run(id);
 
   // Delete all relationships involving this spec (both directions)
-  db.prepare(`
+  db.prepare(
+    `
     DELETE FROM relationships
     WHERE (from_id = ? AND from_type = 'spec')
        OR (to_id = ? AND to_type = 'spec')
-  `).run(id, id);
+  `
+  ).run(id, id);
 
   // Then delete the spec itself
   const stmt = db.prepare(`DELETE FROM specs WHERE id = ?`);
