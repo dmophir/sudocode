@@ -155,7 +155,8 @@ export async function performInitialization(
 issues/
 specs/
 worktrees/
-config.json`;
+config.json
+merge-driver.log`;
   fs.writeFileSync(path.join(dir, ".gitignore"), gitignoreContent, "utf8");
 
   database.close();

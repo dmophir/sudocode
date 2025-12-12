@@ -19,6 +19,7 @@ import type {
   DependencyGraph,
 } from "@sudocode-ai/types";
 import { getIncomingRelationships } from "@sudocode-ai/cli/dist/operations/relationships.js";
+import { getIssue } from "@sudocode-ai/cli/dist/operations/issues.js";
 
 import type { IWorkflowEngine } from "./workflow-engine.js";
 import {
@@ -670,12 +671,20 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
         }
       }
 
+      // Check if the issue is already closed - if so, mark step as completed
+      const issue = getIssue(this.db, issueId);
+      const isAlreadyClosed = issue?.status === "closed";
+
       const step: WorkflowStep = {
         id: stepId,
         issueId,
         index: i,
         dependencies,
-        status: dependencies.length === 0 ? "ready" : "pending",
+        status: isAlreadyClosed
+          ? "completed"
+          : dependencies.length === 0
+            ? "ready"
+            : "pending",
       };
 
       steps.push(step);

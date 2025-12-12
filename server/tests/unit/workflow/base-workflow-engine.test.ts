@@ -30,9 +30,16 @@ vi.mock("@sudocode-ai/cli/dist/operations/relationships.js", () => ({
   getIncomingRelationships: vi.fn(),
 }));
 
+// Mock the CLI issues module
+vi.mock("@sudocode-ai/cli/dist/operations/issues.js", () => ({
+  getIssue: vi.fn(),
+}));
+
 import { getIncomingRelationships } from "@sudocode-ai/cli/dist/operations/relationships.js";
+import { getIssue } from "@sudocode-ai/cli/dist/operations/issues.js";
 
 const mockGetIncomingRelationships = vi.mocked(getIncomingRelationships);
+const mockGetIssue = vi.mocked(getIssue);
 
 // =============================================================================
 // Concrete Test Implementation
@@ -168,6 +175,10 @@ describe("BaseWorkflowEngine", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Default mock: getIssue returns null (issue not found) so existing tests work
+    // Tests that need specific issue statuses will override this
+    mockGetIssue.mockReturnValue(null);
 
     // Create in-memory database
     db = new Database(":memory:");
@@ -599,6 +610,126 @@ describe("BaseWorkflowEngine", () => {
       for (const id of stepIds) {
         expect(id).toMatch(/^step-/);
       }
+    });
+
+    it("should mark steps as completed for already-closed issues", () => {
+      // Mock: i-1 is closed, i-2 and i-3 are open
+      mockGetIssue.mockImplementation((db, issueId) => {
+        if (issueId === "i-1") {
+          return { id: "i-1", status: "closed" } as any;
+        }
+        return { id: issueId, status: "open" } as any;
+      });
+
+      const graph: DependencyGraph = {
+        issueIds: ["i-1", "i-2", "i-3"],
+        edges: [
+          ["i-1", "i-2"], // i-1 blocks i-2
+          ["i-2", "i-3"], // i-2 blocks i-3
+        ],
+        topologicalOrder: ["i-1", "i-2", "i-3"],
+        parallelGroups: [["i-1"], ["i-2"], ["i-3"]],
+        cycles: null,
+      };
+
+      const steps = engine.testCreateStepsFromGraph(graph);
+
+      expect(steps.length).toBe(3);
+
+      // i-1 is closed, so step should be "completed"
+      expect(steps[0].issueId).toBe("i-1");
+      expect(steps[0].status).toBe("completed");
+
+      // i-2 is open but has dependencies, so should be "pending"
+      expect(steps[1].issueId).toBe("i-2");
+      expect(steps[1].status).toBe("pending");
+
+      // i-3 is open and has dependencies, so should be "pending"
+      expect(steps[2].issueId).toBe("i-3");
+      expect(steps[2].status).toBe("pending");
+    });
+
+    it("should mark all steps as completed when all issues are closed", () => {
+      // Mock: all issues are closed
+      mockGetIssue.mockReturnValue({ id: "i-1", status: "closed" } as any);
+
+      const graph: DependencyGraph = {
+        issueIds: ["i-1", "i-2", "i-3"],
+        edges: [
+          ["i-1", "i-2"],
+          ["i-2", "i-3"],
+        ],
+        topologicalOrder: ["i-1", "i-2", "i-3"],
+        parallelGroups: [["i-1"], ["i-2"], ["i-3"]],
+        cycles: null,
+      };
+
+      const steps = engine.testCreateStepsFromGraph(graph);
+
+      // All steps should be "completed" regardless of dependencies
+      for (const step of steps) {
+        expect(step.status).toBe("completed");
+      }
+    });
+
+    it("should handle mix of closed and open issues with no dependencies", () => {
+      // Mock: i-1 and i-3 are closed, i-2 is open
+      mockGetIssue.mockImplementation((db, issueId) => {
+        if (issueId === "i-1" || issueId === "i-3") {
+          return { id: issueId, status: "closed" } as any;
+        }
+        return { id: issueId, status: "open" } as any;
+      });
+
+      const graph: DependencyGraph = {
+        issueIds: ["i-1", "i-2", "i-3"],
+        edges: [], // No dependencies
+        topologicalOrder: ["i-1", "i-2", "i-3"],
+        parallelGroups: [["i-1", "i-2", "i-3"]],
+        cycles: null,
+      };
+
+      const steps = engine.testCreateStepsFromGraph(graph);
+
+      // i-1: closed -> completed
+      expect(steps[0].issueId).toBe("i-1");
+      expect(steps[0].status).toBe("completed");
+
+      // i-2: open, no deps -> ready
+      expect(steps[1].issueId).toBe("i-2");
+      expect(steps[1].status).toBe("ready");
+
+      // i-3: closed -> completed
+      expect(steps[2].issueId).toBe("i-3");
+      expect(steps[2].status).toBe("completed");
+    });
+
+    it("should handle issue not found gracefully (treat as open)", () => {
+      // Mock: getIssue returns null for i-1 (issue not found)
+      mockGetIssue.mockImplementation((db, issueId) => {
+        if (issueId === "i-1") {
+          return null;
+        }
+        return { id: issueId, status: "open" } as any;
+      });
+
+      const graph: DependencyGraph = {
+        issueIds: ["i-1", "i-2"],
+        edges: [],
+        topologicalOrder: ["i-1", "i-2"],
+        parallelGroups: [["i-1", "i-2"]],
+        cycles: null,
+      };
+
+      const steps = engine.testCreateStepsFromGraph(graph);
+
+      // i-1: not found, should be treated as open -> ready
+      expect(steps[0].issueId).toBe("i-1");
+      expect(steps[0].status).toBe("ready");
+
+      // i-2: open -> ready
+      expect(steps[1].issueId).toBe("i-2");
+      expect(steps[1].status).toBe("ready");
     });
   });
 
