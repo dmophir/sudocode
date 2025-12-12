@@ -37,6 +37,7 @@ vi.mock("../../../src/operations/external-links.js", () => ({
   createIssueFromExternal: vi.fn(),
   deleteIssueFromJsonl: vi.fn(),
   closeIssueInJsonl: vi.fn(),
+  removeExternalLinkFromIssue: vi.fn(),
 }));
 
 import {
@@ -53,6 +54,7 @@ import {
   createIssueFromExternal,
   deleteIssueFromJsonl,
   closeIssueInJsonl,
+  removeExternalLinkFromIssue,
 } from "../../../src/operations/external-links.js";
 
 // Type assertion helper for mocked functions
@@ -944,6 +946,12 @@ describe("SyncCoordinator", () => {
       expect(closeIssueInJsonl).toHaveBeenCalledWith(
         expect.stringContaining(".sudocode"),
         "i-linked"
+      );
+      // Should also remove the external link to prevent orphaned reference
+      expect(removeExternalLinkFromIssue).toHaveBeenCalledWith(
+        expect.stringContaining(".sudocode"),
+        "i-linked",
+        "EXT-DELETE"
       );
       expect(deleteIssueFromJsonl).not.toHaveBeenCalled();
     });

@@ -6,8 +6,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   handlePluginList,
   handlePluginStatus,
+  handlePluginConfigure,
+  handlePluginTest,
+  handlePluginInfo,
 } from "../../../src/cli/plugin-commands.js";
 import * as pluginLoader from "../../../src/integrations/plugin-loader.js";
+import * as config from "../../../src/config.js";
 
 // Mock chalk to capture styled output with chained methods
 vi.mock("chalk", () => {
@@ -161,6 +165,310 @@ describe("Plugin Commands", () => {
     it("should generate package name for unknown short names", () => {
       const path = pluginLoader.resolvePluginPath("unknown");
       expect(path).toBe("@sudocode-ai/integration-unknown");
+    });
+  });
+
+  describe("handlePluginConfigure", () => {
+    const mockPlugin = {
+      name: "test-plugin",
+      displayName: "Test Plugin",
+      version: "1.0.0",
+      validateConfig: vi.fn(),
+      testConnection: vi.fn(),
+      createProvider: vi.fn(),
+      configSchema: {
+        type: "object" as const,
+        properties: {
+          path: {
+            type: "string" as const,
+            title: "Path",
+            required: true,
+          },
+        },
+        required: ["path"],
+      },
+    };
+
+    beforeEach(() => {
+      vi.spyOn(pluginLoader, "loadPlugin").mockResolvedValue(mockPlugin);
+      vi.spyOn(config, "getConfig").mockReturnValue({ version: "0.1.0" });
+      vi.spyOn(config, "updateConfig").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should configure plugin with valid options", async () => {
+      mockPlugin.validateConfig.mockReturnValue({ valid: true, errors: [], warnings: [] });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "test-plugin", {
+        set: ["path=.test"],
+      });
+
+      expect(mockPlugin.validateConfig).toHaveBeenCalledWith({ path: ".test" });
+      expect(config.updateConfig).toHaveBeenCalled();
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(true);
+      expect(parsed.config.options.path).toBe(".test");
+    });
+
+    it("should fail configuration with invalid options", async () => {
+      mockPlugin.validateConfig.mockReturnValue({
+        valid: false,
+        errors: ["path is required"],
+        warnings: [],
+      });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "test-plugin", {});
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(false);
+      expect(parsed.errors).toContain("path is required");
+    });
+
+    it("should error when plugin not installed", async () => {
+      vi.spyOn(pluginLoader, "loadPlugin").mockResolvedValue(null);
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "not-installed", {});
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain("not installed");
+    });
+
+    it("should apply --enable flag", async () => {
+      mockPlugin.validateConfig.mockReturnValue({ valid: true, errors: [], warnings: [] });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "test-plugin", {
+        set: ["path=.test"],
+        enable: true,
+      });
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.config.enabled).toBe(true);
+    });
+
+    it("should apply --disable flag", async () => {
+      mockPlugin.validateConfig.mockReturnValue({ valid: true, errors: [], warnings: [] });
+      vi.spyOn(config, "getConfig").mockReturnValue({
+        version: "0.1.0",
+        integrations: {
+          "test-plugin": { enabled: true, options: { path: ".test" } },
+        },
+      });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "test-plugin", {
+        disable: true,
+      });
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.config.enabled).toBe(false);
+    });
+
+    it("should apply --delete-behavior flag", async () => {
+      mockPlugin.validateConfig.mockReturnValue({ valid: true, errors: [], warnings: [] });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginConfigure(ctx, "test-plugin", {
+        set: ["path=.test"],
+        deleteBehavior: "delete",
+      });
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.config.delete_behavior).toBe("delete");
+    });
+  });
+
+  describe("handlePluginTest", () => {
+    beforeEach(() => {
+      vi.spyOn(config, "getConfig").mockReturnValue({
+        version: "0.1.0",
+        integrations: {
+          beads: { enabled: true, options: { path: ".beads" } },
+        },
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should error when plugin not configured", async () => {
+      vi.spyOn(config, "getConfig").mockReturnValue({ version: "0.1.0" });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginTest(ctx, "unconfigured");
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain("not configured");
+    });
+
+    it("should run test for configured plugin", async () => {
+      vi.spyOn(pluginLoader, "testProviderConnection").mockResolvedValue({
+        success: true,
+        configured: true,
+        enabled: true,
+        details: { path: ".beads", issueCount: 5 },
+      });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginTest(ctx, "beads");
+
+      expect(pluginLoader.testProviderConnection).toHaveBeenCalledWith(
+        "beads",
+        { enabled: true, options: { path: ".beads" } },
+        expect.any(String)
+      );
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe("handlePluginInfo", () => {
+    const mockPlugin = {
+      name: "beads",
+      displayName: "Beads",
+      version: "0.1.0",
+      description: "Test description",
+      validateConfig: vi.fn(),
+      testConnection: vi.fn(),
+      createProvider: vi.fn(),
+      configSchema: {
+        type: "object" as const,
+        properties: {
+          path: {
+            type: "string" as const,
+            title: "Path",
+            description: "Path to beads directory",
+            required: true,
+          },
+        },
+        required: ["path"],
+      },
+    };
+
+    beforeEach(() => {
+      vi.spyOn(pluginLoader, "loadPlugin").mockResolvedValue(mockPlugin);
+      vi.spyOn(config, "getConfig").mockReturnValue({ version: "0.1.0" });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should show plugin info in JSON format", async () => {
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginInfo(ctx, "beads");
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.plugin.name).toBe("beads");
+      expect(parsed.plugin.displayName).toBe("Beads");
+      expect(parsed.plugin.configSchema).toBeDefined();
+    });
+
+    it("should show configured status", async () => {
+      vi.spyOn(config, "getConfig").mockReturnValue({
+        version: "0.1.0",
+        integrations: {
+          beads: { enabled: true, options: { path: ".beads" } },
+        },
+      });
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginInfo(ctx, "beads");
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+
+      expect(parsed.configured).toBe(true);
+      expect(parsed.currentConfig.enabled).toBe(true);
+    });
+
+    it("should error when plugin not installed", async () => {
+      vi.spyOn(pluginLoader, "loadPlugin").mockResolvedValue(null);
+
+      const ctx = {
+        db: {},
+        outputDir: ".sudocode",
+        jsonOutput: true,
+      };
+
+      await handlePluginInfo(ctx, "not-installed");
+
+      const output = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain("not installed");
     });
   });
 });

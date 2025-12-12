@@ -32,6 +32,7 @@ import {
   createIssueFromExternal,
   deleteIssueFromJsonl,
   closeIssueInJsonl,
+  removeExternalLinkFromIssue,
 } from "../operations/external-links.js";
 import * as path from "path";
 
@@ -446,6 +447,10 @@ export class SyncCoordinator {
       const deleteBehavior = config?.delete_behavior || "close";
 
       if (deleteBehavior === "ignore") {
+        // Disable sync on the stale link to avoid future sync errors
+        updateIssueExternalLinkSync(sudocodeDir, linkedEntity.id, change.entity_id, {
+          sync_enabled: false,
+        });
         return {
           success: true,
           entity_id: linkedEntity.id,
@@ -464,8 +469,10 @@ export class SyncCoordinator {
         };
       }
 
-      // Default: close the issue
+      // Default: close the issue AND remove the stale external link
       closeIssueInJsonl(sudocodeDir, linkedEntity.id);
+      // Clean up the external link to avoid orphaned reference
+      removeExternalLinkFromIssue(sudocodeDir, linkedEntity.id, change.entity_id);
       return {
         success: true,
         entity_id: linkedEntity.id,

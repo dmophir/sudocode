@@ -48,6 +48,9 @@ import {
   handlePluginInstall,
   handlePluginStatus,
   handlePluginUninstall,
+  handlePluginConfigure,
+  handlePluginTest,
+  handlePluginInfo,
 } from "./cli/plugin-commands.js";
 import {
   handleResolveConflicts,
@@ -591,6 +594,49 @@ plugin
   .description("Show status of installed plugins")
   .action(async () => {
     await handlePluginStatus(getContext());
+  });
+
+plugin
+  .command("configure <name>")
+  .description("Configure an integration plugin")
+  .option("--set <key=value...>", "Set configuration option(s)")
+  .option("--options <json>", "Set options as JSON object")
+  .option("--enable", "Enable the integration")
+  .option("--disable", "Disable the integration")
+  .option("--auto-sync", "Enable automatic syncing")
+  .option("--no-auto-sync", "Disable automatic syncing")
+  .option("--auto-import", "Enable automatic import of new entities")
+  .option("--no-auto-import", "Disable automatic import")
+  .option(
+    "--delete-behavior <behavior>",
+    "What to do when external entity is deleted (close|delete|ignore)"
+  )
+  .option("--test", "Run connection test after configuration")
+  .action(async (name, options) => {
+    await handlePluginConfigure(getContext(), name, {
+      set: options.set,
+      options: options.options,
+      enable: options.enable,
+      disable: options.disable,
+      autoSync: options.autoSync,
+      autoImport: options.autoImport,
+      deleteBehavior: options.deleteBehavior,
+      test: options.test,
+    });
+  });
+
+plugin
+  .command("test <name>")
+  .description("Test a plugin's connection/setup")
+  .action(async (name) => {
+    await handlePluginTest(getContext(), name);
+  });
+
+plugin
+  .command("info <name>")
+  .description("Show detailed information about a plugin")
+  .action(async (name) => {
+    await handlePluginInfo(getContext(), name);
   });
 
 // Parse arguments

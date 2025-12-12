@@ -8,7 +8,13 @@ import {
   getFirstPartyPlugins,
   loadPlugin,
   resolvePluginPath,
+  testProviderConnection,
 } from "../integrations/plugin-loader.js";
+import { getConfig, updateConfig } from "../config.js";
+import type {
+  IntegrationProviderConfig,
+  IntegrationsConfig,
+} from "@sudocode-ai/types";
 
 export interface CommandContext {
   db: any;
@@ -361,4 +367,377 @@ export async function handlePluginUninstall(
       reject(error);
     });
   });
+}
+
+export interface PluginConfigureOptions {
+  /** Plugin-specific options as JSON string */
+  options?: string;
+  /** Individual option key=value pairs */
+  set?: string[];
+  /** Enable the integration */
+  enable?: boolean;
+  /** Disable the integration */
+  disable?: boolean;
+  /** Enable auto-sync */
+  autoSync?: boolean;
+  /** Enable auto-import */
+  autoImport?: boolean;
+  /** Delete behavior: close, delete, or ignore */
+  deleteBehavior?: "close" | "delete" | "ignore";
+  /** Run test after configuration */
+  test?: boolean;
+}
+
+/**
+ * Configure a plugin
+ */
+export async function handlePluginConfigure(
+  ctx: CommandContext,
+  pluginName: string,
+  options: PluginConfigureOptions
+): Promise<void> {
+  // Load the plugin to validate it exists and get config schema
+  const plugin = await loadPlugin(pluginName);
+  if (!plugin) {
+    if (ctx.jsonOutput) {
+      console.log(
+        JSON.stringify({
+          success: false,
+          plugin: pluginName,
+          error: "Plugin not installed. Install with: sudocode plugin install " + pluginName,
+        })
+      );
+    } else {
+      console.error(
+        chalk.red(`✗ Plugin '${pluginName}' not installed.`)
+      );
+      console.log(chalk.gray(`Install with: sudocode plugin install ${pluginName}`));
+    }
+    return;
+  }
+
+  // Get current config
+  const config = getConfig(ctx.outputDir);
+  const integrations: IntegrationsConfig = config.integrations || {};
+  const existingConfig = integrations[pluginName] || { enabled: false };
+
+  // Parse options
+  let pluginOptions: Record<string, unknown> = existingConfig.options || {};
+
+  // Apply --options JSON if provided
+  if (options.options) {
+    try {
+      const parsed = JSON.parse(options.options);
+      pluginOptions = { ...pluginOptions, ...parsed };
+    } catch (e) {
+      if (ctx.jsonOutput) {
+        console.log(
+          JSON.stringify({
+            success: false,
+            plugin: pluginName,
+            error: "Invalid JSON in --options",
+          })
+        );
+      } else {
+        console.error(chalk.red("✗ Invalid JSON in --options"));
+      }
+      return;
+    }
+  }
+
+  // Apply --set key=value pairs
+  if (options.set && options.set.length > 0) {
+    for (const pair of options.set) {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) {
+        if (ctx.jsonOutput) {
+          console.log(
+            JSON.stringify({
+              success: false,
+              plugin: pluginName,
+              error: `Invalid --set format: ${pair}. Expected key=value`,
+            })
+          );
+        } else {
+          console.error(chalk.red(`✗ Invalid --set format: ${pair}. Expected key=value`));
+        }
+        return;
+      }
+      const key = pair.slice(0, eqIdx);
+      const value = pair.slice(eqIdx + 1);
+
+      // Try to parse as JSON for booleans/numbers, otherwise use as string
+      try {
+        pluginOptions[key] = JSON.parse(value);
+      } catch {
+        pluginOptions[key] = value;
+      }
+    }
+  }
+
+  // Validate the configuration
+  const validation = plugin.validateConfig(pluginOptions);
+  if (!validation.valid) {
+    if (ctx.jsonOutput) {
+      console.log(
+        JSON.stringify({
+          success: false,
+          plugin: pluginName,
+          errors: validation.errors,
+          warnings: validation.warnings,
+        })
+      );
+    } else {
+      console.error(chalk.red("✗ Configuration validation failed:"));
+      for (const error of validation.errors) {
+        console.error(chalk.red(`  - ${error}`));
+      }
+      if (validation.warnings.length > 0) {
+        console.log(chalk.yellow("\nWarnings:"));
+        for (const warning of validation.warnings) {
+          console.log(chalk.yellow(`  - ${warning}`));
+        }
+      }
+    }
+    return;
+  }
+
+  // Show warnings even on success
+  if (!ctx.jsonOutput && validation.warnings.length > 0) {
+    console.log(chalk.yellow("Warnings:"));
+    for (const warning of validation.warnings) {
+      console.log(chalk.yellow(`  - ${warning}`));
+    }
+    console.log();
+  }
+
+  // Build the new provider config
+  const newConfig: IntegrationProviderConfig = {
+    ...existingConfig,
+    options: pluginOptions,
+  };
+
+  // Apply enable/disable flags
+  if (options.enable) {
+    newConfig.enabled = true;
+  } else if (options.disable) {
+    newConfig.enabled = false;
+  } else if (existingConfig.enabled === undefined) {
+    // Enable by default when first configuring
+    newConfig.enabled = true;
+  }
+
+  // Apply other flags
+  if (options.autoSync !== undefined) {
+    newConfig.auto_sync = options.autoSync;
+  }
+  if (options.autoImport !== undefined) {
+    newConfig.auto_import = options.autoImport;
+  }
+  if (options.deleteBehavior) {
+    newConfig.delete_behavior = options.deleteBehavior;
+  }
+
+  // Update config
+  integrations[pluginName] = newConfig;
+  updateConfig(ctx.outputDir, { integrations });
+
+  if (ctx.jsonOutput) {
+    console.log(
+      JSON.stringify({
+        success: true,
+        plugin: pluginName,
+        config: newConfig,
+        message: "Configuration saved",
+      })
+    );
+  } else {
+    console.log(chalk.green(`✓ Plugin '${pluginName}' configured successfully`));
+    console.log();
+    console.log(chalk.bold("Configuration:"));
+    console.log(chalk.gray(`  Enabled: ${newConfig.enabled}`));
+    console.log(chalk.gray(`  Auto-sync: ${newConfig.auto_sync ?? false}`));
+    console.log(chalk.gray(`  Auto-import: ${newConfig.auto_import ?? true}`));
+    console.log(chalk.gray(`  Delete behavior: ${newConfig.delete_behavior ?? "close"}`));
+    console.log(chalk.gray(`  Options:`));
+    for (const [key, value] of Object.entries(newConfig.options || {})) {
+      console.log(chalk.gray(`    ${key}: ${JSON.stringify(value)}`));
+    }
+  }
+
+  // Run test if requested
+  if (options.test) {
+    console.log();
+    await handlePluginTest(ctx, pluginName);
+  }
+}
+
+/**
+ * Test a plugin's connection
+ */
+export async function handlePluginTest(
+  ctx: CommandContext,
+  pluginName: string
+): Promise<void> {
+  // Get current config
+  const config = getConfig(ctx.outputDir);
+  const integrations: IntegrationsConfig = config.integrations || {};
+  const providerConfig = integrations[pluginName];
+
+  if (!providerConfig) {
+    if (ctx.jsonOutput) {
+      console.log(
+        JSON.stringify({
+          success: false,
+          plugin: pluginName,
+          error: "Plugin not configured. Configure with: sudocode plugin configure " + pluginName,
+        })
+      );
+    } else {
+      console.error(
+        chalk.red(`✗ Plugin '${pluginName}' not configured.`)
+      );
+      console.log(chalk.gray(`Configure with: sudocode plugin configure ${pluginName} --set path=.beads`));
+    }
+    return;
+  }
+
+  if (!ctx.jsonOutput) {
+    console.log(chalk.blue(`Testing plugin '${pluginName}'...`));
+  }
+
+  // Get project root (parent of .sudocode)
+  const projectPath = ctx.outputDir.replace(/[/\\]\.sudocode$/, "");
+
+  // Run the test
+  const result = await testProviderConnection(pluginName, providerConfig, projectPath);
+
+  if (ctx.jsonOutput) {
+    console.log(
+      JSON.stringify({
+        plugin: pluginName,
+        ...result,
+      })
+    );
+  } else {
+    if (result.success) {
+      console.log(chalk.green(`✓ Plugin '${pluginName}' test passed`));
+      if (result.details) {
+        console.log();
+        console.log(chalk.bold("Details:"));
+        for (const [key, value] of Object.entries(result.details)) {
+          console.log(chalk.gray(`  ${key}: ${JSON.stringify(value)}`));
+        }
+      }
+    } else {
+      console.error(chalk.red(`✗ Plugin '${pluginName}' test failed`));
+      if (result.error) {
+        console.error(chalk.gray(`  Error: ${result.error}`));
+      }
+    }
+  }
+}
+
+/**
+ * Show detailed info about a plugin including its config schema
+ */
+export async function handlePluginInfo(
+  ctx: CommandContext,
+  pluginName: string
+): Promise<void> {
+  const plugin = await loadPlugin(pluginName);
+
+  if (!plugin) {
+    if (ctx.jsonOutput) {
+      console.log(
+        JSON.stringify({
+          success: false,
+          plugin: pluginName,
+          error: "Plugin not installed",
+        })
+      );
+    } else {
+      console.error(chalk.red(`✗ Plugin '${pluginName}' not installed`));
+      console.log(chalk.gray(`Install with: sudocode plugin install ${pluginName}`));
+    }
+    return;
+  }
+
+  // Get current config if exists
+  const config = getConfig(ctx.outputDir);
+  const integrations: IntegrationsConfig = config.integrations || {};
+  const currentConfig = integrations[pluginName];
+
+  if (ctx.jsonOutput) {
+    console.log(
+      JSON.stringify({
+        success: true,
+        plugin: {
+          name: plugin.name,
+          displayName: plugin.displayName,
+          version: plugin.version,
+          description: plugin.description,
+          configSchema: plugin.configSchema,
+        },
+        configured: !!currentConfig,
+        currentConfig,
+      })
+    );
+  } else {
+    console.log(chalk.blue.bold(plugin.displayName));
+    console.log(chalk.gray(plugin.description || "No description"));
+    console.log();
+    console.log(`  ${chalk.bold("Version:")} ${plugin.version}`);
+    console.log(`  ${chalk.bold("Package:")} ${resolvePluginPath(pluginName)}`);
+    console.log(`  ${chalk.bold("Configured:")} ${currentConfig ? chalk.green("Yes") : chalk.yellow("No")}`);
+
+    if (currentConfig) {
+      console.log(`  ${chalk.bold("Enabled:")} ${currentConfig.enabled ? chalk.green("Yes") : chalk.gray("No")}`);
+    }
+
+    console.log();
+
+    // Show config schema
+    if (plugin.configSchema) {
+      console.log(chalk.bold("Configuration Options:"));
+      console.log();
+
+      for (const [key, prop] of Object.entries(plugin.configSchema.properties)) {
+        const isRequired = plugin.configSchema.required?.includes(key) || prop.required;
+        const reqLabel = isRequired ? chalk.red("*") : "";
+
+        console.log(`  ${chalk.cyan(key)}${reqLabel} (${prop.type})`);
+        if (prop.description) {
+          console.log(`    ${chalk.gray(prop.description)}`);
+        }
+        if (prop.default !== undefined) {
+          console.log(`    ${chalk.gray(`Default: ${JSON.stringify(prop.default)}`)}`);
+        }
+        console.log();
+      }
+
+      console.log(chalk.gray("* = required"));
+    }
+
+    // Show example command
+    console.log();
+    console.log(chalk.bold("Quick Start:"));
+
+    if (!currentConfig) {
+      // Build example command from schema
+      const exampleOpts: string[] = [];
+      if (plugin.configSchema) {
+        for (const [key, prop] of Object.entries(plugin.configSchema.properties)) {
+          const isRequired = plugin.configSchema.required?.includes(key) || prop.required;
+          if (isRequired) {
+            const example = prop.default ?? (prop.type === "string" ? `<${key}>` : "");
+            exampleOpts.push(`--set ${key}=${example}`);
+          }
+        }
+      }
+      console.log(chalk.gray(`  sudocode plugin configure ${pluginName} ${exampleOpts.join(" ")}`));
+    } else {
+      console.log(chalk.gray(`  sudocode plugin test ${pluginName}`));
+    }
+  }
 }
