@@ -61,6 +61,7 @@ const beadsPlugin: IntegrationPlugin = {
         type: "string",
         title: "Beads Path",
         description: "Path to the .beads directory (relative to project root)",
+        default: ".beads",
         required: true,
       },
       issue_prefix: {
@@ -191,21 +192,56 @@ class BeadsProvider implements IntegrationProvider {
     this.resolvedPath = path.resolve(projectPath, options.path);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(_config?: unknown): Promise<void> {
+    console.log(`[beads] Initializing provider for path: ${this.resolvedPath}`);
+
     if (!existsSync(this.resolvedPath)) {
       throw new Error(`Beads directory not found: ${this.resolvedPath}`);
     }
 
     // Check CLI availability
     this.cliAvailable = isBeadsCLIAvailable();
+    console.log(`[beads] CLI available: ${this.cliAvailable}`);
 
     // Capture initial state for change detection
     this.captureEntityState();
+    console.log(`[beads] Captured initial state with ${this.entityHashes.size} entities`);
+  }
+
+  async validate(): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    if (!existsSync(this.resolvedPath)) {
+      errors.push(`Beads directory not found: ${this.resolvedPath}`);
+    }
+
+    const issuesPath = path.join(this.resolvedPath, "issues.jsonl");
+    if (!existsSync(issuesPath)) {
+      // Not an error - file might not exist yet
+      console.log(`[beads] Note: issues.jsonl does not exist yet at ${issuesPath}`);
+    }
+
+    const valid = errors.length === 0;
+    console.log(`[beads] Validation result: valid=${valid}, errors=${errors.length}`);
+    return { valid, errors };
   }
 
   async dispose(): Promise<void> {
+    console.log(`[beads] Disposing provider`);
     // Stop watcher if running
     this.stopWatching();
+  }
+
+  parseExternalId(id: string): { provider: string; id: string } {
+    // Handle "beads:xxx" format or just "xxx"
+    if (id.startsWith("beads:")) {
+      return { provider: "beads", id: id.substring(6) };
+    }
+    return { provider: "beads", id };
+  }
+
+  formatExternalId(id: string): string {
+    return `beads:${id}`;
   }
 
   /**
@@ -307,6 +343,9 @@ class BeadsProvider implements IntegrationProvider {
           });
         }
 
+        // Read back and update watcher hash
+        this.updateWatcherHashForEntity(id);
+
         // Refresh state after creation
         this.captureEntityState();
         return id;
@@ -325,15 +364,38 @@ class BeadsProvider implements IntegrationProvider {
       priority: entity.priority ?? 2,
     }, prefix);
 
+    // Update watcher hash so it won't detect our create as a change
+    if (this.beadsWatcher) {
+      this.beadsWatcher.updateEntityHash(newIssue.id, newIssue);
+    }
+
     // Refresh state after creation
     this.captureEntityState();
     return newIssue.id;
+  }
+
+  /**
+   * Helper to update watcher hash for an entity after writing
+   */
+  private updateWatcherHashForEntity(entityId: string): void {
+    if (!this.beadsWatcher) return;
+
+    const issues = readBeadsJSONL(
+      path.join(this.resolvedPath, "issues.jsonl"),
+      { skipErrors: true }
+    );
+    const entity = issues.find(i => i.id === entityId);
+    if (entity) {
+      this.beadsWatcher.updateEntityHash(entityId, entity);
+    }
   }
 
   async updateEntity(
     externalId: string,
     entity: Partial<Spec | Issue>
   ): Promise<void> {
+    console.log(`[beads] updateEntity called for ${externalId}:`, JSON.stringify(entity));
+
     // Always use direct JSONL for updates (Beads CLI may not have update command)
     // Only include defined fields to avoid overwriting existing values with undefined
     const issueEntity = entity as Partial<Issue>;
@@ -344,9 +406,22 @@ class BeadsProvider implements IntegrationProvider {
     if (issueEntity.status !== undefined) updates.status = issueEntity.status;
     if (entity.priority !== undefined) updates.priority = entity.priority;
 
+    console.log(`[beads] Writing updates to beads:`, JSON.stringify(updates));
     updateIssueViaJSONL(this.resolvedPath, externalId, updates);
 
-    // Refresh state after update
+    // Read back the updated entity to get the full content with new updated_at
+    const updatedIssues = readBeadsJSONL(
+      path.join(this.resolvedPath, "issues.jsonl"),
+      { skipErrors: true }
+    );
+    const updatedEntity = updatedIssues.find(i => i.id === externalId);
+
+    // Update watcher's hash cache so it won't detect our write as a change
+    if (this.beadsWatcher && updatedEntity) {
+      this.beadsWatcher.updateEntityHash(externalId, updatedEntity);
+    }
+
+    // Refresh provider state after update
     this.captureEntityState();
   }
 
@@ -354,6 +429,12 @@ class BeadsProvider implements IntegrationProvider {
     // Always use JSONL for hard delete - CLI 'close' only changes status
     // This ensures the entity is actually removed from the file
     deleteIssueViaJSONL(this.resolvedPath, externalId);
+
+    // Remove from watcher's hash cache so it won't detect our delete as a change
+    if (this.beadsWatcher) {
+      this.beadsWatcher.removeEntityHash(externalId);
+    }
+
     this.captureEntityState();
   }
 
@@ -424,16 +505,23 @@ class BeadsProvider implements IntegrationProvider {
   // =========================================================================
 
   startWatching(callback: (changes: ExternalChange[]) => void): void {
+    console.log(`[beads] startWatching called for path: ${this.resolvedPath}`);
+
     if (this.beadsWatcher) {
       console.warn("[beads] Already watching");
       return;
     }
 
     this.beadsWatcher = new BeadsWatcher(this.resolvedPath);
-    this.beadsWatcher.start(callback);
+    this.beadsWatcher.start((changes) => {
+      console.log(`[beads] Watcher detected ${changes.length} change(s), forwarding to coordinator`);
+      callback(changes);
+    });
+    console.log("[beads] Watcher started successfully");
   }
 
   stopWatching(): void {
+    console.log("[beads] stopWatching called");
     if (this.beadsWatcher) {
       this.beadsWatcher.stop();
       this.beadsWatcher = null;

@@ -25,7 +25,6 @@ const installedPlugins = new Set(["beads"]);
 vi.mock("@sudocode-ai/cli/dist/integrations/index.js", () => ({
   getFirstPartyPlugins: vi.fn(() => [
     { name: "beads", package: "@sudocode-ai/integration-beads" },
-    { name: "jira", package: "@sudocode-ai/integration-jira" },
   ]),
   loadPlugin: vi.fn(async (name: string) => {
     if (installedPlugins.has(name)) {
@@ -135,12 +134,15 @@ describe("Plugins Router", () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          plugins: expect.arrayContaining([
-            expect.objectContaining({
-              name: "beads",
-              package: "@sudocode-ai/integration-beads",
-            }),
-          ]),
+          success: true,
+          data: expect.objectContaining({
+            plugins: expect.arrayContaining([
+              expect.objectContaining({
+                name: "beads",
+                package: "@sudocode-ai/integration-beads",
+              }),
+            ]),
+          }),
         })
       );
     });
@@ -164,7 +166,7 @@ describe("Plugins Router", () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       const response = vi.mocked(res.json).mock.calls[0][0];
-      const beadsPlugin = response.plugins.find(
+      const beadsPlugin = response.data.plugins.find(
         (p: { name: string }) => p.name === "beads"
       );
 
@@ -208,9 +210,12 @@ describe("Plugins Router", () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: "beads",
-          displayName: "Beads",
-          installed: true,
+          success: true,
+          data: expect.objectContaining({
+            name: "beads",
+            displayName: "Beads",
+            installed: true,
+          }),
         })
       );
     });
@@ -251,7 +256,9 @@ describe("Plugins Router", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          message: expect.stringContaining("activated"),
+          data: expect.objectContaining({
+            message: expect.stringContaining("activated"),
+          }),
         })
       );
 
@@ -339,7 +346,9 @@ describe("Plugins Router", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          message: expect.stringContaining("deactivated"),
+          data: expect.objectContaining({
+            message: expect.stringContaining("deactivated"),
+          }),
         })
       );
 
@@ -389,7 +398,9 @@ describe("Plugins Router", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          options: { path: ".new-beads" },
+          data: expect.objectContaining({
+            options: { path: ".new-beads" },
+          }),
         })
       );
     });
@@ -432,6 +443,9 @@ describe("Plugins Router", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
+          data: expect.objectContaining({
+            success: true,
+          }),
         })
       );
     });
@@ -474,7 +488,9 @@ describe("Plugins Router", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          message: expect.stringContaining("removed"),
+          data: expect.objectContaining({
+            message: expect.stringContaining("removed"),
+          }),
         })
       );
 

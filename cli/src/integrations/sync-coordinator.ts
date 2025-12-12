@@ -126,38 +126,55 @@ export class SyncCoordinator {
    * 4. Start watching if auto_sync is enabled and provider supports it
    */
   async start(): Promise<void> {
+    console.log(`[sync-coordinator] Starting with ${this.providers.size} provider(s)`);
+
     for (const [name, provider] of this.providers) {
       const config = this.getProviderConfig(name);
-      if (!config?.enabled) continue;
+      console.log(`[sync-coordinator] Provider ${name}: enabled=${config?.enabled}, auto_sync=${config?.auto_sync}`);
+
+      if (!config?.enabled) {
+        console.log(`[sync-coordinator] Skipping ${name} - not enabled`);
+        continue;
+      }
 
       try {
+        console.log(`[sync-coordinator] Initializing provider ${name}`);
         await provider.initialize(config);
 
+        console.log(`[sync-coordinator] Validating provider ${name}`);
         const validation = await provider.validate();
         if (!validation.valid) {
           console.warn(
-            `Provider ${name} validation failed:`,
+            `[sync-coordinator] Provider ${name} validation failed:`,
             validation.errors
           );
           continue;
         }
 
         // Start watching if auto_sync is enabled and provider supports it
+        console.log(`[sync-coordinator] Provider ${name}: supportsWatch=${provider.supportsWatch}, auto_sync=${config.auto_sync}`);
         if (
           config.auto_sync &&
           provider.supportsWatch &&
           provider.startWatching
         ) {
-          provider.startWatching((changes) =>
-            this.handleInboundChanges(name, changes)
-          );
+          console.log(`[sync-coordinator] Starting watcher for ${name}`);
+          provider.startWatching((changes) => {
+            console.log(`[sync-coordinator] Received ${changes.length} change(s) from ${name}`);
+            this.handleInboundChanges(name, changes);
+          });
+          console.log(`[sync-coordinator] Watcher started for ${name}`);
+        } else {
+          console.log(`[sync-coordinator] NOT starting watcher for ${name} (auto_sync=${config.auto_sync}, supportsWatch=${provider.supportsWatch}, hasStartWatching=${!!provider.startWatching})`);
         }
 
         this.lastSyncTimes.set(name, new Date());
+        console.log(`[sync-coordinator] Provider ${name} initialized successfully`);
       } catch (error) {
-        console.error(`Failed to initialize provider ${name}:`, error);
+        console.error(`[sync-coordinator] Failed to initialize provider ${name}:`, error);
       }
     }
+    console.log(`[sync-coordinator] Start complete`);
   }
 
   /**
@@ -232,8 +249,13 @@ export class SyncCoordinator {
    * @returns Array of sync results for each link
    */
   async syncEntity(entityId: string): Promise<SyncResult[]> {
+    console.log(`[sync-coordinator] syncEntity called for ${entityId}`);
+
     const entity = this.loadEntity(entityId);
+    console.log(`[sync-coordinator] Entity ${entityId} has ${entity?.external_links?.length || 0} external link(s)`);
+
     if (!entity?.external_links?.length) {
+      console.log(`[sync-coordinator] No external links for ${entityId}, skipping outbound sync`);
       return [
         {
           success: true,
@@ -548,8 +570,11 @@ export class SyncCoordinator {
     entity: Entity,
     link: ExternalLink
   ): Promise<SyncResult> {
+    console.log(`[sync-coordinator] syncSingleLink: entity=${entity.id}, external=${link.external_id}, direction=${link.sync_direction}`);
+
     const provider = this.providers.get(link.provider);
     if (!provider) {
+      console.log(`[sync-coordinator] Provider not registered: ${link.provider}`);
       return {
         success: false,
         entity_id: entity.id,
@@ -561,8 +586,10 @@ export class SyncCoordinator {
 
     try {
       // Fetch current external state
+      console.log(`[sync-coordinator] Fetching external entity ${link.external_id}`);
       const externalEntity = await provider.fetchEntity(link.external_id);
       if (!externalEntity) {
+        console.log(`[sync-coordinator] External entity not found: ${link.external_id}`);
         return {
           success: false,
           entity_id: entity.id,
@@ -571,6 +598,7 @@ export class SyncCoordinator {
           error: "External entity not found",
         };
       }
+      console.log(`[sync-coordinator] External entity found, status=${externalEntity.status}`);
 
       // Check for conflicts
       const change: ExternalChange = {
@@ -582,8 +610,11 @@ export class SyncCoordinator {
       };
 
       const conflict = this.detectConflict(entity, change, link);
+      console.log(`[sync-coordinator] Conflict detected: ${conflict !== null}`);
+
       if (conflict) {
         const resolution = await this.resolveConflict(conflict);
+        console.log(`[sync-coordinator] Conflict resolution: ${resolution}`);
 
         if (resolution === "skip") {
           return {
@@ -596,6 +627,7 @@ export class SyncCoordinator {
 
         if (resolution === "sudocode") {
           // Push sudocode to external
+          console.log(`[sync-coordinator] Pushing sudocode to external (conflict resolution), entity:`, JSON.stringify(entity));
           await provider.updateEntity(link.external_id, entity);
           this.updateLinkSyncTime(entity.id, link.external_id);
           return {
@@ -622,11 +654,16 @@ export class SyncCoordinator {
       }
 
       // No conflict - sync based on direction
+      console.log(`[sync-coordinator] No conflict, checking direction: ${link.sync_direction}`);
       if (
         link.sync_direction === "outbound" ||
         link.sync_direction === "bidirectional"
       ) {
+        console.log(`[sync-coordinator] Calling provider.updateEntity with:`, JSON.stringify(entity));
         await provider.updateEntity(link.external_id, entity);
+        console.log(`[sync-coordinator] provider.updateEntity completed`);
+      } else {
+        console.log(`[sync-coordinator] Skipping updateEntity - direction is ${link.sync_direction}`);
       }
 
       this.updateLinkSyncTime(entity.id, link.external_id);
@@ -637,6 +674,7 @@ export class SyncCoordinator {
         action: "updated",
       };
     } catch (error) {
+      console.error(`[sync-coordinator] syncSingleLink error:`, error);
       return {
         success: false,
         entity_id: entity.id,

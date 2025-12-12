@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, existsSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ExternalChange } from "@sudocode-ai/types";
@@ -337,28 +337,25 @@ describe("File Watcher Integration", () => {
     });
   });
 
-  describe("Integration with Provider Operations", () => {
-    it("should work alongside provider create operations", async () => {
+  describe("Sync Loop Prevention", () => {
+    it("should NOT detect provider create operations (prevents sync loops)", async () => {
       const changes: ExternalChange[] = [];
       const callback = vi.fn((c: ExternalChange[]) => changes.push(...c));
 
       provider.startWatching(callback);
       await sleep(200);
 
-      // Create via provider
-      const id = await provider.createEntity({ title: "Provider Created" });
+      // Create via provider - watcher hash is updated, so it shouldn't be detected
+      await provider.createEntity({ title: "Provider Created" });
 
-      // Wait for watcher to see the change
-      await waitForCallback(callback, 1000);
+      // Give watcher time to potentially detect (it shouldn't)
+      await sleep(500);
 
-      // Should detect the creation
-      const createChange = changes.find(
-        (c) => c.change_type === "created" && c.entity_id === id
-      );
-      expect(createChange).toBeDefined();
+      // Provider operations should NOT trigger watcher callbacks (sync loop prevention)
+      expect(changes).toHaveLength(0);
     });
 
-    it("should work alongside provider update operations", async () => {
+    it("should NOT detect provider update operations (prevents sync loops)", async () => {
       const id = await provider.createEntity({ title: "Original" });
 
       const changes: ExternalChange[] = [];
@@ -367,18 +364,17 @@ describe("File Watcher Integration", () => {
       provider.startWatching(callback);
       await sleep(200);
 
-      // Update via provider
+      // Update via provider - watcher hash is updated, so it shouldn't be detected
       await provider.updateEntity(id, { title: "Updated" });
 
-      await waitForCallback(callback, 1000);
+      // Give watcher time to potentially detect (it shouldn't)
+      await sleep(500);
 
-      const updateChange = changes.find(
-        (c) => c.change_type === "updated" && c.entity_id === id
-      );
-      expect(updateChange).toBeDefined();
+      // Provider operations should NOT trigger watcher callbacks (sync loop prevention)
+      expect(changes).toHaveLength(0);
     });
 
-    it("should work alongside provider delete operations", async () => {
+    it("should NOT detect provider delete operations (prevents sync loops)", async () => {
       const id = await provider.createEntity({ title: "To Delete" });
 
       const changes: ExternalChange[] = [];
@@ -387,15 +383,48 @@ describe("File Watcher Integration", () => {
       provider.startWatching(callback);
       await sleep(200);
 
-      // Delete via provider
+      // Delete via provider - watcher hash is removed, so it shouldn't be detected
       await provider.deleteEntity(id);
 
-      await waitForCallback(callback, 1000);
+      // Give watcher time to potentially detect (it shouldn't)
+      await sleep(500);
 
-      const deleteChange = changes.find(
-        (c) => c.change_type === "deleted" && c.entity_id === id
+      // Provider operations should NOT trigger watcher callbacks (sync loop prevention)
+      expect(changes).toHaveLength(0);
+    });
+
+    it("should still detect external changes while provider operations occur", async () => {
+      // First create an entity to have something to watch
+      await provider.createEntity({ title: "Existing" });
+
+      const changes: ExternalChange[] = [];
+      const callback = vi.fn((c: ExternalChange[]) => changes.push(...c));
+
+      provider.startWatching(callback);
+      await sleep(200);
+
+      // Simulate external change (not through provider)
+      const externalIssue = {
+        id: "external-new",
+        title: "External Change",
+        status: "open",
+        priority: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Read existing content and append
+      const existingContent = readFileSync(issuesPath, "utf-8");
+      writeFileSync(issuesPath, existingContent + JSON.stringify(externalIssue) + "\n");
+
+      // Wait for watcher
+      await waitForCallback(callback, 2000);
+
+      // Should detect the external creation
+      const createChange = changes.find(
+        (c) => c.change_type === "created" && c.entity_id === "external-new"
       );
-      expect(deleteChange).toBeDefined();
+      expect(createChange).toBeDefined();
     });
   });
 });

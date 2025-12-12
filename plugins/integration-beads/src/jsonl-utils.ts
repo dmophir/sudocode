@@ -77,6 +77,8 @@ export function readBeadsJSONL(
  * @param issues - Array of issues to write
  */
 export function writeBeadsJSONL(filePath: string, issues: BeadsIssue[]): void {
+  console.log(`[beads-jsonl] writeBeadsJSONL called with ${issues.length} issue(s)`);
+
   // Sort by created_at for consistent ordering (minimizes merge conflicts)
   const sortedIssues = [...issues].sort((a, b) => {
     const aDate = a.created_at || "";
@@ -96,14 +98,19 @@ export function writeBeadsJSONL(filePath: string, issues: BeadsIssue[]): void {
   if (existsSync(filePath)) {
     const existingContent = readFileSync(filePath, "utf-8");
     if (existingContent.trim() === content.trim()) {
+      console.log(`[beads-jsonl] Content unchanged, skipping write`);
       return; // No changes
     }
+    console.log(`[beads-jsonl] Content changed, proceeding with write`);
+  } else {
+    console.log(`[beads-jsonl] File doesn't exist, creating new file`);
   }
 
   // Atomic write: write to temp file, then rename
   const tempPath = `${filePath}.tmp`;
   writeFileSync(tempPath, content + "\n", "utf-8");
   renameSync(tempPath, filePath);
+  console.log(`[beads-jsonl] Successfully wrote to ${filePath}`);
 }
 
 /**
@@ -170,13 +177,18 @@ export function updateIssueViaJSONL(
   issueId: string,
   updates: Partial<BeadsIssue>
 ): BeadsIssue {
+  console.log(`[beads-jsonl] updateIssueViaJSONL called for ${issueId} with updates:`, JSON.stringify(updates));
+
   const issuesPath = path.join(beadsDir, "issues.jsonl");
   const issues = readBeadsJSONL(issuesPath, { skipErrors: true });
 
   const index = issues.findIndex((i) => i.id === issueId);
   if (index === -1) {
+    console.error(`[beads-jsonl] Issue not found: ${issueId}`);
     throw new Error(`Beads issue not found: ${issueId}`);
   }
+
+  console.log(`[beads-jsonl] Found issue at index ${index}, current status: ${issues[index].status}`);
 
   // Merge updates, preserving beads-specific fields
   const updatedIssue: BeadsIssue = {
@@ -186,8 +198,11 @@ export function updateIssueViaJSONL(
     updated_at: new Date().toISOString(),
   };
 
+  console.log(`[beads-jsonl] Merged issue, new status: ${updatedIssue.status}`);
+
   issues[index] = updatedIssue;
   writeBeadsJSONL(issuesPath, issues);
+  console.log(`[beads-jsonl] Wrote issues back to ${issuesPath}`);
 
   return updatedIssue;
 }

@@ -331,11 +331,16 @@ export class IntegrationSyncService {
    * Sync a specific entity's external links
    */
   async syncEntity(entityId: string): Promise<SyncResult[]> {
+    console.log(`[integration-sync] syncEntity called for ${entityId}`);
+
     if (!this.coordinator) {
-      throw new Error("IntegrationSyncService not started");
+      console.log(`[integration-sync] Coordinator not started, skipping sync for ${entityId}`);
+      return [];
     }
 
-    return this.coordinator.syncEntity(entityId);
+    const results = await this.coordinator.syncEntity(entityId);
+    console.log(`[integration-sync] syncEntity results for ${entityId}:`, JSON.stringify(results));
+    return results;
   }
 
   // ==========================================================================

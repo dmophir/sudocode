@@ -494,12 +494,11 @@ describe("IntegrationSyncService", () => {
       await service.start();
     });
 
-    it("should throw if not started", async () => {
+    it("should return empty array if not started", async () => {
       await service.stop();
 
-      await expect(service.syncEntity("i-123")).rejects.toThrow(
-        "IntegrationSyncService not started"
-      );
+      const results = await service.syncEntity("i-123");
+      expect(results).toEqual([]);
     });
 
     it("should sync specific entity", async () => {

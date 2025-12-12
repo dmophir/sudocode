@@ -14,7 +14,7 @@ import {
 } from "../services/issues.js";
 import { generateIssueId } from "@sudocode-ai/cli/dist/id-generator.js";
 import { broadcastIssueUpdate } from "../services/websocket.js";
-import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
+import { triggerExport, executeExportNow, syncEntityToMarkdown } from "../services/export.js";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -171,7 +171,7 @@ export function createIssuesRouter(): Router {
   /**
    * PUT /api/issues/:id - Update an existing issue
    */
-  router.put("/:id", (req: Request, res: Response) => {
+  router.put("/:id", async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const {
@@ -232,8 +232,20 @@ export function createIssuesRouter(): Router {
       // Update issue using CLI operation
       const issue = updateExistingIssue(req.project!.db, id, updateInput);
 
-      // Trigger export to JSONL files
-      triggerExport(req.project!.db, req.project!.sudocodeDir);
+      // If integration sync is enabled, export immediately so JSONL is updated before sync
+      // Otherwise use debounced export
+      if (req.project!.integrationSyncService) {
+        // Execute export now to ensure JSONL is updated before integration sync
+        await executeExportNow(req.project!.db, req.project!.sudocodeDir);
+
+        // Sync to external integrations
+        req.project!.integrationSyncService.syncEntity(issue.id).catch((error) => {
+          console.error(`Failed to sync issue ${issue.id} to external integrations:`, error);
+        });
+      } else {
+        // Trigger debounced export when no integration sync is needed
+        triggerExport(req.project!.db, req.project!.sudocodeDir);
+      }
 
       // Sync this specific issue to its markdown file (don't wait for it)
       syncEntityToMarkdown(req.project!.db, issue.id, "issue", req.project!.sudocodeDir).catch((error) => {

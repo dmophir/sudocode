@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from "express";
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { execSync } from "child_process";
 import * as path from "path";
 import type {
   IntegrationsConfig,
@@ -149,7 +150,7 @@ export function createPluginsRouter(): Router {
         }
       }
 
-      res.status(200).json({ plugins });
+      res.status(200).json({ success: true, data: { plugins } });
     } catch (error) {
       console.error("Failed to list plugins:", error);
       res.status(500).json({ error: "Failed to list plugins" });
@@ -195,7 +196,7 @@ export function createPluginsRouter(): Router {
         options: providerConfig?.options,
       };
 
-      res.status(200).json(pluginInfo);
+      res.status(200).json({ success: true, data: pluginInfo });
     } catch (error) {
       console.error("Failed to get plugin:", error);
       res.status(500).json({ error: "Failed to get plugin details" });
@@ -250,10 +251,12 @@ export function createPluginsRouter(): Router {
       // Create or update provider config
       const providerConfig: IntegrationProviderConfig = {
         enabled: true,
+        auto_sync: true, // Enable auto-sync by default when activating
         options,
         ...(integrations[name] || {}),
       };
       providerConfig.enabled = true; // Ensure enabled is set
+      providerConfig.auto_sync = true; // Ensure auto_sync is enabled
       if (Object.keys(options).length > 0) {
         providerConfig.options = options;
       }
@@ -264,14 +267,21 @@ export function createPluginsRouter(): Router {
       // Write updated config
       writeConfig(req.project!.sudocodeDir, config);
 
+      // Reload integration sync service to pick up new config
+      if (req.project!.integrationSyncService) {
+        await req.project!.integrationSyncService.reload();
+      }
+
       res.status(200).json({
         success: true,
-        message: `Plugin '${name}' activated`,
-        plugin: {
-          name,
-          displayName: plugin.displayName,
-          enabled: true,
-          options: providerConfig.options,
+        data: {
+          message: `Plugin '${name}' activated`,
+          plugin: {
+            name,
+            displayName: plugin.displayName,
+            enabled: true,
+            options: providerConfig.options,
+          },
         },
       });
     } catch (error) {
@@ -301,13 +311,21 @@ export function createPluginsRouter(): Router {
 
       // Set enabled to false (preserve other config)
       integrations[name].enabled = false;
+      integrations[name].auto_sync = false; // Also disable auto-sync
       config.integrations = integrations;
 
       writeConfig(req.project!.sudocodeDir, config);
 
+      // Reload integration sync service to stop watching/polling
+      if (req.project!.integrationSyncService) {
+        await req.project!.integrationSyncService.reload();
+      }
+
       res.status(200).json({
         success: true,
-        message: `Plugin '${name}' deactivated`,
+        data: {
+          message: `Plugin '${name}' deactivated`,
+        },
       });
     } catch (error) {
       console.error("Failed to deactivate plugin:", error);
@@ -366,10 +384,17 @@ export function createPluginsRouter(): Router {
       config.integrations = integrations;
       writeConfig(req.project!.sudocodeDir, config);
 
+      // Reload integration sync service to pick up new options
+      if (req.project!.integrationSyncService) {
+        await req.project!.integrationSyncService.reload();
+      }
+
       res.status(200).json({
         success: true,
-        options,
-        warnings: validation.warnings,
+        data: {
+          options,
+          warnings: validation.warnings,
+        },
       });
     } catch (error) {
       console.error("Failed to update plugin options:", error);
@@ -404,13 +429,88 @@ export function createPluginsRouter(): Router {
         req.project!.path
       );
 
-      res.status(200).json(result);
+      res.status(200).json({ success: true, data: result });
     } catch (error) {
       console.error("Failed to test plugin:", error);
       res.status(500).json({
         success: false,
         error: "Failed to test plugin connection",
       });
+    }
+  });
+
+  /**
+   * POST /api/plugins/:name/install - Install a plugin via npm
+   *
+   * Installs the plugin package globally so it can be loaded
+   */
+  router.post("/:name/install", async (req: Request, res: Response) => {
+    try {
+      const { name } = req.params;
+      const { package: packageName } = req.body as { package?: string };
+
+      // Determine the package to install
+      const targetPackage =
+        packageName || `@sudocode-ai/integration-${name}`;
+
+      // Check if already installed
+      const alreadyInstalled = await isPluginInstalled(name);
+      if (alreadyInstalled) {
+        res.status(200).json({
+          success: true,
+          data: {
+            message: `Plugin '${name}' is already installed`,
+            alreadyInstalled: true,
+          },
+        });
+        return;
+      }
+
+      // Install the package
+      try {
+        execSync(`npm install -g ${targetPackage}`, {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
+      } catch (installError) {
+        const error = installError as { stderr?: string; message?: string };
+        res.status(500).json({
+          success: false,
+          error: `Failed to install package: ${error.stderr || error.message}`,
+        });
+        return;
+      }
+
+      // Verify installation
+      const installed = await isPluginInstalled(name);
+      if (!installed) {
+        res.status(500).json({
+          success: false,
+          error: `Package installed but plugin '${name}' could not be loaded`,
+        });
+        return;
+      }
+
+      // Load plugin to get info
+      const plugin = await loadPlugin(name);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          message: `Plugin '${name}' installed successfully`,
+          plugin: plugin
+            ? {
+                name,
+                displayName: plugin.displayName,
+                version: plugin.version,
+                description: plugin.description,
+              }
+            : { name },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to install plugin:", error);
+      res.status(500).json({ error: "Failed to install plugin" });
     }
   });
 
@@ -438,9 +538,16 @@ export function createPluginsRouter(): Router {
 
       writeConfig(req.project!.sudocodeDir, config);
 
+      // Reload integration sync service to unregister removed provider
+      if (req.project!.integrationSyncService) {
+        await req.project!.integrationSyncService.reload();
+      }
+
       res.status(200).json({
         success: true,
-        message: `Plugin '${name}' configuration removed`,
+        data: {
+          message: `Plugin '${name}' configuration removed`,
+        },
       });
     } catch (error) {
       console.error("Failed to remove plugin:", error);

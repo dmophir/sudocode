@@ -235,6 +235,58 @@ describe("JSONL Utils", () => {
 
       expect((updated as any).beadsCustom).toBe("value");
     });
+
+    describe("status updates", () => {
+      it("should update status from open to closed", () => {
+        const updated = updateIssueViaJSONL(beadsDir, "bd-1", {
+          status: "closed",
+        });
+
+        expect(updated.status).toBe("closed");
+        // Verify in file
+        const fromFile = getIssueById(beadsDir, "bd-1");
+        expect(fromFile?.status).toBe("closed");
+      });
+
+      it("should update status from open to in_progress", () => {
+        const updated = updateIssueViaJSONL(beadsDir, "bd-1", {
+          status: "in_progress",
+        });
+
+        expect(updated.status).toBe("in_progress");
+      });
+
+      it("should update status from open to blocked", () => {
+        const updated = updateIssueViaJSONL(beadsDir, "bd-1", {
+          status: "blocked",
+        });
+
+        expect(updated.status).toBe("blocked");
+      });
+
+      it("should update status along with other fields", () => {
+        const updated = updateIssueViaJSONL(beadsDir, "bd-1", {
+          title: "Updated with status",
+          status: "needs_review",
+          priority: 0,
+        });
+
+        expect(updated.title).toBe("Updated with status");
+        expect(updated.status).toBe("needs_review");
+        expect(updated.priority).toBe(0);
+        // Original content preserved
+        expect(updated.content).toBe("Original content");
+      });
+
+      it("should preserve original status when not updating status", () => {
+        const updated = updateIssueViaJSONL(beadsDir, "bd-1", {
+          title: "New title only",
+        });
+
+        expect(updated.title).toBe("New title only");
+        expect(updated.status).toBe("open"); // Original status preserved
+      });
+    });
   });
 
   describe("deleteIssueViaJSONL", () => {

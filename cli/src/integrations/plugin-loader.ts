@@ -5,10 +5,8 @@
  * - npm packages (e.g., "@sudocode-ai/integration-beads")
  * - Local paths (e.g., "./plugins/my-integration")
  *
- * First-party plugins are bundled as optional dependencies and loaded by name:
+ * First-party plugins are loaded by short name:
  * - "beads" -> "@sudocode-ai/integration-beads"
- * - "jira" -> "@sudocode-ai/integration-jira"
- * - etc.
  */
 
 import type {
@@ -24,9 +22,6 @@ import type {
  */
 const FIRST_PARTY_PLUGINS: Record<string, string> = {
   beads: "@sudocode-ai/integration-beads",
-  jira: "@sudocode-ai/integration-jira",
-  "spec-kit": "@sudocode-ai/integration-spec-kit",
-  openspec: "@sudocode-ai/integration-openspec",
 };
 
 /**
@@ -93,7 +88,10 @@ export async function loadPlugin(
   } catch (error) {
     // Plugin not installed or failed to load
     const err = error as Error;
-    if (err.code === "ERR_MODULE_NOT_FOUND" || err.code === "MODULE_NOT_FOUND") {
+    if (
+      err.code === "ERR_MODULE_NOT_FOUND" ||
+      err.code === "MODULE_NOT_FOUND"
+    ) {
       console.warn(
         `Plugin '${pluginId}' not installed. Install with: npm install ${modulePath}`
       );

@@ -34,6 +34,24 @@ export class BeadsWatcher {
   }
 
   /**
+   * Update the cached hash for a specific entity after we wrote to it.
+   * This prevents the watcher from detecting our own writes as changes.
+   */
+  updateEntityHash(entityId: string, entity: BeadsIssue): void {
+    const hash = computeCanonicalHash(entity);
+    console.log(`[beads-watcher] Updated hash for ${entityId} after outbound write`);
+    this.entityHashes.set(entityId, hash);
+  }
+
+  /**
+   * Remove an entity from the hash cache (after deletion)
+   */
+  removeEntityHash(entityId: string): void {
+    console.log(`[beads-watcher] Removed hash for ${entityId} after outbound delete`);
+    this.entityHashes.delete(entityId);
+  }
+
+  /**
    * Start watching for changes
    *
    * @param callback - Function to call when changes are detected
@@ -109,8 +127,11 @@ export class BeadsWatcher {
    * Handle file change event
    */
   private handleFileChange(): void {
+    console.log("[beads-watcher] File change detected");
+
     // Prevent concurrent processing
     if (this.isProcessing) {
+      console.log("[beads-watcher] Already processing, skipping");
       return;
     }
 
@@ -118,8 +139,19 @@ export class BeadsWatcher {
 
     try {
       const changes = this.detectChanges();
-      if (changes.length > 0 && this.callback) {
-        this.callback(changes);
+      console.log(`[beads-watcher] Detected ${changes.length} change(s) (content-based comparison)`);
+      if (changes.length > 0) {
+        for (const change of changes) {
+          console.log(`[beads-watcher]   - ${change.change_type}: ${change.entity_id}`);
+        }
+        if (this.callback) {
+          console.log("[beads-watcher] Invoking callback");
+          this.callback(changes);
+        } else {
+          console.log("[beads-watcher] No callback registered!");
+        }
+      } else {
+        console.log("[beads-watcher] No actual content changes (hashes match)");
       }
     } catch (error) {
       console.error("[beads-watcher] Error processing changes:", error);

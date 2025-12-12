@@ -68,7 +68,6 @@ export interface Spec {
   updated_at: string;
   parent_id?: string;
   parent_uuid?: string;
-  /** Links to external systems (Jira, Beads, etc.) */
   external_links?: ExternalLink[];
 }
 
@@ -87,7 +86,6 @@ export interface Issue {
   closed_at?: string;
   parent_id?: string;
   parent_uuid?: string;
-  /** Links to external systems (Jira, Beads, etc.) */
   external_links?: ExternalLink[];
 }
 
@@ -350,7 +348,7 @@ export type {
   FileChangeStat,
   ExecutionChangesResult,
   ChangesSnapshot,
-} from './artifacts.js';
+} from "./artifacts.js";
 
 /**
  * Workflow types for multi-issue orchestration
