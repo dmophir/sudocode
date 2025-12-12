@@ -60,6 +60,14 @@ export interface PluginInfo {
   enabled: boolean;
   configSchema?: unknown;
   options?: Record<string, unknown>;
+  // Integration-level config
+  integrationConfig?: {
+    auto_sync?: boolean;
+    auto_import?: boolean;
+    delete_behavior?: "close" | "delete" | "ignore";
+    conflict_resolution?: "newest-wins" | "sudocode-wins" | "external-wins" | "manual";
+    default_sync_direction?: "inbound" | "outbound" | "bidirectional";
+  };
 }
 
 export function createPluginsRouter(): Router {
@@ -109,6 +117,15 @@ export function createPluginsRouter(): Router {
             enabled,
             configSchema,
             options: providerConfig?.options,
+            integrationConfig: providerConfig
+              ? {
+                  auto_sync: providerConfig.auto_sync,
+                  auto_import: providerConfig.auto_import,
+                  delete_behavior: providerConfig.delete_behavior,
+                  conflict_resolution: providerConfig.conflict_resolution,
+                  default_sync_direction: providerConfig.default_sync_direction,
+                }
+              : undefined,
           };
         })
       );
@@ -146,6 +163,13 @@ export function createPluginsRouter(): Router {
             enabled: providerConfig.enabled ?? false,
             configSchema,
             options: providerConfig.options,
+            integrationConfig: {
+              auto_sync: providerConfig.auto_sync,
+              auto_import: providerConfig.auto_import,
+              delete_behavior: providerConfig.delete_behavior,
+              conflict_resolution: providerConfig.conflict_resolution,
+              default_sync_direction: providerConfig.default_sync_direction,
+            },
           });
         }
       }
@@ -334,14 +358,24 @@ export function createPluginsRouter(): Router {
   });
 
   /**
-   * PUT /api/plugins/:name/options - Update plugin options
+   * PUT /api/plugins/:name/options - Update plugin options and integration config
    *
    * Validates options against plugin schema before saving
+   * Also accepts integrationConfig for sync settings
    */
   router.put("/:name/options", async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const options = req.body as Record<string, unknown>;
+      const { options = {}, integrationConfig = {} } = req.body as {
+        options?: Record<string, unknown>;
+        integrationConfig?: {
+          auto_sync?: boolean;
+          auto_import?: boolean;
+          delete_behavior?: "close" | "delete" | "ignore";
+          conflict_resolution?: "newest-wins" | "sudocode-wins" | "external-wins" | "manual";
+          default_sync_direction?: "inbound" | "outbound" | "bidirectional";
+        };
+      };
 
       // Check if plugin is installed
       const installed = await isPluginInstalled(name);
@@ -352,19 +386,21 @@ export function createPluginsRouter(): Router {
         return;
       }
 
-      // Validate options
-      const validation = await validateProviderConfig(name, {
-        enabled: true,
-        options,
-      });
-
-      if (!validation.valid) {
-        res.status(400).json({
-          error: "Invalid plugin options",
-          errors: validation.errors,
-          warnings: validation.warnings,
+      // Validate options if provided
+      if (Object.keys(options).length > 0) {
+        const validation = await validateProviderConfig(name, {
+          enabled: true,
+          options,
         });
-        return;
+
+        if (!validation.valid) {
+          res.status(400).json({
+            error: "Invalid plugin options",
+            errors: validation.errors,
+            warnings: validation.warnings,
+          });
+          return;
+        }
       }
 
       // Read and update config
@@ -378,7 +414,26 @@ export function createPluginsRouter(): Router {
           options,
         };
       } else {
-        integrations[name].options = options;
+        if (Object.keys(options).length > 0) {
+          integrations[name].options = options;
+        }
+      }
+
+      // Apply integration config settings
+      if (integrationConfig.auto_sync !== undefined) {
+        integrations[name].auto_sync = integrationConfig.auto_sync;
+      }
+      if (integrationConfig.auto_import !== undefined) {
+        integrations[name].auto_import = integrationConfig.auto_import;
+      }
+      if (integrationConfig.delete_behavior !== undefined) {
+        integrations[name].delete_behavior = integrationConfig.delete_behavior;
+      }
+      if (integrationConfig.conflict_resolution !== undefined) {
+        integrations[name].conflict_resolution = integrationConfig.conflict_resolution;
+      }
+      if (integrationConfig.default_sync_direction !== undefined) {
+        integrations[name].default_sync_direction = integrationConfig.default_sync_direction;
       }
 
       config.integrations = integrations;
@@ -393,7 +448,7 @@ export function createPluginsRouter(): Router {
         success: true,
         data: {
           options,
-          warnings: validation.warnings,
+          integrationConfig,
         },
       });
     } catch (error) {

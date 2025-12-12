@@ -11,11 +11,12 @@ import { randomBytes } from "crypto";
 
 /**
  * Beads issue structure (minimal fields we need)
+ * Note: Beads uses 'description' while sudocode uses 'content'
  */
 export interface BeadsIssue {
   id: string;
   title: string;
-  content?: string;
+  description?: string;
   status?: string;
   priority?: number;
   created_at: string;
@@ -146,7 +147,7 @@ export function createIssueViaJSONL(
   const newIssue: BeadsIssue = {
     id: generateBeadsId(idPrefix),
     title: issue.title || "Untitled",
-    content: issue.content || "",
+    description: issue.description || "",
     status: issue.status || "open",
     priority: issue.priority ?? 2,
     created_at: issue.created_at || now,

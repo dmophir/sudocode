@@ -126,22 +126,14 @@ export class SyncCoordinator {
    * 4. Start watching if auto_sync is enabled and provider supports it
    */
   async start(): Promise<void> {
-    console.log(`[sync-coordinator] Starting with ${this.providers.size} provider(s)`);
-
     for (const [name, provider] of this.providers) {
       const config = this.getProviderConfig(name);
-      console.log(`[sync-coordinator] Provider ${name}: enabled=${config?.enabled}, auto_sync=${config?.auto_sync}`);
 
-      if (!config?.enabled) {
-        console.log(`[sync-coordinator] Skipping ${name} - not enabled`);
-        continue;
-      }
+      if (!config?.enabled) continue;
 
       try {
-        console.log(`[sync-coordinator] Initializing provider ${name}`);
         await provider.initialize(config);
 
-        console.log(`[sync-coordinator] Validating provider ${name}`);
         const validation = await provider.validate();
         if (!validation.valid) {
           console.warn(
@@ -152,29 +144,21 @@ export class SyncCoordinator {
         }
 
         // Start watching if auto_sync is enabled and provider supports it
-        console.log(`[sync-coordinator] Provider ${name}: supportsWatch=${provider.supportsWatch}, auto_sync=${config.auto_sync}`);
         if (
           config.auto_sync &&
           provider.supportsWatch &&
           provider.startWatching
         ) {
-          console.log(`[sync-coordinator] Starting watcher for ${name}`);
           provider.startWatching((changes) => {
-            console.log(`[sync-coordinator] Received ${changes.length} change(s) from ${name}`);
             this.handleInboundChanges(name, changes);
           });
-          console.log(`[sync-coordinator] Watcher started for ${name}`);
-        } else {
-          console.log(`[sync-coordinator] NOT starting watcher for ${name} (auto_sync=${config.auto_sync}, supportsWatch=${provider.supportsWatch}, hasStartWatching=${!!provider.startWatching})`);
         }
 
         this.lastSyncTimes.set(name, new Date());
-        console.log(`[sync-coordinator] Provider ${name} initialized successfully`);
       } catch (error) {
         console.error(`[sync-coordinator] Failed to initialize provider ${name}:`, error);
       }
     }
-    console.log(`[sync-coordinator] Start complete`);
   }
 
   /**
@@ -249,13 +233,9 @@ export class SyncCoordinator {
    * @returns Array of sync results for each link
    */
   async syncEntity(entityId: string): Promise<SyncResult[]> {
-    console.log(`[sync-coordinator] syncEntity called for ${entityId}`);
-
     const entity = this.loadEntity(entityId);
-    console.log(`[sync-coordinator] Entity ${entityId} has ${entity?.external_links?.length || 0} external link(s)`);
 
     if (!entity?.external_links?.length) {
-      console.log(`[sync-coordinator] No external links for ${entityId}, skipping outbound sync`);
       return [
         {
           success: true,
@@ -350,6 +330,76 @@ export class SyncCoordinator {
       (l) => l.external_id !== externalId
     );
     this.updateEntityLinks(entityId, links);
+  }
+
+  /**
+   * Handle deletion of a sudocode entity - propagate to external systems
+   *
+   * Call this when a sudocode entity is deleted to propagate the deletion
+   * to all linked external systems.
+   *
+   * @param entityId - Sudocode entity ID that was deleted
+   * @param externalLinks - The external_links from the deleted entity
+   * @returns Array of sync results
+   */
+  async handleEntityDeleted(
+    entityId: string,
+    externalLinks: ExternalLink[]
+  ): Promise<SyncResult[]> {
+    const results: SyncResult[] = [];
+
+    if (!externalLinks || externalLinks.length === 0) {
+      return results;
+    }
+
+    for (const link of externalLinks) {
+      // Skip if sync is disabled or inbound-only
+      if (!link.sync_enabled) continue;
+      if (link.sync_direction === "inbound") continue;
+
+      const provider = this.providers.get(link.provider);
+      if (!provider) continue;
+
+      const config = this.getProviderConfig(link.provider);
+      const deleteBehavior = config?.delete_behavior || "close";
+
+      try {
+        if (deleteBehavior === "delete" && provider.deleteEntity) {
+          await provider.deleteEntity(link.external_id);
+          results.push({
+            success: true,
+            entity_id: entityId,
+            external_id: link.external_id,
+            action: "updated",
+          });
+        } else if (deleteBehavior === "close" && provider.updateEntity) {
+          await provider.updateEntity(link.external_id, { status: "closed" } as Partial<Issue>);
+          results.push({
+            success: true,
+            entity_id: entityId,
+            external_id: link.external_id,
+            action: "updated",
+          });
+        } else {
+          results.push({
+            success: true,
+            entity_id: entityId,
+            external_id: link.external_id,
+            action: "skipped",
+          });
+        }
+      } catch (error) {
+        results.push({
+          success: false,
+          entity_id: entityId,
+          external_id: link.external_id,
+          action: "skipped",
+          error: String(error),
+        });
+      }
+    }
+
+    return results;
   }
 
   // ==========================================================================
@@ -809,15 +859,14 @@ export class SyncCoordinator {
   /**
    * Find a sudocode entity linked to an external entity
    */
-  /**
-   * Find a sudocode entity linked to an external entity
-   */
   private findLinkedEntity(
     provider: string,
     externalId: string
   ): Entity | null {
     const sudocodeDir = path.join(this.options.projectPath, ".sudocode");
     const providerName = provider as IntegrationProviderName;
+
+    console.log(`[sync-coordinator] findLinkedEntity: looking for provider=${providerName}, external_id=${externalId}`);
 
     // Search specs
     const specs = findSpecsByExternalLink(
@@ -826,6 +875,7 @@ export class SyncCoordinator {
       externalId
     );
     if (specs.length > 0) {
+      console.log(`[sync-coordinator] findLinkedEntity: found spec ${specs[0].id}`);
       return this.toEntity(specs[0]);
     }
 
@@ -836,9 +886,11 @@ export class SyncCoordinator {
       externalId
     );
     if (issues.length > 0) {
+      console.log(`[sync-coordinator] findLinkedEntity: found issue ${issues[0].id}`);
       return this.toEntity(issues[0]);
     }
 
+    console.log(`[sync-coordinator] findLinkedEntity: no linked entity found`);
     return null;
   }
 

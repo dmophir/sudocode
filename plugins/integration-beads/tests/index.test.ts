@@ -161,8 +161,8 @@ describe("Beads Plugin", () => {
       mkdirSync(beadsDir);
       writeFileSync(
         join(beadsDir, "issues.jsonl"),
-        '{"id": "bd-1", "title": "First Issue", "content": "Description 1", "status": "open", "priority": 2}\n' +
-          '{"id": "bd-2", "title": "Second Issue", "content": "Description 2", "status": "in_progress", "priority": 1}\n'
+        '{"id": "bd-1", "title": "First Issue", "description": "Description 1", "status": "open", "priority": 2}\n' +
+          '{"id": "bd-2", "title": "Second Issue", "description": "Description 2", "status": "in_progress", "priority": 1}\n'
       );
     });
 
@@ -227,7 +227,7 @@ describe("Beads Plugin", () => {
       mkdirSync(beadsDir);
       writeFileSync(
         join(beadsDir, "issues.jsonl"),
-        '{"id": "bd-1", "title": "First Issue", "content": "Description 1", "status": "open", "priority": 2, "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}\n'
+        '{"id": "bd-1", "title": "First Issue", "description": "Description 1", "status": "open", "priority": 2, "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}\n'
       );
     });
 
@@ -438,7 +438,7 @@ describe("Beads Plugin", () => {
         };
         writeFileSync(
           join(beadsDir, "issues.jsonl"),
-          '{"id": "bd-1", "title": "First Issue", "content": "Description 1", "status": "open", "priority": 2, "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}\n' +
+          '{"id": "bd-1", "title": "First Issue", "description": "Description 1", "status": "open", "priority": 2, "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}\n' +
             JSON.stringify(newIssue) + "\n"
         );
 
@@ -461,7 +461,7 @@ describe("Beads Plugin", () => {
         const updatedIssue = {
           id: "bd-1",
           title: "Externally Updated",
-          content: "Description 1",
+          description: "Description 1",
           status: "closed",
           priority: 2,
           created_at: "2024-01-01T00:00:00Z",

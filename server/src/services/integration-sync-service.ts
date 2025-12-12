@@ -331,16 +331,11 @@ export class IntegrationSyncService {
    * Sync a specific entity's external links
    */
   async syncEntity(entityId: string): Promise<SyncResult[]> {
-    console.log(`[integration-sync] syncEntity called for ${entityId}`);
-
     if (!this.coordinator) {
-      console.log(`[integration-sync] Coordinator not started, skipping sync for ${entityId}`);
       return [];
     }
 
-    const results = await this.coordinator.syncEntity(entityId);
-    console.log(`[integration-sync] syncEntity results for ${entityId}:`, JSON.stringify(results));
-    return results;
+    return await this.coordinator.syncEntity(entityId);
   }
 
   // ==========================================================================
@@ -372,6 +367,37 @@ export class IntegrationSyncService {
     }
 
     await this.coordinator.unlinkEntity(entityId, externalId);
+  }
+
+  /**
+   * Handle deletion of a sudocode entity - propagate to external systems
+   *
+   * Call this BEFORE deleting a sudocode entity to propagate the deletion
+   * to all linked external systems. You must pass the entity's external_links
+   * since the entity may be deleted from storage before this is called.
+   *
+   * @param entityId - Sudocode entity ID being deleted
+   * @param externalLinks - The external_links from the entity being deleted
+   * @returns Array of sync results
+   */
+  async handleEntityDeleted(
+    entityId: string,
+    externalLinks: Array<{
+      provider: string;
+      external_id: string;
+      sync_enabled?: boolean;
+      sync_direction?: "inbound" | "outbound" | "bidirectional";
+    }>
+  ): Promise<SyncResult[]> {
+    if (!this.coordinator) {
+      return [];
+    }
+
+    if (!externalLinks || externalLinks.length === 0) {
+      return [];
+    }
+
+    return await this.coordinator.handleEntityDeleted(entityId, externalLinks as any);
   }
 
   // ==========================================================================

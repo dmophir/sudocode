@@ -335,10 +335,11 @@ class BeadsProvider implements IntegrationProvider {
         });
 
         // CLI create doesn't support content or status - update via JSONL if provided
+        // Note: sudocode uses 'content', beads uses 'description'
         const issueEntity = entity as Partial<Issue>;
         if (entity.content || issueEntity.status) {
           updateIssueViaJSONL(this.resolvedPath, id, {
-            ...(entity.content ? { content: entity.content } : {}),
+            ...(entity.content ? { description: entity.content } : {}),  // Map content → description
             ...(issueEntity.status ? { status: issueEntity.status } : {}),
           });
         }
@@ -356,10 +357,11 @@ class BeadsProvider implements IntegrationProvider {
     }
 
     // Fallback: Direct JSONL manipulation
+    // Note: sudocode uses 'content', beads uses 'description'
     const issueEntity = entity as Partial<Issue>;
     const newIssue = createIssueViaJSONL(this.resolvedPath, {
       title: entity.title,
-      content: entity.content,
+      description: entity.content,  // Map content → description
       status: issueEntity.status || "open",
       priority: entity.priority ?? 2,
     }, prefix);
@@ -398,11 +400,12 @@ class BeadsProvider implements IntegrationProvider {
 
     // Always use direct JSONL for updates (Beads CLI may not have update command)
     // Only include defined fields to avoid overwriting existing values with undefined
+    // Note: sudocode uses 'content', beads uses 'description'
     const issueEntity = entity as Partial<Issue>;
     const updates: Partial<BeadsIssue> = {};
 
     if (entity.title !== undefined) updates.title = entity.title;
-    if (entity.content !== undefined) updates.content = entity.content;
+    if (entity.content !== undefined) updates.description = entity.content;  // Map content → description
     if (issueEntity.status !== undefined) updates.status = issueEntity.status;
     if (entity.priority !== undefined) updates.priority = entity.priority;
 
@@ -569,7 +572,7 @@ class BeadsProvider implements IntegrationProvider {
       id: beadsIssue.id as string,
       type: "issue",
       title: (beadsIssue.title as string) || "",
-      description: beadsIssue.content as string,
+      description: beadsIssue.description as string,  // Beads uses 'description'
       status: beadsIssue.status as string,
       priority: beadsIssue.priority as number,
       created_at: beadsIssue.created_at as string,

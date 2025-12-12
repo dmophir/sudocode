@@ -54,6 +54,7 @@ describe("IntegrationSyncService", () => {
     syncEntity: ReturnType<typeof vi.fn>;
     linkEntity: ReturnType<typeof vi.fn>;
     unlinkEntity: ReturnType<typeof vi.fn>;
+    handleEntityDeleted: ReturnType<typeof vi.fn>;
     registerProvider: ReturnType<typeof vi.fn>;
     getProviderNames: ReturnType<typeof vi.fn>;
     getProvider: ReturnType<typeof vi.fn>;
@@ -75,6 +76,7 @@ describe("IntegrationSyncService", () => {
       syncEntity: vi.fn().mockResolvedValue([]),
       linkEntity: vi.fn().mockResolvedValue(undefined),
       unlinkEntity: vi.fn().mockResolvedValue(undefined),
+      handleEntityDeleted: vi.fn().mockResolvedValue([]),
       registerProvider: vi.fn(),
       getProviderNames: vi.fn().mockReturnValue([]),
       getProvider: vi.fn(),
@@ -580,6 +582,121 @@ describe("IntegrationSyncService", () => {
           "i-123",
           "PROJ-123"
         );
+      });
+    });
+
+    describe("handleEntityDeleted()", () => {
+      it("should return empty array if not started", async () => {
+        await service.stop();
+
+        const results = await service.handleEntityDeleted("i-123", [
+          {
+            provider: "beads",
+            external_id: "EXT-123",
+            sync_enabled: true,
+            sync_direction: "bidirectional" as const,
+          },
+        ]);
+        expect(results).toEqual([]);
+      });
+
+      it("should return empty array for empty external links", async () => {
+        const results = await service.handleEntityDeleted("i-123", []);
+        expect(results).toEqual([]);
+      });
+
+      it("should delegate to coordinator with external links", async () => {
+        const externalLinks = [
+          {
+            provider: "beads",
+            external_id: "EXT-123",
+            sync_enabled: true,
+            sync_direction: "bidirectional" as const,
+          },
+          {
+            provider: "jira",
+            external_id: "PROJ-456",
+            sync_enabled: true,
+            sync_direction: "outbound" as const,
+          },
+        ];
+
+        const mockResults = [
+          {
+            entity_id: "i-123",
+            external_id: "EXT-123",
+            action: "updated" as const,
+            success: true,
+          },
+          {
+            entity_id: "i-123",
+            external_id: "PROJ-456",
+            action: "updated" as const,
+            success: true,
+          },
+        ];
+        mockCoordinatorInstance.handleEntityDeleted.mockResolvedValue(mockResults);
+
+        const results = await service.handleEntityDeleted("i-123", externalLinks);
+
+        expect(results).toEqual(mockResults);
+        expect(mockCoordinatorInstance.handleEntityDeleted).toHaveBeenCalledWith(
+          "i-123",
+          externalLinks
+        );
+      });
+
+      it("should handle coordinator errors gracefully", async () => {
+        const externalLinks = [
+          {
+            provider: "beads",
+            external_id: "EXT-123",
+            sync_enabled: true,
+          },
+        ];
+
+        mockCoordinatorInstance.handleEntityDeleted.mockRejectedValue(
+          new Error("Delete propagation failed")
+        );
+
+        await expect(
+          service.handleEntityDeleted("i-123", externalLinks)
+        ).rejects.toThrow("Delete propagation failed");
+      });
+
+      it("should work with mixed sync_enabled links", async () => {
+        const externalLinks = [
+          {
+            provider: "beads",
+            external_id: "EXT-ENABLED",
+            sync_enabled: true,
+            sync_direction: "bidirectional" as const,
+          },
+          {
+            provider: "jira",
+            external_id: "EXT-DISABLED",
+            sync_enabled: false,
+            sync_direction: "bidirectional" as const,
+          },
+        ];
+
+        mockCoordinatorInstance.handleEntityDeleted.mockResolvedValue([
+          {
+            entity_id: "i-123",
+            external_id: "EXT-ENABLED",
+            action: "updated" as const,
+            success: true,
+          },
+        ]);
+
+        const results = await service.handleEntityDeleted("i-123", externalLinks);
+
+        // The service passes through to coordinator - filtering is done there
+        expect(mockCoordinatorInstance.handleEntityDeleted).toHaveBeenCalledWith(
+          "i-123",
+          externalLinks
+        );
+        expect(results).toHaveLength(1);
       });
     });
   });

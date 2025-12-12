@@ -1098,4 +1098,264 @@ describe("SyncCoordinator", () => {
       expect(createIssueFromExternal).toHaveBeenCalled();
     });
   });
+
+  describe("Outbound Entity Deletion (handleEntityDeleted)", () => {
+    const externalLinks = [
+      {
+        provider: "jira" as const,
+        external_id: "EXT-TO-DELETE",
+        sync_enabled: true,
+        sync_direction: "bidirectional" as const,
+        last_synced_at: "2025-01-01T00:00:00Z",
+      },
+    ];
+
+    let updateEntitySpy: ReturnType<typeof vi.fn>;
+    let deleteEntitySpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      // Spy on updateEntity and add deleteEntity method to mock provider
+      updateEntitySpy = vi.fn().mockResolvedValue(undefined);
+      deleteEntitySpy = vi.fn().mockResolvedValue(undefined);
+      mockProvider.updateEntity = updateEntitySpy;
+      (mockProvider as any).deleteEntity = deleteEntitySpy;
+    });
+
+    it("should close external entity when delete_behavior is 'close' (default)", async () => {
+      await coordinator.start();
+      const results = await coordinator.handleEntityDeleted("i-deleted", externalLinks);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(results[0].entity_id).toBe("i-deleted");
+      expect(results[0].external_id).toBe("EXT-TO-DELETE");
+      expect(results[0].action).toBe("updated");
+
+      // Should call updateEntity with status: "closed"
+      expect(updateEntitySpy).toHaveBeenCalledWith(
+        "EXT-TO-DELETE",
+        expect.objectContaining({ status: "closed" })
+      );
+      expect(deleteEntitySpy).not.toHaveBeenCalled();
+    });
+
+    it("should delete external entity when delete_behavior is 'delete'", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "delete",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      // Re-apply spies to the provider for the new coordinator
+      mockProvider.updateEntity = updateEntitySpy;
+      (mockProvider as any).deleteEntity = deleteEntitySpy;
+      coordinator.registerProvider(mockProvider);
+
+      await coordinator.start();
+      const results = await coordinator.handleEntityDeleted("i-deleted", externalLinks);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(results[0].action).toBe("updated");
+
+      // Should call deleteEntity
+      expect(deleteEntitySpy).toHaveBeenCalledWith("EXT-TO-DELETE");
+      expect(updateEntitySpy).not.toHaveBeenCalled();
+    });
+
+    it("should skip when delete_behavior is 'ignore'", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "ignore",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      mockProvider.updateEntity = updateEntitySpy;
+      (mockProvider as any).deleteEntity = deleteEntitySpy;
+      coordinator.registerProvider(mockProvider);
+
+      await coordinator.start();
+      const results = await coordinator.handleEntityDeleted("i-deleted", externalLinks);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(results[0].action).toBe("skipped");
+
+      // Should not call any update/delete methods
+      expect(updateEntitySpy).not.toHaveBeenCalled();
+      expect(deleteEntitySpy).not.toHaveBeenCalled();
+    });
+
+    it("should skip disabled links", async () => {
+      await coordinator.start();
+      const disabledLinks = [
+        {
+          provider: "jira" as const,
+          external_id: "EXT-DISABLED",
+          sync_enabled: false,
+          sync_direction: "bidirectional" as const,
+        },
+      ];
+
+      const results = await coordinator.handleEntityDeleted("i-deleted", disabledLinks);
+
+      expect(results).toHaveLength(0);
+      expect(updateEntitySpy).not.toHaveBeenCalled();
+    });
+
+    it("should skip inbound-only links", async () => {
+      await coordinator.start();
+      const inboundLinks = [
+        {
+          provider: "jira" as const,
+          external_id: "EXT-INBOUND",
+          sync_enabled: true,
+          sync_direction: "inbound" as const,
+        },
+      ];
+
+      const results = await coordinator.handleEntityDeleted("i-deleted", inboundLinks);
+
+      expect(results).toHaveLength(0);
+      expect(updateEntitySpy).not.toHaveBeenCalled();
+    });
+
+    it("should handle outbound-only links", async () => {
+      await coordinator.start();
+      const outboundLinks = [
+        {
+          provider: "jira" as const,
+          external_id: "EXT-OUTBOUND",
+          sync_enabled: true,
+          sync_direction: "outbound" as const,
+        },
+      ];
+
+      const results = await coordinator.handleEntityDeleted("i-deleted", outboundLinks);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(updateEntitySpy).toHaveBeenCalledWith(
+        "EXT-OUTBOUND",
+        expect.objectContaining({ status: "closed" })
+      );
+    });
+
+    it("should handle empty external links array", async () => {
+      await coordinator.start();
+      const results = await coordinator.handleEntityDeleted("i-deleted", []);
+
+      expect(results).toHaveLength(0);
+    });
+
+    it("should handle provider not found", async () => {
+      await coordinator.start();
+      const unknownProviderLinks = [
+        {
+          provider: "unknown-provider" as any,
+          external_id: "EXT-UNKNOWN",
+          sync_enabled: true,
+          sync_direction: "bidirectional" as const,
+        },
+      ];
+
+      const results = await coordinator.handleEntityDeleted("i-deleted", unknownProviderLinks);
+
+      expect(results).toHaveLength(0);
+    });
+
+    it("should handle provider errors gracefully", async () => {
+      updateEntitySpy = vi.fn().mockRejectedValue(new Error("API error"));
+      mockProvider.updateEntity = updateEntitySpy;
+
+      await coordinator.start();
+      const results = await coordinator.handleEntityDeleted("i-deleted", externalLinks);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0].error).toContain("API error");
+    });
+
+    it("should handle multiple external links", async () => {
+      const anotherProvider = new MockProvider();
+      (anotherProvider as any).name = "beads";
+      const beadsDeleteSpy = vi.fn().mockResolvedValue(undefined);
+      const beadsUpdateSpy = vi.fn().mockResolvedValue(undefined);
+      anotherProvider.updateEntity = beadsUpdateSpy;
+      (anotherProvider as any).deleteEntity = beadsDeleteSpy;
+
+      // Update config to include beads
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "close",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+          beads: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "delete",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            path: ".beads",
+          },
+        } as IntegrationsConfig,
+      });
+      // Re-apply spies to mock provider
+      mockProvider.updateEntity = updateEntitySpy;
+      (mockProvider as any).deleteEntity = deleteEntitySpy;
+      coordinator.registerProvider(mockProvider);
+      coordinator.registerProvider(anotherProvider);
+
+      await coordinator.start();
+
+      const multipleLinks = [
+        {
+          provider: "jira" as const,
+          external_id: "JIRA-123",
+          sync_enabled: true,
+          sync_direction: "bidirectional" as const,
+        },
+        {
+          provider: "beads" as any,
+          external_id: "beads-456",
+          sync_enabled: true,
+          sync_direction: "bidirectional" as const,
+        },
+      ];
+
+      const results = await coordinator.handleEntityDeleted("i-deleted", multipleLinks);
+
+      expect(results).toHaveLength(2);
+      // Jira should close (delete_behavior: close)
+      expect(updateEntitySpy).toHaveBeenCalledWith(
+        "JIRA-123",
+        expect.objectContaining({ status: "closed" })
+      );
+      // Beads should delete (delete_behavior: delete)
+      expect(beadsDeleteSpy).toHaveBeenCalledWith("beads-456");
+    });
+  });
 });

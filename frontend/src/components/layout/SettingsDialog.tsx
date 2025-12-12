@@ -58,11 +58,20 @@ interface PluginInfo {
         description?: string
         default?: unknown
         required?: boolean
+        enum?: string[]
       }
     >
     required?: string[]
   }
   options?: Record<string, unknown>
+  // Integration-level config (separate from plugin-specific options)
+  integrationConfig?: {
+    auto_sync?: boolean
+    auto_import?: boolean
+    delete_behavior?: 'close' | 'delete' | 'ignore'
+    conflict_resolution?: 'newest-wins' | 'sudocode-wins' | 'external-wins' | 'manual'
+    default_sync_direction?: 'inbound' | 'outbound' | 'bidirectional'
+  }
 }
 
 interface PluginTestResult {
@@ -84,6 +93,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [testResults, setTestResults] = useState<Record<string, PluginTestResult>>({})
   const [savingPlugin, setSavingPlugin] = useState<string | null>(null)
   const [pluginOptions, setPluginOptions] = useState<Record<string, Record<string, unknown>>>({})
+  const [integrationConfigs, setIntegrationConfigs] = useState<
+    Record<string, PluginInfo['integrationConfig']>
+  >({})
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
   const [selectedPreset, setSelectedPreset] = useState<string>('')
   const [installing, setInstalling] = useState(false)
@@ -120,10 +132,13 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         setPlugins(data.plugins)
         // Initialize options state
         const optionsState: Record<string, Record<string, unknown>> = {}
+        const configsState: Record<string, PluginInfo['integrationConfig']> = {}
         data.plugins.forEach((p) => {
           optionsState[p.name] = p.options || {}
+          configsState[p.name] = p.integrationConfig || {}
         })
         setPluginOptions(optionsState)
+        setIntegrationConfigs(configsState)
       } catch (error) {
         console.error('Failed to fetch plugins:', error)
       } finally {
@@ -194,7 +209,11 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const handleSaveOptions = async (pluginName: string) => {
     setSavingPlugin(pluginName)
     try {
-      await api.put(`/plugins/${pluginName}/options`, pluginOptions[pluginName] || {})
+      // Save both plugin options and integration config
+      await api.put(`/plugins/${pluginName}/options`, {
+        options: pluginOptions[pluginName] || {},
+        integrationConfig: integrationConfigs[pluginName] || {},
+      })
       toast.success('Settings saved')
       // Refresh plugins
       const data = await api.get<{ plugins: PluginInfo[] }, { plugins: PluginInfo[] }>('/plugins')
@@ -209,6 +228,20 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   const updatePluginOption = (pluginName: string, key: string, value: unknown) => {
     setPluginOptions((prev) => ({
+      ...prev,
+      [pluginName]: {
+        ...prev[pluginName],
+        [key]: value,
+      },
+    }))
+  }
+
+  const updateIntegrationConfig = (
+    pluginName: string,
+    key: keyof NonNullable<PluginInfo['integrationConfig']>,
+    value: unknown
+  ) => {
+    setIntegrationConfigs((prev) => ({
       ...prev,
       [pluginName]: {
         ...prev[pluginName],
@@ -266,41 +299,143 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   }
 
   const renderPluginConfig = (plugin: PluginInfo) => {
-    if (!plugin.configSchema?.properties) return null
-
     const options = pluginOptions[plugin.name] || {}
+    const config = integrationConfigs[plugin.name] || {}
 
     return (
-      <div className="mt-3 space-y-3 border-t border-border pt-3">
-        {Object.entries(plugin.configSchema.properties).map(([key, prop]) => {
-          const isRequired = plugin.configSchema?.required?.includes(key) || prop.required
-          const value = options[key] ?? prop.default ?? ''
+      <div className="mt-3 space-y-4 border-t border-border pt-3">
+        {/* Plugin-specific options */}
+        {plugin.configSchema?.properties && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-medium text-muted-foreground">Plugin Settings</h4>
+            {Object.entries(plugin.configSchema.properties).map(([key, prop]) => {
+              const isRequired = plugin.configSchema?.required?.includes(key) || prop.required
+              const value = options[key] ?? prop.default ?? ''
 
-          return (
-            <div key={key} className="space-y-1">
-              <Label className="text-xs">
-                {prop.title || key}
-                {isRequired && <span className="ml-1 text-destructive">*</span>}
-              </Label>
-              {prop.type === 'boolean' ? (
-                <Switch
-                  checked={Boolean(value)}
-                  onCheckedChange={(checked) => updatePluginOption(plugin.name, key, checked)}
-                />
-              ) : (
-                <Input
-                  value={String(value)}
-                  onChange={(e) => updatePluginOption(plugin.name, key, e.target.value)}
-                  placeholder={prop.description}
-                  className="h-8 text-sm"
-                />
-              )}
-              {prop.description && (
-                <p className="text-[10px] text-muted-foreground">{prop.description}</p>
-              )}
+              return (
+                <div key={key} className="space-y-1">
+                  <Label className="text-xs">
+                    {prop.title || key}
+                    {isRequired && <span className="ml-1 text-destructive">*</span>}
+                  </Label>
+                  {prop.type === 'boolean' ? (
+                    <Switch
+                      checked={Boolean(value)}
+                      onCheckedChange={(checked) => updatePluginOption(plugin.name, key, checked)}
+                    />
+                  ) : (
+                    <Input
+                      value={String(value)}
+                      onChange={(e) => updatePluginOption(plugin.name, key, e.target.value)}
+                      placeholder={prop.description}
+                      className="h-8 text-sm"
+                    />
+                  )}
+                  {prop.description && (
+                    <p className="text-[10px] text-muted-foreground">{prop.description}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Integration-level settings */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-muted-foreground">Sync Settings</h4>
+
+          {/* Auto Sync */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-xs">Auto Sync</Label>
+              <p className="text-[10px] text-muted-foreground">
+                Automatically sync changes in real-time
+              </p>
             </div>
-          )
-        })}
+            <Switch
+              checked={config.auto_sync ?? false}
+              onCheckedChange={(checked) => updateIntegrationConfig(plugin.name, 'auto_sync', checked)}
+            />
+          </div>
+
+          {/* Auto Import */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-xs">Auto Import</Label>
+              <p className="text-[10px] text-muted-foreground">
+                Automatically import new issues from external system
+              </p>
+            </div>
+            <Switch
+              checked={config.auto_import ?? true}
+              onCheckedChange={(checked) => updateIntegrationConfig(plugin.name, 'auto_import', checked)}
+            />
+          </div>
+
+          {/* Delete Behavior */}
+          <div className="space-y-1">
+            <Label className="text-xs">Delete Behavior</Label>
+            <Select
+              value={config.delete_behavior ?? 'close'}
+              onValueChange={(value) => updateIntegrationConfig(plugin.name, 'delete_behavior', value)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="close">Close issue</SelectItem>
+                <SelectItem value="delete">Delete issue</SelectItem>
+                <SelectItem value="ignore">Do nothing</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              What to do when a linked issue is deleted on either side
+            </p>
+          </div>
+
+          {/* Conflict Resolution */}
+          <div className="space-y-1">
+            <Label className="text-xs">Conflict Resolution</Label>
+            <Select
+              value={config.conflict_resolution ?? 'newest-wins'}
+              onValueChange={(value) => updateIntegrationConfig(plugin.name, 'conflict_resolution', value)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest-wins">Newest wins</SelectItem>
+                <SelectItem value="sudocode-wins">Sudocode wins</SelectItem>
+                <SelectItem value="external-wins">External wins</SelectItem>
+                <SelectItem value="manual">Manual resolution</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              How to resolve conflicts when both sides are modified
+            </p>
+          </div>
+
+          {/* Sync Direction */}
+          <div className="space-y-1">
+            <Label className="text-xs">Default Sync Direction</Label>
+            <Select
+              value={config.default_sync_direction ?? 'bidirectional'}
+              onValueChange={(value) => updateIntegrationConfig(plugin.name, 'default_sync_direction', value)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bidirectional">Bidirectional</SelectItem>
+                <SelectItem value="inbound">Inbound only (external → sudocode)</SelectItem>
+                <SelectItem value="outbound">Outbound only (sudocode → external)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Default sync direction for newly linked issues
+            </p>
+          </div>
+        </div>
 
         <div className="flex gap-2 pt-2">
           <Button

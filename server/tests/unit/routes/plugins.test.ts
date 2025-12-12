@@ -377,7 +377,7 @@ describe("Plugins Router", () => {
     it("should update options for configured plugin", async () => {
       const { req, res } = createMockReqRes({
         params: { name: "beads" },
-        body: { path: ".new-beads" },
+        body: { options: { path: ".new-beads" } },
       });
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(

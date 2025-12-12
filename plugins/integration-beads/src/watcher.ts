@@ -259,13 +259,14 @@ export class BeadsWatcher {
 
   /**
    * Convert BeadsIssue to ExternalEntity format
+   * Note: Beads uses 'description', which maps to ExternalEntity.description
    */
   private issueToExternalEntity(issue: BeadsIssue): ExternalChange["data"] {
     return {
       id: issue.id,
       type: "issue" as const,
       title: issue.title || "",
-      description: issue.content,
+      description: issue.description || "",  // Beads uses 'description'
       status: issue.status,
       priority: issue.priority,
       created_at: issue.created_at,
