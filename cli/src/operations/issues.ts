@@ -39,7 +39,7 @@ export interface CreateIssueInput {
   created_at?: string;
   updated_at?: string;
   closed_at?: string;
-  external_links?: string; // JSON string of ExternalLink[]
+  external_links?: string | null; // JSON string of ExternalLink[], null to clear
 }
 
 export interface UpdateIssueInput {
@@ -53,7 +53,7 @@ export interface UpdateIssueInput {
   archived_at?: string;
   updated_at?: string;
   closed_at?: string;
-  external_links?: string; // JSON string of ExternalLink[]
+  external_links?: string | null; // JSON string of ExternalLink[], null to clear
 }
 
 export interface ListIssuesOptions {

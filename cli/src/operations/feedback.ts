@@ -256,7 +256,9 @@ export function listFeedback(
   if (conditions.length > 0) {
     query += " WHERE " + conditions.join(" AND ");
   }
-  query += " ORDER BY created_at DESC";
+  // Deterministic ordering: by created_at DESC, then by id for stability
+  // This prevents oscillation when multiple feedback items have the same timestamp
+  query += " ORDER BY created_at DESC, id ASC";
 
   if (options.limit !== undefined) {
     query += " LIMIT @limit";

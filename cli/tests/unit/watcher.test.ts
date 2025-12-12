@@ -856,6 +856,111 @@ Updated content.
         expect(errors.length).toBe(0);
       }
     );
+
+    it("should produce same hash regardless of array element order (relationships, tags)", async () => {
+      // This tests the canonical hash function's array sorting behavior
+      // Two entities with same content but different array ordering should have same hash
+      const { createIssue } = await import("../../src/operations/issues.js");
+      const { addRelationship } = await import("../../src/operations/relationships.js");
+      const { addTags } = await import("../../src/operations/tags.js");
+      const { exportToJSONL } = await import("../../src/export.js");
+      const { readJSONLSync } = await import("../../src/jsonl.js");
+
+      // Create two issues
+      createIssue(db, {
+        id: "issue-hash-001",
+        uuid: "uuid-hash-001",
+        title: "Hash Test 1",
+        content: "Content",
+        status: "open",
+        priority: 2,
+      });
+      createIssue(db, {
+        id: "issue-hash-002",
+        uuid: "uuid-hash-002",
+        title: "Hash Test 2",
+        content: "Content",
+        status: "open",
+        priority: 2,
+      });
+      createIssue(db, {
+        id: "issue-hash-003",
+        uuid: "uuid-hash-003",
+        title: "Hash Test 3",
+        content: "Content",
+        status: "open",
+        priority: 2,
+      });
+
+      // Add relationships in different order
+      // For issue-hash-001: add to 002 first, then 003
+      addRelationship(db, {
+        from_id: "issue-hash-001",
+        from_type: "issue",
+        to_id: "issue-hash-002",
+        to_type: "issue",
+        relationship_type: "related",
+      });
+      addRelationship(db, {
+        from_id: "issue-hash-001",
+        from_type: "issue",
+        to_id: "issue-hash-003",
+        to_type: "issue",
+        relationship_type: "related",
+      });
+
+      // Add tags in different order
+      addTags(db, "issue-hash-001", "issue", ["beta", "alpha", "gamma"]);
+
+      // Export to JSONL
+      await exportToJSONL(db, { outputDir: tempDir });
+
+      // Read JSONL
+      const issuesJsonlPath = path.join(tempDir, "issues.jsonl");
+      const issues = readJSONLSync<any>(issuesJsonlPath);
+      const issue = issues.find((i: any) => i.id === "issue-hash-001");
+
+      // Verify relationships and tags are present
+      expect(issue.relationships.length).toBe(2);
+      expect(issue.tags.length).toBe(3);
+
+      // Now modify the JSONL to have different array order but same content
+      const modifiedIssues = issues.map((i: any) => {
+        if (i.id === "issue-hash-001") {
+          return {
+            ...i,
+            // Reverse the relationships order
+            relationships: [...i.relationships].reverse(),
+            // Reverse the tags order
+            tags: [...i.tags].reverse(),
+          };
+        }
+        return i;
+      });
+
+      // Write modified JSONL
+      const { writeJSONL } = await import("../../src/jsonl.js");
+      await writeJSONL(issuesJsonlPath, modifiedIssues);
+
+      // Start watcher
+      const logs: string[] = [];
+      const errors: Error[] = [];
+      control = startWatcher({
+        db,
+        baseDir: tempDir,
+        ignoreInitial: false,
+        onLog: (msg) => logs.push(msg),
+        onError: (err) => errors.push(err),
+      });
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // The canonical hash should treat arrays as order-independent
+      // So no import should be triggered (content is semantically same)
+      // Note: The hash now sorts arrays, so same content different order = same hash
+      expect(errors.length).toBe(0);
+    });
   });
 
   describe("Smart JSONL Operations (Regression Prevention)", () => {

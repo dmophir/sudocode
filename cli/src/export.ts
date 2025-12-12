@@ -36,6 +36,45 @@ export interface ExportOptions {
 }
 
 /**
+ * Sort relationships for deterministic JSONL output
+ * Sorts by: to_id, then to_type, then relationship type
+ */
+function sortRelationships(rels: RelationshipJSONL[]): RelationshipJSONL[] {
+  return [...rels].sort((a, b) => {
+    if (a.to !== b.to) return a.to.localeCompare(b.to);
+    if (a.to_type !== b.to_type) return a.to_type.localeCompare(b.to_type);
+    return a.type.localeCompare(b.type);
+  });
+}
+
+/**
+ * Sort tags alphabetically for deterministic JSONL output
+ */
+function sortTags(tags: string[]): string[] {
+  return [...tags].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Sort feedback for deterministic JSONL output
+ * Sorts by: id (stable identifier)
+ */
+function sortFeedback(feedback: FeedbackJSONL[]): FeedbackJSONL[] {
+  return [...feedback].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Sort external links for deterministic JSONL output
+ * Sorts by: provider, then external_id
+ */
+function sortExternalLinks(links: ExternalLink[] | undefined): ExternalLink[] | undefined {
+  if (!links || links.length === 0) return links;
+  return [...links].sort((a, b) => {
+    if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+    return a.external_id.localeCompare(b.external_id);
+  });
+}
+
+/**
  * Convert a Spec to SpecJSONL format with embedded relationships and tags
  * @param existingExternalLinks - Optional map of spec ID to external links (preserved from existing JSONL)
  */
@@ -64,9 +103,10 @@ export function specToJSONL(
 
   return {
     ...spec,
-    relationships: relationshipsJSONL,
-    tags,
-    external_links: externalLinks,
+    // Sort arrays for deterministic output (reduces JSONL churn)
+    relationships: sortRelationships(relationshipsJSONL),
+    tags: sortTags(tags),
+    external_links: sortExternalLinks(externalLinks),
   };
 }
 
@@ -115,12 +155,15 @@ export function issueToJSONL(
   // Get external_links - prefer from issue if present, otherwise from existing JSONL
   const externalLinks = issue.external_links ?? existingExternalLinks?.get(issue.id);
 
+  // Sort arrays for deterministic output (reduces JSONL churn)
+  const sortedFeedback = sortFeedback(feedbackJSONL);
+
   return {
     ...issue,
-    relationships: relationshipsJSONL,
-    tags,
-    feedback: feedbackJSONL.length > 0 ? feedbackJSONL : undefined,
-    external_links: externalLinks,
+    relationships: sortRelationships(relationshipsJSONL),
+    tags: sortTags(tags),
+    feedback: sortedFeedback.length > 0 ? sortedFeedback : undefined,
+    external_links: sortExternalLinks(externalLinks),
   };
 }
 

@@ -2356,4 +2356,202 @@ describe("Import Operations", () => {
       expect(parent!.parent_id).toBeNull();
     });
   });
+
+  describe("external_links Import Behavior", () => {
+    it("should clear external_links in SQLite when JSONL has no external_links field", async () => {
+      // Create spec with external_links in database
+      createSpec(db, {
+        id: "spec-001",
+        uuid: "uuid-001",
+        title: "Test Spec",
+        file_path: "test.md",
+        external_links: JSON.stringify([
+          { provider: "jira", external_id: "JIRA-123", sync_enabled: true, sync_direction: "bidirectional" }
+        ]),
+      });
+
+      // Verify external_links exists in DB
+      const before = getSpec(db, "spec-001");
+      expect(before?.external_links).toHaveLength(1);
+
+      // Create JSONL WITHOUT external_links field (simulating removal)
+      const specs: SpecJSONL[] = [
+        {
+          id: "spec-001",
+          uuid: "uuid-001",
+          title: "Test Spec",
+          file_path: "test.md",
+          content: "",
+          priority: 2,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          parent_id: null,
+          relationships: [],
+          tags: [],
+          // Note: external_links is NOT present
+        },
+      ];
+
+      await writeJSONL(path.join(TEST_DIR, "specs.jsonl"), specs);
+      await writeJSONL(path.join(TEST_DIR, "issues.jsonl"), []);
+
+      // Import
+      const result = await importFromJSONL(db, {
+        inputDir: TEST_DIR,
+      });
+
+      expect(result.specs.updated).toBe(1);
+
+      // Verify external_links was cleared in SQLite (null or undefined)
+      const after = getSpec(db, "spec-001");
+      expect(after?.external_links == null).toBe(true);
+    });
+
+    it("should clear external_links in SQLite when JSONL has empty external_links array", async () => {
+      // Create spec with external_links in database
+      createSpec(db, {
+        id: "spec-001",
+        uuid: "uuid-001",
+        title: "Test Spec",
+        file_path: "test.md",
+        external_links: JSON.stringify([
+          { provider: "jira", external_id: "JIRA-123", sync_enabled: true, sync_direction: "bidirectional" }
+        ]),
+      });
+
+      // Verify external_links exists in DB
+      const before = getSpec(db, "spec-001");
+      expect(before?.external_links).toHaveLength(1);
+
+      // Create JSONL with empty external_links array
+      const specs: SpecJSONL[] = [
+        {
+          id: "spec-001",
+          uuid: "uuid-001",
+          title: "Test Spec",
+          file_path: "test.md",
+          content: "",
+          priority: 2,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          parent_id: null,
+          relationships: [],
+          tags: [],
+          external_links: [], // Empty array
+        },
+      ];
+
+      await writeJSONL(path.join(TEST_DIR, "specs.jsonl"), specs);
+      await writeJSONL(path.join(TEST_DIR, "issues.jsonl"), []);
+
+      // Import
+      const result = await importFromJSONL(db, {
+        inputDir: TEST_DIR,
+      });
+
+      expect(result.specs.updated).toBe(1);
+
+      // Verify external_links was cleared in SQLite (empty array becomes null)
+      const after = getSpec(db, "spec-001");
+      expect(after?.external_links == null).toBe(true);
+    });
+
+    it("should preserve external_links when JSONL has non-empty external_links", async () => {
+      // Create spec without external_links
+      createSpec(db, {
+        id: "spec-001",
+        uuid: "uuid-001",
+        title: "Test Spec",
+        file_path: "test.md",
+      });
+
+      // Create JSONL with external_links
+      const specs: SpecJSONL[] = [
+        {
+          id: "spec-001",
+          uuid: "uuid-001",
+          title: "Test Spec",
+          file_path: "test.md",
+          content: "",
+          priority: 2,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          parent_id: null,
+          relationships: [],
+          tags: [],
+          external_links: [
+            { provider: "jira", external_id: "JIRA-456", sync_enabled: true, sync_direction: "bidirectional" }
+          ],
+        },
+      ];
+
+      await writeJSONL(path.join(TEST_DIR, "specs.jsonl"), specs);
+      await writeJSONL(path.join(TEST_DIR, "issues.jsonl"), []);
+
+      // Import
+      const result = await importFromJSONL(db, {
+        inputDir: TEST_DIR,
+      });
+
+      expect(result.specs.updated).toBe(1);
+
+      // Verify external_links was imported
+      const after = getSpec(db, "spec-001");
+      expect(after?.external_links).toHaveLength(1);
+      expect(after?.external_links?.[0].external_id).toBe("JIRA-456");
+    });
+
+    it("should clear external_links for issues when JSONL has no external_links field", async () => {
+      // Create issue with external_links in database
+      createIssue(db, {
+        id: "issue-001",
+        uuid: "uuid-001",
+        title: "Test Issue",
+        external_links: JSON.stringify([
+          { provider: "jira", external_id: "JIRA-123", sync_enabled: true, sync_direction: "bidirectional" }
+        ]),
+      });
+
+      // Verify external_links exists in DB
+      const before = getIssue(db, "issue-001");
+      expect(before?.external_links).toHaveLength(1);
+
+      // Create JSONL WITHOUT external_links field
+      const issues: IssueJSONL[] = [
+        {
+          id: "issue-001",
+          uuid: "uuid-001",
+          title: "Test Issue",
+          content: "",
+          status: "open",
+          priority: 2,
+          assignee: null,
+          parent_id: null,
+          archived: false,
+          archived_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          closed_at: null,
+          relationships: [],
+          tags: [],
+          feedback: [],
+          // Note: external_links is NOT present
+        },
+      ];
+
+      await writeJSONL(path.join(TEST_DIR, "specs.jsonl"), []);
+      await writeJSONL(path.join(TEST_DIR, "issues.jsonl"), issues);
+
+      // Import
+      const result = await importFromJSONL(db, {
+        inputDir: TEST_DIR,
+      });
+
+      expect(result.issues.updated).toBe(1);
+
+      // Verify external_links was cleared in SQLite (null or undefined)
+      const after = getIssue(db, "issue-001");
+      expect(after?.external_links == null).toBe(true);
+    });
+  });
 });
