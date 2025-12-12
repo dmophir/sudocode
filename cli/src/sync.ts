@@ -438,10 +438,11 @@ async function syncSpec(
       oldSpec?.file_path !== specData.file_path;
 
     // Only update timestamp if content actually changed
+    // Note: external_links is handled separately via JSONL import, not markdown sync
     updateSpec(db, id, {
       ...specData,
       ...(contentChanged && fileModTime ? { updated_at: fileModTime } : {}),
-    });
+    } as any);
 
     // Relocate feedback anchors if content changed
     if (oldContent !== content) {
@@ -540,10 +541,11 @@ async function syncIssue(
       oldIssue?.parent_id !== issueData.parent_id;
 
     // Only update timestamp if content actually changed
+    // Note: external_links is handled separately via JSONL import, not markdown sync
     updateIssue(db, id, {
       ...issueData,
       ...(contentChanged && fileModTime ? { updated_at: fileModTime } : {}),
-    });
+    } as any);
   }
 
   // Sync tags
