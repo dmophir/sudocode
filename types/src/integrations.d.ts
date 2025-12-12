@@ -5,7 +5,12 @@
  * Provider-specific implementations should be in separate packages.
  */
 
-import type { SyncDirection, ConflictResolution, Spec, Issue } from "./index.js";
+import type {
+  SyncDirection,
+  ConflictResolution,
+  Spec,
+  Issue,
+} from "./index.js";
 
 // =============================================================================
 // Plugin Configuration
@@ -26,6 +31,19 @@ export interface IntegrationProviderConfig {
   default_sync_direction?: SyncDirection;
   /** How to resolve sync conflicts (default: 'manual') */
   conflict_resolution?: ConflictResolution;
+  /**
+   * Whether to auto-import new entities from external system (default: true)
+   * When true, new issues/specs in the external system are automatically
+   * created as sudocode issues/specs with an external_link.
+   */
+  auto_import?: boolean;
+  /**
+   * What to do when an external entity is deleted (default: 'close')
+   * - 'close': Close the linked sudocode issue (set status to 'closed')
+   * - 'delete': Delete the linked sudocode issue entirely
+   * - 'ignore': Do nothing, leave sudocode issue unchanged
+   */
+  delete_behavior?: "close" | "delete" | "ignore";
   /** Provider-specific configuration options */
   options?: Record<string, unknown>;
 }
@@ -285,7 +303,10 @@ export interface IntegrationProvider {
   createEntity(entity: Partial<Spec | Issue>): Promise<string>;
 
   /** Update an existing entity in the external system */
-  updateEntity(externalId: string, entity: Partial<Spec | Issue>): Promise<void>;
+  updateEntity(
+    externalId: string,
+    entity: Partial<Spec | Issue>
+  ): Promise<void>;
 
   /** Delete an entity from the external system (optional) */
   deleteEntity?(externalId: string): Promise<void>;

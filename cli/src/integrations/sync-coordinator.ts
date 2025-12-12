@@ -29,6 +29,9 @@ import {
   getIssueFromJsonl,
   updateSpecExternalLinkSync,
   updateIssueExternalLinkSync,
+  createIssueFromExternal,
+  deleteIssueFromJsonl,
+  closeIssueInJsonl,
 } from "../operations/external-links.js";
 import * as path from "path";
 
@@ -371,11 +374,45 @@ export class SyncCoordinator {
     provider: IntegrationProvider,
     change: ExternalChange
   ): Promise<SyncResult> {
+    const config = this.getProviderConfig(providerName);
+    const sudocodeDir = path.join(this.options.projectPath, ".sudocode");
+
     // Find linked sudocode entity
     const linkedEntity = this.findLinkedEntity(providerName, change.entity_id);
 
-    if (!linkedEntity && change.change_type !== "deleted") {
-      // No linked entity - could auto-import if configured, but skip for now
+    // Handle NEW entities (auto-import)
+    if (!linkedEntity && change.change_type === "created") {
+      // Auto-import if enabled (defaults to true)
+      const autoImport = config?.auto_import !== false;
+
+      if (autoImport && change.data) {
+        // Map external entity to sudocode format
+        const mapped = provider.mapToSudocode(change.data);
+        const issueData = mapped.issue;
+
+        if (issueData && change.entity_type === "issue") {
+          // Create sudocode issue with auto-link
+          const newIssue = createIssueFromExternal(sudocodeDir, {
+            title: issueData.title || change.data.title,
+            content: issueData.content || change.data.description,
+            status: issueData.status || "open",
+            priority: issueData.priority ?? change.data.priority ?? 2,
+            external: {
+              provider: providerName as IntegrationProviderName,
+              external_id: change.entity_id,
+              sync_direction: config?.default_sync_direction || "bidirectional",
+            },
+          });
+
+          return {
+            success: true,
+            entity_id: newIssue.id,
+            external_id: change.entity_id,
+            action: "created",
+          };
+        }
+      }
+
       return {
         success: true,
         entity_id: "",
@@ -384,13 +421,56 @@ export class SyncCoordinator {
       };
     }
 
-    if (change.change_type === "deleted") {
-      // Handle deletion based on config - for now, just skip
+    // Handle UPDATED entities without link (skip)
+    if (!linkedEntity && change.change_type === "updated") {
       return {
         success: true,
-        entity_id: linkedEntity?.id || "",
+        entity_id: "",
         external_id: change.entity_id,
         action: "skipped",
+      };
+    }
+
+    // Handle DELETED entities
+    if (change.change_type === "deleted") {
+      if (!linkedEntity) {
+        return {
+          success: true,
+          entity_id: "",
+          external_id: change.entity_id,
+          action: "skipped",
+        };
+      }
+
+      // Get delete behavior from config (defaults to 'close')
+      const deleteBehavior = config?.delete_behavior || "close";
+
+      if (deleteBehavior === "ignore") {
+        return {
+          success: true,
+          entity_id: linkedEntity.id,
+          external_id: change.entity_id,
+          action: "skipped",
+        };
+      }
+
+      if (deleteBehavior === "delete") {
+        deleteIssueFromJsonl(sudocodeDir, linkedEntity.id);
+        return {
+          success: true,
+          entity_id: linkedEntity.id,
+          external_id: change.entity_id,
+          action: "updated", // Using 'updated' as there's no 'deleted' action type
+        };
+      }
+
+      // Default: close the issue
+      closeIssueInJsonl(sudocodeDir, linkedEntity.id);
+      return {
+        success: true,
+        entity_id: linkedEntity.id,
+        external_id: change.entity_id,
+        action: "updated",
       };
     }
 

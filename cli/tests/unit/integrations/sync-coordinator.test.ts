@@ -26,11 +26,38 @@ vi.mock("../../../src/jsonl.js", () => ({
   updateJSONLLineSync: vi.fn(),
 }));
 
+// Mock the external-links functions
+vi.mock("../../../src/operations/external-links.js", () => ({
+  findSpecsByExternalLink: vi.fn().mockReturnValue([]),
+  findIssuesByExternalLink: vi.fn().mockReturnValue([]),
+  getSpecFromJsonl: vi.fn().mockReturnValue(null),
+  getIssueFromJsonl: vi.fn().mockReturnValue(null),
+  updateSpecExternalLinkSync: vi.fn(),
+  updateIssueExternalLinkSync: vi.fn(),
+  createIssueFromExternal: vi.fn(),
+  deleteIssueFromJsonl: vi.fn(),
+  closeIssueInJsonl: vi.fn(),
+}));
+
 import {
   readJSONLSync,
   writeJSONLSync,
   getJSONLEntitySync,
 } from "../../../src/jsonl.js";
+
+import {
+  findSpecsByExternalLink,
+  findIssuesByExternalLink,
+  getSpecFromJsonl,
+  getIssueFromJsonl,
+  createIssueFromExternal,
+  deleteIssueFromJsonl,
+  closeIssueInJsonl,
+} from "../../../src/operations/external-links.js";
+
+// Type assertion helper for mocked functions
+const mockedGetIssueFromJsonl = getIssueFromJsonl as ReturnType<typeof vi.fn>;
+const mockedGetSpecFromJsonl = getSpecFromJsonl as ReturnType<typeof vi.fn>;
 
 /**
  * Mock provider for testing
@@ -356,61 +383,8 @@ describe("SyncCoordinator", () => {
 
     describe("syncEntity", () => {
       it("should skip entities without external links", async () => {
-        // Mock readJSONLSync to return array with the entity (used by getIssueFromJsonl)
-        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-          {
-            id: "i-test",
-            title: "Test Issue",
-            uuid: "uuid-123",
-            content: "content",
-            status: "open",
-            priority: 2,
-            created_at: "2025-01-01T00:00:00Z",
-            updated_at: "2025-01-01T00:00:00Z",
-            // No external_links
-          },
-        ]);
-
-        const results = await coordinator.syncEntity("i-test");
-
-        expect(results).toHaveLength(1);
-        expect(results[0].action).toBe("skipped");
-      });
-
-      it("should skip disabled links", async () => {
-        // Mock readJSONLSync to return array with the entity (used by getIssueFromJsonl)
-        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-          {
-            id: "i-test",
-            title: "Test Issue",
-            uuid: "uuid-123",
-            content: "content",
-            status: "open",
-            priority: 2,
-            created_at: "2025-01-01T00:00:00Z",
-            updated_at: "2025-01-01T00:00:00Z",
-            external_links: [
-              {
-                provider: "jira",
-                external_id: "EXT-123",
-                sync_enabled: false, // Disabled
-                sync_direction: "bidirectional",
-              },
-            ],
-          },
-        ]);
-
-        const results = await coordinator.syncEntity("i-test");
-
-        expect(results).toHaveLength(0);
-      });
-    });
-  });
-
-  describe("Link Management", () => {
-    beforeEach(() => {
-      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-        {
+        // Mock getIssueFromJsonl to return entity without external_links
+        mockedGetIssueFromJsonl.mockReturnValue({
           id: "i-test",
           title: "Test Issue",
           uuid: "uuid-123",
@@ -421,24 +395,74 @@ describe("SyncCoordinator", () => {
           updated_at: "2025-01-01T00:00:00Z",
           relationships: [],
           tags: [],
-        },
-      ]);
+          // No external_links
+        });
 
-      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "i-test",
-        title: "Test Issue",
-        uuid: "uuid-123",
-        content: "content",
-        status: "open",
-        priority: 2,
-        created_at: "2025-01-01T00:00:00Z",
-        updated_at: "2025-01-01T00:00:00Z",
+        const results = await coordinator.syncEntity("i-test");
+
+        expect(results).toHaveLength(1);
+        expect(results[0].action).toBe("skipped");
       });
+
+      it("should skip disabled links", async () => {
+        // Mock getIssueFromJsonl to return entity with disabled external link
+        mockedGetIssueFromJsonl.mockReturnValue({
+          id: "i-test",
+          title: "Test Issue",
+          uuid: "uuid-123",
+          content: "content",
+          status: "open",
+          priority: 2,
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+          relationships: [],
+          tags: [],
+          external_links: [
+            {
+              provider: "jira",
+              external_id: "EXT-123",
+              sync_enabled: false, // Disabled
+              sync_direction: "bidirectional",
+            },
+          ],
+        });
+
+        const results = await coordinator.syncEntity("i-test");
+
+        expect(results).toHaveLength(0);
+      });
+    });
+  });
+
+  describe("Link Management", () => {
+    const testIssue = {
+      id: "i-test",
+      title: "Test Issue",
+      uuid: "uuid-123",
+      content: "content",
+      status: "open",
+      priority: 2,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      relationships: [],
+      tags: [],
+    };
+
+    beforeEach(() => {
+      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([testIssue]);
+
+      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(testIssue);
+
+      // Set up the external-links mock for loadEntity
+      mockedGetIssueFromJsonl.mockReturnValue(testIssue);
+      mockedGetSpecFromJsonl.mockReturnValue(null);
     });
 
     describe("linkEntity", () => {
       it("should throw for non-existent entity", async () => {
         (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(null);
+        mockedGetIssueFromJsonl.mockReturnValue(null);
+        mockedGetSpecFromJsonl.mockReturnValue(null);
 
         await expect(
           coordinator.linkEntity("i-nonexistent", "EXT-123", "jira")
@@ -477,7 +501,7 @@ describe("SyncCoordinator", () => {
       });
 
       it("should update existing link", async () => {
-        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
+        const issueWithLink = {
           id: "i-test",
           title: "Test Issue",
           uuid: "uuid-123",
@@ -494,30 +518,14 @@ describe("SyncCoordinator", () => {
               sync_direction: "inbound",
             },
           ],
-        });
+          relationships: [],
+          tags: [],
+        };
 
-        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-          {
-            id: "i-test",
-            title: "Test Issue",
-            uuid: "uuid-123",
-            content: "content",
-            status: "open",
-            priority: 2,
-            created_at: "2025-01-01T00:00:00Z",
-            updated_at: "2025-01-01T00:00:00Z",
-            external_links: [
-              {
-                provider: "jira",
-                external_id: "EXT-123",
-                sync_enabled: true,
-                sync_direction: "inbound",
-              },
-            ],
-            relationships: [],
-            tags: [],
-          },
-        ]);
+        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(issueWithLink);
+        mockedGetIssueFromJsonl.mockReturnValue(issueWithLink);
+
+        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([issueWithLink]);
 
         await coordinator.linkEntity("i-test", "EXT-123", "jira", {
           sync_direction: "bidirectional",
@@ -537,7 +545,7 @@ describe("SyncCoordinator", () => {
 
     describe("unlinkEntity", () => {
       it("should remove external link", async () => {
-        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
+        const issueWithLink = {
           id: "i-test",
           title: "Test Issue",
           uuid: "uuid-123",
@@ -554,30 +562,13 @@ describe("SyncCoordinator", () => {
               sync_direction: "bidirectional",
             },
           ],
-        });
+          relationships: [],
+          tags: [],
+        };
 
-        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-          {
-            id: "i-test",
-            title: "Test Issue",
-            uuid: "uuid-123",
-            content: "content",
-            status: "open",
-            priority: 2,
-            created_at: "2025-01-01T00:00:00Z",
-            updated_at: "2025-01-01T00:00:00Z",
-            external_links: [
-              {
-                provider: "jira",
-                external_id: "EXT-123",
-                sync_enabled: true,
-                sync_direction: "bidirectional",
-              },
-            ],
-            relationships: [],
-            tags: [],
-          },
-        ]);
+        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(issueWithLink);
+        mockedGetIssueFromJsonl.mockReturnValue(issueWithLink);
+        (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([issueWithLink]);
 
         await coordinator.unlinkEntity("i-test", "EXT-123");
 
@@ -589,7 +580,7 @@ describe("SyncCoordinator", () => {
       });
 
       it("should do nothing for entity without links", async () => {
-        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
+        const issueNoLinks = {
           id: "i-test",
           title: "Test Issue",
           uuid: "uuid-123",
@@ -599,7 +590,9 @@ describe("SyncCoordinator", () => {
           created_at: "2025-01-01T00:00:00Z",
           updated_at: "2025-01-01T00:00:00Z",
           // No external_links
-        });
+        };
+        (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(issueNoLinks);
+        mockedGetIssueFromJsonl.mockReturnValue(issueNoLinks);
 
         await coordinator.unlinkEntity("i-test", "EXT-123");
 
@@ -608,6 +601,8 @@ describe("SyncCoordinator", () => {
 
       it("should do nothing for non-existent entity", async () => {
         (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(null);
+        mockedGetIssueFromJsonl.mockReturnValue(null);
+        mockedGetSpecFromJsonl.mockReturnValue(null);
 
         await coordinator.unlinkEntity("i-nonexistent", "EXT-123");
 
@@ -618,7 +613,7 @@ describe("SyncCoordinator", () => {
 
   describe("Entity Type Detection", () => {
     it("should identify specs from ID prefix", async () => {
-      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
+      const testSpec = {
         id: "s-test",
         title: "Test Spec",
         uuid: "uuid-123",
@@ -627,22 +622,14 @@ describe("SyncCoordinator", () => {
         priority: 2,
         created_at: "2025-01-01T00:00:00Z",
         updated_at: "2025-01-01T00:00:00Z",
-      });
+        relationships: [],
+        tags: [],
+      };
 
-      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-        {
-          id: "s-test",
-          title: "Test Spec",
-          uuid: "uuid-123",
-          file_path: ".sudocode/specs/test.md",
-          content: "content",
-          priority: 2,
-          created_at: "2025-01-01T00:00:00Z",
-          updated_at: "2025-01-01T00:00:00Z",
-          relationships: [],
-          tags: [],
-        },
-      ]);
+      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(testSpec);
+      mockedGetSpecFromJsonl.mockReturnValue(testSpec);
+      mockedGetIssueFromJsonl.mockReturnValue(null);
+      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([testSpec]);
 
       await coordinator.linkEntity("s-test", "EXT-123", "jira");
 
@@ -654,7 +641,7 @@ describe("SyncCoordinator", () => {
     });
 
     it("should identify issues from ID prefix", async () => {
-      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue({
+      const testIssue = {
         id: "i-test",
         title: "Test Issue",
         uuid: "uuid-123",
@@ -663,22 +650,14 @@ describe("SyncCoordinator", () => {
         priority: 2,
         created_at: "2025-01-01T00:00:00Z",
         updated_at: "2025-01-01T00:00:00Z",
-      });
+        relationships: [],
+        tags: [],
+      };
 
-      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([
-        {
-          id: "i-test",
-          title: "Test Issue",
-          uuid: "uuid-123",
-          content: "content",
-          status: "open",
-          priority: 2,
-          created_at: "2025-01-01T00:00:00Z",
-          updated_at: "2025-01-01T00:00:00Z",
-          relationships: [],
-          tags: [],
-        },
-      ]);
+      (getJSONLEntitySync as ReturnType<typeof vi.fn>).mockReturnValue(testIssue);
+      mockedGetIssueFromJsonl.mockReturnValue(testIssue);
+      mockedGetSpecFromJsonl.mockReturnValue(null);
+      (readJSONLSync as ReturnType<typeof vi.fn>).mockReturnValue([testIssue]);
 
       await coordinator.linkEntity("i-test", "EXT-123", "jira");
 
@@ -734,6 +713,381 @@ describe("SyncCoordinator", () => {
 
       // The callback is stored and would be called during conflict resolution
       expect((coordinator as any).options.onConflict).toBe(onConflict);
+    });
+  });
+
+  describe("Auto-Import", () => {
+    beforeEach(() => {
+      // Reset mocks
+      vi.mocked(findIssuesByExternalLink).mockReturnValue([]);
+      vi.mocked(findSpecsByExternalLink).mockReturnValue([]);
+      vi.mocked(createIssueFromExternal).mockReturnValue({
+        id: "i-new",
+        uuid: "uuid-new",
+        title: "Imported Issue",
+        content: "",
+        status: "open",
+        priority: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        relationships: [],
+        tags: [],
+        external_links: [{
+          provider: "jira",
+          external_id: "EXT-NEW",
+          sync_enabled: true,
+          sync_direction: "bidirectional",
+          last_synced_at: new Date().toISOString(),
+        }],
+      });
+    });
+
+    it("should auto-import new external issues by default", async () => {
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-NEW",
+          entity_type: "issue",
+          change_type: "created",
+          timestamp: new Date().toISOString(),
+          data: {
+            id: "EXT-NEW",
+            type: "issue",
+            title: "New External Issue",
+            description: "Created in external system",
+            status: "open",
+            priority: 1,
+          },
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("created");
+      expect(results[0].entity_id).toBe("i-new");
+      expect(results[0].external_id).toBe("EXT-NEW");
+      expect(createIssueFromExternal).toHaveBeenCalledWith(
+        expect.stringContaining(".sudocode"),
+        expect.objectContaining({
+          title: "New External Issue",
+          external: expect.objectContaining({
+            provider: "jira",
+            external_id: "EXT-NEW",
+          }),
+        })
+      );
+    });
+
+    it("should skip auto-import when auto_import is false", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            auto_import: false,
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      coordinator.registerProvider(mockProvider);
+
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-NEW",
+          entity_type: "issue",
+          change_type: "created",
+          timestamp: new Date().toISOString(),
+          data: {
+            id: "EXT-NEW",
+            type: "issue",
+            title: "New External Issue",
+          },
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("skipped");
+      expect(createIssueFromExternal).not.toHaveBeenCalled();
+    });
+
+    it("should use configured sync_direction for auto-imported issues", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            default_sync_direction: "inbound",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      coordinator.registerProvider(mockProvider);
+
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-NEW",
+          entity_type: "issue",
+          change_type: "created",
+          timestamp: new Date().toISOString(),
+          data: {
+            id: "EXT-NEW",
+            type: "issue",
+            title: "New External Issue",
+          },
+        },
+      ];
+
+      await coordinator.start();
+      await coordinator.syncProvider("jira");
+
+      expect(createIssueFromExternal).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          external: expect.objectContaining({
+            sync_direction: "inbound",
+          }),
+        })
+      );
+    });
+
+    it("should skip import for updated entities without link", async () => {
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-ORPHAN",
+          entity_type: "issue",
+          change_type: "updated",
+          timestamp: new Date().toISOString(),
+          data: {
+            id: "EXT-ORPHAN",
+            type: "issue",
+            title: "Orphan Issue",
+          },
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("skipped");
+      expect(createIssueFromExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Delete Behavior", () => {
+    const linkedIssue = {
+      id: "i-linked",
+      uuid: "uuid-linked",
+      title: "Linked Issue",
+      content: "content",
+      status: "open" as const,
+      priority: 2,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      relationships: [],
+      tags: [],
+      external_links: [{
+        provider: "jira",
+        external_id: "EXT-DELETE",
+        sync_enabled: true,
+        sync_direction: "bidirectional" as const,
+        last_synced_at: "2025-01-01T00:00:00Z",
+      }],
+    };
+
+    beforeEach(() => {
+      // Setup: external issue is linked to sudocode issue
+      vi.mocked(findIssuesByExternalLink).mockImplementation(
+        (_dir, _provider, extId) => {
+          if (extId === "EXT-DELETE") {
+            return [linkedIssue];
+          }
+          return [];
+        }
+      );
+      vi.mocked(findSpecsByExternalLink).mockReturnValue([]);
+      vi.mocked(closeIssueInJsonl).mockReturnValue({
+        ...linkedIssue,
+        status: "closed",
+        closed_at: new Date().toISOString(),
+      });
+      vi.mocked(deleteIssueFromJsonl).mockReturnValue(true);
+    });
+
+    it("should close sudocode issue when external is deleted (default behavior)", async () => {
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-DELETE",
+          entity_type: "issue",
+          change_type: "deleted",
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("updated");
+      expect(results[0].entity_id).toBe("i-linked");
+      expect(closeIssueInJsonl).toHaveBeenCalledWith(
+        expect.stringContaining(".sudocode"),
+        "i-linked"
+      );
+      expect(deleteIssueFromJsonl).not.toHaveBeenCalled();
+    });
+
+    it("should delete sudocode issue when delete_behavior is 'delete'", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "delete",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      coordinator.registerProvider(mockProvider);
+
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-DELETE",
+          entity_type: "issue",
+          change_type: "deleted",
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("updated");
+      expect(deleteIssueFromJsonl).toHaveBeenCalledWith(
+        expect.stringContaining(".sudocode"),
+        "i-linked"
+      );
+      expect(closeIssueInJsonl).not.toHaveBeenCalled();
+    });
+
+    it("should ignore deletion when delete_behavior is 'ignore'", async () => {
+      coordinator = new SyncCoordinator({
+        projectPath,
+        config: {
+          jira: {
+            enabled: true,
+            auto_sync: false,
+            delete_behavior: "ignore",
+            default_sync_direction: "bidirectional",
+            conflict_resolution: "newest-wins",
+            instance_url: "https://mock.atlassian.net",
+            auth_type: "basic",
+          },
+        } as IntegrationsConfig,
+      });
+      coordinator.registerProvider(mockProvider);
+
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-DELETE",
+          entity_type: "issue",
+          change_type: "deleted",
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("skipped");
+      expect(closeIssueInJsonl).not.toHaveBeenCalled();
+      expect(deleteIssueFromJsonl).not.toHaveBeenCalled();
+    });
+
+    it("should skip deletion for unlinked external entities", async () => {
+      vi.mocked(findIssuesByExternalLink).mockReturnValue([]);
+
+      mockProvider.changes = [
+        {
+          entity_id: "EXT-UNLINKED",
+          entity_type: "issue",
+          change_type: "deleted",
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      await coordinator.start();
+      const results = await coordinator.syncProvider("jira");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].action).toBe("skipped");
+      expect(closeIssueInJsonl).not.toHaveBeenCalled();
+      expect(deleteIssueFromJsonl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Watch-triggered Changes", () => {
+    beforeEach(() => {
+      vi.mocked(findIssuesByExternalLink).mockReturnValue([]);
+      vi.mocked(findSpecsByExternalLink).mockReturnValue([]);
+      vi.mocked(createIssueFromExternal).mockReturnValue({
+        id: "i-watched",
+        uuid: "uuid-watched",
+        title: "Watched Issue",
+        content: "",
+        status: "open",
+        priority: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        relationships: [],
+        tags: [],
+        external_links: [{
+          provider: "jira",
+          external_id: "EXT-WATCH",
+          sync_enabled: true,
+          sync_direction: "bidirectional",
+          last_synced_at: new Date().toISOString(),
+        }],
+      });
+    });
+
+    it("should process changes triggered by watch callback", async () => {
+      await coordinator.start();
+
+      // Simulate file change triggering watch callback
+      mockProvider.triggerChange({
+        entity_id: "EXT-WATCH",
+        entity_type: "issue",
+        change_type: "created",
+        timestamp: new Date().toISOString(),
+        data: {
+          id: "EXT-WATCH",
+          type: "issue",
+          title: "Watch-triggered Issue",
+        },
+      });
+
+      // The change is processed asynchronously via handleInboundChanges
+      // Since triggerChange calls the callback synchronously in our mock,
+      // we need to verify createIssueFromExternal was called
+      expect(createIssueFromExternal).toHaveBeenCalled();
     });
   });
 });

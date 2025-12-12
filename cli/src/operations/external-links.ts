@@ -4,8 +4,20 @@
  * work directly with JSONL files.
  */
 
-import type { ExternalLink, SpecJSONL, IssueJSONL, IntegrationProviderName } from "../types.js";
+import type {
+  ExternalLink,
+  SpecJSONL,
+  IssueJSONL,
+  IntegrationProviderName,
+  IssueStatus,
+  SyncDirection,
+} from "../types.js";
 import { readJSONLSync, writeJSONLSync } from "../jsonl.js";
+import {
+  hashUUIDToBase36,
+  getAdaptiveHashLength,
+  generateUUID,
+} from "../id-generator.js";
 import * as path from "path";
 
 /**
@@ -74,8 +86,15 @@ export function addExternalLinkToSpec(
     const links = spec.external_links || [];
 
     // Check for duplicate
-    if (links.some(l => l.provider === link.provider && l.external_id === link.external_id)) {
-      throw new Error(`Link already exists: ${link.provider}:${link.external_id}`);
+    if (
+      links.some(
+        (l) =>
+          l.provider === link.provider && l.external_id === link.external_id
+      )
+    ) {
+      throw new Error(
+        `Link already exists: ${link.provider}:${link.external_id}`
+      );
     }
 
     links.push(link);
@@ -92,7 +111,9 @@ export function removeExternalLinkFromSpec(
   externalId: string
 ): SpecJSONL {
   return updateSpecInJsonl(sudocodeDir, specId, (spec) => {
-    const links = (spec.external_links || []).filter(l => l.external_id !== externalId);
+    const links = (spec.external_links || []).filter(
+      (l) => l.external_id !== externalId
+    );
     return { ...spec, external_links: links.length > 0 ? links : undefined };
   });
 }
@@ -104,10 +125,15 @@ export function updateSpecExternalLinkSync(
   sudocodeDir: string,
   specId: string,
   externalId: string,
-  updates: Partial<Pick<ExternalLink, 'last_synced_at' | 'external_updated_at' | 'sync_enabled'>>
+  updates: Partial<
+    Pick<
+      ExternalLink,
+      "last_synced_at" | "external_updated_at" | "sync_enabled"
+    >
+  >
 ): SpecJSONL {
   return updateSpecInJsonl(sudocodeDir, specId, (spec) => {
-    const links = (spec.external_links || []).map(l => {
+    const links = (spec.external_links || []).map((l) => {
       if (l.external_id === externalId) {
         return { ...l, ...updates };
       }
@@ -127,8 +153,10 @@ export function findSpecsByExternalLink(
 ): SpecJSONL[] {
   const specsPath = getSpecsJsonlPath(sudocodeDir);
   const specs = readJSONLSync<SpecJSONL>(specsPath, { skipErrors: true });
-  return specs.filter(s =>
-    s.external_links?.some(l => l.provider === provider && l.external_id === externalId)
+  return specs.filter((s) =>
+    s.external_links?.some(
+      (l) => l.provider === provider && l.external_id === externalId
+    )
   );
 }
 
@@ -198,8 +226,15 @@ export function addExternalLinkToIssue(
     const links = issue.external_links || [];
 
     // Check for duplicate
-    if (links.some(l => l.provider === link.provider && l.external_id === link.external_id)) {
-      throw new Error(`Link already exists: ${link.provider}:${link.external_id}`);
+    if (
+      links.some(
+        (l) =>
+          l.provider === link.provider && l.external_id === link.external_id
+      )
+    ) {
+      throw new Error(
+        `Link already exists: ${link.provider}:${link.external_id}`
+      );
     }
 
     links.push(link);
@@ -216,7 +251,9 @@ export function removeExternalLinkFromIssue(
   externalId: string
 ): IssueJSONL {
   return updateIssueInJsonl(sudocodeDir, issueId, (issue) => {
-    const links = (issue.external_links || []).filter(l => l.external_id !== externalId);
+    const links = (issue.external_links || []).filter(
+      (l) => l.external_id !== externalId
+    );
     return { ...issue, external_links: links.length > 0 ? links : undefined };
   });
 }
@@ -228,10 +265,15 @@ export function updateIssueExternalLinkSync(
   sudocodeDir: string,
   issueId: string,
   externalId: string,
-  updates: Partial<Pick<ExternalLink, 'last_synced_at' | 'external_updated_at' | 'sync_enabled'>>
+  updates: Partial<
+    Pick<
+      ExternalLink,
+      "last_synced_at" | "external_updated_at" | "sync_enabled"
+    >
+  >
 ): IssueJSONL {
   return updateIssueInJsonl(sudocodeDir, issueId, (issue) => {
-    const links = (issue.external_links || []).map(l => {
+    const links = (issue.external_links || []).map((l) => {
       if (l.external_id === externalId) {
         return { ...l, ...updates };
       }
@@ -251,8 +293,10 @@ export function findIssuesByExternalLink(
 ): IssueJSONL[] {
   const issuesPath = getIssuesJsonlPath(sudocodeDir);
   const issues = readJSONLSync<IssueJSONL>(issuesPath, { skipErrors: true });
-  return issues.filter(i =>
-    i.external_links?.some(l => l.provider === provider && l.external_id === externalId)
+  return issues.filter((i) =>
+    i.external_links?.some(
+      (l) => l.provider === provider && l.external_id === externalId
+    )
   );
 }
 
@@ -286,4 +330,159 @@ export function findEntitiesByExternalLink(
     specs: findSpecsByExternalLink(sudocodeDir, provider, externalId),
     issues: findIssuesByExternalLink(sudocodeDir, provider, externalId),
   };
+}
+
+// =============================================================================
+// Auto-Import Operations
+// =============================================================================
+
+/**
+ * Generate a unique issue ID without database
+ * Uses JSONL to check for collisions
+ */
+function generateIssueIdFromJsonl(sudocodeDir: string): {
+  id: string;
+  uuid: string;
+} {
+  const issuesPath = getIssuesJsonlPath(sudocodeDir);
+  const issues = readJSONLSync<IssueJSONL>(issuesPath, { skipErrors: true });
+  const existingIds = new Set(issues.map((i) => i.id));
+
+  const uuid = generateUUID();
+  const baseLength = getAdaptiveHashLength(issues.length);
+
+  // Try progressively longer hashes on collision
+  for (let length = baseLength; length <= 8; length++) {
+    const hash = hashUUIDToBase36(uuid, length);
+    const candidate = `i-${hash}`;
+
+    if (!existingIds.has(candidate)) {
+      return { id: candidate, uuid };
+    }
+  }
+
+  throw new Error(
+    `Failed to generate unique issue ID after trying lengths ${baseLength}-8`
+  );
+}
+
+/**
+ * Input for creating an issue from an external entity
+ */
+export interface CreateIssueFromExternalInput {
+  /** Issue title */
+  title: string;
+  /** Issue content/description */
+  content?: string;
+  /** Issue status */
+  status?: IssueStatus;
+  /** Priority (0-4) */
+  priority?: number;
+  /** External system info for auto-linking */
+  external: {
+    provider: IntegrationProviderName;
+    external_id: string;
+    sync_direction?: SyncDirection;
+  };
+}
+
+/**
+ * Create a new sudocode issue from an external entity
+ * Automatically establishes the external_link
+ *
+ * @param sudocodeDir - Path to .sudocode directory
+ * @param input - Issue data and external link info
+ * @returns The created issue
+ */
+export function createIssueFromExternal(
+  sudocodeDir: string,
+  input: CreateIssueFromExternalInput
+): IssueJSONL {
+  const issuesPath = getIssuesJsonlPath(sudocodeDir);
+  const issues = readJSONLSync<IssueJSONL>(issuesPath, { skipErrors: true });
+
+  const { id, uuid } = generateIssueIdFromJsonl(sudocodeDir);
+  const now = new Date().toISOString();
+
+  const newIssue: IssueJSONL = {
+    id,
+    uuid,
+    title: input.title,
+    content: input.content || "",
+    status: input.status || "open",
+    priority: input.priority ?? 2,
+    created_at: now,
+    updated_at: now,
+    relationships: [],
+    tags: [],
+    external_links: [
+      {
+        provider: input.external.provider,
+        external_id: input.external.external_id,
+        sync_enabled: true,
+        sync_direction: input.external.sync_direction || "bidirectional",
+        last_synced_at: now,
+      },
+    ],
+  };
+
+  issues.push(newIssue);
+  writeJSONLSync(issuesPath, issues);
+
+  return newIssue;
+}
+
+/**
+ * Delete an issue by ID
+ *
+ * @param sudocodeDir - Path to .sudocode directory
+ * @param issueId - ID of issue to delete
+ * @returns true if deleted, false if not found
+ */
+export function deleteIssueFromJsonl(
+  sudocodeDir: string,
+  issueId: string
+): boolean {
+  const issuesPath = getIssuesJsonlPath(sudocodeDir);
+  const issues = readJSONLSync<IssueJSONL>(issuesPath, { skipErrors: true });
+
+  const index = issues.findIndex((i) => i.id === issueId);
+  if (index === -1) {
+    return false;
+  }
+
+  issues.splice(index, 1);
+  writeJSONLSync(issuesPath, issues);
+  return true;
+}
+
+/**
+ * Close an issue (set status to 'closed')
+ *
+ * @param sudocodeDir - Path to .sudocode directory
+ * @param issueId - ID of issue to close
+ * @returns The closed issue, or null if not found
+ */
+export function closeIssueInJsonl(
+  sudocodeDir: string,
+  issueId: string
+): IssueJSONL | null {
+  const issuesPath = getIssuesJsonlPath(sudocodeDir);
+  const issues = readJSONLSync<IssueJSONL>(issuesPath, { skipErrors: true });
+
+  const index = issues.findIndex((i) => i.id === issueId);
+  if (index === -1) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  issues[index] = {
+    ...issues[index],
+    status: "closed",
+    closed_at: now,
+    updated_at: now,
+  };
+
+  writeJSONLSync(issuesPath, issues);
+  return issues[index];
 }

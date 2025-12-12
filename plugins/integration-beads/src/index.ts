@@ -19,6 +19,22 @@ import type {
 import { existsSync, readFileSync } from "fs";
 import * as path from "path";
 
+// Internal utilities
+import { computeCanonicalHash } from "./hash-utils.js";
+import {
+  readBeadsJSONL,
+  createIssueViaJSONL,
+  updateIssueViaJSONL,
+  deleteIssueViaJSONL,
+  type BeadsIssue,
+} from "./jsonl-utils.js";
+import {
+  isBeadsCLIAvailable,
+  createIssueViaCLI,
+  closeIssueViaCLI,
+} from "./cli-utils.js";
+import { BeadsWatcher, type ChangeCallback } from "./watcher.js";
+
 /**
  * Beads-specific configuration options
  */
@@ -159,6 +175,16 @@ class BeadsProvider implements IntegrationProvider {
   private projectPath: string;
   private resolvedPath: string;
 
+  // CLI detection (cached)
+  private cliAvailable: boolean = false;
+
+  // Change tracking for getChangesSince
+  private entityHashes: Map<string, string> = new Map();
+  private lastCaptureTime: Date = new Date(0);
+
+  // File watcher
+  private beadsWatcher: BeadsWatcher | null = null;
+
   constructor(options: BeadsOptions, projectPath: string) {
     this.options = options;
     this.projectPath = projectPath;
@@ -169,10 +195,34 @@ class BeadsProvider implements IntegrationProvider {
     if (!existsSync(this.resolvedPath)) {
       throw new Error(`Beads directory not found: ${this.resolvedPath}`);
     }
+
+    // Check CLI availability
+    this.cliAvailable = isBeadsCLIAvailable();
+
+    // Capture initial state for change detection
+    this.captureEntityState();
   }
 
   async dispose(): Promise<void> {
-    // No cleanup needed for file-based provider
+    // Stop watcher if running
+    this.stopWatching();
+  }
+
+  /**
+   * Capture current entity state for change detection
+   */
+  private captureEntityState(): void {
+    const issues = readBeadsJSONL(
+      path.join(this.resolvedPath, "issues.jsonl"),
+      { skipErrors: true }
+    );
+
+    this.entityHashes.clear();
+    for (const issue of issues) {
+      const hash = computeCanonicalHash(issue);
+      this.entityHashes.set(issue.id, hash);
+    }
+    this.lastCaptureTime = new Date();
   }
 
   async fetchEntity(externalId: string): Promise<ExternalEntity | null> {
@@ -238,21 +288,156 @@ class BeadsProvider implements IntegrationProvider {
   }
 
   async createEntity(entity: Partial<Spec | Issue>): Promise<string> {
-    // TODO: Implement create in beads format
-    throw new Error("Creating entities in Beads is not yet implemented");
+    const prefix = this.options.issue_prefix || "beads";
+
+    if (this.cliAvailable) {
+      // Use Beads CLI for creation
+      try {
+        const id = createIssueViaCLI(this.projectPath, entity.title || "Untitled", {
+          priority: entity.priority,
+          beadsDir: this.resolvedPath,
+        });
+
+        // CLI create doesn't support content or status - update via JSONL if provided
+        const issueEntity = entity as Partial<Issue>;
+        if (entity.content || issueEntity.status) {
+          updateIssueViaJSONL(this.resolvedPath, id, {
+            ...(entity.content ? { content: entity.content } : {}),
+            ...(issueEntity.status ? { status: issueEntity.status } : {}),
+          });
+        }
+
+        // Refresh state after creation
+        this.captureEntityState();
+        return id;
+      } catch (cliError) {
+        // Fall back to JSONL if CLI fails
+        console.warn("[beads] CLI create failed, falling back to JSONL:", cliError);
+      }
+    }
+
+    // Fallback: Direct JSONL manipulation
+    const issueEntity = entity as Partial<Issue>;
+    const newIssue = createIssueViaJSONL(this.resolvedPath, {
+      title: entity.title,
+      content: entity.content,
+      status: issueEntity.status || "open",
+      priority: entity.priority ?? 2,
+    }, prefix);
+
+    // Refresh state after creation
+    this.captureEntityState();
+    return newIssue.id;
   }
 
   async updateEntity(
     externalId: string,
     entity: Partial<Spec | Issue>
   ): Promise<void> {
-    // TODO: Implement update in beads format
-    throw new Error("Updating entities in Beads is not yet implemented");
+    // Always use direct JSONL for updates (Beads CLI may not have update command)
+    // Only include defined fields to avoid overwriting existing values with undefined
+    const issueEntity = entity as Partial<Issue>;
+    const updates: Partial<BeadsIssue> = {};
+
+    if (entity.title !== undefined) updates.title = entity.title;
+    if (entity.content !== undefined) updates.content = entity.content;
+    if (issueEntity.status !== undefined) updates.status = issueEntity.status;
+    if (entity.priority !== undefined) updates.priority = entity.priority;
+
+    updateIssueViaJSONL(this.resolvedPath, externalId, updates);
+
+    // Refresh state after update
+    this.captureEntityState();
+  }
+
+  async deleteEntity(externalId: string): Promise<void> {
+    // Always use JSONL for hard delete - CLI 'close' only changes status
+    // This ensures the entity is actually removed from the file
+    deleteIssueViaJSONL(this.resolvedPath, externalId);
+    this.captureEntityState();
   }
 
   async getChangesSince(timestamp: Date): Promise<ExternalChange[]> {
-    // TODO: Implement change detection
-    return [];
+    const issues = readBeadsJSONL(
+      path.join(this.resolvedPath, "issues.jsonl"),
+      { skipErrors: true }
+    );
+
+    const changes: ExternalChange[] = [];
+    const currentIds = new Set<string>();
+
+    // Check for created and updated entities
+    for (const issue of issues) {
+      currentIds.add(issue.id);
+      const newHash = computeCanonicalHash(issue);
+      const cachedHash = this.entityHashes.get(issue.id);
+
+      // Check if entity was modified after the timestamp
+      const entityUpdatedAt = issue.updated_at ? new Date(issue.updated_at) : new Date();
+
+      if (!cachedHash) {
+        // New entity
+        if (entityUpdatedAt >= timestamp) {
+          changes.push({
+            entity_id: issue.id,
+            entity_type: "issue",
+            change_type: "created",
+            timestamp: issue.created_at || new Date().toISOString(),
+            data: this.beadsToExternal(issue),
+          });
+        }
+        this.entityHashes.set(issue.id, newHash);
+      } else if (newHash !== cachedHash) {
+        // Updated entity
+        if (entityUpdatedAt >= timestamp) {
+          changes.push({
+            entity_id: issue.id,
+            entity_type: "issue",
+            change_type: "updated",
+            timestamp: issue.updated_at || new Date().toISOString(),
+            data: this.beadsToExternal(issue),
+          });
+        }
+        this.entityHashes.set(issue.id, newHash);
+      }
+    }
+
+    // Check for deleted entities
+    const now = new Date().toISOString();
+    for (const [id] of this.entityHashes) {
+      if (!currentIds.has(id)) {
+        changes.push({
+          entity_id: id,
+          entity_type: "issue",
+          change_type: "deleted",
+          timestamp: now,
+        });
+        this.entityHashes.delete(id);
+      }
+    }
+
+    return changes;
+  }
+
+  // =========================================================================
+  // Real-time Watching
+  // =========================================================================
+
+  startWatching(callback: (changes: ExternalChange[]) => void): void {
+    if (this.beadsWatcher) {
+      console.warn("[beads] Already watching");
+      return;
+    }
+
+    this.beadsWatcher = new BeadsWatcher(this.resolvedPath);
+    this.beadsWatcher.start(callback);
+  }
+
+  stopWatching(): void {
+    if (this.beadsWatcher) {
+      this.beadsWatcher.stop();
+      this.beadsWatcher = null;
+    }
   }
 
   mapToSudocode(external: ExternalEntity): {
