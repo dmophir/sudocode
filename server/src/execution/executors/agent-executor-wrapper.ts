@@ -282,7 +282,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         this.agentType === "claude-code" &&
         (taskMcpServers ||
           taskAppendSystemPrompt ||
-          taskDangerouslySkipPermissions !== undefined ||
+          taskDangerouslySkipPermissions !== undefined || // false is a valid override
           taskResume)
       ) {
         // Create a task-specific executor with merged config
@@ -295,8 +295,6 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
           }
         );
 
-        // Functionally compose task-specific config
-        // mergeAgentConfig filters undefined values, treating them as "not present"
         const taskSpecificConfig = mergeAgentConfig(this._agentConfig, {
           mcpServers: taskMcpServers,
           appendSystemPrompt: taskAppendSystemPrompt,
