@@ -171,7 +171,8 @@ User authentication system.
       const specEntity = entities.find((e) => e.id === "sk-001-spec");
       expect(specEntity).toBeDefined();
       expect(specEntity?.type).toBe("spec");
-      expect(specEntity?.title).toBe("Authentication");
+      // Title format: {dirName} ({fileType})
+      expect(specEntity?.title).toBe("001-auth (spec)");
     });
 
     it("should find plan files", async () => {
@@ -197,7 +198,8 @@ Implementation details.
 
       expect(planEntity).toBeDefined();
       expect(planEntity?.type).toBe("spec");
-      expect(planEntity?.title).toBe("Authentication");
+      // Title format: {dirName} ({fileType})
+      expect(planEntity?.title).toBe("001-auth (plan)");
     });
 
     it("should find tasks as issues", async () => {
@@ -246,10 +248,12 @@ Implementation details.
       );
       await provider.initialize();
 
+      // Search matches description content (which includes "Authentication")
       const filteredEntities = await provider.searchEntities("Authentication");
 
       expect(filteredEntities.length).toBe(1);
-      expect(filteredEntities[0].title).toBe("Authentication");
+      // Title format: {dirName} ({fileType})
+      expect(filteredEntities[0].title).toBe("001-auth (spec)");
     });
 
     it("should include constitution when configured", async () => {
@@ -324,7 +328,8 @@ User authentication.
       expect(entity).not.toBeNull();
       expect(entity?.id).toBe("sk-001-spec");
       expect(entity?.type).toBe("spec");
-      expect(entity?.title).toBe("Authentication");
+      // Title format: {dirName} ({fileType})
+      expect(entity?.title).toBe("001-auth (spec)");
     });
 
     it("should fetch a specific task entity", async () => {
@@ -584,6 +589,302 @@ User authentication.
       const taskEntity = entities.find((e) => e.id === "tk-001-T001");
 
       expect(taskEntity).toBeDefined();
+    });
+  });
+
+  describe("title format", () => {
+    it("should use directory-based title format for specs", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: My Fancy Title\n\nContent here.",
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const specEntity = entities.find((e) => e.id === "sk-001-spec");
+
+      // Title should be "{dirName} ({fileType})" not the extracted markdown title
+      expect(specEntity?.title).toBe("001-auth (spec)");
+    });
+
+    it("should use directory-based title format for plans", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: "# Implementation Plan: My Plan Title\n\nPlan content.",
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const planEntity = entities.find((e) => e.id === "sk-001-plan");
+
+      // Title should be "{dirName} (plan)" not the extracted markdown title
+      expect(planEntity?.title).toBe("001-auth (plan)");
+    });
+
+    it("should use directory-based title format for supporting docs", async () => {
+      // Create a research.md file
+      const featureDir = join(specifyDir, "specs", "001-auth");
+      mkdirSync(featureDir, { recursive: true });
+      writeFileSync(
+        join(featureDir, "spec.md"),
+        "# Feature Specification: Auth\n"
+      );
+      writeFileSync(
+        join(featureDir, "research.md"),
+        "# Research: My Research Title\n\nResearch content."
+      );
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify", include_supporting_docs: true },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const researchEntity = entities.find((e) => e.id === "sk-001-research");
+
+      // Title should be "{dirName} ({fileName})"
+      expect(researchEntity?.title).toBe("001-auth (research)");
+    });
+  });
+
+  describe("raw content preservation", () => {
+    it("should include frontmatter in spec description", async () => {
+      const specContent = `---
+status: Draft
+created: 2024-01-01
+---
+
+# Feature Specification: Test
+
+This is the spec content.
+`;
+      createFeature("001", "auth", {
+        spec: specContent,
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const specEntity = entities.find((e) => e.id === "sk-001-spec");
+
+      // Description should include the frontmatter
+      expect(specEntity?.description).toContain("---");
+      expect(specEntity?.description).toContain("status: Draft");
+      expect(specEntity?.description).toContain("created: 2024-01-01");
+    });
+
+    it("should include frontmatter in plan description", async () => {
+      const planContent = `---
+status: In Progress
+branch: feature/auth
+---
+
+# Implementation Plan: Auth
+
+Plan details here.
+`;
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: planContent,
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const planEntity = entities.find((e) => e.id === "sk-001-plan");
+
+      // Description should include the frontmatter
+      expect(planEntity?.description).toContain("---");
+      expect(planEntity?.description).toContain("status: In Progress");
+      expect(planEntity?.description).toContain("branch: feature/auth");
+    });
+
+    it("should preserve full raw content when fetching entity", async () => {
+      const specContent = `---
+metadata: value
+---
+
+# Feature Specification: Test
+
+Full spec content here.
+
+## Section 1
+Details.
+`;
+      createFeature("001", "auth", {
+        spec: specContent,
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entity = await provider.fetchEntity("sk-001-spec");
+
+      // Should get the full raw content
+      expect(entity?.description).toBe(specContent);
+    });
+  });
+
+  describe("relationships", () => {
+    it("should include implements relationship from plan to spec", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: "# Implementation Plan: Auth\n",
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const planEntity = entities.find((e) => e.id === "sk-001-plan");
+
+      expect(planEntity?.relationships).toBeDefined();
+      expect(planEntity?.relationships).toHaveLength(1);
+      expect(planEntity?.relationships?.[0]).toEqual({
+        targetId: "sk-001-spec",
+        targetType: "spec",
+        relationshipType: "implements",
+      });
+    });
+
+    it("should include implements relationship from task to plan", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: "# Implementation Plan: Auth\n",
+        tasks: `# Tasks: Auth
+
+## Phase 1: Setup
+- [ ] T001 Setup authentication
+`,
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const taskEntity = entities.find((e) => e.id === "skt-001-T001");
+
+      expect(taskEntity?.relationships).toBeDefined();
+      expect(taskEntity?.relationships).toHaveLength(1);
+      expect(taskEntity?.relationships?.[0]).toEqual({
+        targetId: "sk-001-plan",
+        targetType: "spec",
+        relationshipType: "implements",
+      });
+    });
+
+    it("should include references relationship from supporting doc to plan", async () => {
+      // Create feature with supporting docs
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: "# Implementation Plan: Auth\n",
+      });
+
+      // Add a research.md file
+      const supportingDocPath = join(
+        testDir,
+        ".specify",
+        "specs",
+        "001-auth",
+        "research.md"
+      );
+      writeFileSync(
+        supportingDocPath,
+        "# Research: Authentication\n\nResearch content here."
+      );
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify", include_supporting_docs: true },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const researchEntity = entities.find((e) =>
+        e.title.includes("(research)")
+      );
+
+      expect(researchEntity?.relationships).toBeDefined();
+      expect(researchEntity?.relationships).toHaveLength(1);
+      expect(researchEntity?.relationships?.[0]).toEqual({
+        targetId: "sk-001-plan",
+        targetType: "spec",
+        relationshipType: "references",
+      });
+    });
+
+    it("should not include relationships for spec (root entity)", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      const entities = await provider.searchEntities();
+      const specEntity = entities.find((e) => e.id === "sk-001-spec");
+
+      // Spec is a root entity, so it should not have relationships
+      expect(specEntity?.relationships).toBeUndefined();
+    });
+
+    it("should include relationships in watcher detected changes", async () => {
+      createFeature("001", "auth", {
+        spec: "# Feature Specification: Auth\n",
+        plan: "# Implementation Plan: Auth\n",
+      });
+
+      const provider = specKitPlugin.createProvider(
+        { path: ".specify" },
+        testDir
+      );
+      await provider.initialize();
+
+      // Get changes since beginning of time (to get all entities as "created")
+      const changes = await provider.getChangesSince(new Date(0));
+
+      // Find the plan in the changes
+      const planChange = changes.find(
+        (c) => c.entity_id === "sk-001-plan" && c.change_type === "created"
+      );
+
+      expect(planChange?.data?.relationships).toBeDefined();
+      expect(planChange?.data?.relationships).toHaveLength(1);
+      expect(planChange?.data?.relationships?.[0]).toEqual({
+        targetId: "sk-001-spec",
+        targetType: "spec",
+        relationshipType: "implements",
+      });
     });
   });
 });

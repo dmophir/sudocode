@@ -46,7 +46,10 @@ interface TestContext {
  * Create a fresh test environment with spec-kit directory structure
  */
 function createTestContext(): TestContext {
-  const testDir = join(tmpdir(), `speckit-integration-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const testDir = join(
+    tmpdir(),
+    `speckit-integration-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
   const specifyDir = join(testDir, ".specify");
   const specsDir = join(specifyDir, "specs");
   const memoryDir = join(specifyDir, "memory");
@@ -105,7 +108,10 @@ function createFeature(
     const contractsDir = join(featureDir, "contracts");
     mkdirSync(contractsDir, { recursive: true });
     for (const [name, data] of Object.entries(options.contracts)) {
-      writeFileSync(join(contractsDir, `${name}.json`), JSON.stringify(data, null, 2));
+      writeFileSync(
+        join(contractsDir, `${name}.json`),
+        JSON.stringify(data, null, 2)
+      );
     }
   }
 
@@ -236,11 +242,13 @@ describe("Import Tests", () => {
 
     expect(spec).toBeDefined();
     expect(spec?.type).toBe("spec");
-    expect(spec?.title).toBe("User Authentication");
+    // Title format: {dirName} ({fileType})
+    expect(spec?.title).toBe("001-auth (spec)");
 
     expect(plan).toBeDefined();
     expect(plan?.type).toBe("spec");
-    expect(plan?.title).toBe("User Authentication");
+    // Title format: {dirName} ({fileType})
+    expect(plan?.title).toBe("001-auth (plan)");
 
     expect(research).toBeDefined();
     expect(research?.type).toBe("spec");
@@ -380,9 +388,7 @@ describe("Relationship Tests", () => {
         { taskId: "T002", dependsOn: ["T001"] },
         { taskId: "T003" },
       ],
-      [
-        { fileType: "research", entityType: "spec" },
-      ]
+      [{ fileType: "research", entityType: "spec" }]
     );
 
     // Should have:
@@ -442,7 +448,9 @@ describe("Change Detection Tests", () => {
     const createdChanges = changes.filter((c) => c.change_type === "created");
 
     expect(createdChanges.length).toBeGreaterThan(0);
-    expect(createdChanges.some((c) => c.entity_id === "sk-001-spec")).toBe(true);
+    expect(createdChanges.some((c) => c.entity_id === "sk-001-spec")).toBe(
+      true
+    );
   });
 
   it("should detect spec.md content changes", async () => {
@@ -461,7 +469,10 @@ describe("Change Detection Tests", () => {
 
     // Modify the spec
     const specPath = join(ctx.specsDir, "001-auth", "spec.md");
-    writeFileSync(specPath, SAMPLE_SPEC + "\n\n## Updated Section\nNew content here.");
+    writeFileSync(
+      specPath,
+      SAMPLE_SPEC + "\n\n## Updated Section\nNew content here."
+    );
 
     // Should detect the update
     const changes = await provider.getChangesSince(new Date(0));
@@ -572,7 +583,9 @@ describe("Outbound Sync Tests", () => {
     const specPath = join(ctx.specsDir, "001-auth", "spec.md");
 
     // Verify initial title
-    expect(getSpecTitle(specPath)).toBe("Feature Specification: User Authentication");
+    expect(getSpecTitle(specPath)).toBe(
+      "Feature Specification: User Authentication"
+    );
 
     // Update spec title
     const result = updateSpecContent(specPath, {
@@ -580,11 +593,17 @@ describe("Outbound Sync Tests", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.changes.title?.from).toBe("Feature Specification: User Authentication");
-    expect(result.changes.title?.to).toBe("Feature Specification: Enhanced Authentication");
+    expect(result.changes.title?.from).toBe(
+      "Feature Specification: User Authentication"
+    );
+    expect(result.changes.title?.to).toBe(
+      "Feature Specification: Enhanced Authentication"
+    );
 
     // Verify file was updated
-    expect(getSpecTitle(specPath)).toBe("Feature Specification: Enhanced Authentication");
+    expect(getSpecTitle(specPath)).toBe(
+      "Feature Specification: Enhanced Authentication"
+    );
   });
 
   it("should not trigger false change detection after outbound write", async () => {
@@ -896,7 +915,7 @@ describe("Edge Cases", () => {
       spec: SAMPLE_SPEC,
       contracts: {
         "api-spec": { openapi: "3.0.0", paths: {} },
-        "events": { eventTypes: ["login", "logout"] },
+        events: { eventTypes: ["login", "logout"] },
       },
     });
 

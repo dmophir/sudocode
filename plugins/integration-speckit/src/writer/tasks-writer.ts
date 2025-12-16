@@ -5,7 +5,7 @@
  * Tasks are formatted as: `- [ ] T001: Task description` or `- [x] T001: Task description`
  */
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
 import { dirname } from "path";
 import { mkdirSync } from "fs";
 
@@ -198,6 +198,5 @@ function writeFileAtomic(filePath: string, content: string): void {
   writeFileSync(tempPath, content, "utf-8");
 
   // Rename is atomic on most file systems
-  const { renameSync } = require("fs");
   renameSync(tempPath, filePath);
 }

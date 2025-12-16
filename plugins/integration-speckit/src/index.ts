@@ -47,6 +47,13 @@ export {
   type SpecUpdateResult,
 } from "./writer/index.js";
 
+// Re-export watcher
+export {
+  SpecKitWatcher,
+  type ChangeCallback,
+  type SpecKitWatcherOptions,
+} from "./watcher.js";
+
 // Re-export parser utilities
 export {
   // Markdown utilities
@@ -125,6 +132,8 @@ import {
   generateSpecId,
   generateTaskIssueId,
   extractFeatureNumber,
+  getFeatureSpecId,
+  getFeaturePlanId,
 } from "./id-generator.js";
 import { updateTaskStatus, updateSpecContent } from "./writer/index.js";
 import { parseSpec } from "./parser/spec-parser.js";
@@ -135,6 +144,7 @@ import {
   type ParsedSupportingDoc,
   type ParsedContract,
 } from "./parser/supporting-docs.js";
+import { SpecKitWatcher } from "./watcher.js";
 
 /**
  * Spec-kit specific configuration options
@@ -332,6 +342,9 @@ class SpecKitProvider implements IntegrationProvider {
   // Change tracking for getChangesSince
   private entityHashes: Map<string, string> = new Map();
 
+  // File watcher instance
+  private watcher: SpecKitWatcher | null = null;
+
   constructor(options: SpecKitOptions, projectPath: string) {
     this.options = options;
     this.projectPath = projectPath;
@@ -355,13 +368,11 @@ class SpecKitProvider implements IntegrationProvider {
       );
     }
 
-    // Initialize entity state cache for change detection
-    await this.captureEntityState();
-    console.log(
-      `[spec-kit] Captured initial state with ${this.entityHashes.size} entities`
-    );
-
-    console.log(`[spec-kit] Provider initialized successfully`);
+    // Note: We intentionally do NOT pre-populate entityHashes here.
+    // This allows getChangesSince to detect all existing entities as "new" on first sync,
+    // enabling auto-import of existing spec-kit entities into sudocode.
+    // The hash cache gets populated as entities are synced/detected.
+    console.log(`[spec-kit] Provider initialized successfully (hash cache empty for fresh import)`);
   }
 
   async validate(): Promise<{ valid: boolean; errors: string[] }> {
@@ -445,15 +456,18 @@ class SpecKitProvider implements IntegrationProvider {
         return null;
       }
 
+      // Get the feature directory name for title generation
+      const featureDirName = this.getFeatureDirName(parsed.featureNumber);
+
       // Parse based on file type
       if (parsed.fileType === "spec") {
         const spec = parseSpec(filePath);
         if (!spec) return null;
-        return this.specToExternalEntity(spec, externalId);
+        return this.specToExternalEntity(spec, externalId, featureDirName || undefined, "spec");
       } else if (parsed.fileType === "plan") {
         const plan = parsePlan(filePath);
         if (!plan) return null;
-        return this.planToExternalEntity(plan, externalId);
+        return this.planToExternalEntity(plan, externalId, featureDirName || undefined, parsed.featureNumber || undefined);
       } else if (
         parsed.fileType === "research" ||
         parsed.fileType === "data-model"
@@ -463,7 +477,7 @@ class SpecKitProvider implements IntegrationProvider {
         const doc =
           parsed.fileType === "research" ? docs.research : docs.dataModel;
         if (!doc) return null;
-        return this.supportingDocToExternalEntity(doc, externalId);
+        return this.supportingDocToExternalEntity(doc, externalId, featureDirName || undefined, parsed.featureNumber || undefined);
       } else if (parsed.fileType.startsWith("contract-")) {
         const featureDir = path.dirname(filePath);
         const contractsDir = path.join(featureDir, "contracts");
@@ -471,7 +485,7 @@ class SpecKitProvider implements IntegrationProvider {
         const docs = discoverSupportingDocs(featureDir);
         const contract = docs.contracts.find((c) => c.name === contractName);
         if (!contract) return null;
-        return this.contractToExternalEntity(contract, externalId);
+        return this.contractToExternalEntity(contract, externalId, featureDirName || undefined, parsed.featureNumber || undefined);
       }
     } else {
       // Non-feature file (e.g., constitution.md)
@@ -487,7 +501,7 @@ class SpecKitProvider implements IntegrationProvider {
 
         const spec = parseSpec(constitutionPath);
         if (!spec) return null;
-        return this.specToExternalEntity(spec, externalId);
+        return this.specToExternalEntity(spec, externalId, undefined, "constitution");
       }
     }
 
@@ -529,7 +543,7 @@ class SpecKitProvider implements IntegrationProvider {
                 `specs/${entry.name}/spec.md`,
                 prefix
               );
-              const entity = this.specToExternalEntity(spec, specId);
+              const entity = this.specToExternalEntity(spec, specId, entry.name, "spec");
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
               }
@@ -545,7 +559,7 @@ class SpecKitProvider implements IntegrationProvider {
                 `specs/${entry.name}/plan.md`,
                 prefix
               );
-              const entity = this.planToExternalEntity(plan, planId);
+              const entity = this.planToExternalEntity(plan, planId, entry.name, featureNumber);
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
               }
@@ -587,7 +601,9 @@ class SpecKitProvider implements IntegrationProvider {
               );
               const entity = this.supportingDocToExternalEntity(
                 docs.research,
-                docId
+                docId,
+                entry.name,
+                featureNumber
               );
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
@@ -601,7 +617,9 @@ class SpecKitProvider implements IntegrationProvider {
               );
               const entity = this.supportingDocToExternalEntity(
                 docs.dataModel,
-                docId
+                docId,
+                entry.name,
+                featureNumber
               );
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
@@ -610,7 +628,7 @@ class SpecKitProvider implements IntegrationProvider {
 
             for (const contract of docs.contracts) {
               const docId = `${prefix}-${featureNumber}-contract-${contract.name}`;
-              const entity = this.contractToExternalEntity(contract, docId);
+              const entity = this.contractToExternalEntity(contract, docId, entry.name, featureNumber);
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
               }
@@ -621,7 +639,7 @@ class SpecKitProvider implements IntegrationProvider {
                 `specs/${entry.name}/${other.fileName}.md`,
                 prefix
               );
-              const entity = this.supportingDocToExternalEntity(other, docId);
+              const entity = this.supportingDocToExternalEntity(other, docId, entry.name, featureNumber);
               if (this.matchesQuery(entity, query)) {
                 entities.push(entity);
               }
@@ -644,7 +662,8 @@ class SpecKitProvider implements IntegrationProvider {
         const spec = parseSpec(constitutionPath);
         if (spec) {
           const constitutionId = `${prefix}-constitution`;
-          const entity = this.specToExternalEntity(spec, constitutionId);
+          // Use "constitution" as title (no feature dir for global files)
+          const entity = this.specToExternalEntity(spec, constitutionId, undefined, "constitution");
           if (this.matchesQuery(entity, query)) {
             entities.push(entity);
           }
@@ -844,10 +863,9 @@ class SpecKitProvider implements IntegrationProvider {
       return path.join(specsDir, `${featureNumber}-unknown`, "tasks.md");
     }
 
-    const { readdirSync } = require("fs");
     const dirs = readdirSync(specsDir, { withFileTypes: true })
-      .filter((d: { isDirectory: () => boolean }) => d.isDirectory())
-      .map((d: { name: string }) => d.name);
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
 
     const featureDir = dirs.find((dir: string) =>
       dir.startsWith(`${featureNumber}-`)
@@ -871,10 +889,9 @@ class SpecKitProvider implements IntegrationProvider {
       return path.join(specsDir, `${featureNumber}-unknown`, `${fileType}.md`);
     }
 
-    const { readdirSync } = require("fs");
     const dirs = readdirSync(specsDir, { withFileTypes: true })
-      .filter((d: { isDirectory: () => boolean }) => d.isDirectory())
-      .map((d: { name: string }) => d.name);
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
 
     const featureDir = dirs.find((dir: string) =>
       dir.startsWith(`${featureNumber}-`)
@@ -897,6 +914,23 @@ class SpecKitProvider implements IntegrationProvider {
 
     // Fallback
     return path.join(specsDir, `${featureNumber}-unknown`, `${fileType}.md`);
+  }
+
+  /**
+   * Get the feature directory name (e.g., "001-test-feature") from a feature number
+   */
+  private getFeatureDirName(featureNumber: string): string | null {
+    const specsDir = path.join(this.resolvedPath, "specs");
+
+    if (!existsSync(specsDir)) {
+      return null;
+    }
+
+    const dirs = readdirSync(specsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    return dirs.find((dir) => dir.startsWith(`${featureNumber}-`)) || null;
   }
 
   /**
@@ -929,10 +963,12 @@ class SpecKitProvider implements IntegrationProvider {
   }
 
   async getChangesSince(timestamp: Date): Promise<ExternalChange[]> {
-    console.log(`[spec-kit] getChangesSince called for: ${timestamp}`);
+    console.log(`[spec-kit] getChangesSince called for: ${timestamp.toISOString()}`);
+    console.log(`[spec-kit] getChangesSince: current entityHashes count: ${this.entityHashes.size}`);
 
     const changes: ExternalChange[] = [];
     const currentEntities = await this.searchEntities();
+    console.log(`[spec-kit] getChangesSince: searchEntities returned ${currentEntities.length} entities`);
     const currentIds = new Set<string>();
 
     // Check for created and updated entities
@@ -943,6 +979,7 @@ class SpecKitProvider implements IntegrationProvider {
 
       if (!cachedHash) {
         // New entity
+        console.log(`[spec-kit] getChangesSince: NEW entity detected: ${entity.id} (type=${entity.type})`);
         changes.push({
           entity_id: entity.id,
           entity_type: entity.type,
@@ -953,6 +990,7 @@ class SpecKitProvider implements IntegrationProvider {
         this.entityHashes.set(entity.id, newHash);
       } else if (newHash !== cachedHash) {
         // Updated entity
+        console.log(`[spec-kit] getChangesSince: UPDATED entity detected: ${entity.id}`);
         changes.push({
           entity_id: entity.id,
           entity_type: entity.type,
@@ -971,6 +1009,7 @@ class SpecKitProvider implements IntegrationProvider {
         // Determine entity type from ID
         const parsed = parseSpecId(id);
         const entityType: "spec" | "issue" = parsed?.isTask ? "issue" : "spec";
+        console.log(`[spec-kit] getChangesSince: DELETED entity detected: ${id}`);
 
         changes.push({
           entity_id: id,
@@ -982,26 +1021,47 @@ class SpecKitProvider implements IntegrationProvider {
       }
     }
 
-    console.log(`[spec-kit] getChangesSince found ${changes.length} changes`);
+    console.log(`[spec-kit] getChangesSince found ${changes.length} changes:`, changes.map(c => `${c.entity_id}(${c.change_type})`).join(", "));
     return changes;
   }
 
   startWatching(callback: (changes: ExternalChange[]) => void): void {
-    // TODO: Implement in watcher issue
     console.log(`[spec-kit] startWatching called`);
+
+    if (this.watcher) {
+      console.warn(`[spec-kit] Watcher already running`);
+      return;
+    }
+
+    this.watcher = new SpecKitWatcher({
+      specifyPath: this.resolvedPath,
+      specPrefix: this.options.spec_prefix || "sk",
+      taskPrefix: this.options.task_prefix || "skt",
+      includeSupportingDocs: this.options.include_supporting_docs !== false,
+      includeConstitution: this.options.include_constitution !== false,
+    });
+
+    this.watcher.start(callback);
+    console.log(`[spec-kit] Watcher started for ${this.resolvedPath}`);
   }
 
   stopWatching(): void {
-    // TODO: Implement in watcher issue
     console.log(`[spec-kit] stopWatching called`);
+
+    if (this.watcher) {
+      this.watcher.stop();
+      this.watcher = null;
+      console.log(`[spec-kit] Watcher stopped`);
+    }
   }
 
   mapToSudocode(external: ExternalEntity): {
     spec?: Partial<Spec>;
     issue?: Partial<Issue>;
   } {
+    console.log(`[spec-kit] mapToSudocode: external.type=${external.type}, title=${external.title}`);
     if (external.type === "issue") {
-      return {
+      const result = {
         issue: {
           title: external.title,
           content: external.description || "",
@@ -1009,15 +1069,19 @@ class SpecKitProvider implements IntegrationProvider {
           status: this.mapStatus(external.status),
         },
       };
+      console.log(`[spec-kit] mapToSudocode: returning issue with status=${result.issue.status}`);
+      return result;
     }
 
-    return {
+    const result = {
       spec: {
         title: external.title,
         content: external.description || "",
         priority: external.priority ?? 2,
       },
     };
+    console.log(`[spec-kit] mapToSudocode: returning spec`);
+    return result;
   }
 
   mapFromSudocode(entity: Spec | Issue): Partial<ExternalEntity> {
@@ -1061,6 +1125,7 @@ class SpecKitProvider implements IntegrationProvider {
    * Capture current entity state for change detection
    */
   private async captureEntityState(): Promise<void> {
+    console.log(`[spec-kit] captureEntityState: capturing initial entity state...`);
     const entities = await this.searchEntities();
 
     this.entityHashes.clear();
@@ -1068,6 +1133,7 @@ class SpecKitProvider implements IntegrationProvider {
       const hash = this.computeEntityHash(entity);
       this.entityHashes.set(entity.id, hash);
     }
+    console.log(`[spec-kit] captureEntityState: captured ${this.entityHashes.size} entities`);
   }
 
   /**
@@ -1101,16 +1167,35 @@ class SpecKitProvider implements IntegrationProvider {
 
   /**
    * Convert a parsed spec to ExternalEntity
+   * @param spec - Parsed spec data
+   * @param id - External entity ID
+   * @param featureDirName - Feature directory name (e.g., "001-test-feature")
+   * @param fileType - File type for title suffix (e.g., "spec", "plan")
    */
   private specToExternalEntity(
     spec: import("./parser/spec-parser.js").ParsedSpecKitSpec,
-    id: string
+    id: string,
+    featureDirName?: string,
+    fileType: string = "spec"
   ): ExternalEntity {
+    // Use directory-based title: "001-test-feature (spec)" instead of extracted title
+    const title = featureDirName
+      ? `${featureDirName} (${fileType})`
+      : spec.title;
+
+    // Read raw file content (including frontmatter) instead of processed content
+    let rawContent = spec.content;
+    try {
+      rawContent = readFileSync(spec.filePath, "utf-8");
+    } catch {
+      // Fall back to parsed content if file read fails
+    }
+
     return {
       id,
       type: "spec",
-      title: spec.title,
-      description: spec.content,
+      title,
+      description: rawContent,
       status: spec.status || undefined,
       priority: this.statusToPriority(spec.status),
       created_at: spec.createdAt?.toISOString(),
@@ -1126,19 +1211,49 @@ class SpecKitProvider implements IntegrationProvider {
 
   /**
    * Convert a parsed plan to ExternalEntity
+   * @param plan - Parsed plan data
+   * @param id - External entity ID
+   * @param featureDirName - Feature directory name (e.g., "001-test-feature")
    */
   private planToExternalEntity(
     plan: import("./parser/plan-parser.js").ParsedSpecKitPlan,
-    id: string
+    id: string,
+    featureDirName?: string,
+    featureNumber?: string
   ): ExternalEntity {
+    // Use directory-based title: "001-test-feature (plan)" instead of extracted title
+    const title = featureDirName
+      ? `${featureDirName} (plan)`
+      : plan.title;
+
+    // Read raw file content (including frontmatter) instead of processed content
+    let rawContent = plan.content;
+    try {
+      rawContent = readFileSync(plan.filePath, "utf-8");
+    } catch {
+      // Fall back to parsed content if file read fails
+    }
+
+    // Plan implements Spec relationship
+    const relationships: ExternalEntity["relationships"] = [];
+    if (featureNumber) {
+      const specId = getFeatureSpecId(featureNumber, this.options.spec_prefix || "sk");
+      relationships.push({
+        targetId: specId,
+        targetType: "spec",
+        relationshipType: "implements",
+      });
+    }
+
     return {
       id,
       type: "spec",
-      title: plan.title,
-      description: plan.content,
+      title,
+      description: rawContent,
       status: plan.status || undefined,
       priority: this.statusToPriority(plan.status),
       created_at: plan.createdAt?.toISOString(),
+      relationships: relationships.length > 0 ? relationships : undefined,
       raw: {
         rawTitle: plan.rawTitle,
         branch: plan.branch,
@@ -1160,6 +1275,17 @@ class SpecKitProvider implements IntegrationProvider {
     tasksFilePath: string
   ): ExternalEntity {
     const status = task.completed ? "closed" : "open";
+
+    // Task implements Plan relationship
+    const planId = getFeaturePlanId(featureNumber, this.options.spec_prefix || "sk");
+    const relationships: ExternalEntity["relationships"] = [
+      {
+        targetId: planId,
+        targetType: "spec",
+        relationshipType: "implements",
+      },
+    ];
+
     return {
       id,
       type: "issue",
@@ -1167,6 +1293,7 @@ class SpecKitProvider implements IntegrationProvider {
       description: task.description,
       status,
       priority: task.parallelizable ? 1 : 2, // Parallelizable tasks get higher priority
+      relationships,
       raw: {
         taskId: task.taskId,
         completed: task.completed,
@@ -1185,16 +1312,47 @@ class SpecKitProvider implements IntegrationProvider {
 
   /**
    * Convert a parsed supporting document to ExternalEntity
+   * @param doc - Parsed supporting document data
+   * @param id - External entity ID
+   * @param featureDirName - Feature directory name (e.g., "001-test-feature")
+   * @param featureNumber - Feature number (e.g., "001") for relationship creation
    */
   private supportingDocToExternalEntity(
     doc: ParsedSupportingDoc,
-    id: string
+    id: string,
+    featureDirName?: string,
+    featureNumber?: string
   ): ExternalEntity {
+    // Use directory-based title: "001-test-feature (research)" instead of extracted title
+    const title = featureDirName
+      ? `${featureDirName} (${doc.fileName})`
+      : doc.title;
+
+    // Read raw file content (including frontmatter) instead of processed content
+    let rawContent = doc.content;
+    try {
+      rawContent = readFileSync(doc.filePath, "utf-8");
+    } catch {
+      // Fall back to parsed content if file read fails
+    }
+
+    // Supporting doc references Plan relationship
+    const relationships: ExternalEntity["relationships"] = [];
+    if (featureNumber) {
+      const planId = getFeaturePlanId(featureNumber, this.options.spec_prefix || "sk");
+      relationships.push({
+        targetId: planId,
+        targetType: "spec",
+        relationshipType: "references",
+      });
+    }
+
     return {
       id,
       type: "spec",
-      title: doc.title,
-      description: doc.content,
+      title,
+      description: rawContent,
+      relationships: relationships.length > 0 ? relationships : undefined,
       raw: {
         docType: doc.type,
         metadata: Object.fromEntries(doc.metadata),
@@ -1208,16 +1366,39 @@ class SpecKitProvider implements IntegrationProvider {
 
   /**
    * Convert a parsed contract to ExternalEntity
+   * @param contract - Parsed contract data
+   * @param id - External entity ID
+   * @param featureDirName - Feature directory name (e.g., "001-test-feature")
+   * @param featureNumber - Feature number (e.g., "001") for relationship creation
    */
   private contractToExternalEntity(
     contract: ParsedContract,
-    id: string
+    id: string,
+    featureDirName?: string,
+    featureNumber?: string
   ): ExternalEntity {
+    // Use directory-based title: "001-test-feature (contract-api)" instead of contract name
+    const title = featureDirName
+      ? `${featureDirName} (contract-${contract.name})`
+      : contract.name;
+
+    // Contract references Plan relationship
+    const relationships: ExternalEntity["relationships"] = [];
+    if (featureNumber) {
+      const planId = getFeaturePlanId(featureNumber, this.options.spec_prefix || "sk");
+      relationships.push({
+        targetId: planId,
+        targetType: "spec",
+        relationshipType: "references",
+      });
+    }
+
     return {
       id,
       type: "spec",
-      title: contract.name,
+      title,
       description: JSON.stringify(contract.data, null, 2),
+      relationships: relationships.length > 0 ? relationships : undefined,
       raw: {
         contractName: contract.name,
         format: contract.format,
