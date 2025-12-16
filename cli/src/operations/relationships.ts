@@ -305,7 +305,9 @@ export function getOutgoingRelationships(
     params.relationship_type = relationship_type;
   }
 
-  query += " ORDER BY created_at DESC";
+  // Deterministic ordering: by created_at DESC, then by to_id and relationship_type
+  // This prevents oscillation when multiple relationships have the same timestamp
+  query += " ORDER BY created_at DESC, to_id ASC, relationship_type ASC";
 
   const stmt = db.prepare(query);
   return stmt.all(params) as Relationship[];
@@ -335,7 +337,9 @@ export function getIncomingRelationships(
     params.relationship_type = relationship_type;
   }
 
-  query += " ORDER BY created_at DESC";
+  // Deterministic ordering: by created_at DESC, then by from_id and relationship_type
+  // This prevents oscillation when multiple relationships have the same timestamp
+  query += " ORDER BY created_at DESC, from_id ASC, relationship_type ASC";
 
   const stmt = db.prepare(query);
   return stmt.all(params) as Relationship[];

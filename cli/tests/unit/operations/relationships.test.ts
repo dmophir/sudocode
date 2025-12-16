@@ -634,6 +634,86 @@ describe("Relationship Operations", () => {
     });
   });
 
+  describe("Deterministic Ordering", () => {
+    it("should return outgoing relationships in deterministic order regardless of creation order", () => {
+      // Create relationships with potentially same timestamp
+      // By inserting quickly, they might have the same created_at
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "related",
+      });
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-002",
+        to_type: "issue",
+        relationship_type: "blocks",
+      });
+
+      // Get relationships multiple times - should always be same order
+      const rels1 = getOutgoingRelationships(db, "issue-001", "issue");
+      const rels2 = getOutgoingRelationships(db, "issue-001", "issue");
+
+      expect(rels1.map(r => `${r.to_id}-${r.relationship_type}`))
+        .toEqual(rels2.map(r => `${r.to_id}-${r.relationship_type}`));
+    });
+
+    it("should order outgoing relationships by to_id when created_at is same", () => {
+      // Force same timestamp by using transaction
+      db.exec("BEGIN");
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "related",
+      });
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-002",
+        to_type: "issue",
+        relationship_type: "related",
+      });
+      db.exec("COMMIT");
+
+      const rels = getOutgoingRelationships(db, "issue-001", "issue");
+
+      // With same created_at, should be ordered by to_id ASC
+      // issue-002 comes before issue-003
+      expect(rels[0].to_id).toBe("issue-002");
+      expect(rels[1].to_id).toBe("issue-003");
+    });
+
+    it("should order incoming relationships deterministically by from_id", () => {
+      // Create incoming relationships to issue-003
+      addRelationship(db, {
+        from_id: "issue-002",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "blocks",
+      });
+      addRelationship(db, {
+        from_id: "issue-001",
+        from_type: "issue",
+        to_id: "issue-003",
+        to_type: "issue",
+        relationship_type: "blocks",
+      });
+
+      const rels = getIncomingRelationships(db, "issue-003", "issue");
+
+      // Get multiple times to verify determinism
+      const rels2 = getIncomingRelationships(db, "issue-003", "issue");
+
+      expect(rels.map(r => r.from_id)).toEqual(rels2.map(r => r.from_id));
+    });
+  });
+
   describe("Cascade Delete on Entity Deletion", () => {
     beforeEach(() => {
       // Create a spec

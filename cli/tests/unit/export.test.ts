@@ -362,4 +362,138 @@ describe('Export Operations', () => {
       expect(debouncer.isPending()).toBe(false);
     });
   });
+
+  describe('Deterministic Array Sorting', () => {
+    it('should sort relationships by to_id, to_type, then type', () => {
+      // Create entities
+      const spec1 = createSpec(db, {
+        id: 'spec-001',
+        title: 'Spec 1',
+        file_path: 'spec1.md',
+      });
+      createSpec(db, {
+        id: 'spec-002',
+        title: 'Spec 2',
+        file_path: 'spec2.md',
+      });
+      createSpec(db, {
+        id: 'spec-003',
+        title: 'Spec 3',
+        file_path: 'spec3.md',
+      });
+      createIssue(db, {
+        id: 'issue-001',
+        title: 'Issue 1',
+      });
+
+      // Add relationships in non-sorted order
+      addRelationship(db, {
+        from_id: 'spec-001',
+        from_type: 'spec',
+        to_id: 'spec-003',
+        to_type: 'spec',
+        relationship_type: 'related',
+      });
+      addRelationship(db, {
+        from_id: 'spec-001',
+        from_type: 'spec',
+        to_id: 'issue-001',
+        to_type: 'issue',
+        relationship_type: 'references',
+      });
+      addRelationship(db, {
+        from_id: 'spec-001',
+        from_type: 'spec',
+        to_id: 'spec-002',
+        to_type: 'spec',
+        relationship_type: 'blocks',
+      });
+      addRelationship(db, {
+        from_id: 'spec-001',
+        from_type: 'spec',
+        to_id: 'spec-002',
+        to_type: 'spec',
+        relationship_type: 'related',
+      });
+
+      // Export
+      const jsonl = specToJSONL(db, spec1);
+
+      // Verify sorted order: first by to_id, then to_type, then type
+      expect(jsonl.relationships).toHaveLength(4);
+      // issue-001 comes before spec-002 and spec-003 alphabetically
+      expect(jsonl.relationships[0].to).toBe('issue-001');
+      // spec-002 comes next, with 'blocks' before 'related'
+      expect(jsonl.relationships[1].to).toBe('spec-002');
+      expect(jsonl.relationships[1].type).toBe('blocks');
+      expect(jsonl.relationships[2].to).toBe('spec-002');
+      expect(jsonl.relationships[2].type).toBe('related');
+      // spec-003 comes last
+      expect(jsonl.relationships[3].to).toBe('spec-003');
+    });
+
+    it('should sort tags alphabetically', () => {
+      const spec = createSpec(db, {
+        id: 'spec-001',
+        title: 'Spec 1',
+        file_path: 'spec1.md',
+      });
+
+      // Add tags in non-alphabetical order
+      addTags(db, 'spec-001', 'spec', ['zebra', 'alpha', 'monkey', 'beta']);
+
+      const jsonl = specToJSONL(db, spec);
+
+      // Verify alphabetical order
+      expect(jsonl.tags).toEqual(['alpha', 'beta', 'monkey', 'zebra']);
+    });
+
+    it('should produce identical output regardless of insertion order', () => {
+      // Create entities
+      const issue = createIssue(db, {
+        id: 'issue-001',
+        title: 'Issue 1',
+      });
+      createIssue(db, {
+        id: 'issue-002',
+        title: 'Issue 2',
+      });
+      createIssue(db, {
+        id: 'issue-003',
+        title: 'Issue 3',
+      });
+
+      // Add relationships in one order
+      addRelationship(db, {
+        from_id: 'issue-001',
+        from_type: 'issue',
+        to_id: 'issue-003',
+        to_type: 'issue',
+        relationship_type: 'related',
+      });
+      addRelationship(db, {
+        from_id: 'issue-001',
+        from_type: 'issue',
+        to_id: 'issue-002',
+        to_type: 'issue',
+        relationship_type: 'blocks',
+      });
+
+      // Add tags in non-alphabetical order
+      addTags(db, 'issue-001', 'issue', ['c-tag', 'a-tag', 'b-tag']);
+
+      // Export multiple times
+      const jsonl1 = issueToJSONL(db, issue);
+      const jsonl2 = issueToJSONL(db, issue);
+
+      // Should produce identical output
+      expect(JSON.stringify(jsonl1.relationships)).toBe(JSON.stringify(jsonl2.relationships));
+      expect(JSON.stringify(jsonl1.tags)).toBe(JSON.stringify(jsonl2.tags));
+
+      // Verify consistent ordering
+      expect(jsonl1.relationships[0].to).toBe('issue-002'); // Sorted alphabetically
+      expect(jsonl1.relationships[1].to).toBe('issue-003');
+      expect(jsonl1.tags).toEqual(['a-tag', 'b-tag', 'c-tag']);
+    });
+  });
 });

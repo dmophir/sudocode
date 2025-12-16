@@ -111,7 +111,7 @@ export function IssueCard({
     if (!workflowInfo?.workflowId) return undefined
     const color = getColorFromId(workflowInfo.workflowId)
     return {
-      borderLeftWidth: '4px',
+      borderLeftWidth: '2px',
       borderLeftStyle: 'solid' as const,
       borderLeftColor: color,
     }

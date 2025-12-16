@@ -440,7 +440,11 @@ export function importSpecs(
         archived_at: spec.archived_at,
         created_at: spec.created_at,
         updated_at: spec.updated_at,
-        external_links: spec.external_links ? JSON.stringify(spec.external_links) : undefined,
+        // Pass null when JSONL doesn't have external_links, so SQLite gets cleared
+        // (undefined would skip the update, causing oscillation with export)
+        external_links: spec.external_links && spec.external_links.length > 0
+          ? JSON.stringify(spec.external_links)
+          : null,
       });
 
       // Add tags
@@ -494,7 +498,11 @@ export function importSpecs(
         archived: spec.archived,
         archived_at: spec.archived_at,
         updated_at: spec.updated_at,
-        external_links: spec.external_links ? JSON.stringify(spec.external_links) : undefined,
+        // Pass null when JSONL doesn't have external_links, so SQLite gets cleared
+        // (undefined would skip the update, causing oscillation with export)
+        external_links: spec.external_links && spec.external_links.length > 0
+          ? JSON.stringify(spec.external_links)
+          : null,
       });
       setTags(db, spec.id, "spec", spec.tags || []);
       updated++;
@@ -614,7 +622,11 @@ export function importIssues(
         created_at: issue.created_at,
         updated_at: issue.updated_at,
         closed_at: issue.closed_at,
-        external_links: issue.external_links ? JSON.stringify(issue.external_links) : undefined,
+        // Pass null when JSONL doesn't have external_links, so SQLite gets cleared
+        // (undefined would skip the update, causing oscillation with export)
+        external_links: issue.external_links && issue.external_links.length > 0
+          ? JSON.stringify(issue.external_links)
+          : null,
       });
       setTags(db, issue.id, "issue", issue.tags || []);
       added++;
@@ -666,9 +678,11 @@ export function importIssues(
         archived_at: issue.archived_at,
         updated_at: issue.updated_at,
         closed_at: issue.closed_at,
-        external_links: issue.external_links
+        // Pass null when JSONL doesn't have external_links, so SQLite gets cleared
+        // (undefined would skip the update, causing oscillation with export)
+        external_links: issue.external_links && issue.external_links.length > 0
           ? JSON.stringify(issue.external_links)
-          : undefined,
+          : null,
       });
       setTags(db, issue.id, "issue", issue.tags || []);
       updated++;

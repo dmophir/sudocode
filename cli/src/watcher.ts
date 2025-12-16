@@ -183,27 +183,32 @@ export function startWatcher(options: WatcherOptions): WatcherControl {
 
   /**
    * Compute a canonical content hash for an entity that's invariant to key ordering
-   * This ensures that {"id":"x","title":"y"} and {"title":"y","id":"x"} produce the same hash
+   * and array element ordering. This ensures consistent hashes regardless of:
+   * - Object key order: {"id":"x","title":"y"} vs {"title":"y","id":"x"}
+   * - Array element order: [{to:"A"},{to:"B"}] vs [{to:"B"},{to:"A"}]
    */
   function computeCanonicalHash(entity: any): string {
-    // Sort keys recursively to ensure consistent ordering
-    const sortKeys = (obj: any): any => {
+    // Recursively sort keys and array elements for consistent ordering
+    const canonicalize = (obj: any): any => {
       if (obj === null || typeof obj !== "object") {
         return obj;
       }
       if (Array.isArray(obj)) {
-        return obj.map(sortKeys);
+        // Sort array elements by their JSON representation for deterministic ordering
+        return obj
+          .map(canonicalize)
+          .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
       }
       const sorted: any = {};
       Object.keys(obj)
         .sort()
         .forEach((key) => {
-          sorted[key] = sortKeys(obj[key]);
+          sorted[key] = canonicalize(obj[key]);
         });
       return sorted;
     };
 
-    const canonical = sortKeys(entity);
+    const canonical = canonicalize(entity);
     return crypto
       .createHash("sha256")
       .update(JSON.stringify(canonical))
