@@ -364,7 +364,7 @@ export function createIssuesRouter(): Router {
   });
 
   /**
-   * POST /api/issues/:id/refresh - Refresh an issue from its external source
+   * POST /api/issues/:id/refresh_from_external - Refresh an issue from its external source
    *
    * Query params:
    * - force=true: Skip conflict check, overwrite local changes
@@ -375,7 +375,7 @@ export function createIssuesRouter(): Router {
    * - changes?: Array<{field, localValue, remoteValue}> - Field-level changes (when hasLocalChanges=true)
    * - entity?: Issue - The updated entity (when updated=true)
    */
-  router.post("/:id/refresh", async (req: Request, res: Response) => {
+  router.post("/:id/refresh_from_external", async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const force = req.query.force === "true";

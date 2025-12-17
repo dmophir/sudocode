@@ -102,14 +102,8 @@ const SECTIONS: Section[] = [
 function ThemePreviewSwatch({ theme }: { theme: ColorTheme }) {
   return (
     <div className="flex h-4 w-6 overflow-hidden rounded-sm border border-border">
-      <div
-        className="w-1/2"
-        style={{ backgroundColor: `hsl(${theme.colors.background})` }}
-      />
-      <div
-        className="w-1/2"
-        style={{ backgroundColor: `hsl(${theme.colors.primary})` }}
-      />
+      <div className="w-1/2" style={{ backgroundColor: `hsl(${theme.colors.background})` }} />
+      <div className="w-1/2" style={{ backgroundColor: `hsl(${theme.colors.primary})` }} />
     </div>
   )
 }
@@ -145,9 +139,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   // Preset plugins available for installation
   const presetPlugins = [
-    { name: 'beads', package: '@sudocode-ai/integration-beads', displayName: 'Beads' },
+    { name: 'github', package: '@sudocode-ai/integration-github', displayName: 'GitHub Issues' },
     { name: 'spec-kit', package: '@sudocode-ai/integration-speckit', displayName: 'Spec-Kit' },
     { name: 'openspec', package: '@sudocode-ai/integration-openspec', displayName: 'OpenSpec' },
+    { name: 'beads', package: '@sudocode-ai/integration-beads', displayName: 'Beads' },
   ]
 
   useEffect(() => {
@@ -668,7 +663,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     </div>
                     <div className="flex items-center gap-2">
                       {/* Mode Selector */}
-                      <Select value={mode} onValueChange={(value) => setMode(value as 'light' | 'dark' | 'system')}>
+                      <Select
+                        value={mode}
+                        onValueChange={(value) => setMode(value as 'light' | 'dark' | 'system')}
+                      >
                         <SelectTrigger className="w-32">
                           <SelectValue />
                         </SelectTrigger>

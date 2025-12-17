@@ -2,8 +2,8 @@
  * Refresh API Integration Tests
  *
  * Tests the refresh endpoints for specs and issues:
- * - POST /api/specs/:id/refresh
- * - POST /api/issues/:id/refresh
+ * - POST /api/specs/:id/refresh_from_external
+ * - POST /api/issues/:id/refresh_from_external
  * - POST /api/import/refresh (bulk)
  */
 
@@ -144,10 +144,10 @@ describe("Refresh API Integration Tests", () => {
     }
   });
 
-  describe("POST /api/specs/:id/refresh", () => {
+  describe("POST /api/specs/:id/refresh_from_external", () => {
     it("should return 404 for non-existent spec", async () => {
       const response = await request(app)
-        .post("/api/specs/s-nonexistent/refresh")
+        .post("/api/specs/s-nonexistent/refresh_from_external")
         .set("X-Project-ID", projectId)
         .send();
 
@@ -188,7 +188,7 @@ describe("Refresh API Integration Tests", () => {
 
       // Try to refresh - should fail since no external link
       const refreshResponse = await request(app)
-        .post(`/api/specs/${specId}/refresh`)
+        .post(`/api/specs/${specId}/refresh_from_external`)
         .set("X-Project-ID", projectId)
         .send();
 
@@ -198,10 +198,10 @@ describe("Refresh API Integration Tests", () => {
     });
   });
 
-  describe("POST /api/issues/:id/refresh", () => {
+  describe("POST /api/issues/:id/refresh_from_external", () => {
     it("should return 404 for non-existent issue", async () => {
       const response = await request(app)
-        .post("/api/issues/i-nonexistent/refresh")
+        .post("/api/issues/i-nonexistent/refresh_from_external")
         .set("X-Project-ID", projectId)
         .send();
 
@@ -242,7 +242,7 @@ describe("Refresh API Integration Tests", () => {
 
       // Try to refresh - should fail since no external link
       const refreshResponse = await request(app)
-        .post(`/api/issues/${issueId}/refresh`)
+        .post(`/api/issues/${issueId}/refresh_from_external`)
         .set("X-Project-ID", projectId)
         .send();
 

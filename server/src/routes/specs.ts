@@ -375,7 +375,7 @@ export function createSpecsRouter(): Router {
   });
 
   /**
-   * POST /api/specs/:id/refresh - Refresh a spec from its external source
+   * POST /api/specs/:id/refresh_from_external - Refresh a spec from its external source
    *
    * Query params:
    * - force=true: Skip conflict check, overwrite local changes
@@ -386,7 +386,7 @@ export function createSpecsRouter(): Router {
    * - changes?: Array<{field, localValue, remoteValue}> - Field-level changes (when hasLocalChanges=true)
    * - entity?: Spec - The updated entity (when updated=true)
    */
-  router.post("/:id/refresh", async (req: Request, res: Response) => {
+  router.post("/:id/refresh_from_external", async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const force = req.query.force === "true";

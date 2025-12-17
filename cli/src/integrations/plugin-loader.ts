@@ -26,9 +26,10 @@ import { fileURLToPath, pathToFileURL } from "url";
  * Mapping of first-party plugin short names to npm package names
  */
 const FIRST_PARTY_PLUGINS: Record<string, string> = {
-  beads: "@sudocode-ai/integration-beads",
+  github: "@sudocode-ai/integration-github",
   "spec-kit": "@sudocode-ai/integration-speckit",
   openspec: "@sudocode-ai/integration-openspec",
+  beads: "@sudocode-ai/integration-beads",
 };
 
 /**
@@ -175,7 +176,10 @@ export async function loadPlugin(
     const err = error as { code?: string; message?: string };
 
     // If module not found, try global packages
-    if (err.code === "ERR_MODULE_NOT_FOUND" || err.code === "MODULE_NOT_FOUND") {
+    if (
+      err.code === "ERR_MODULE_NOT_FOUND" ||
+      err.code === "MODULE_NOT_FOUND"
+    ) {
       const globalPath = resolveGlobalPackage(modulePath);
 
       if (globalPath) {

@@ -60,7 +60,7 @@ export interface GitHubOptions {
  */
 const githubPlugin: IntegrationPlugin = {
   name: "github",
-  displayName: "GitHub",
+  displayName: "GitHub Issues",
   version: "0.1.0",
   description: "Import GitHub issues and discussions into sudocode specs using gh CLI",
 
