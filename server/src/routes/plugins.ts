@@ -17,6 +17,7 @@ import {
   loadPlugin,
   validateProviderConfig,
   testProviderConnection,
+  isPluginInstalledGlobally,
 } from "@sudocode-ai/cli/dist/integrations/index.js";
 
 /**
@@ -90,7 +91,9 @@ export function createPluginsRouter(): Router {
 
       const plugins: PluginInfo[] = await Promise.all(
         firstPartyPlugins.map(async (p) => {
-          const installed = await isPluginInstalled(p.name);
+          // Only check for global installations to avoid detecting workspace plugins
+          // during development (when server is linked from monorepo)
+          const installed = isPluginInstalledGlobally(p.name);
           const providerConfig = integrations[p.name];
           const activated = !!providerConfig;
           const enabled = providerConfig?.enabled ?? false;
@@ -519,13 +522,16 @@ export function createPluginsRouter(): Router {
       // Determine the package to install
       const targetPackage = packageName || `@sudocode-ai/integration-${name}`;
 
-      // Check if already installed
-      const alreadyInstalled = await isPluginInstalled(name);
-      if (alreadyInstalled) {
+      // Check if already installed globally
+      // We only check global installations to avoid detecting workspace/local packages
+      // during development in the monorepo
+      const isGloballyInstalled = isPluginInstalledGlobally(name);
+
+      if (isGloballyInstalled) {
         res.status(200).json({
           success: true,
           data: {
-            message: `Plugin '${name}' is already installed`,
+            message: `Plugin '${name}' is already installed globally`,
             alreadyInstalled: true,
           },
         });
@@ -557,21 +563,12 @@ export function createPluginsRouter(): Router {
         return;
       }
 
-      // Load plugin to get info
-      const plugin = await loadPlugin(name);
-
       res.status(200).json({
         success: true,
         data: {
-          message: `Plugin '${name}' installed successfully`,
-          plugin: plugin
-            ? {
-                name,
-                displayName: plugin.displayName,
-                version: plugin.version,
-                description: plugin.description,
-              }
-            : { name },
+          message: `Plugin '${name}' installed successfully. Please restart the server to use it.`,
+          requiresRestart: true,
+          plugin: { name },
         },
       });
     } catch (error) {
