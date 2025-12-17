@@ -203,30 +203,28 @@ describe("ExecutionService - MCP Detection", () => {
     });
   });
 
-  describe.skip("Integration - buildExecutionConfig", () => {
-    // These tests are skipped until buildExecutionConfig is implemented in issue i-1xk5
+  describe("Integration - buildExecutionConfig", () => {
     it("should throw error when detectSudocodeMcp() returns false", async () => {
       // Mock sudocode-mcp not installed
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        const error = new Error("Command failed") as any;
-        error.code = 1;
-        callback(error, { stdout: "", stderr: "not found" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "",
+        stderr: "not found",
+        status: 1,
       });
 
-      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
-      // await expect(
-      //   service.buildExecutionConfig('claude-code', {})
-      // ).rejects.toThrow(/sudocode-mcp not installed/);
+      await expect(
+        service.buildExecutionConfig('claude-code', {})
+      ).rejects.toThrow(/sudocode-mcp package not found/);
     });
 
     it("should add sudocode-mcp to mcpServers when detectAgentMcp() returns false", async () => {
       // Mock sudocode-mcp installed but not configured for agent
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        callback(null, { stdout: "/usr/local/bin/sudocode-mcp\n", stderr: "" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "/usr/local/bin/sudocode-mcp\n",
+        stderr: "",
+        status: 0,
       });
 
       // Mock agent MCP detection as false (not configured)
@@ -235,21 +233,21 @@ describe("ExecutionService - MCP Detection", () => {
       };
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
-      // const result = await service.buildExecutionConfig('claude-code', {});
-      // expect(result.mcpServers).toBeDefined();
-      // expect(result.mcpServers['sudocode-mcp']).toEqual({
-      //   command: 'sudocode-mcp',
-      //   args: [],
-      // });
+      const result = await service.buildExecutionConfig('claude-code', {});
+      expect(result.mcpServers).toBeDefined();
+      expect(result.mcpServers['sudocode-mcp']).toEqual({
+        command: 'sudocode-mcp',
+        args: [],
+      });
     });
 
     it("should skip injection when detectAgentMcp() returns true (plugin already configured)", async () => {
       // Mock sudocode-mcp installed AND configured
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        callback(null, { stdout: "/usr/local/bin/sudocode-mcp\n", stderr: "" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "/usr/local/bin/sudocode-mcp\n",
+        stderr: "",
+        status: 0,
       });
 
       const mockSettings = {
@@ -259,17 +257,17 @@ describe("ExecutionService - MCP Detection", () => {
       };
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
-      // const result = await service.buildExecutionConfig('claude-code', {});
-      // expect(result.mcpServers?.['sudocode-mcp']).toBeUndefined();
+      const result = await service.buildExecutionConfig('claude-code', {});
+      expect(result.mcpServers?.['sudocode-mcp']).toBeUndefined();
     });
 
     it("should preserve user-provided MCP servers when auto-injecting", async () => {
       // Mock sudocode-mcp installed but not configured
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        callback(null, { stdout: "/usr/local/bin/sudocode-mcp\n", stderr: "" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "/usr/local/bin/sudocode-mcp\n",
+        stderr: "",
+        status: 0,
       });
 
       const mockSettings = { enabledPlugins: {} };
@@ -284,18 +282,18 @@ describe("ExecutionService - MCP Detection", () => {
         },
       };
 
-      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
-      // const result = await service.buildExecutionConfig('claude-code', userConfig);
-      // expect(result.mcpServers['custom-mcp']).toEqual(userConfig.mcpServers['custom-mcp']);
-      // expect(result.mcpServers['sudocode-mcp']).toBeDefined();
+      const result = await service.buildExecutionConfig('claude-code', userConfig);
+      expect(result.mcpServers['custom-mcp']).toEqual(userConfig.mcpServers['custom-mcp']);
+      expect(result.mcpServers['sudocode-mcp']).toBeDefined();
     });
 
     it("should not duplicate sudocode-mcp if user already provided it", async () => {
       // Mock sudocode-mcp installed
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        callback(null, { stdout: "/usr/local/bin/sudocode-mcp\n", stderr: "" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "/usr/local/bin/sudocode-mcp\n",
+        stderr: "",
+        status: 0,
       });
 
       const mockSettings = { enabledPlugins: {} };
@@ -310,9 +308,8 @@ describe("ExecutionService - MCP Detection", () => {
         },
       };
 
-      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
-      // const result = await service.buildExecutionConfig('claude-code', userConfig);
-      // expect(result.mcpServers['sudocode-mcp']).toEqual(userConfig.mcpServers['sudocode-mcp']);
+      const result = await service.buildExecutionConfig('claude-code', userConfig);
+      expect(result.mcpServers['sudocode-mcp']).toEqual(userConfig.mcpServers['sudocode-mcp']);
       // Should preserve user's custom config, not overwrite with default
     });
   });
