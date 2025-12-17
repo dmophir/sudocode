@@ -354,10 +354,12 @@ Create actionable issues that implement its requirements. Each issue should be s
   // Handle workflow creation
   const handleCreateWorkflow = useCallback(
     async (options: Parameters<typeof createWorkflow>[0]) => {
-      await createWorkflow(options)
+      const workflow = await createWorkflow(options)
       setWorkflowDialogOpen(false)
+      // Navigate to the created workflow's detail page
+      navigate(`/workflows/${workflow.id}`)
     },
-    [createWorkflow]
+    [createWorkflow, navigate]
   )
 
   if (isLoading) {
