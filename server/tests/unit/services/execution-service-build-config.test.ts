@@ -181,7 +181,7 @@ describe("ExecutionService.buildExecutionConfig", () => {
           const mcpPresent = await service.detectAgentMcp(agentType);
           const mergedConfig = { ...userConfig };
 
-          if (!mcpPresent) {
+          if (!mcpPresent && !userConfig.mcpServers?.["sudocode-mcp"]) {
             mergedConfig.mcpServers = {
               ...(userConfig.mcpServers || {}),
               "sudocode-mcp": {
@@ -189,6 +189,12 @@ describe("ExecutionService.buildExecutionConfig", () => {
                 args: [],
               },
             };
+          } else if (mcpPresent) {
+            // Remove sudocode-mcp from mcpServers to avoid duplication with plugin
+            if (userConfig.mcpServers) {
+              const { "sudocode-mcp": _removed, ...rest } = userConfig.mcpServers;
+              mergedConfig.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+            }
           }
 
           return mergedConfig;
@@ -205,6 +211,120 @@ describe("ExecutionService.buildExecutionConfig", () => {
       );
 
       // Should NOT have auto-injected sudocode-mcp (already configured)
+      expect(result.mcpServers).toBeUndefined();
+    });
+
+    it("should remove sudocode-mcp from userConfig when plugin is detected", async () => {
+      // Mock: plugin is detected
+      vi.spyOn(service, "detectSudocodeMcp").mockResolvedValue(true);
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(true);
+
+      vi.spyOn(service, "buildExecutionConfig").mockImplementation(
+        async (agentType: AgentType, userConfig: ExecutionConfig) => {
+          const isInstalled = await service.detectSudocodeMcp();
+          if (!isInstalled) {
+            throw new Error("sudocode-mcp not installed");
+          }
+
+          const mcpPresent = await service.detectAgentMcp(agentType);
+          const mergedConfig = { ...userConfig };
+
+          if (!mcpPresent && !userConfig.mcpServers?.["sudocode-mcp"]) {
+            mergedConfig.mcpServers = {
+              ...(userConfig.mcpServers || {}),
+              "sudocode-mcp": {
+                command: "sudocode-mcp",
+                args: [],
+              },
+            };
+          } else if (mcpPresent) {
+            // Remove sudocode-mcp from mcpServers to avoid duplication with plugin
+            if (userConfig.mcpServers) {
+              const { "sudocode-mcp": _removed, ...rest } = userConfig.mcpServers;
+              mergedConfig.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+            }
+          }
+
+          return mergedConfig;
+        }
+      );
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+        mcpServers: {
+          "sudocode-mcp": {
+            command: "sudocode-mcp",
+            args: [],
+          },
+          "other-server": {
+            command: "other-server",
+            args: [],
+          },
+        },
+      };
+
+      const result = await service.buildExecutionConfig(
+        "claude-code",
+        userConfig
+      );
+
+      // Should remove sudocode-mcp but keep other-server
+      expect(result.mcpServers).toBeDefined();
+      expect(result.mcpServers!["sudocode-mcp"]).toBeUndefined();
+      expect(result.mcpServers!["other-server"]).toBeDefined();
+    });
+
+    it("should set mcpServers to undefined when only sudocode-mcp is removed", async () => {
+      // Mock: plugin is detected
+      vi.spyOn(service, "detectSudocodeMcp").mockResolvedValue(true);
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(true);
+
+      vi.spyOn(service, "buildExecutionConfig").mockImplementation(
+        async (agentType: AgentType, userConfig: ExecutionConfig) => {
+          const isInstalled = await service.detectSudocodeMcp();
+          if (!isInstalled) {
+            throw new Error("sudocode-mcp not installed");
+          }
+
+          const mcpPresent = await service.detectAgentMcp(agentType);
+          const mergedConfig = { ...userConfig };
+
+          if (!mcpPresent && !userConfig.mcpServers?.["sudocode-mcp"]) {
+            mergedConfig.mcpServers = {
+              ...(userConfig.mcpServers || {}),
+              "sudocode-mcp": {
+                command: "sudocode-mcp",
+                args: [],
+              },
+            };
+          } else if (mcpPresent) {
+            // Remove sudocode-mcp from mcpServers to avoid duplication with plugin
+            if (userConfig.mcpServers) {
+              const { "sudocode-mcp": _removed, ...rest } = userConfig.mcpServers;
+              mergedConfig.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+            }
+          }
+
+          return mergedConfig;
+        }
+      );
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+        mcpServers: {
+          "sudocode-mcp": {
+            command: "sudocode-mcp",
+            args: [],
+          },
+        },
+      };
+
+      const result = await service.buildExecutionConfig(
+        "claude-code",
+        userConfig
+      );
+
+      // Should set mcpServers to undefined when it becomes empty
       expect(result.mcpServers).toBeUndefined();
     });
 

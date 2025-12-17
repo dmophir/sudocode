@@ -1394,8 +1394,13 @@ ${feedback}`;
       };
     } else if (mcpPresent) {
       console.info(
-        "[ExecutionService] Skipping sudocode-mcp injection (already configured in agent)"
+        "[ExecutionService] Removing sudocode-mcp from CLI config (using plugin instead)"
       );
+      // Remove sudocode-mcp from mcpServers to avoid duplication with plugin
+      if (userConfig.mcpServers) {
+        const { "sudocode-mcp": _removed, ...rest } = userConfig.mcpServers;
+        mergedConfig.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+      }
     } else if (userConfig.mcpServers?.["sudocode-mcp"]) {
       console.info(
         "[ExecutionService] Skipping sudocode-mcp injection (user provided in config)"
