@@ -1,8 +1,7 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play, Loader2, Pause } from 'lucide-react'
+import { Loader2, Pause } from 'lucide-react'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SyncIndicator } from '@/components/issues/SyncIndicator'
 import type { Spec } from '@/types/api'
@@ -31,32 +30,18 @@ interface SpecCardProps {
   onClick?: (spec: Spec) => void
   /** Active workflow for this spec (if any) */
   activeWorkflow?: Workflow
-  /** Whether spec has implementing issues */
-  hasImplementingIssues?: boolean
-  /** Callback to run spec as workflow */
-  onRunAsWorkflow?: (spec: Spec) => void
 }
 
 export function SpecCard({
   spec,
   onClick,
   activeWorkflow,
-  hasImplementingIssues = true, // Default to true until API supports bulk relationship fetch
-  onRunAsWorkflow,
 }: SpecCardProps) {
   const navigate = useNavigate()
 
   const handleClick = useCallback(() => {
     onClick?.(spec)
   }, [spec, onClick])
-
-  const handleRunWorkflow = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation() // Prevent card click
-      onRunAsWorkflow?.(spec)
-    },
-    [spec, onRunAsWorkflow]
-  )
 
   const handleWorkflowBadgeClick = useCallback(
     (e: React.MouseEvent) => {
@@ -134,35 +119,10 @@ export function SpecCard({
           {/* Preview */}
           {preview && <p className="line-clamp-3 text-sm text-muted-foreground">{preview}</p>}
 
-          {/* Footer with file path and workflow button */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              {spec.file_path && (
-                <p className="truncate font-mono text-xs text-muted-foreground">{spec.file_path}</p>
-              )}
-            </div>
-            {/* Run as Workflow button */}
-            {onRunAsWorkflow && !activeWorkflow && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRunWorkflow}
-                    disabled={!hasImplementingIssues}
-                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {hasImplementingIssues
-                    ? 'Run as Workflow'
-                    : 'No implementing issues'}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+          {/* Footer with file path */}
+          {spec.file_path && (
+            <p className="truncate font-mono text-xs text-muted-foreground">{spec.file_path}</p>
+          )}
         </div>
       </Card>
     </TooltipProvider>
