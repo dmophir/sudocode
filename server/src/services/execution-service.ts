@@ -8,7 +8,9 @@
  */
 
 import fs from "fs";
+import fsPromises from "fs/promises";
 import path from "path";
+import os from "os";
 import type Database from "better-sqlite3";
 import type { Execution, ExecutionStatus } from "@sudocode-ai/types";
 import { ExecutionLifecycleService } from "./execution-lifecycle.js";
@@ -18,7 +20,8 @@ import {
   updateExecution,
 } from "./executions.js";
 import { randomUUID } from "crypto";
-import { execSync } from "child_process";
+import { execSync, exec } from "child_process";
+import { promisify } from "util";
 import type { ExecutionTask } from "agent-execution-engine/engine";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
@@ -27,6 +30,8 @@ import { broadcastExecutionUpdate } from "./websocket.js";
 import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
 import type { AgentType } from "@sudocode-ai/types/agents";
 import { PromptResolver } from "./prompt-resolver.js";
+
+const execAsync = promisify(exec);
 
 /**
  * MCP server configuration
@@ -1339,5 +1344,105 @@ ${feedback}`;
     }
 
     return expandedIds;
+  }
+
+  /**
+   * Detect if sudocode-mcp command is available in PATH
+   *
+   * This checks if the sudocode-mcp package is installed on the system by
+   * attempting to locate the command using `which` (Unix) or `where` (Windows).
+   *
+   * @returns true if sudocode-mcp is available, false otherwise
+   * @internal Used by buildExecutionConfig (to be implemented in i-1xk5)
+   */
+  // @ts-expect-error - Used by buildExecutionConfig (to be implemented in i-1xk5)
+  private async detectSudocodeMcp(): Promise<boolean> {
+    try {
+      // Use 'which' on Unix systems, 'where' on Windows
+      const command =
+        process.platform === "win32" ? "where sudocode-mcp" : "which sudocode-mcp";
+
+      await execAsync(command);
+      return true;
+    } catch (error) {
+      // Command failed - sudocode-mcp not found in PATH
+      console.warn(
+        "[ExecutionService] sudocode-mcp command not found in PATH:",
+        error instanceof Error ? error.message : String(error)
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Detect if sudocode-mcp is configured for the given agent
+   *
+   * For claude-code: Checks if the sudocode plugin is enabled in ~/.claude/settings.json
+   * For other agents: Returns true (default safe behavior - assume configured)
+   *
+   * @param agentType - The type of agent to check
+   * @returns true if configured, false otherwise
+   * @internal Used by buildExecutionConfig (to be implemented in i-1xk5)
+   */
+  // @ts-expect-error - Used by buildExecutionConfig (to be implemented in i-1xk5)
+  private async detectAgentMcp(agentType: AgentType): Promise<boolean> {
+    // For claude-code, check ~/.claude/settings.json
+    if (agentType === "claude-code") {
+      try {
+        const claudeSettingsPath = path.join(
+          os.homedir(),
+          ".claude",
+          "settings.json"
+        );
+
+        const settingsContent = await fsPromises.readFile(
+          claudeSettingsPath,
+          "utf-8"
+        );
+
+        const settings = JSON.parse(settingsContent);
+
+        // Check if sudocode@sudocode-marketplace is enabled
+        const isEnabled =
+          settings.enabledPlugins?.["sudocode@sudocode-marketplace"] === true;
+
+        if (isEnabled) {
+          console.info(
+            "[ExecutionService] sudocode-mcp detected for claude-code (plugin enabled)"
+          );
+        } else {
+          console.info(
+            "[ExecutionService] sudocode-mcp not detected for claude-code (plugin not enabled)"
+          );
+        }
+
+        return isEnabled;
+      } catch (error) {
+        // Handle file read errors gracefully
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          console.warn(
+            "[ExecutionService] ~/.claude/settings.json not found - plugin not configured"
+          );
+        } else if (error instanceof SyntaxError) {
+          console.error(
+            "[ExecutionService] Failed to parse ~/.claude/settings.json - malformed JSON:",
+            error.message
+          );
+        } else {
+          console.warn(
+            "[ExecutionService] Failed to read ~/.claude/settings.json:",
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+        return false;
+      }
+    }
+
+    // For other agents (copilot, cursor, codex), return true (safe default)
+    return true;
   }
 }

@@ -11,6 +11,8 @@ import type { AgentType } from "@sudocode-ai/types";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { ExecutionService } from "../../../src/services/execution-service.js";
+import Database from "better-sqlite3";
 
 /**
  * Mock modules before importing ExecutionService
@@ -18,15 +20,32 @@ import * as path from "path";
 vi.mock("fs/promises");
 vi.mock("child_process", () => ({
   exec: vi.fn(),
+  execFile: vi.fn(),
+  execSync: vi.fn(),
 }));
 
 describe("ExecutionService - MCP Detection", () => {
+  let service: any; // Use 'any' to access private methods
+  let db: Database.Database;
+
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Create an in-memory database for testing
+    db = new Database(":memory:");
+
+    // Create ExecutionService instance
+    // We'll use 'any' type to access private methods
+    service = new ExecutionService(
+      db,
+      "test-project-id",
+      "/test/repo/path"
+    );
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    db.close();
   });
 
   describe("detectSudocodeMcp", () => {
@@ -39,12 +58,8 @@ describe("ExecutionService - MCP Detection", () => {
         return {} as any;
       });
 
-      // TODO: Call detectSudocodeMcp() when implemented
-      // const result = await service.detectSudocodeMcp();
-      // expect(result).toBe(true);
-
-      // For now, test should fail since method doesn't exist
-      expect(true).toBe(false); // RED STATE: Force failure until implementation
+      const result = await service.detectSudocodeMcp();
+      expect(result).toBe(true);
     });
 
     it("should return false when sudocode-mcp package is not available", async () => {
@@ -58,12 +73,8 @@ describe("ExecutionService - MCP Detection", () => {
         return {} as any;
       });
 
-      // TODO: Call detectSudocodeMcp() when implemented
-      // const result = await service.detectSudocodeMcp();
-      // expect(result).toBe(false);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectSudocodeMcp();
+      expect(result).toBe(false);
     });
 
     it("should return false on detection errors (logs warning, doesn't throw)", async () => {
@@ -74,13 +85,9 @@ describe("ExecutionService - MCP Detection", () => {
         return {} as any;
       });
 
-      // TODO: Call detectSudocodeMcp() when implemented
-      // const result = await service.detectSudocodeMcp();
-      // expect(result).toBe(false);
+      const result = await service.detectSudocodeMcp();
+      expect(result).toBe(false);
       // Verify warning was logged but no error thrown
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
   });
 
@@ -102,13 +109,9 @@ describe("ExecutionService - MCP Detection", () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(true);
-      // expect(fs.readFile).toHaveBeenCalledWith(claudeSettingsPath, 'utf-8');
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(true);
+      expect(fs.readFile).toHaveBeenCalledWith(claudeSettingsPath, "utf-8");
     });
 
     it("should return false when settings.json exists but plugin is not enabled", async () => {
@@ -122,12 +125,8 @@ describe("ExecutionService - MCP Detection", () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
     });
 
     it("should return false when settings.json doesn't exist", async () => {
@@ -136,25 +135,17 @@ describe("ExecutionService - MCP Detection", () => {
       error.code = "ENOENT";
       vi.mocked(fs.readFile).mockRejectedValue(error);
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
     });
 
     it("should return false when settings.json is malformed JSON (logs error)", async () => {
       // Mock file read with invalid JSON
       vi.mocked(fs.readFile).mockResolvedValue("{ invalid json }");
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
       // Verify error was logged but no exception thrown
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
 
     it("should return false when enabledPlugins['sudocode@sudocode-marketplace'] is false", async () => {
@@ -168,12 +159,8 @@ describe("ExecutionService - MCP Detection", () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
     });
 
     it("should return false when enabledPlugins['sudocode@sudocode-marketplace'] is missing", async () => {
@@ -185,12 +172,8 @@ describe("ExecutionService - MCP Detection", () => {
 
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
     });
 
     it("should handle file read errors gracefully (returns false, logs warning)", async () => {
@@ -199,46 +182,31 @@ describe("ExecutionService - MCP Detection", () => {
       error.code = "EACCES";
       vi.mocked(fs.readFile).mockRejectedValue(error);
 
-      // TODO: Call detectAgentMcp('claude-code') when implemented
-      // const result = await service.detectAgentMcp('claude-code');
-      // expect(result).toBe(false);
+      const result = await service.detectAgentMcp("claude-code");
+      expect(result).toBe(false);
       // Verify warning was logged
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
   });
 
   describe("detectAgentMcp - other agents", () => {
     it("should return true for copilot agent (unsupported, defaults to safe behavior)", async () => {
-      // TODO: Call detectAgentMcp('copilot') when implemented
-      // const result = await service.detectAgentMcp('copilot');
-      // expect(result).toBe(true);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(true);
     });
 
     it("should return true for cursor agent (unsupported, defaults to safe behavior)", async () => {
-      // TODO: Call detectAgentMcp('cursor') when implemented
-      // const result = await service.detectAgentMcp('cursor');
-      // expect(result).toBe(true);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("cursor");
+      expect(result).toBe(true);
     });
 
     it("should return true for codex agent (unsupported, defaults to safe behavior)", async () => {
-      // TODO: Call detectAgentMcp('codex') when implemented
-      // const result = await service.detectAgentMcp('codex');
-      // expect(result).toBe(true);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(true);
     });
   });
 
-  describe("Integration - buildExecutionConfig", () => {
+  describe.skip("Integration - buildExecutionConfig", () => {
+    // These tests are skipped until buildExecutionConfig is implemented in issue i-1xk5
     it("should throw error when detectSudocodeMcp() returns false", async () => {
       // Mock sudocode-mcp not installed
       const { exec } = await import("child_process");
@@ -249,13 +217,10 @@ describe("ExecutionService - MCP Detection", () => {
         return {} as any;
       });
 
-      // TODO: Call buildExecutionConfig() when implemented
+      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
       // await expect(
       //   service.buildExecutionConfig('claude-code', {})
       // ).rejects.toThrow(/sudocode-mcp not installed/);
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
 
     it("should add sudocode-mcp to mcpServers when detectAgentMcp() returns false", async () => {
@@ -272,16 +237,13 @@ describe("ExecutionService - MCP Detection", () => {
       };
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call buildExecutionConfig() when implemented
+      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
       // const result = await service.buildExecutionConfig('claude-code', {});
       // expect(result.mcpServers).toBeDefined();
       // expect(result.mcpServers['sudocode-mcp']).toEqual({
       //   command: 'sudocode-mcp',
       //   args: [],
       // });
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
 
     it("should skip injection when detectAgentMcp() returns true (plugin already configured)", async () => {
@@ -299,12 +261,9 @@ describe("ExecutionService - MCP Detection", () => {
       };
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockSettings));
 
-      // TODO: Call buildExecutionConfig() when implemented
+      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
       // const result = await service.buildExecutionConfig('claude-code', {});
       // expect(result.mcpServers?.['sudocode-mcp']).toBeUndefined();
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
 
     it("should preserve user-provided MCP servers when auto-injecting", async () => {
@@ -327,13 +286,10 @@ describe("ExecutionService - MCP Detection", () => {
         },
       };
 
-      // TODO: Call buildExecutionConfig() when implemented
+      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
       // const result = await service.buildExecutionConfig('claude-code', userConfig);
       // expect(result.mcpServers['custom-mcp']).toEqual(userConfig.mcpServers['custom-mcp']);
       // expect(result.mcpServers['sudocode-mcp']).toBeDefined();
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
 
     it("should not duplicate sudocode-mcp if user already provided it", async () => {
@@ -356,13 +312,10 @@ describe("ExecutionService - MCP Detection", () => {
         },
       };
 
-      // TODO: Call buildExecutionConfig() when implemented
+      // TODO: Call buildExecutionConfig() when implemented in i-1xk5
       // const result = await service.buildExecutionConfig('claude-code', userConfig);
       // expect(result.mcpServers['sudocode-mcp']).toEqual(userConfig.mcpServers['sudocode-mcp']);
       // Should preserve user's custom config, not overwrite with default
-
-      // RED STATE: Force failure until implementation
-      expect(true).toBe(false);
     });
   });
 });
