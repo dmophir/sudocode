@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { useSpec, useSpecFeedback, useSpecs } from '@/hooks/useSpecs'
 import { useSpecRelationships } from '@/hooks/useSpecRelationships'
 import { useIssues } from '@/hooks/useIssues'
 import { useFeedback } from '@/hooks/useFeedback'
+import { useWorkflowMutations } from '@/hooks/useWorkflows'
 import { SpecViewerTiptap } from '@/components/specs/SpecViewerTiptap'
 import { AlignedFeedbackPanel } from '@/components/specs/AlignedFeedbackPanel'
 import { AddFeedbackDialog } from '@/components/specs/AddFeedbackDialog'
 import { TableOfContentsPanel } from '@/components/specs/TableOfContentsPanel'
+import { CreateWorkflowDialog } from '@/components/workflows'
 import { useFeedbackPositions } from '@/hooks/useFeedbackPositions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,8 +42,10 @@ import {
   ChevronsUpDown,
   ArrowLeft,
   Link,
+  Play,
 } from 'lucide-react'
 import type { IssueFeedback, Relationship, EntityType, RelationshipType } from '@/types/api'
+import type { WorkflowSource } from '@/types/workflow'
 import { relationshipsApi } from '@/lib/api'
 import { DeleteSpecDialog } from '@/components/specs/DeleteSpecDialog'
 import { EntityBadge } from '@/components/entities/EntityBadge'
@@ -70,6 +74,7 @@ export default function SpecDetailPage() {
   const { issues } = useIssues()
   const { specs, updateSpec, isUpdating, archiveSpec, unarchiveSpec, deleteSpec } = useSpecs()
   const { createFeedback, updateFeedback, deleteFeedback } = useFeedback(id || '')
+  const { create: createWorkflow, isCreating: isCreatingWorkflow } = useWorkflowMutations()
 
   const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const [_selectedText, setSelectedText] = useState<string | null>(null) // Reserved for future text selection feature
@@ -89,6 +94,8 @@ export default function SpecDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false)
+  const [workflowDefaultSource, setWorkflowDefaultSource] = useState<WorkflowSource | undefined>()
 
   // Local state for editable fields
   const [title, setTitle] = useState('')
@@ -109,6 +116,27 @@ export default function SpecDetailPage() {
     if (!id) return []
     return specs.filter((s) => s.parent_id === id)
   }, [specs, id])
+
+  // Compute the count of open implementing issues
+  const openImplementingIssuesCount = useMemo(() => {
+    if (!id || !relationships || !issues) return 0
+
+    // Find "implements" relationships where this spec is the target
+    const implementingIssueIds = relationships
+      .filter(
+        (rel) =>
+          rel.relationship_type === 'implements' &&
+          rel.from_type === 'issue' &&
+          rel.to_type === 'spec' &&
+          rel.to_id === id
+      )
+      .map((rel) => rel.from_id)
+
+    // Count how many of these issues are open (not closed)
+    return issues.filter(
+      (issue) => implementingIssueIds.includes(issue.id) && issue.status !== 'closed'
+    ).length
+  }, [id, relationships, issues])
 
   // Compute all descendant IDs to prevent circular parent references
   const descendantIds = useMemo(() => {
@@ -302,6 +330,22 @@ export default function SpecDetailPage() {
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
   }, [tocItems.length])
+
+  // Handle running spec as workflow
+  const handleRunAsWorkflow = useCallback(() => {
+    if (!id) return
+    setWorkflowDefaultSource({ type: 'spec', specId: id })
+    setWorkflowDialogOpen(true)
+  }, [id])
+
+  // Handle workflow creation
+  const handleCreateWorkflow = useCallback(
+    async (options: Parameters<typeof createWorkflow>[0]) => {
+      await createWorkflow(options)
+      setWorkflowDialogOpen(false)
+    },
+    [createWorkflow]
+  )
 
   if (isLoading) {
     return (
@@ -570,7 +614,31 @@ export default function SpecDetailPage() {
               </Tooltip>
             </TooltipProvider>
 
-            {/* Run as Workflow - hidden for now */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunAsWorkflow}
+                    disabled={openImplementingIssuesCount === 0 || isCreatingWorkflow}
+                  >
+                    <Play className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Run as Workflow</span>
+                    {openImplementingIssuesCount > 0 && (
+                      <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1.5">
+                        {openImplementingIssuesCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {openImplementingIssuesCount > 0
+                    ? `Run ${openImplementingIssuesCount} implementing issue${openImplementingIssuesCount > 1 ? 's' : ''} as workflow`
+                    : 'No open implementing issues'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {spec.archived ? (
               <Button
@@ -979,7 +1047,13 @@ export default function SpecDetailPage() {
         isDeleting={isDeleting}
       />
 
-      {/* Create Workflow Dialog - hidden for now */}
+      <CreateWorkflowDialog
+        open={workflowDialogOpen}
+        onOpenChange={setWorkflowDialogOpen}
+        onCreate={handleCreateWorkflow}
+        defaultSource={workflowDefaultSource}
+        isCreating={isCreatingWorkflow}
+      />
     </div>
   )
 }
