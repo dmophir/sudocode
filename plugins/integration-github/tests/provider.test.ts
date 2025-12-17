@@ -54,7 +54,7 @@ describe("GitHub Plugin", () => {
     });
 
     it("should have display name", () => {
-      expect(githubPlugin.displayName).toBe("GitHub");
+      expect(githubPlugin.displayName).toBe("GitHub Issues");
     });
 
     it("should have version", () => {
