@@ -146,6 +146,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   // Preset plugins available for installation
   const presetPlugins = [
     { name: 'beads', package: '@sudocode-ai/integration-beads', displayName: 'Beads' },
+    { name: 'spec-kit', package: '@sudocode-ai/integration-speckit', displayName: 'Spec-Kit' },
+    { name: 'openspec', package: '@sudocode-ai/integration-openspec', displayName: 'OpenSpec' },
   ]
 
   useEffect(() => {
@@ -338,25 +340,32 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     setInstalling(true)
     try {
       const result = await api.post<
-        { message: string; alreadyInstalled?: boolean },
-        { message: string; alreadyInstalled?: boolean }
+        { message: string; alreadyInstalled?: boolean; requiresRestart?: boolean },
+        { message: string; alreadyInstalled?: boolean; requiresRestart?: boolean }
       >(`/plugins/${preset.name}/install`, { package: preset.package })
 
       if (result?.alreadyInstalled) {
         toast.info(`${preset.displayName} is already installed`)
+      } else if (result?.requiresRestart) {
+        toast.success(
+          `${preset.displayName} installed successfully. Please restart the server to use it.`,
+          { duration: 10000 }
+        )
       } else {
         toast.success(`${preset.displayName} installed successfully`)
       }
-      // Refresh plugins list
-      const data = await api.get<{ plugins: PluginInfo[] }, { plugins: PluginInfo[] }>('/plugins')
-      setPlugins(data.plugins)
-      // Initialize options for newly installed plugin
-      const newPlugin = data.plugins.find((p) => p.name === preset.name)
-      if (newPlugin) {
-        setPluginOptions((prev) => ({
-          ...prev,
-          [preset.name]: newPlugin.options || {},
-        }))
+      // Note: Don't refresh plugins list if restart is required
+      // The plugin won't be loadable until after restart
+      if (!result?.requiresRestart) {
+        const data = await api.get<{ plugins: PluginInfo[] }, { plugins: PluginInfo[] }>('/plugins')
+        setPlugins(data.plugins)
+        const newPlugin = data.plugins.find((p) => p.name === preset.name)
+        if (newPlugin) {
+          setPluginOptions((prev) => ({
+            ...prev,
+            [preset.name]: newPlugin.options || {},
+          }))
+        }
       }
       setSelectedPreset('')
     } catch (error) {
