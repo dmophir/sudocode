@@ -505,7 +505,7 @@ Create actionable issues that implement its requirements. Each issue should be s
   }
 
   const handleCreateFeedback = async (data: {
-    issueId?: string  // Optional for anonymous feedback
+    issueId?: string // Optional for anonymous feedback
     type: any
     content: string
     anchor?: any
@@ -517,7 +517,7 @@ Create actionable issues that implement its requirements. Each issue should be s
 
     await createFeedback({
       to_id: id,
-      issue_id: data.issueId,  // Can be undefined for anonymous feedback
+      issue_id: data.issueId, // Can be undefined for anonymous feedback
       feedback_type: data.type,
       content: data.content,
       anchor: data.anchor,
@@ -853,17 +853,6 @@ Create actionable issues that implement its requirements. Each issue should be s
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  {/* External Link Badges with Refresh */}
-                  {spec.external_links &&
-                    spec.external_links.length > 0 &&
-                    spec.external_links.map((link) => (
-                      <ExternalLinkBadge
-                        key={`${link.provider}-${link.external_id}`}
-                        link={link}
-                        onRefresh={() => refreshSpec()}
-                        isRefreshing={isRefreshing || isForceRefreshing}
-                      />
-                    ))}
                   {/* Parent spec selector */}
                   <div className="flex items-center gap-1">
                     <span className="text-sm text-muted-foreground">Parent:</span>
@@ -1020,6 +1009,20 @@ Create actionable issues that implement its requirements. Each issue should be s
                     )}
                   </div>
                 </div>
+
+                {/* External Link Badges */}
+                {spec.external_links && spec.external_links.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {spec.external_links.map((link) => (
+                      <ExternalLinkBadge
+                        key={`${link.provider}-${link.external_id}`}
+                        link={link}
+                        onRefresh={() => refreshSpec()}
+                        isRefreshing={isRefreshing || isForceRefreshing}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Metadata Row */}
                 <div className="flex items-center justify-between">

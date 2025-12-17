@@ -18,7 +18,7 @@ import type {
   PluginTestResult,
 } from "@sudocode-ai/types";
 import { execSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
@@ -124,7 +124,7 @@ function resolveGlobalPackage(packageName: string): string | null {
 
   try {
     const packageJson = JSON.parse(
-      require("fs").readFileSync(packageJsonPath, "utf-8")
+      readFileSync(packageJsonPath, "utf-8")
     );
     const mainEntry = packageJson.main || "index.js";
     const fullPath = path.join(packagePath, mainEntry);

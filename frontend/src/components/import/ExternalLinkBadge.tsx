@@ -39,7 +39,9 @@ export function ExternalLinkBadge({
   // Format the last synced timestamp
   const lastSynced = link.last_synced_at
     ? formatDistanceToNow(
-        new Date(link.last_synced_at.endsWith('Z') ? link.last_synced_at : link.last_synced_at + 'Z'),
+        new Date(
+          link.last_synced_at.endsWith('Z') ? link.last_synced_at : link.last_synced_at + 'Z'
+        ),
         { addSuffix: true }
       )
     : null
@@ -50,7 +52,7 @@ export function ExternalLinkBadge({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2',
+        'inline-flex items-center gap-2 rounded-lg border bg-muted/30 px-2 py-0.5',
         isStale && 'border-yellow-500/50 bg-yellow-500/10',
         className
       )}
