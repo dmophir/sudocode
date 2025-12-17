@@ -172,6 +172,23 @@ export function CreateWorkflowDialog({
   const { issues, isLoading: isLoadingIssues } = useIssues(false)
   const { specs, isLoading: isLoadingSpecs } = useSpecs(false)
 
+  // Reset form source fields when dialog opens with defaultSource
+  useEffect(() => {
+    if (!open) return
+
+    // Update form with defaultSource values when dialog opens
+    if (defaultSource) {
+      setForm((prev) => ({
+        ...prev,
+        sourceType: defaultSource.type === 'goal' ? 'spec' : defaultSource.type,
+        specId: defaultSource.type === 'spec' ? defaultSource.specId : prev.specId,
+        issueIds: defaultSource.type === 'issues' ? defaultSource.issueIds : prev.issueIds,
+        rootIssueId: defaultSource.type === 'root_issue' ? defaultSource.issueId : prev.rootIssueId,
+        goal: defaultSource.type === 'goal' ? defaultSource.goal : prev.goal,
+      }))
+    }
+  }, [open, defaultSource])
+
   // Fetch branches when dialog opens
   useEffect(() => {
     if (!open) return
