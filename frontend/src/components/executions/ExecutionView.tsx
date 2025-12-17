@@ -394,9 +394,12 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         deleteWorktree: deleteWorktreeFlag,
       })
 
-      // Navigate back to issue page after deletion
+      // Navigate back after deletion
       if (rootExecution.issue_id) {
         window.location.href = `/issues/${rootExecution.issue_id}`
+      } else {
+        // For adhoc executions, navigate to executions list
+        window.location.href = '/executions'
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete execution')
@@ -678,12 +681,13 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
   const lastExecution = executions[executions.length - 1]
 
   // Determine if we can enable follow-up panel (last execution must be terminal)
+  // Follow-ups work for both issue-based and adhoc executions
   const lastExecutionTerminal =
     lastExecution.status === 'completed' ||
     lastExecution.status === 'failed' ||
     lastExecution.status === 'stopped' ||
     lastExecution.status === 'cancelled'
-  const canEnableFollowUp = lastExecutionTerminal && rootExecution.issue_id
+  const canEnableFollowUp = lastExecutionTerminal
 
   // Can we cancel the last execution?
   const canCancelLast = lastExecution.status === 'running'
@@ -1047,34 +1051,33 @@ export function ExecutionView({ executionId, onFollowUpCreated }: ExecutionViewP
         </div>
 
         {/* Sticky Follow-up Input Panel - always rendered at bottom */}
-        {rootExecution.issue_id && (
-          <div className="sticky bottom-0 border-t bg-background shadow-lg">
-            <div className="mx-auto w-full max-w-7xl">
-              <AgentConfigPanel
-                issueId={rootExecution.issue_id}
-                onStart={handleFollowUpStart}
-                isFollowUp
-                allowModeToggle={false}
-                disabled={!canEnableFollowUp || submittingFollowUp}
-                isRunning={!lastExecutionTerminal}
-                onCancel={() => handleCancel(lastExecution.id)}
-                isCancelling={cancelling}
-                lastExecution={{
-                  id: lastExecution.id,
-                  mode: rootExecution.mode || undefined,
-                  model: rootExecution.model || undefined,
-                  target_branch: rootExecution.target_branch || undefined,
-                  agent_type: rootExecution.agent_type || undefined,
-                  config: rootExecution.config
-                    ? typeof rootExecution.config === 'string'
-                      ? JSON.parse(rootExecution.config)
-                      : rootExecution.config
-                    : undefined,
-                }}
-              />
-            </div>
+        {/* Works for both issue-based and adhoc executions */}
+        <div className="sticky bottom-0 border-t bg-background shadow-lg">
+          <div className="mx-auto w-full max-w-7xl">
+            <AgentConfigPanel
+              issueId={rootExecution.issue_id || undefined}
+              onStart={handleFollowUpStart}
+              isFollowUp
+              allowModeToggle={false}
+              disabled={!canEnableFollowUp || submittingFollowUp}
+              isRunning={!lastExecutionTerminal}
+              onCancel={() => handleCancel(lastExecution.id)}
+              isCancelling={cancelling}
+              lastExecution={{
+                id: lastExecution.id,
+                mode: rootExecution.mode || undefined,
+                model: rootExecution.model || undefined,
+                target_branch: rootExecution.target_branch || undefined,
+                agent_type: rootExecution.agent_type || undefined,
+                config: rootExecution.config
+                  ? typeof rootExecution.config === 'string'
+                    ? JSON.parse(rootExecution.config)
+                    : rootExecution.config
+                  : undefined,
+              }}
+            />
           </div>
-        )}
+        </div>
 
         {/* Delete Worktree Dialog */}
         <DeleteWorktreeDialog
