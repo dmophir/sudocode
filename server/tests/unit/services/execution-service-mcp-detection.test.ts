@@ -23,6 +23,9 @@ vi.mock("child_process", () => ({
   execFile: vi.fn(),
   execSync: vi.fn(),
 }));
+vi.mock("../../../src/utils/execFileNoThrow.js", () => ({
+  execFileNoThrow: vi.fn(),
+}));
 
 describe("ExecutionService - MCP Detection", () => {
   let service: any; // Use 'any' to access private methods
@@ -51,11 +54,11 @@ describe("ExecutionService - MCP Detection", () => {
   describe("detectSudocodeMcp", () => {
     it("should return true when sudocode-mcp package is available in PATH", async () => {
       // Mock successful command execution (sudocode-mcp exists in PATH)
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        // Simulate successful `which sudocode-mcp` or `where sudocode-mcp` command
-        callback(null, { stdout: "/usr/local/bin/sudocode-mcp\n", stderr: "" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "/usr/local/bin/sudocode-mcp\n",
+        stderr: "",
+        status: 0,
       });
 
       const result = await service.detectSudocodeMcp();
@@ -64,13 +67,11 @@ describe("ExecutionService - MCP Detection", () => {
 
     it("should return false when sudocode-mcp package is not available", async () => {
       // Mock failed command execution (sudocode-mcp not found)
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        // Simulate `which sudocode-mcp` returning non-zero exit code
-        const error = new Error("Command failed") as any;
-        error.code = 1;
-        callback(error, { stdout: "", stderr: "not found" });
-        return {} as any;
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockResolvedValue({
+        stdout: "",
+        stderr: "not found",
+        status: 1,
       });
 
       const result = await service.detectSudocodeMcp();
@@ -79,11 +80,8 @@ describe("ExecutionService - MCP Detection", () => {
 
     it("should return false on detection errors (logs warning, doesn't throw)", async () => {
       // Mock command execution error (not just "not found", but actual failure)
-      const { exec } = await import("child_process");
-      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
-        callback(new Error("Unexpected error"), null);
-        return {} as any;
-      });
+      const { execFileNoThrow } = await import("../../../src/utils/execFileNoThrow.js");
+      vi.mocked(execFileNoThrow).mockRejectedValue(new Error("Unexpected error"));
 
       const result = await service.detectSudocodeMcp();
       expect(result).toBe(false);
@@ -139,12 +137,13 @@ describe("ExecutionService - MCP Detection", () => {
       expect(result).toBe(false);
     });
 
-    it("should return false when settings.json is malformed JSON (logs error)", async () => {
+    it("should return true when settings.json is malformed JSON (conservative behavior, logs error)", async () => {
       // Mock file read with invalid JSON
+      // Returns true (assume configured) as conservative behavior
       vi.mocked(fs.readFile).mockResolvedValue("{ invalid json }");
 
       const result = await service.detectAgentMcp("claude-code");
-      expect(result).toBe(false);
+      expect(result).toBe(true);
       // Verify error was logged but no exception thrown
     });
 
@@ -176,14 +175,15 @@ describe("ExecutionService - MCP Detection", () => {
       expect(result).toBe(false);
     });
 
-    it("should handle file read errors gracefully (returns false, logs warning)", async () => {
+    it("should handle file read errors gracefully (returns true - conservative, logs warning)", async () => {
       // Mock file read error (permission denied or other error)
+      // Returns true (assume configured) as conservative behavior
       const error = new Error("EACCES: permission denied") as any;
       error.code = "EACCES";
       vi.mocked(fs.readFile).mockRejectedValue(error);
 
       const result = await service.detectAgentMcp("claude-code");
-      expect(result).toBe(false);
+      expect(result).toBe(true);
       // Verify warning was logged
     });
   });

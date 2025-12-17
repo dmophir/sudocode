@@ -244,8 +244,8 @@ describe('MCP Auto-Injection Integration Tests', () => {
   /**
    * Helper to get the captured config from the mock executor factory
    */
-  function getCapturedExecutorConfig(): any {
-    const factory = require('../../src/execution/executors/executor-factory.js');
+  async function getCapturedExecutorConfig(): Promise<any> {
+    const factory = await import('../../src/execution/executors/executor-factory.js');
     return factory.__getCapturedConfig();
   }
 
@@ -271,7 +271,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution.id).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
       expect(capturedConfig).toBeDefined();
 
       // Verify sudocode-mcp was auto-injected
@@ -301,7 +301,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
       expect(capturedConfig).toBeDefined();
 
       // Verify sudocode-mcp was NOT injected (plugin already configured)
@@ -343,7 +343,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify the MCP server config would enable sudocode tools
       expect(capturedConfig.mcpServers['sudocode-mcp']).toEqual({
@@ -386,7 +386,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify both custom MCP and sudocode-mcp are present
       expect(capturedConfig.mcpServers).toBeDefined();
@@ -471,7 +471,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Detection failed, so it should proceed as normal without injection
       // (conservative behavior: if we can't detect, assume it's already configured)
@@ -485,10 +485,11 @@ describe('MCP Auto-Injection Integration Tests', () => {
       await mockSudocodeMcpDetection(true);
       mockAgentMcpDetection(false);
 
-      // Create adhoc execution (issueId = null)
+      // Create adhoc execution (issueId = null) in local mode
+      // Worktree mode requires an issue or reuseWorktreePath
       const execution = await service.createExecution(
         null,
-        { mode: 'worktree' },
+        { mode: 'local' },
         'Adhoc prompt',
         'claude-code'
       );
@@ -496,7 +497,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify sudocode-mcp was auto-injected for adhoc execution
       expect(capturedConfig.mcpServers).toBeDefined();
@@ -523,7 +524,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify sudocode-mcp was auto-injected for issue-based execution
       expect(capturedConfig.mcpServers).toBeDefined();
@@ -554,7 +555,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify sudocode-mcp was auto-injected for workflow sub-execution
       expect(capturedConfig.mcpServers).toBeDefined();
@@ -590,10 +591,10 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
-      // Verify all config fields are preserved
-      expect(capturedConfig.mode).toBe('worktree');
+      // Verify agent-relevant config fields are preserved
+      // Note: mode is a sudocode-specific field and is stripped out before passing to agent
       expect(capturedConfig.model).toBe('claude-sonnet-4');
       expect(capturedConfig.timeout).toBe(30000);
       expect(capturedConfig.appendSystemPrompt).toBe('Be concise');
@@ -633,7 +634,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution).toBeDefined();
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify user's config is preserved (not overwritten by auto-injection)
       expect(capturedConfig.mcpServers['sudocode-mcp']).toEqual({
@@ -671,7 +672,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
       expect(execution.agent_type).toBe('claude-code');
 
       // Get the config that was passed to the executor
-      const capturedConfig = getCapturedExecutorConfig();
+      const capturedConfig = await getCapturedExecutorConfig();
 
       // Verify auto-injection worked for claude-code
       expect(capturedConfig.mcpServers).toBeDefined();
@@ -685,13 +686,16 @@ describe('MCP Auto-Injection Integration Tests', () => {
       // For non-claude-code agents, detection should return true (safe default)
       // No settings.json needed for these agents
 
-      // Create test issue
-      const issueId = 'i-test-014';
-      createTestIssue(issueId, 'Test Issue - Other Agent Types');
+      // Test with different agent types - use separate issues for each agent
+      const agentTypes = ['codex', 'copilot', 'cursor'] as const;
+      let issueCounter = 14; // Start from 14 as base
 
-      // Test with different agent types
-      for (const agentType of ['codex', 'copilot', 'cursor'] as const) {
+      for (const agentType of agentTypes) {
         vi.clearAllMocks();
+
+        // Create unique issue for each agent type
+        const issueId = `i-test-${issueCounter++}`;
+        createTestIssue(issueId, `Test Issue - ${agentType} Agent`);
 
         const execution = await service.createExecution(
           issueId,
@@ -704,7 +708,7 @@ describe('MCP Auto-Injection Integration Tests', () => {
         expect(execution.agent_type).toBe(agentType);
 
         // Get the config that was passed to the executor
-        const capturedConfig = getCapturedExecutorConfig();
+        const capturedConfig = await getCapturedExecutorConfig();
 
         // For unsupported agents, detection returns true (assumes configured),
         // so no auto-injection occurs

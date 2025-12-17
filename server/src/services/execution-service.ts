@@ -20,8 +20,7 @@ import {
   updateExecution,
 } from "./executions.js";
 import { randomUUID } from "crypto";
-import { execSync, exec } from "child_process";
-import { promisify } from "util";
+import { execSync } from "child_process";
 import type { ExecutionTask } from "agent-execution-engine/engine";
 import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
@@ -30,8 +29,7 @@ import { broadcastExecutionUpdate } from "./websocket.js";
 import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
 import type { AgentType } from "@sudocode-ai/types/agents";
 import { PromptResolver } from "./prompt-resolver.js";
-
-const execAsync = promisify(exec);
+import { execFileNoThrow } from "../utils/execFileNoThrow.js";
 
 /**
  * MCP server configuration
@@ -1419,15 +1417,23 @@ ${feedback}`;
   private async detectSudocodeMcp(): Promise<boolean> {
     try {
       // Use 'which' on Unix systems, 'where' on Windows
-      const command =
-        process.platform === "win32" ? "where sudocode-mcp" : "which sudocode-mcp";
+      const command = process.platform === "win32" ? "where" : "which";
 
-      await execAsync(command);
-      return true;
+      const result = await execFileNoThrow(command, ["sudocode-mcp"]);
+
+      if (result.status === 0) {
+        return true;
+      } else {
+        // Command failed - sudocode-mcp not found in PATH
+        console.warn(
+          "[ExecutionService] sudocode-mcp command not found in PATH"
+        );
+        return false;
+      }
     } catch (error) {
-      // Command failed - sudocode-mcp not found in PATH
+      // Unexpected error during detection
       console.warn(
-        "[ExecutionService] sudocode-mcp command not found in PATH:",
+        "[ExecutionService] Failed to detect sudocode-mcp:",
         error instanceof Error ? error.message : String(error)
       );
       return false;
@@ -1483,21 +1489,26 @@ ${feedback}`;
           "code" in error &&
           error.code === "ENOENT"
         ) {
+          // File not found - plugin definitely not configured
           console.warn(
             "[ExecutionService] ~/.claude/settings.json not found - plugin not configured"
           );
+          return false;
         } else if (error instanceof SyntaxError) {
+          // Malformed JSON - can't determine, assume configured (conservative)
           console.error(
             "[ExecutionService] Failed to parse ~/.claude/settings.json - malformed JSON:",
             error.message
           );
+          return true;
         } else {
+          // Other errors (permission denied, etc.) - can't determine, assume configured (conservative)
           console.warn(
             "[ExecutionService] Failed to read ~/.claude/settings.json:",
             error instanceof Error ? error.message : String(error)
           );
+          return true;
         }
-        return false;
       }
     }
 
