@@ -26,6 +26,10 @@ import {
   findIssuesByExternalLink,
   createSpecFromExternal,
 } from "@sudocode-ai/cli/dist/operations/external-links.js";
+import { createIssue } from "@sudocode-ai/cli/dist/operations/issues.js";
+import { createFeedback } from "@sudocode-ai/cli/dist/operations/feedback.js";
+import { generateIssueId } from "@sudocode-ai/cli/dist/id-generator.js";
+import type { ExternalComment } from "@sudocode-ai/types";
 import { triggerExport, syncEntityToMarkdown } from "../services/export.js";
 import { broadcastSpecUpdate } from "../services/websocket.js";
 import {
@@ -114,6 +118,25 @@ function computeContentHash(title: string, content: string): string {
   hash.update(title);
   hash.update(content || "");
   return hash.digest("hex");
+}
+
+/**
+ * Format a comment for import as IssueFeedback content
+ */
+function formatImportedComment(comment: ExternalComment): string {
+  const dateStr = new Date(comment.created_at).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  let content = `**@${comment.author}** commented on ${dateStr}:\n\n${comment.body}`;
+
+  if (comment.url) {
+    content += `\n\n---\n*Imported from [${comment.url}](${comment.url})*`;
+  }
+
+  return content;
 }
 
 /**
@@ -637,13 +660,14 @@ export function createImportRouter(): Router {
       );
       if (syncPromise && typeof syncPromise.catch === "function") {
         syncPromise.catch((error: Error) => {
-          console.error(`[import] Failed to sync spec ${spec.id} to markdown:`, error);
+          console.error(
+            `[import] Failed to sync spec ${spec.id} to markdown:`,
+            error
+          );
         });
       }
 
-      // Import comments count for response
-      // Note: Full comment import as IssueFeedback would require a valid issue as source,
-      // which we don't have for external imports. Comments are fetched for count only.
+      // Import comments as IssueFeedback
       let feedbackCount = 0;
       if (
         options.includeComments &&
@@ -652,16 +676,57 @@ export function createImportRouter(): Router {
       ) {
         try {
           const comments = await matchedProvider.fetchComments(entity.id);
-          feedbackCount = comments.length;
 
-          // Future enhancement: Create a synthetic issue to hold imported feedback,
-          // or add a different storage mechanism for imported comments
-          console.log(
-            `[import] Found ${comments.length} comments for ${entity.id}. ` +
-            `Comment import as feedback requires a valid issue source (future enhancement).`
-          );
+          if (comments.length > 0) {
+            // Create a placeholder issue to serve as the feedback source
+            // TODO: Support feedback without an issue.
+            const { id: placeholderIssueId, uuid: placeholderIssueUuid } =
+              generateIssueId(req.project!.db, req.project!.sudocodeDir);
+
+            const placeholderIssue = createIssue(req.project!.db, {
+              id: placeholderIssueId,
+              uuid: placeholderIssueUuid,
+              title: `Imported comments for: ${entity.title}`,
+              content:
+                `This issue was created to hold imported comments from [${entity.url}](${entity.url}).\n\n` +
+                `Provider: ${matchedProviderName}\n` +
+                `External ID: ${entity.id}\n` +
+                `Imported at: ${now}\n` +
+                `Comments: ${comments.length}`,
+              status: "closed",
+              priority: 4, // Lowest priority - placeholder only
+            });
+
+            console.log(
+              `[import] Created placeholder issue ${placeholderIssue.id} for ${comments.length} comments`
+            );
+
+            // Import each comment as IssueFeedback
+            for (const comment of comments) {
+              try {
+                createFeedback(req.project!.db, {
+                  from_id: placeholderIssue.id,
+                  to_id: spec.id,
+                  feedback_type: "comment",
+                  content: formatImportedComment(comment),
+                  agent: "import",
+                  created_at: comment.created_at,
+                });
+                feedbackCount++;
+              } catch (feedbackError) {
+                console.warn(
+                  `[import] Failed to create feedback for comment ${comment.id}:`,
+                  feedbackError
+                );
+              }
+            }
+
+            console.log(
+              `[import] Successfully imported ${feedbackCount} of ${comments.length} comments as feedback`
+            );
+          }
         } catch (error) {
-          console.warn("[import] Failed to fetch comments:", error);
+          console.warn("[import] Failed to fetch/import comments:", error);
         }
       }
 

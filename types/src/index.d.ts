@@ -158,11 +158,16 @@ export type EventType =
 /**
  * Issue-based feedback types
  * Feedback can target either a spec or another issue (type inferred from ID prefix)
+ *
+ * When from_id is set, feedback originates from a sudocode issue.
+ * When from_id is null/undefined, feedback is anonymous/external.
  */
 export interface IssueFeedback {
   id: string;
-  from_id: string;
-  from_uuid: string;
+  /** Issue ID that provided the feedback (optional for anonymous/external feedback) */
+  from_id?: string;
+  /** Issue UUID that provided the feedback (optional for anonymous/external feedback) */
+  from_uuid?: string;
   to_id: string;
   to_uuid: string;
   feedback_type: FeedbackType;
@@ -218,7 +223,8 @@ export interface IssueJSONL extends Issue {
 
 export interface FeedbackJSONL {
   id: string;
-  from_id: string;
+  /** Issue ID that provided the feedback (optional for anonymous/external feedback) */
+  from_id?: string;
   to_id: string;
   feedback_type: FeedbackType;
   content: string;

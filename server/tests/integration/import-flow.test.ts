@@ -107,6 +107,45 @@ vi.mock("@sudocode-ai/cli/dist/operations/external-links.js", () => ({
   })),
 }));
 
+// Mock issue operations for comment import
+vi.mock("@sudocode-ai/cli/dist/operations/issues.js", () => ({
+  createIssue: vi.fn((_db: any, input: any) => ({
+    id: input.id || "i-placeholder",
+    uuid: input.uuid || "placeholder-uuid",
+    title: input.title,
+    content: input.content || "",
+    status: input.status || "open",
+    priority: input.priority || 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    relationships: [],
+    tags: [],
+  })),
+}));
+
+// Mock feedback operations for comment import
+vi.mock("@sudocode-ai/cli/dist/operations/feedback.js", () => ({
+  createFeedback: vi.fn((_db: any, input: any) => ({
+    id: `fb-${Date.now()}`,
+    uuid: `fb-uuid-${Date.now()}`,
+    from_id: input.from_id,
+    to_id: input.to_id,
+    feedback_type: input.feedback_type,
+    content: input.content,
+    agent: input.agent,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })),
+}));
+
+// Mock ID generator for comment import
+vi.mock("@sudocode-ai/cli/dist/id-generator.js", () => ({
+  generateIssueId: vi.fn(() => ({
+    id: "i-placeholder",
+    uuid: "placeholder-uuid-123",
+  })),
+}));
+
 // Mock export service
 vi.mock("../../src/services/export.js", () => ({
   triggerExport: vi.fn(),

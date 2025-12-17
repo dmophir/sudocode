@@ -104,6 +104,44 @@ vi.mock("@sudocode-ai/cli/dist/operations/external-links.js", () => ({
   })),
 }));
 
+// Mock issue operations
+vi.mock("@sudocode-ai/cli/dist/operations/issues.js", () => ({
+  createIssue: vi.fn((db: any, input: any) => ({
+    id: input.id,
+    uuid: input.uuid,
+    title: input.title,
+    content: input.content,
+    status: input.status,
+    priority: input.priority,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })),
+}));
+
+// Mock feedback operations
+vi.mock("@sudocode-ai/cli/dist/operations/feedback.js", () => ({
+  createFeedback: vi.fn((db: any, input: any) => ({
+    id: `feedback-${Date.now()}`,
+    from_id: input.from_id,
+    from_uuid: "mock-from-uuid",
+    to_id: input.to_id,
+    to_uuid: "mock-to-uuid",
+    feedback_type: input.feedback_type,
+    content: input.content,
+    agent: input.agent,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })),
+}));
+
+// Mock id-generator
+vi.mock("@sudocode-ai/cli/dist/id-generator.js", () => ({
+  generateIssueId: vi.fn(() => ({
+    id: "i-import1",
+    uuid: "import-uuid-123",
+  })),
+}));
+
 // Mock export service
 vi.mock("../../../src/services/export.js", () => ({
   triggerExport: vi.fn(),
@@ -498,7 +536,7 @@ describe("Import Router", () => {
       );
     });
 
-    it("should count comments when includeComments requested", async () => {
+    it("should import comments as IssueFeedback when includeComments requested", async () => {
       const mockEntity = {
         id: "owner/repo#123",
         type: "issue" as const,
@@ -508,13 +546,17 @@ describe("Import Router", () => {
       };
 
       const mockComments = [
-        { id: "c1", author: "user1", body: "First comment", created_at: "2024-01-01" },
-        { id: "c2", author: "user2", body: "Second comment", created_at: "2024-01-02" },
+        { id: "c1", author: "user1", body: "First comment", created_at: "2024-01-01T10:00:00Z", url: "https://github.com/owner/repo/issues/123#issuecomment-1" },
+        { id: "c2", author: "user2", body: "Second comment", created_at: "2024-01-02T12:00:00Z", url: "https://github.com/owner/repo/issues/123#issuecomment-2" },
       ];
 
       mockOnDemandProvider.canHandleUrl.mockReturnValueOnce(true);
       mockOnDemandProvider.fetchByUrl.mockResolvedValueOnce(mockEntity);
       mockOnDemandProvider.fetchComments.mockResolvedValueOnce(mockComments);
+
+      const { createIssue } = await import("@sudocode-ai/cli/dist/operations/issues.js");
+      const { createFeedback } = await import("@sudocode-ai/cli/dist/operations/feedback.js");
+      const { generateIssueId } = await import("@sudocode-ai/cli/dist/id-generator.js");
 
       const { req, res } = createMockReqRes({
         body: {
@@ -528,9 +570,205 @@ describe("Import Router", () => {
 
       expect(res.status).toHaveBeenCalledWith(201);
 
-      // Comments are counted but not yet imported as feedback (future enhancement)
+      // Verify placeholder issue was created
+      expect(vi.mocked(generateIssueId)).toHaveBeenCalled();
+      expect(vi.mocked(createIssue)).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          id: "i-import1",
+          uuid: "import-uuid-123",
+          title: expect.stringContaining("Imported comments for:"),
+          status: "closed",
+          priority: 4,
+        })
+      );
+
+      // Verify feedback was created for each comment
+      expect(vi.mocked(createFeedback)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(createFeedback)).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          from_id: "i-import1",
+          to_id: "s-test123",
+          feedback_type: "comment",
+          agent: "import",
+          content: expect.stringContaining("@user1"),
+        })
+      );
+      expect(vi.mocked(createFeedback)).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          from_id: "i-import1",
+          to_id: "s-test123",
+          feedback_type: "comment",
+          agent: "import",
+          content: expect.stringContaining("@user2"),
+        })
+      );
+
+      // Verify response includes feedbackCount
       const response = vi.mocked(res.json).mock.calls[0][0];
       expect(response.data.feedbackCount).toBe(2);
+    });
+
+    it("should not import comments when includeComments is false", async () => {
+      const mockEntity = {
+        id: "owner/repo#456",
+        type: "issue" as const,
+        title: "Test Issue Without Comments",
+        description: "Test description",
+        url: "https://github.com/owner/repo/issues/456",
+      };
+
+      mockOnDemandProvider.canHandleUrl.mockReturnValueOnce(true);
+      mockOnDemandProvider.fetchByUrl.mockResolvedValueOnce(mockEntity);
+
+      const { createIssue } = await import("@sudocode-ai/cli/dist/operations/issues.js");
+      const { createFeedback } = await import("@sudocode-ai/cli/dist/operations/feedback.js");
+
+      const { req, res } = createMockReqRes({
+        body: {
+          url: "https://github.com/owner/repo/issues/456",
+          options: { includeComments: false },
+        },
+      });
+
+      const handler = findHandler(router, "/", "post");
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      // Verify no placeholder issue or feedback was created
+      expect(vi.mocked(createIssue)).not.toHaveBeenCalled();
+      expect(vi.mocked(createFeedback)).not.toHaveBeenCalled();
+
+      // Verify response does not include feedbackCount
+      const response = vi.mocked(res.json).mock.calls[0][0];
+      expect(response.data.feedbackCount).toBeUndefined();
+    });
+
+    it("should handle empty comments array gracefully", async () => {
+      const mockEntity = {
+        id: "owner/repo#789",
+        type: "issue" as const,
+        title: "Issue With No Comments",
+        description: "Test description",
+        url: "https://github.com/owner/repo/issues/789",
+      };
+
+      mockOnDemandProvider.canHandleUrl.mockReturnValueOnce(true);
+      mockOnDemandProvider.fetchByUrl.mockResolvedValueOnce(mockEntity);
+      mockOnDemandProvider.fetchComments.mockResolvedValueOnce([]);
+
+      const { createIssue } = await import("@sudocode-ai/cli/dist/operations/issues.js");
+      const { createFeedback } = await import("@sudocode-ai/cli/dist/operations/feedback.js");
+
+      const { req, res } = createMockReqRes({
+        body: {
+          url: "https://github.com/owner/repo/issues/789",
+          options: { includeComments: true },
+        },
+      });
+
+      const handler = findHandler(router, "/", "post");
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      // Verify no placeholder issue or feedback was created for empty comments
+      expect(vi.mocked(createIssue)).not.toHaveBeenCalled();
+      expect(vi.mocked(createFeedback)).not.toHaveBeenCalled();
+
+      // Verify response does not include feedbackCount when no comments
+      const response = vi.mocked(res.json).mock.calls[0][0];
+      expect(response.data.feedbackCount).toBeUndefined();
+    });
+
+    it("should preserve comment timestamps in feedback", async () => {
+      const mockEntity = {
+        id: "owner/repo#101",
+        type: "issue" as const,
+        title: "Test Issue",
+        description: "Test description",
+        url: "https://github.com/owner/repo/issues/101",
+      };
+
+      const originalTimestamp = "2023-06-15T14:30:00Z";
+      const mockComments = [
+        { id: "c1", author: "user1", body: "Historical comment", created_at: originalTimestamp },
+      ];
+
+      mockOnDemandProvider.canHandleUrl.mockReturnValueOnce(true);
+      mockOnDemandProvider.fetchByUrl.mockResolvedValueOnce(mockEntity);
+      mockOnDemandProvider.fetchComments.mockResolvedValueOnce(mockComments);
+
+      const { createFeedback } = await import("@sudocode-ai/cli/dist/operations/feedback.js");
+
+      const { req, res } = createMockReqRes({
+        body: {
+          url: "https://github.com/owner/repo/issues/101",
+          options: { includeComments: true },
+        },
+      });
+
+      const handler = findHandler(router, "/", "post");
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      // Verify original timestamp is preserved
+      expect(vi.mocked(createFeedback)).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          created_at: originalTimestamp,
+        })
+      );
+    });
+
+    it("should format comment content with author attribution", async () => {
+      const mockEntity = {
+        id: "owner/repo#102",
+        type: "issue" as const,
+        title: "Test Issue",
+        description: "Test description",
+        url: "https://github.com/owner/repo/issues/102",
+      };
+
+      const mockComments = [
+        {
+          id: "c1",
+          author: "testuser",
+          body: "This is the comment body",
+          created_at: "2024-03-15T10:00:00Z",
+          url: "https://github.com/owner/repo/issues/102#issuecomment-1",
+        },
+      ];
+
+      mockOnDemandProvider.canHandleUrl.mockReturnValueOnce(true);
+      mockOnDemandProvider.fetchByUrl.mockResolvedValueOnce(mockEntity);
+      mockOnDemandProvider.fetchComments.mockResolvedValueOnce(mockComments);
+
+      const { createFeedback } = await import("@sudocode-ai/cli/dist/operations/feedback.js");
+
+      const { req, res } = createMockReqRes({
+        body: {
+          url: "https://github.com/owner/repo/issues/102",
+          options: { includeComments: true },
+        },
+      });
+
+      const handler = findHandler(router, "/", "post");
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      // Verify content format includes author, date, body, and import attribution
+      expect(vi.mocked(createFeedback)).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          content: expect.stringMatching(/@testuser.*commented.*This is the comment body.*Imported from/s),
+        })
+      );
     });
 
     it("should respect priority option", async () => {

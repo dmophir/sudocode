@@ -505,7 +505,7 @@ Create actionable issues that implement its requirements. Each issue should be s
   }
 
   const handleCreateFeedback = async (data: {
-    issueId: string
+    issueId?: string  // Optional for anonymous feedback
     type: any
     content: string
     anchor?: any
@@ -517,7 +517,7 @@ Create actionable issues that implement its requirements. Each issue should be s
 
     await createFeedback({
       to_id: id,
-      issue_id: data.issueId,
+      issue_id: data.issueId,  // Can be undefined for anonymous feedback
       feedback_type: data.type,
       content: data.content,
       anchor: data.anchor,

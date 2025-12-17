@@ -134,7 +134,7 @@ export interface DeleteRelationshipRequest {
  * Feedback API types
  */
 export interface CreateFeedbackRequest {
-  issue_id: string
+  issue_id?: string  // Optional for anonymous feedback
   to_id: string
   feedback_type: FeedbackType
   content: string
