@@ -34,8 +34,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed, Pencil } from 'lucide-react'
+import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed, Pencil, Folder } from 'lucide-react'
 import type { ProjectInfo } from '@/types/project'
+import { DirectoryBrowser } from '@/components/projects/DirectoryBrowser'
 
 export default function ProjectsPage() {
   const navigate = useNavigate()
@@ -56,6 +57,8 @@ export default function ProjectsPage() {
   const [projectPath, setProjectPath] = useState('')
   const [projectName, setProjectName] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [browserOpen, setBrowserOpen] = useState(false)
+  const [browserTarget, setBrowserTarget] = useState<'open' | 'init'>('open')
 
   // Helper to check if a project is open
   const isProjectOpen = (projectId: string) => {
@@ -151,6 +154,16 @@ export default function ProjectsPage() {
       console.error('Failed to initialize project:', error)
       setValidationError(error instanceof Error ? error.message : 'Failed to initialize project')
     }
+  }
+
+  const handleOpenBrowser = (target: 'open' | 'init') => {
+    setBrowserTarget(target)
+    setBrowserOpen(true)
+  }
+
+  const handleBrowserSelect = (path: string) => {
+    setProjectPath(path)
+    setValidationError(null)
   }
 
   if (isLoading) {
@@ -289,20 +302,29 @@ export default function ProjectsPage() {
           <div className="space-y-4 py-4">
             <div>
               <label className="text-sm font-medium">Project Path</label>
-              <Input
-                value={projectPath}
-                onChange={(e) => {
-                  setProjectPath(e.target.value)
-                  setValidationError(null)
-                }}
-                placeholder="/path/to/project"
-                className="mt-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && projectPath.trim()) {
-                    handleOpenExistingProject()
-                  }
-                }}
-              />
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={projectPath}
+                  onChange={(e) => {
+                    setProjectPath(e.target.value)
+                    setValidationError(null)
+                  }}
+                  placeholder="/path/to/project"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && projectPath.trim()) {
+                      handleOpenExistingProject()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOpenBrowser('open')}
+                  className="shrink-0"
+                >
+                  <Folder className="h-4 w-4" />
+                </Button>
+              </div>
               {validationError && (
                 <p className="mt-2 text-sm text-destructive">{validationError}</p>
               )}
@@ -348,20 +370,29 @@ export default function ProjectsPage() {
           <div className="space-y-4 py-4">
             <div>
               <label className="text-sm font-medium">Project Path</label>
-              <Input
-                value={projectPath}
-                onChange={(e) => {
-                  setProjectPath(e.target.value)
-                  setValidationError(null)
-                }}
-                placeholder="/path/to/project"
-                className="mt-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && projectPath.trim()) {
-                    handleInitProject()
-                  }
-                }}
-              />
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={projectPath}
+                  onChange={(e) => {
+                    setProjectPath(e.target.value)
+                    setValidationError(null)
+                  }}
+                  placeholder="/path/to/project"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && projectPath.trim()) {
+                      handleInitProject()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOpenBrowser('init')}
+                  className="shrink-0"
+                >
+                  <Folder className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Project Name (optional)</label>
@@ -402,6 +433,19 @@ export default function ProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Directory Browser Dialog */}
+      <DirectoryBrowser
+        open={browserOpen}
+        onOpenChange={setBrowserOpen}
+        onSelect={handleBrowserSelect}
+        title={browserTarget === 'open' ? 'Select Project Directory' : 'Select Directory to Initialize'}
+        description={
+          browserTarget === 'open'
+            ? 'Browse and select an existing Sudocode project directory.'
+            : 'Browse and select a directory to initialize as a Sudocode project.'
+        }
+      />
     </div>
   )
 }

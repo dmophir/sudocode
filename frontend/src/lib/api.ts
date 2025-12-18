@@ -426,6 +426,19 @@ export const projectsApi = {
 
   // Initialize a new project
   init: (data: InitProjectRequest) => post<ProjectInfo>('/projects/init', data),
+
+  // Browse directories on the filesystem
+  browse: (path?: string) =>
+    get<{
+      currentPath: string
+      parentPath: string | null
+      entries: Array<{
+        name: string
+        path: string
+        isDirectory: boolean
+        hasSudocode: boolean
+      }>
+    }>(`/projects/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 }
 
 /**
