@@ -17,6 +17,7 @@ import {
   loadPlugin,
   validateProviderConfig,
   testProviderConnection,
+  isPluginInstalledGlobally,
 } from "@sudocode-ai/cli/dist/integrations/index.js";
 
 /**
@@ -60,6 +61,14 @@ export interface PluginInfo {
   enabled: boolean;
   configSchema?: unknown;
   options?: Record<string, unknown>;
+  // Plugin capabilities (determined by creating a provider instance)
+  capabilities?: {
+    supportsWatch: boolean;
+    supportsPolling: boolean;
+    supportsOnDemandImport: boolean;
+    supportsSearch: boolean;
+    supportsPush: boolean;
+  };
   // Integration-level config
   integrationConfig?: {
     auto_sync?: boolean;
@@ -90,6 +99,8 @@ export function createPluginsRouter(): Router {
 
       const plugins: PluginInfo[] = await Promise.all(
         firstPartyPlugins.map(async (p) => {
+          // Check if plugin is installed (local node_modules or global)
+          // This detects both metapackage dependencies and global installations
           const installed = await isPluginInstalled(p.name);
           const providerConfig = integrations[p.name];
           const activated = !!providerConfig;
@@ -99,6 +110,15 @@ export function createPluginsRouter(): Router {
           let version: string | undefined;
           let description: string | undefined;
           let configSchema: unknown | undefined;
+          let capabilities:
+            | {
+                supportsWatch: boolean;
+                supportsPolling: boolean;
+                supportsOnDemandImport: boolean;
+                supportsSearch: boolean;
+                supportsPush: boolean;
+              }
+            | undefined;
 
           if (installed) {
             const plugin = await loadPlugin(p.name);
@@ -107,6 +127,27 @@ export function createPluginsRouter(): Router {
               version = plugin.version;
               description = plugin.description;
               configSchema = plugin.configSchema;
+
+              // Get capabilities by creating a provider instance
+              try {
+                const provider = plugin.createProvider(
+                  providerConfig?.options || {},
+                  req.project!.path
+                );
+                capabilities = {
+                  supportsWatch: provider.supportsWatch ?? false,
+                  supportsPolling: provider.supportsPolling ?? false,
+                  supportsOnDemandImport: provider.supportsOnDemandImport ?? false,
+                  supportsSearch: provider.supportsSearch ?? false,
+                  supportsPush: provider.supportsPush ?? false,
+                };
+              } catch (error) {
+                // If provider creation fails, leave capabilities undefined
+                console.warn(
+                  `[plugins] Failed to get capabilities for ${p.name}:`,
+                  error
+                );
+              }
             }
           }
 
@@ -121,6 +162,7 @@ export function createPluginsRouter(): Router {
             enabled,
             configSchema,
             options: providerConfig?.options,
+            capabilities,
             integrationConfig: providerConfig
               ? {
                   auto_sync: providerConfig.auto_sync,
@@ -145,6 +187,15 @@ export function createPluginsRouter(): Router {
           let version: string | undefined;
           let description: string | undefined;
           let configSchema: unknown | undefined;
+          let capabilities:
+            | {
+                supportsWatch: boolean;
+                supportsPolling: boolean;
+                supportsOnDemandImport: boolean;
+                supportsSearch: boolean;
+                supportsPush: boolean;
+              }
+            | undefined;
 
           if (installed) {
             const plugin = await loadPlugin(pluginId);
@@ -153,6 +204,26 @@ export function createPluginsRouter(): Router {
               version = plugin.version;
               description = plugin.description;
               configSchema = plugin.configSchema;
+
+              // Get capabilities by creating a provider instance
+              try {
+                const provider = plugin.createProvider(
+                  providerConfig.options || {},
+                  req.project!.path
+                );
+                capabilities = {
+                  supportsWatch: provider.supportsWatch ?? false,
+                  supportsPolling: provider.supportsPolling ?? false,
+                  supportsOnDemandImport: provider.supportsOnDemandImport ?? false,
+                  supportsSearch: provider.supportsSearch ?? false,
+                  supportsPush: provider.supportsPush ?? false,
+                };
+              } catch (error) {
+                console.warn(
+                  `[plugins] Failed to get capabilities for ${name}:`,
+                  error
+                );
+              }
             }
           }
 
@@ -167,6 +238,7 @@ export function createPluginsRouter(): Router {
             enabled: providerConfig.enabled ?? false,
             configSchema,
             options: providerConfig.options,
+            capabilities,
             integrationConfig: {
               auto_sync: providerConfig.auto_sync,
               auto_import: providerConfig.auto_import,
@@ -519,13 +591,16 @@ export function createPluginsRouter(): Router {
       // Determine the package to install
       const targetPackage = packageName || `@sudocode-ai/integration-${name}`;
 
-      // Check if already installed
+      // Check if already installed (local node_modules or global)
       const alreadyInstalled = await isPluginInstalled(name);
+
       if (alreadyInstalled) {
+        // Determine if it's global or local for better messaging
+        const isGlobal = isPluginInstalledGlobally(name);
         res.status(200).json({
           success: true,
           data: {
-            message: `Plugin '${name}' is already installed`,
+            message: `Plugin '${name}' is already installed${isGlobal ? " globally" : " (via metapackage or local node_modules)"}`,
             alreadyInstalled: true,
           },
         });
@@ -557,21 +632,12 @@ export function createPluginsRouter(): Router {
         return;
       }
 
-      // Load plugin to get info
-      const plugin = await loadPlugin(name);
-
       res.status(200).json({
         success: true,
         data: {
-          message: `Plugin '${name}' installed successfully`,
-          plugin: plugin
-            ? {
-                name,
-                displayName: plugin.displayName,
-                version: plugin.version,
-                description: plugin.description,
-              }
-            : { name },
+          message: `Plugin '${name}' installed successfully. Please restart the server to use it.`,
+          requiresRestart: true,
+          plugin: { name },
         },
       });
     } catch (error) {

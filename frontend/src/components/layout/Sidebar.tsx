@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ProjectSwitcher } from '@/components/projects/ProjectSwitcher'
 import { SettingsDialog } from './SettingsDialog'
 import { HelpDialog } from './HelpDialog'
+import { useUpdateCheck } from '@/hooks/useUpdateCheck'
 
 interface SidebarProps {
   open: boolean
@@ -26,6 +27,8 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
   const location = useLocation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const { updateInfo } = useUpdateCheck()
+  const hasUpdate = updateInfo?.updateAvailable ?? false
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path)
@@ -116,14 +119,14 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
                 to={item.path}
                 onClick={onClose}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors',
                   active
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    ? 'rounded-r-lg border-l-[3px] border-l-primary bg-accent text-foreground'
+                    : 'rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground',
                   collapsed && 'justify-center px-2'
                 )}
               >
-                <Icon className={'h-5 w-5 flex-shrink-0' + (active ? ' text-white' : '')} />
+                <Icon className="h-5 w-5 flex-shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             )
@@ -186,10 +189,17 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
                     )}
                     aria-label="Settings"
                   >
-                    <Settings className="h-5 w-5 flex-shrink-0" />
+                    <div className="relative">
+                      <Settings className="h-5 w-5 flex-shrink-0" />
+                      {hasUpdate && (
+                        <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-orange-500" />
+                      )}
+                    </div>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right">Settings</TooltipContent>
+                <TooltipContent side="right">
+                  {hasUpdate ? 'Settings (Update Available)' : 'Settings'}
+                </TooltipContent>
               </Tooltip>
             ) : (
               <button
@@ -199,7 +209,12 @@ export default function Sidebar({ open, collapsed, onClose }: SidebarProps) {
                 )}
                 aria-label="Settings"
               >
-                <Settings className="h-5 w-5 flex-shrink-0" />
+                <div className="relative">
+                  <Settings className="h-5 w-5 flex-shrink-0" />
+                  {hasUpdate && (
+                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-orange-500" />
+                  )}
+                </div>
                 <span>Settings</span>
               </button>
             )}
