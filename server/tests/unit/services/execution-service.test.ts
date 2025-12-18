@@ -145,7 +145,7 @@ describe("ExecutionService", () => {
     });
 
     // Create mock worktree manager
-    const mockWorktreeManager = createExtendedMockWorktreeManager();
+    const mockWorktreeManager = createMockWorktreeManager();
 
     // Create lifecycle service with mock
     const lifecycleService = new ExecutionLifecycleService(
@@ -418,7 +418,7 @@ describe("ExecutionService", () => {
         const gitLifecycleService = new ExecutionLifecycleService(
           gitTestDb,
           gitTestDir,
-          createExtendedMockWorktreeManager()
+          createMockWorktreeManager()
         );
         const gitService = new ExecutionService(
           gitTestDb,
@@ -661,7 +661,7 @@ describe("ExecutionService", () => {
         const gitLifecycleService = new ExecutionLifecycleService(
           gitTestDb,
           gitTestDir,
-          createExtendedMockWorktreeManager()
+          createMockWorktreeManager()
         );
         const gitService = new ExecutionService(
           gitTestDb,
@@ -1632,18 +1632,80 @@ describe("ExecutionService", () => {
   });
 });
 
-import { createMockWorktreeManager } from '../../integration/execution/helpers/execution-test-utils.js';
-
 /**
- * Create a mock worktree manager for testing (extended with git.deleteBranch)
+ * Create a mock worktree manager for testing
  */
-function createExtendedMockWorktreeManager(): any {
-  const baseManager = createMockWorktreeManager();
+function createMockWorktreeManager(): IWorktreeManager & {
+  git: {
+    deleteBranch: (
+      repoPath: string,
+      branchName: string,
+      force: boolean
+    ) => Promise<void>;
+  };
+} {
+  const config: WorktreeConfig = {
+    worktreeStoragePath: ".worktrees",
+    branchPrefix: "worktree",
+    autoCreateBranches: true,
+    autoDeleteBranches: false,
+    enableSparseCheckout: false,
+    cleanupOrphanedWorktreesOnStartup: false,
+  };
 
   return {
-    ...baseManager,
+    getConfig: () => config,
+
+    createWorktree: async (_params: WorktreeCreateParams): Promise<void> => {
+      // Mock: just return success
+      return Promise.resolve();
+    },
+
+    cleanupWorktree: async (
+      _worktreePath: string,
+      _repoPath: string
+    ): Promise<void> => {
+      // Mock: just return success
+      return Promise.resolve();
+    },
+
+    listWorktrees: async (_repoPath: string): Promise<WorktreeInfo[]> => {
+      return Promise.resolve([]);
+    },
+
+    isValidRepo: async (_repoPath: string): Promise<boolean> => {
+      return Promise.resolve(true);
+    },
+
+    listBranches: async (_repoPath: string): Promise<string[]> => {
+      return Promise.resolve(["main", "develop"]);
+    },
+
+    ensureWorktreeExists: async (
+      _repoPath: string,
+      _branchName: string,
+      _worktreePath: string
+    ): Promise<void> => {
+      return Promise.resolve();
+    },
+
+    isWorktreeValid: async (
+      _repoPath: string,
+      _worktreePath: string
+    ): Promise<boolean> => {
+      return Promise.resolve(true);
+    },
+
+    // Mock git property for branch deletion tests
     git: {
-      deleteBranch: vi.fn(async () => Promise.resolve()),
+      deleteBranch: async (
+        _repoPath: string,
+        _branchName: string,
+        _force: boolean
+      ): Promise<void> => {
+        // Mock: just return success
+        return Promise.resolve();
+      },
     },
   };
 }

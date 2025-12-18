@@ -61,7 +61,7 @@ export function createMockWorktreeManager(): any {
     }),
     removeWorktree: vi.fn().mockResolvedValue(undefined),
     listWorktrees: vi.fn().mockResolvedValue([]),
-    listBranches: vi.fn().mockResolvedValue(['main', 'test-branch']),
+    listBranches: vi.fn().mockResolvedValue(['main', 'develop', 'test-branch']),
     isValidRepo: vi.fn().mockResolvedValue(true),
     getCurrentBranch: vi.fn().mockResolvedValue('main'),
     branchExists: vi.fn().mockResolvedValue(true),
@@ -70,12 +70,17 @@ export function createMockWorktreeManager(): any {
     getWorktreePath: vi.fn().mockReturnValue('/tmp/test-worktree'),
     getRepoRoot: vi.fn().mockResolvedValue('/test/repo'),
     getConfig: vi.fn().mockReturnValue({
-      worktreeStoragePath: '/tmp/test-worktrees',
+      worktreeStoragePath: '.worktrees',
       autoCreateBranches: true,
       autoDeleteBranches: false,
-      branchPrefix: 'sudocode',
+      branchPrefix: 'worktree',
+      enableSparseCheckout: false,
+      cleanupOrphanedWorktreesOnStartup: false,
     }),
     cleanup: vi.fn().mockResolvedValue(undefined),
+    ensureWorktreeExists: vi.fn().mockResolvedValue(undefined),
+    isWorktreeValid: vi.fn().mockResolvedValue(true),
+    cleanupWorktree: vi.fn().mockResolvedValue(undefined),
   };
 }
 
