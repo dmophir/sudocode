@@ -51,6 +51,12 @@ export function buildClaudeConfig(config: ClaudeCodeConfig): ProcessConfig {
  * @returns Array of command-line arguments
  */
 export function buildClaudeArgs(config: ClaudeCodeConfig): string[] {
+  console.log('[buildClaudeArgs] Input config:', {
+    configKeys: Object.keys(config),
+    hasDisallowedTools: 'disallowedTools' in config,
+    disallowedTools: config.disallowedTools,
+  });
+
   const args: string[] = [];
 
   // === Core Execution Mode ===
@@ -283,5 +289,6 @@ export function getDefaultClaudeConfig(): Partial<ClaudeCodeConfig> {
     outputFormat: 'stream-json',
     verbose: true, // Required for stream-json with print
     dangerouslySkipPermissions: false,
+    disallowedTools: ['AskUserQuestion'], // Block interactive prompts in executions
   };
 }
