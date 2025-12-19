@@ -11,6 +11,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
+import * as TOML from "@iarna/toml";
 import type Database from "better-sqlite3";
 import type { Execution, ExecutionStatus } from "@sudocode-ai/types";
 import { ExecutionLifecycleService } from "./execution-lifecycle.js";
@@ -35,7 +36,9 @@ import { execFileNoThrow } from "../utils/execFileNoThrow.js";
  * MCP server configuration
  */
 export interface McpServerConfig {
+  type?: string;
   command: string;
+  tools?: string[];
   args?: string[];
   env?: Record<string, string>;
 }
@@ -1380,7 +1383,27 @@ ${feedback}`;
     // 2. Check if agent already has sudocode-mcp configured
     const mcpPresent = await this.detectAgentMcp(agentType);
 
-    // 3. Auto-inject sudocode-mcp if not configured and not already in userConfig
+    // 3. For Cursor, MCP MUST be configured (no CLI injection available)
+    if (agentType === "cursor" && !mcpPresent) {
+      throw new Error(
+        "Cursor agent requires sudocode-mcp to be configured in .cursor/mcp.json.\n" +
+        "Please create .cursor/mcp.json in your project root with:\n\n" +
+        JSON.stringify(
+          {
+            mcpServers: {
+              "sudocode-mcp": {
+                command: "sudocode-mcp",
+              },
+            },
+          },
+          null,
+          2
+        ) +
+        "\n\nVisit: https://github.com/sudocode-ai/sudocode"
+      );
+    }
+
+    // 4. Auto-inject sudocode-mcp if not configured and not already in userConfig
     if (!mcpPresent && !userConfig.mcpServers?.["sudocode-mcp"]) {
       console.info(
         "[ExecutionService] Adding sudocode-mcp to mcpServers (auto-injection)"
@@ -1388,7 +1411,9 @@ ${feedback}`;
       mergedConfig.mcpServers = {
         ...(userConfig.mcpServers || {}),
         "sudocode-mcp": {
+          type: "local",
           command: "sudocode-mcp",
+          tools: ["*"],
           args: [],
         },
       };
@@ -1449,7 +1474,9 @@ ${feedback}`;
    * Detect if sudocode-mcp is configured for the given agent
    *
    * For claude-code: Checks if the sudocode plugin is enabled in ~/.claude/settings.json
-   * For other agents: Returns true (default safe behavior - assume configured)
+   * For cursor: Checks .cursor/mcp.json in project root for sudocode-mcp command
+   * For codex: Checks ~/.codex/config.toml for sudocode-mcp in mcp_servers
+   * For copilot: Checks ~/.copilot/mcp-config.json for sudocode-mcp command
    *
    * @param agentType - The type of agent to check
    * @returns true if configured, false otherwise
@@ -1518,7 +1545,181 @@ ${feedback}`;
       }
     }
 
-    // For other agents (copilot, cursor, codex), return true (safe default)
+    // For cursor, check .cursor/mcp.json in project root
+    if (agentType === "cursor") {
+      try {
+        // NOTE: .cursor/mcp.json is in project root, not home directory
+        const cursorConfigPath = path.join(this.repoPath, ".cursor", "mcp.json");
+
+        const configContent = await fsPromises.readFile(cursorConfigPath, "utf-8");
+        const config = JSON.parse(configContent);
+
+        // Check if any mcpServer has command "sudocode-mcp"
+        const hasSudocodeMcp = Object.values(config.mcpServers || {}).some(
+          (server: any) => server.command === "sudocode-mcp"
+        );
+
+        if (hasSudocodeMcp) {
+          console.info("[ExecutionService] sudocode-mcp detected for cursor");
+        } else {
+          console.info("[ExecutionService] sudocode-mcp not detected for cursor");
+        }
+
+        return hasSudocodeMcp;
+      } catch (error) {
+        // Handle ENOENT, JSON parse errors, etc.
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          // File not found - MCP definitely not configured
+          console.warn(
+            "[ExecutionService] .cursor/mcp.json not found in project root - MCP not configured"
+          );
+          return false;
+        } else if (error instanceof SyntaxError) {
+          // Malformed JSON - can't determine configuration
+          console.error(
+            "[ExecutionService] Failed to parse .cursor/mcp.json - malformed JSON:",
+            error.message
+          );
+          return false;
+        } else {
+          // Other errors (permission denied, etc.)
+          console.warn(
+            "[ExecutionService] Failed to read .cursor/mcp.json:",
+            error instanceof Error ? error.message : String(error)
+          );
+          return false;
+        }
+      }
+    }
+
+    // For codex, check ~/.codex/config.toml
+    if (agentType === "codex") {
+      try {
+        const codexConfigPath = path.join(
+          os.homedir(),
+          ".codex",
+          "config.toml"
+        );
+
+        const configContent = await fsPromises.readFile(
+          codexConfigPath,
+          "utf-8"
+        );
+
+        const config = TOML.parse(configContent);
+
+        // Check if any mcp_servers section has command "sudocode-mcp"
+        const mcpServers = config.mcp_servers as Record<string, any> | undefined;
+        const hasSudocodeMcp =
+          mcpServers &&
+          Object.values(mcpServers).some(
+            (server: any) => server.command === "sudocode-mcp"
+          );
+
+        if (hasSudocodeMcp) {
+          console.info("[ExecutionService] sudocode-mcp detected for codex");
+        } else {
+          console.info(
+            "[ExecutionService] sudocode-mcp not detected for codex"
+          );
+        }
+
+        return !!hasSudocodeMcp;
+      } catch (error) {
+        // Handle ENOENT, TOML parse errors, etc.
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          // File not found - MCP definitely not configured
+          console.warn(
+            "[ExecutionService] ~/.codex/config.toml not found - MCP not configured"
+          );
+          return false;
+        } else if (error instanceof Error && error.message.includes("parse")) {
+          // Malformed TOML - can't determine configuration
+          console.error(
+            "[ExecutionService] Failed to parse ~/.codex/config.toml - malformed TOML:",
+            error.message
+          );
+          return false;
+        } else {
+          // Other errors (permission denied, etc.)
+          console.warn(
+            "[ExecutionService] Failed to detect codex MCP config:",
+            error instanceof Error ? error.message : String(error)
+          );
+          return false;
+        }
+      }
+    }
+
+    // For copilot, check ~/.copilot/mcp-config.json
+    if (agentType === "copilot") {
+      try {
+        const copilotConfigPath = path.join(
+          os.homedir(),
+          ".copilot",
+          "mcp-config.json"
+        );
+
+        const configContent = await fsPromises.readFile(
+          copilotConfigPath,
+          "utf-8"
+        );
+
+        const config = JSON.parse(configContent);
+
+        // Check if any mcpServer has command "sudocode-mcp"
+        const hasSudocodeMcp = Object.values(config.mcpServers || {}).some(
+          (server: any) => server.command === "sudocode-mcp"
+        );
+
+        if (hasSudocodeMcp) {
+          console.info("[ExecutionService] sudocode-mcp detected for copilot");
+        } else {
+          console.info(
+            "[ExecutionService] sudocode-mcp not detected for copilot"
+          );
+        }
+
+        return hasSudocodeMcp;
+      } catch (error) {
+        // Handle ENOENT, JSON parse errors, etc.
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          // File not found - MCP definitely not configured
+          console.warn(
+            "[ExecutionService] ~/.copilot/mcp-config.json not found - MCP not configured"
+          );
+          return false;
+        } else if (error instanceof SyntaxError) {
+          // Malformed JSON - can't determine configuration
+          console.error(
+            "[ExecutionService] Failed to parse ~/.copilot/mcp-config.json - malformed JSON:",
+            error.message
+          );
+          return false;
+        } else {
+          // Other errors (permission denied, etc.)
+          console.warn(
+            "[ExecutionService] Failed to detect copilot MCP config:",
+            error instanceof Error ? error.message : String(error)
+          );
+          return false;
+        }
+      }
+    }
+
+    // For other agents, return true (safe default)
     return true;
   }
 }

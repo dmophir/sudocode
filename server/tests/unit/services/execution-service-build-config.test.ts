@@ -944,8 +944,8 @@ describe("ExecutionService.buildExecutionConfig", () => {
     });
   });
 
-  describe("agent defaults merging", () => {
-    it("should merge agent default config with user config", async () => {
+  describe("config passthrough behavior", () => {
+    it("should pass through user config without modification (no agent defaults merged)", async () => {
       // Mock: sudocode-mcp package installed, agent plugin configured
       await mockSudocodeMcpDetection(true);
       mockAgentMcpDetection(true);
@@ -960,29 +960,26 @@ describe("ExecutionService.buildExecutionConfig", () => {
         userConfig
       );
 
-      // Should include agent defaults (like disallowedTools)
-      expect(result.disallowedTools).toBeDefined();
-      expect(result.disallowedTools).toContain("AskUserQuestion");
-
-      // Should preserve user-provided values
+      // buildExecutionConfig doesn't merge agent defaults - it only handles MCP injection
+      // Agent defaults are merged later by the adapter
       expect(result.model).toBe("opus");
 
-      // Should include other defaults from ClaudeCodeAdapter.getDefaultConfig()
-      expect(result.print).toBe(true);
-      expect(result.outputFormat).toBe("stream-json");
-      expect(result.verbose).toBe(true);
-      expect(result.dangerouslySkipPermissions).toBe(true);
+      // Should NOT have defaults merged in buildExecutionConfig
+      expect(result.disallowedTools).toBeUndefined();
+      expect(result.print).toBeUndefined();
+      expect(result.outputFormat).toBeUndefined();
     });
 
-    it("should allow user config to override defaults", async () => {
+    it("should preserve all user-provided config values", async () => {
       // Mock: sudocode-mcp package installed, agent plugin configured
       await mockSudocodeMcpDetection(true);
       mockAgentMcpDetection(true);
 
       const userConfig: ExecutionConfig = {
         mode: "worktree",
-        disallowedTools: ["Bash"], // User wants to override default
-        dangerouslySkipPermissions: false, // Override default
+        disallowedTools: ["Bash"],
+        dangerouslySkipPermissions: false,
+        model: "opus",
       };
 
       const result = await service.buildExecutionConfig(
@@ -990,23 +987,20 @@ describe("ExecutionService.buildExecutionConfig", () => {
         userConfig
       );
 
-      // User config should take precedence over defaults
+      // All user config should be preserved exactly as-is
       expect(result.disallowedTools).toEqual(["Bash"]);
       expect(result.dangerouslySkipPermissions).toBe(false);
-
-      // Other defaults should still be present
-      expect(result.print).toBe(true);
-      expect(result.outputFormat).toBe("stream-json");
+      expect(result.model).toBe("opus");
     });
 
-    it("should filter undefined values from user config so they don't override defaults", async () => {
+    it("should pass through undefined values in user config", async () => {
       // Mock: sudocode-mcp package installed, agent plugin configured
       await mockSudocodeMcpDetection(true);
       mockAgentMcpDetection(true);
 
       const userConfig: ExecutionConfig = {
         mode: "worktree",
-        model: undefined, // Undefined should not override defaults
+        model: undefined,
       };
 
       const result = await service.buildExecutionConfig(
@@ -1014,10 +1008,10 @@ describe("ExecutionService.buildExecutionConfig", () => {
         userConfig
       );
 
-      // Defaults should be present even though userConfig had undefined values
-      expect(result.disallowedTools).toContain("AskUserQuestion");
-      expect(result.print).toBe(true);
-      expect(result.outputFormat).toBe("stream-json");
+      // buildExecutionConfig is not responsible for filtering undefined values
+      // or merging defaults - that happens in the adapter
+      expect(result).toHaveProperty("model");
+      expect(result.model).toBeUndefined();
     });
   });
 
@@ -1078,6 +1072,100 @@ describe("ExecutionService.buildExecutionConfig", () => {
       await expect(
         service.buildExecutionConfig("claude-code", userConfig)
       ).rejects.toThrow();
+    });
+  });
+
+  describe("cursor error handling", () => {
+    it("should throw error when cursor agent has no MCP config", async () => {
+      // Mock detectSudocodeMcp to return true (package installed)
+      await mockSudocodeMcpDetection(true);
+
+      // Mock detectAgentMcp to return false for cursor (no .cursor/mcp.json)
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(false);
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+      };
+
+      try {
+        await service.buildExecutionConfig("cursor", userConfig);
+        expect.fail("Should have thrown error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        const message = (error as Error).message;
+        expect(message).toContain("Cursor agent requires sudocode-mcp");
+        expect(message).toContain(".cursor/mcp.json");
+        expect(message).toContain("project root");
+        expect(message).toContain("github.com/sudocode-ai/sudocode");
+      }
+    });
+
+    it("should include example config in error message for cursor", async () => {
+      // Mock detectSudocodeMcp to return true (package installed)
+      await mockSudocodeMcpDetection(true);
+
+      // Mock detectAgentMcp to return false for cursor
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(false);
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+      };
+
+      try {
+        await service.buildExecutionConfig("cursor", userConfig);
+        expect.fail("Should have thrown error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        const message = (error as Error).message;
+        expect(message).toContain("mcpServers");
+        expect(message).toContain("sudocode-mcp");
+        expect(message).toContain("command");
+      }
+    });
+
+    it("should not throw when cursor agent has MCP config", async () => {
+      // Mock detectSudocodeMcp to return true (package installed)
+      await mockSudocodeMcpDetection(true);
+
+      // Mock detectAgentMcp to return true for cursor (has .cursor/mcp.json)
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(true);
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+      };
+
+      // Should not throw
+      const result = await service.buildExecutionConfig("cursor", userConfig);
+      expect(result).toBeDefined();
+    });
+
+    it("should throw cursor error even if user provides mcpServers in config", async () => {
+      // Mock detectSudocodeMcp to return true (package installed)
+      await mockSudocodeMcpDetection(true);
+
+      // Mock detectAgentMcp to return false for cursor (no .cursor/mcp.json)
+      vi.spyOn(service, "detectAgentMcp").mockResolvedValue(false);
+
+      const userConfig: ExecutionConfig = {
+        mode: "worktree",
+        mcpServers: {
+          "sudocode-mcp": {
+            command: "sudocode-mcp",
+            args: [],
+          },
+        },
+      };
+
+      // Should still throw because Cursor can't accept CLI-injected MCP config
+      try {
+        await service.buildExecutionConfig("cursor", userConfig);
+        expect.fail("Should have thrown error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        const message = (error as Error).message;
+        expect(message).toContain("Cursor agent requires sudocode-mcp");
+        expect(message).toContain(".cursor/mcp.json");
+      }
     });
   });
 });

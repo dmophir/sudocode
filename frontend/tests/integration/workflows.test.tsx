@@ -79,7 +79,7 @@ vi.mock('@/hooks/useProjectRoutes', () => ({
 }))
 
 // Import mocked API after vi.mock
-import { workflowsApi, issuesApi, specsApi } from '@/lib/api'
+import { workflowsApi, issuesApi, specsApi, repositoryApi } from '@/lib/api'
 
 // =============================================================================
 // Test Data
@@ -280,6 +280,13 @@ describe('Workflow Integration Tests', () => {
     vi.mocked(workflowsApi.getEvents).mockResolvedValue([])
     vi.mocked(issuesApi.getAll).mockResolvedValue(mockIssues as any)
     vi.mocked(specsApi.getAll).mockResolvedValue(mockSpecs as any)
+    vi.mocked(repositoryApi.getInfo).mockResolvedValue({
+      name: 'test-repo',
+      branch: 'main',
+      path: '/test/path',
+      ownerRepo: 'test-owner/test-repo',
+      gitProvider: 'github',
+    })
   })
 
   afterEach(() => {
