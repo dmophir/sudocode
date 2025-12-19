@@ -158,20 +158,278 @@ describe("ExecutionService - MCP Detection", () => {
     });
   });
 
-  describe("detectAgentMcp - other agents", () => {
-    it("should return true for copilot agent (unsupported, defaults to safe behavior)", async () => {
-      const result = await service.detectAgentMcp("copilot");
+  describe("detectAgentMcp - cursor", () => {
+    it("should return true when sudocode-mcp is configured in project root", async () => {
+      // Mock .cursor/mcp.json in repoPath with sudocode-mcp
+      const cursorConfigPath = path.join("/test/repo/path", ".cursor", "mcp.json");
+      const mockConfig = {
+        mcpServers: {
+          "sudocode-mcp": {
+            command: "sudocode-mcp",
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await service.detectAgentMcp("cursor");
       expect(result).toBe(true);
+      expect(fs.readFile).toHaveBeenCalledWith(cursorConfigPath, "utf-8");
     });
 
-    it("should return true for cursor agent (unsupported, defaults to safe behavior)", async () => {
+    it("should return false when .cursor/mcp.json doesn't exist", async () => {
+      // Mock ENOENT error
+      const error = new Error("ENOENT: no such file or directory") as any;
+      error.code = "ENOENT";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("cursor");
+      expect(result).toBe(false);
+    });
+
+    it("should check project root, not home directory", async () => {
+      // Mock successful read
+      const cursorConfigPath = path.join("/test/repo/path", ".cursor", "mcp.json");
+      const mockConfig = {
+        mcpServers: {
+          "sudocode-mcp": {
+            command: "sudocode-mcp",
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      await service.detectAgentMcp("cursor");
+
+      // Verify path uses repoPath, not os.homedir()
+      expect(fs.readFile).toHaveBeenCalledWith(cursorConfigPath, "utf-8");
+      expect(fs.readFile).not.toHaveBeenCalledWith(
+        expect.stringContaining(os.homedir()),
+        expect.anything()
+      );
+    });
+
+    it("should return true when sudocode-mcp has custom server name", async () => {
+      // Mock .cursor/mcp.json with different server name but same command
+      const mockConfig = {
+        mcpServers: {
+          "my-custom-name": {
+            command: "sudocode-mcp",
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
       const result = await service.detectAgentMcp("cursor");
       expect(result).toBe(true);
     });
 
-    it("should return true for codex agent (unsupported, defaults to safe behavior)", async () => {
+    it("should return false when file exists but no sudocode-mcp command found", async () => {
+      // Mock .cursor/mcp.json with different MCP servers
+      const mockConfig = {
+        mcpServers: {
+          "other-mcp": {
+            command: "other-mcp",
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await service.detectAgentMcp("cursor");
+      expect(result).toBe(false);
+    });
+
+    it("should return false when file is malformed JSON (logs error)", async () => {
+      // Mock file read with invalid JSON
+      vi.mocked(fs.readFile).mockResolvedValue("{ invalid json }");
+
+      const result = await service.detectAgentMcp("cursor");
+      expect(result).toBe(false);
+      // Verify error was logged but no exception thrown
+    });
+
+    it("should return false on file read errors (permission denied, etc.)", async () => {
+      // Mock file read error (permission denied)
+      const error = new Error("EACCES: permission denied") as any;
+      error.code = "EACCES";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("cursor");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("detectAgentMcp - codex", () => {
+    const codexConfigPath = path.join(os.homedir(), ".codex", "config.toml");
+
+    it("should return true when sudocode-mcp is configured", async () => {
+      // Mock ~/.codex/config.toml with [mcp_servers.sudocode-mcp]
+      const mockToml = `
+model = "gpt-5.1-codex-max"
+
+[mcp_servers.sudocode-mcp]
+command = "sudocode-mcp"
+`;
+      vi.mocked(fs.readFile).mockResolvedValue(mockToml);
+
       const result = await service.detectAgentMcp("codex");
       expect(result).toBe(true);
+      expect(fs.readFile).toHaveBeenCalledWith(codexConfigPath, "utf-8");
+    });
+
+    it("should return false when file doesn't exist", async () => {
+      // Mock ENOENT error
+      const error = new Error("ENOENT: no such file or directory") as any;
+      error.code = "ENOENT";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(false);
+    });
+
+    it("should return false when sudocode-mcp not in config", async () => {
+      // Mock file with other MCP servers but not sudocode-mcp
+      const mockToml = `
+model = "gpt-5.1-codex-max"
+
+[mcp_servers.another-server]
+command = "some-other-command"
+`;
+      vi.mocked(fs.readFile).mockResolvedValue(mockToml);
+
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(false);
+    });
+
+    it("should return false when TOML is malformed", async () => {
+      // Mock invalid TOML syntax
+      vi.mocked(fs.readFile).mockResolvedValue("{ invalid toml syntax [[[");
+
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(false);
+      // Verify error was logged but no exception thrown
+    });
+
+    it("should return true when sudocode-mcp has custom server name", async () => {
+      // Mock config with different server name but same command
+      const mockToml = `
+model = "gpt-5.1-codex-max"
+
+[mcp_servers.my-custom-name]
+command = "sudocode-mcp"
+`;
+      vi.mocked(fs.readFile).mockResolvedValue(mockToml);
+
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(true);
+    });
+
+    it("should return false on file read errors (permission denied, etc.)", async () => {
+      // Mock file read error (permission denied)
+      const error = new Error("EACCES: permission denied") as any;
+      error.code = "EACCES";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("codex");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("detectAgentMcp - copilot", () => {
+    const copilotConfigPath = path.join(
+      os.homedir(),
+      ".copilot",
+      "mcp-config.json"
+    );
+
+    it("should return true when sudocode-mcp is configured", async () => {
+      // Mock ~/.copilot/mcp-config.json with sudocode-mcp
+      const mockConfig = {
+        mcpServers: {
+          "sudocode-mcp": {
+            type: "local",
+            command: "sudocode-mcp",
+            tools: ["*"],
+            args: [],
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(true);
+      expect(fs.readFile).toHaveBeenCalledWith(copilotConfigPath, "utf-8");
+    });
+
+    it("should return false when file doesn't exist", async () => {
+      // Mock ENOENT error
+      const error = new Error("ENOENT: no such file or directory") as any;
+      error.code = "ENOENT";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(false);
+    });
+
+    it("should return false when sudocode-mcp not in config", async () => {
+      // Mock file with other MCP servers but not sudocode-mcp
+      const mockConfig = {
+        mcpServers: {
+          "other-mcp": {
+            type: "local",
+            command: "other-mcp",
+            tools: ["*"],
+            args: [],
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(false);
+    });
+
+    it("should return false when JSON is malformed", async () => {
+      // Mock invalid JSON syntax
+      vi.mocked(fs.readFile).mockResolvedValue("{ invalid json }");
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(false);
+      // Verify error was logged but no exception thrown
+    });
+
+    it("should return true when sudocode-mcp has custom server name", async () => {
+      // Mock config with different server name but same command
+      const mockConfig = {
+        mcpServers: {
+          "my-custom-name": {
+            type: "local",
+            command: "sudocode-mcp",
+            tools: ["*"],
+            args: [],
+          },
+        },
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(true);
+    });
+
+    it("should return false on file read errors (permission denied, etc.)", async () => {
+      // Mock file read error (permission denied)
+      const error = new Error("EACCES: permission denied") as any;
+      error.code = "EACCES";
+      vi.mocked(fs.readFile).mockRejectedValue(error);
+
+      const result = await service.detectAgentMcp("copilot");
+      expect(result).toBe(false);
     });
   });
 
