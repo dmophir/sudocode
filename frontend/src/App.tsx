@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ProjectProvider } from '@/contexts/ProjectContext'
 import { WebSocketProvider } from '@/contexts/WebSocketContext'
+import { ChatWidgetProvider } from '@/contexts/ChatWidgetContext'
 import { Toaster } from '@/components/ui/sonner'
 import MainLayout from '@/components/layout/MainLayout'
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute'
@@ -39,8 +40,9 @@ function App() {
       <ProjectProvider>
         <WebSocketProvider>
           <ThemeProvider>
-            <BrowserRouter>
-              <Routes>
+            <ChatWidgetProvider>
+              <BrowserRouter>
+                <Routes>
                 <Route path="/" element={<MainLayout />}>
                   <Route index element={<DefaultRoute />} />
                   <Route path="projects" element={<ProjectsPage />} />
@@ -148,9 +150,10 @@ function App() {
                   <Route path="workflows" element={<LegacyRedirect />} />
                   <Route path="worktrees" element={<LegacyRedirect />} />
                 </Route>
-              </Routes>
-            </BrowserRouter>
-            <Toaster />
+                </Routes>
+              </BrowserRouter>
+              <Toaster />
+            </ChatWidgetProvider>
           </ThemeProvider>
         </WebSocketProvider>
       </ProjectProvider>
