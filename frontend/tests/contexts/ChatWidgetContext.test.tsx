@@ -37,6 +37,16 @@ vi.mock('@/hooks/useExecutions', () => ({
   useExecutions: (params?: { tags?: string[] }) => mockUseExecutions(params),
 }))
 
+// Mock WebSocket context
+vi.mock('@/contexts/WebSocketContext', () => ({
+  useWebSocketContext: () => ({
+    connected: false,
+    subscribe: vi.fn(),
+    addMessageHandler: vi.fn(),
+    removeMessageHandler: vi.fn(),
+  }),
+}))
+
 describe('ChatWidgetContext', () => {
   beforeEach(() => {
     localStorageMock.clear()

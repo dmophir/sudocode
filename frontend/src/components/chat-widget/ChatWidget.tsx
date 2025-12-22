@@ -25,6 +25,7 @@ export function ChatWidget() {
     setMode,
     selectExecution,
     setAutoConnectLatest,
+    setCreatedExecution,
   } = useChatWidget()
 
   const handleModeToggle = () => {
@@ -40,6 +41,7 @@ export function ChatWidget() {
     onModeToggle: handleModeToggle,
     onExecutionSelect: selectExecution,
     onAutoConnectChange: setAutoConnectLatest,
+    onCreatedExecution: setCreatedExecution,
   }
 
   // Hide FAB when floating overlay is open (overlay replaces FAB position)

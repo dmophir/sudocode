@@ -32,7 +32,7 @@ export function ChatWidgetFAB({
             'border border-border/50',
             // Hover: lift effect with enhanced shadow
             'hover:shadow-[0_6px_16px_rgba(0,0,0,0.2),0_2px_4px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.15)]',
-            'hover:text-foreground hover:border-border',
+            'hover:border-border hover:text-foreground',
             'hover:-translate-y-0.5',
             // Active: pressed effect
             'active:translate-y-0 active:shadow-[0_2px_8px_rgba(0,0,0,0.12),inset_0_1px_2px_rgba(0,0,0,0.1)]',
@@ -55,7 +55,7 @@ export function ChatWidgetFAB({
             {hasNotification && (
               <span
                 className={cn(
-                  'absolute -right-0.5 -top-0.5',
+                  'absolute -right-0.5 -top-2',
                   'h-3 w-3 rounded-full',
                   'bg-blue-500',
                   'shadow-[0_0_4px_rgba(59,130,246,0.5)]',
@@ -71,7 +71,7 @@ export function ChatWidgetFAB({
       <TooltipContent side="left" className="mr-2">
         <p>
           {isOpen ? 'Close' : 'Open'} Assistant{' '}
-          <kbd className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+          <kbd className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
             {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+J
           </kbd>
         </p>

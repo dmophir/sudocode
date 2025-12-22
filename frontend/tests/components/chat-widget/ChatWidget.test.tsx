@@ -24,6 +24,16 @@ vi.mock('@/hooks/useExecutions', () => ({
   }),
 }))
 
+// Mock WebSocket context
+vi.mock('@/contexts/WebSocketContext', () => ({
+  useWebSocketContext: () => ({
+    connected: false,
+    subscribe: vi.fn(),
+    addMessageHandler: vi.fn(),
+    removeMessageHandler: vi.fn(),
+  }),
+}))
+
 // Mock child components to simplify testing
 vi.mock('@/components/chat-widget/ChatWidgetFAB', () => ({
   ChatWidgetFAB: ({

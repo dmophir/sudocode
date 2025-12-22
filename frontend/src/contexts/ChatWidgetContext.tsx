@@ -5,10 +5,13 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react'
 import { useExecutions } from '@/hooks/useExecutions'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import type { Execution } from '@/types/execution'
+import type { WebSocketMessage } from '@/types/api'
 
 // Storage key for persisted preferences
 const STORAGE_KEY = 'sudocode:chatWidget'
@@ -39,6 +42,7 @@ export interface ChatWidgetContextValue {
   setMode: (mode: ChatWidgetMode) => void
   selectExecution: (executionId: string | null) => void
   setAutoConnectLatest: (value: boolean) => void
+  setCreatedExecution: (execution: Execution) => void
 
   // Derived state
   hasActiveExecution: boolean
@@ -94,7 +98,8 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(
     persistedState.lastExecutionId ?? null
   )
-  const [seenExecutionIds, setSeenExecutionIds] = useState<Set<string>>(new Set())
+  // Store newly created execution until it appears in the query results
+  const [pendingExecution, setPendingExecution] = useState<Execution | null>(null)
 
   // Fetch ONLY project-assistant tagged executions
   const { data: executionsData } = useExecutions({ tags: [PROJECT_ASSISTANT_TAG] })
@@ -119,38 +124,102 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
     return selectedExecutionId
   }, [autoConnectLatest, latestActiveExecution, selectedExecutionId])
 
-  // Find the selected execution object
+  // Find the selected execution object (prefer list for updated status, fall back to pending)
   const selectedExecution = useMemo(() => {
     if (!effectiveExecutionId) return null
-    return executions.find((e) => e.id === effectiveExecutionId) || null
-  }, [executions, effectiveExecutionId])
+    // First check the list (has updated status from server)
+    const fromList = executions.find((e) => e.id === effectiveExecutionId)
+    if (fromList) {
+      return fromList
+    }
+    // Fall back to pending execution (for newly created executions not yet in query)
+    if (pendingExecution && pendingExecution.id === effectiveExecutionId) {
+      return pendingExecution
+    }
+    return null
+  }, [executions, effectiveExecutionId, pendingExecution])
+
+  // Clear pending execution once it appears in the query results
+  useEffect(() => {
+    if (pendingExecution && executions.some((e) => e.id === pendingExecution.id)) {
+      setPendingExecution(null)
+    }
+  }, [executions, pendingExecution])
+
+  // Subscribe to WebSocket to update pendingExecution status (for follow-ups not in root list)
+  const { connected, subscribe, addMessageHandler, removeMessageHandler } = useWebSocketContext()
+
+  useEffect(() => {
+    if (!pendingExecution) return
+
+    const handleMessage = (message: WebSocketMessage) => {
+      // Update pending execution status when we receive status change for it
+      if (
+        (message.type === 'execution_status_changed' || message.type === 'execution_updated') &&
+        message.data?.id === pendingExecution.id
+      ) {
+        const execution = message.data as Execution
+        setPendingExecution((prev) => {
+          if (!prev || prev.id !== execution.id) return prev
+          return { ...prev, status: execution.status }
+        })
+      }
+    }
+
+    const handlerId = 'chatWidgetPendingExecution'
+    addMessageHandler(handlerId, handleMessage)
+
+    if (connected) {
+      subscribe('execution')
+    }
+
+    return () => {
+      removeMessageHandler(handlerId)
+    }
+  }, [pendingExecution?.id, connected, subscribe, addMessageHandler, removeMessageHandler])
 
   // Check if there's any active execution
   const hasActiveExecution = latestActiveExecution !== null
 
-  // Check if selected execution is currently running
+  // Check if the selected project-assistant execution is currently running (for FAB spinner)
   const isExecutionRunning = useMemo(() => {
     if (!selectedExecution) return false
     return ['running', 'pending', 'preparing'].includes(selectedExecution.status)
   }, [selectedExecution])
 
-  // Check if there's an unseen active execution
-  const hasUnseenExecution = useMemo(() => {
-    if (!latestActiveExecution) return false
-    return !seenExecutionIds.has(latestActiveExecution.id)
-  }, [latestActiveExecution, seenExecutionIds])
+  // Track execution ID that was running when widget was closed (to show notification on completion)
+  const [watchingExecutionId, setWatchingExecutionId] = useState<string | null>(null)
 
-  // Mark current execution as seen when widget is opened
+  // Check if watched execution has completed (user closed widget while it was running, now it's done)
+  const hasUnseenCompletedExecution = useMemo(() => {
+    if (!watchingExecutionId || !selectedExecution) return false
+    // Only show notification if the watched execution completed
+    if (selectedExecution.id !== watchingExecutionId) return false
+    return selectedExecution.status === 'completed' || selectedExecution.status === 'failed'
+  }, [watchingExecutionId, selectedExecution])
+
+  // Notification dot shows when watched execution completes
+  const hasUnseenExecution = hasUnseenCompletedExecution
+
+  // Clear watching state when widget opens (user has seen the result)
   useEffect(() => {
-    if (isOpen && effectiveExecutionId) {
-      setSeenExecutionIds((prev) => {
-        if (prev.has(effectiveExecutionId)) return prev
-        const next = new Set(prev)
-        next.add(effectiveExecutionId)
-        return next
-      })
+    if (isOpen) {
+      setWatchingExecutionId(null)
     }
-  }, [isOpen, effectiveExecutionId])
+  }, [isOpen])
+
+  // When widget closes while execution is running, start watching for completion
+  const prevIsOpen = useRef(isOpen)
+  useEffect(() => {
+    // Detect close transition (was open, now closed)
+    if (prevIsOpen.current && !isOpen) {
+      // If execution is running when closing, watch for its completion
+      if (selectedExecution && ['running', 'pending', 'preparing'].includes(selectedExecution.status)) {
+        setWatchingExecutionId(selectedExecution.id)
+      }
+    }
+    prevIsOpen.current = isOpen
+  }, [isOpen, selectedExecution])
 
   // Actions
   const toggle = useCallback(() => {
@@ -183,6 +252,14 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
       // Clear manual selection when enabling auto-connect
       setSelectedExecutionId(null)
     }
+  }, [])
+
+  // Store a newly created execution (makes it available before query refetch)
+  const setCreatedExecution = useCallback((execution: Execution) => {
+    setPendingExecution(execution)
+    setSelectedExecutionId(execution.id)
+    // Disable auto-connect since we're explicitly selecting this execution
+    setAutoConnectLatestState(false)
   }, [])
 
   // Persist preferences and last execution ID when they change
@@ -224,6 +301,7 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
       setMode,
       selectExecution,
       setAutoConnectLatest,
+      setCreatedExecution,
       hasActiveExecution,
       latestActiveExecution,
       isExecutionRunning,
@@ -241,6 +319,7 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
       setMode,
       selectExecution,
       setAutoConnectLatest,
+      setCreatedExecution,
       hasActiveExecution,
       latestActiveExecution,
       isExecutionRunning,

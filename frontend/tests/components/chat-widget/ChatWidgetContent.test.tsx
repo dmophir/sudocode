@@ -139,6 +139,7 @@ describe('ChatWidgetContent', () => {
     onModeToggle: vi.fn(),
     onExecutionSelect: vi.fn(),
     onAutoConnectChange: vi.fn(),
+    onCreatedExecution: vi.fn(),
   }
 
   beforeEach(() => {
@@ -367,12 +368,12 @@ describe('ChatWidgetContent', () => {
   describe('Adhoc Execution Creation', () => {
     it('should create adhoc execution when no chain exists', async () => {
       const newExecution = createMockExecution({ id: 'exec-new' })
-      const onExecutionSelect = vi.fn()
+      const onCreatedExecution = vi.fn()
 
       mockCreateAdhoc.mockResolvedValue(newExecution)
 
       renderWithProviders(
-        <ChatWidgetContent {...defaultProps} onExecutionSelect={onExecutionSelect} />
+        <ChatWidgetContent {...defaultProps} onCreatedExecution={onCreatedExecution} />
       )
 
       // Simulate typing and submitting
@@ -389,7 +390,7 @@ describe('ChatWidgetContent', () => {
       })
 
       await waitFor(() => {
-        expect(onExecutionSelect).toHaveBeenCalledWith('exec-new')
+        expect(onCreatedExecution).toHaveBeenCalledWith(newExecution)
       })
     })
   })

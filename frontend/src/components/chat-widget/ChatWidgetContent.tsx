@@ -22,6 +22,7 @@ interface ChatWidgetContentProps {
   onModeToggle: () => void
   onExecutionSelect: (executionId: string | null) => void
   onAutoConnectChange: (value: boolean) => void
+  onCreatedExecution: (execution: Execution) => void
   className?: string
 }
 
@@ -34,6 +35,7 @@ export function ChatWidgetContent({
   onModeToggle,
   onExecutionSelect,
   onAutoConnectChange,
+  onCreatedExecution,
   className,
 }: ChatWidgetContentProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -110,6 +112,8 @@ export function ChatWidgetContent({
               executions: [...prev.executions, newExecution],
             }
           })
+          // Update context with new execution for FAB spinner
+          onCreatedExecution(newExecution)
           handleContentChange()
         } else {
           // Adhoc execution mode - create new execution without an issue
@@ -122,15 +126,15 @@ export function ChatWidgetContent({
             prompt: prompt.trim(),
             agentType,
           })
-          // Auto-select the new execution (no toast - the widget itself shows the execution)
-          onExecutionSelect(newExecution.id)
+          // Use onCreatedExecution to immediately make execution available for FAB spinner
+          onCreatedExecution(newExecution)
         }
       } catch (err) {
         console.error('Failed to create execution:', err)
         toast.error(chainData ? 'Failed to send follow-up' : 'Failed to start execution')
       }
     },
-    [chainData, handleContentChange, onExecutionSelect]
+    [chainData, handleContentChange, onCreatedExecution]
   )
 
   return (
