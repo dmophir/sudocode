@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { repositoryApi } from '@/lib/api'
 import type { ExecutionConfig, ExecutionMode, Execution } from '@/types/execution'
+import { VoiceInputButton } from '@/components/voice'
 import { AgentSettingsDialog } from './AgentSettingsDialog'
 import { CommitChangesDialog } from './CommitChangesDialog'
 import { CleanupWorktreeDialog } from './CleanupWorktreeDialog'
@@ -702,7 +703,7 @@ export function AgentConfigPanel({
   // Users can still attempt to run unavailable agents (will fail at execution time)
   const canStart = !loading && (prompt.trim().length > 0 || (!isFollowUp && !!issueId)) && !disabled
 
-  // Compact mode: inline textarea with submit/cancel button
+  // Compact mode: inline textarea with voice input and submit/cancel button
   if (variant === 'compact') {
     return (
       <div className="flex items-center gap-2">
@@ -725,6 +726,13 @@ export function AgentConfigPanel({
           />
         </div>
         <TooltipProvider>
+          {/* Voice Input Button */}
+          <VoiceInputButton
+            onTranscription={setPrompt}
+            disabled={loading || disabled || isRunning}
+            size="sm"
+          />
+          {/* Submit/Cancel Button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -980,6 +988,13 @@ export function AgentConfigPanel({
                   : 'Advanced settings'}
               </TooltipContent>
             </Tooltip>
+
+            {/* Voice Input Button */}
+            <VoiceInputButton
+              onTranscription={setPrompt}
+              disabled={loading || disabled || isRunning}
+              size="default"
+            />
 
             {/* Submit/Cancel Button - Round button that changes based on state */}
             <Tooltip>
