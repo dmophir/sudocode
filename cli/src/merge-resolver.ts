@@ -219,6 +219,9 @@ function generateConflictId(originalId: string, uuid: string): string {
 
 /**
  * Merge metadata from multiple versions of same entity
+ *
+ * USE FOR: Two-way merge scenarios (manual conflict resolution)
+ * Merges both array fields (union) and scalar fields (latest-wins)
  */
 export function mergeMetadata<T extends JSONLEntity>(entities: T[]): T {
   // Sort by updated_at, keep most recent as base
@@ -274,6 +277,68 @@ export function mergeMetadata<T extends JSONLEntity>(entities: T[]): T {
   }
 
   return base;
+}
+
+/**
+ * Merge ONLY array fields from multiple versions (union semantics)
+ *
+ * USE FOR: Three-way merge scenarios (git merge driver)
+ * Only merges array fields (relationships, tags, feedback)
+ * Scalar fields (status, priority, title, etc.) are NOT merged
+ *
+ * This allows git merge-file to see actual differences in scalar fields
+ * for proper three-way merge semantics.
+ */
+export function mergeArrayFields<T extends JSONLEntity>(entities: T[]): Partial<T> {
+  const result: Partial<T> = {};
+
+  // Merge relationships (union of unique)
+  const relationshipSet = new Set<string>();
+  for (const entity of entities) {
+    if ((entity as any).relationships) {
+      for (const rel of (entity as any).relationships) {
+        relationshipSet.add(JSON.stringify(rel));
+      }
+    }
+  }
+  if (relationshipSet.size > 0) {
+    (result as any).relationships = Array.from(relationshipSet).map((r) =>
+      JSON.parse(r)
+    );
+  }
+
+  // Merge tags (union of unique)
+  const tagSet = new Set<string>();
+  for (const entity of entities) {
+    if ((entity as any).tags) {
+      for (const tag of (entity as any).tags) {
+        tagSet.add(tag);
+      }
+    }
+  }
+  if (tagSet.size > 0) {
+    (result as any).tags = Array.from(tagSet);
+  }
+
+  // Merge feedback if present (union of unique by id)
+  const hasFeedback = entities.some((e) => (e as any).feedback);
+  if (hasFeedback) {
+    const feedbackMap = new Map<string, any>();
+    for (const entity of entities) {
+      if ((entity as any).feedback) {
+        for (const fb of (entity as any).feedback) {
+          if (!feedbackMap.has(fb.id)) {
+            feedbackMap.set(fb.id, fb);
+          }
+        }
+      }
+    }
+    if (feedbackMap.size > 0) {
+      (result as any).feedback = Array.from(feedbackMap.values());
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -530,31 +595,51 @@ export function mergeThreeWay<T extends JSONLEntity>(
       continue;
     }
 
-    // Step 2b-c: Merge metadata FIRST (tags, relationships, feedback)
-    // This eliminates metadata conflicts before YAML stage
+    // Check if IDs match - if not, this is an ID conflict
+    // In three-way merge, keep ours and theirs (they both moved from base)
+    const ids = new Set([baseEntity?.id, oursEntity?.id, theirsEntity?.id].filter(Boolean));
+    if (ids.size > 1) {
+      // IDs don't match - ID conflict
+      // Only keep ours and theirs (not base, since both sides moved away from it)
+      const versionsToResolve = [oursEntity, theirsEntity].filter(
+        (e): e is T => e !== undefined
+      );
+      const resolved = resolveEntities(versionsToResolve);
+      mergedEntities.push(...resolved.entities);
+      stats.conflicts.push(...resolved.stats.conflicts);
+      continue;
+    }
+
+    // Step 2b-c: Merge ONLY array fields (tags, relationships, feedback)
+    // This applies union semantics to arrays while preserving scalar field differences
+    // Git merge-file will handle scalar fields (status, priority, title, etc.) with
+    // proper three-way merge semantics
     const versionsForMetadata = [baseEntity, oursEntity, theirsEntity].filter(
       (e): e is T => e !== undefined
     );
-    const metadataMerged = mergeMetadata(versionsForMetadata);
+    const arrayFieldsMerged = mergeArrayFields(versionsForMetadata);
 
-    // Apply merged metadata to all versions
-    const baseWithMetadata = baseEntity
-      ? ({ ...baseEntity, ...metadataMerged } as T)
+    // Apply merged array fields to all versions
+    // Scalar fields remain DIFFERENT across versions for git to merge
+    const baseWithArrays = baseEntity
+      ? ({ ...baseEntity, ...arrayFieldsMerged } as T)
       : undefined;
-    const oursWithMetadata = oursEntity
-      ? ({ ...oursEntity, ...metadataMerged } as T)
-      : ({ ...metadataMerged } as T);
-    const theirsWithMetadata = theirsEntity
-      ? ({ ...theirsEntity, ...metadataMerged } as T)
-      : ({ ...metadataMerged } as T);
+    const oursWithArrays = oursEntity
+      ? ({ ...oursEntity, ...arrayFieldsMerged } as T)
+      : ({ ...arrayFieldsMerged } as T);
+    const theirsWithArrays = theirsEntity
+      ? ({ ...theirsEntity, ...arrayFieldsMerged } as T)
+      : ({ ...arrayFieldsMerged } as T);
 
     // Step 3: Convert to YAML with multi-line text expansion
-    const baseYaml = baseWithMetadata ? toYaml(baseWithMetadata) : "";
-    const oursYaml = toYaml(oursWithMetadata);
-    const theirsYaml = toYaml(theirsWithMetadata);
+    // Now git merge-file will see scalar field differences (status, priority, etc.)
+    const baseYaml = baseWithArrays ? toYaml(baseWithArrays) : "";
+    const oursYaml = toYaml(oursWithArrays);
+    const theirsYaml = toYaml(theirsWithArrays);
 
     try {
       // Step 4: Run git merge-file (line-level merging)
+      // Git will properly handle three-way merge for scalar fields
       const gitMergeResult = mergeYamlContent({
         base: baseYaml,
         ours: oursYaml,
@@ -567,8 +652,8 @@ export function mergeThreeWay<T extends JSONLEntity>(
       if (gitMergeResult.hasConflicts) {
         const resolveResult = resolveConflicts(
           finalYaml,
-          oursWithMetadata.updated_at,
-          theirsWithMetadata.updated_at
+          oursWithArrays.updated_at,
+          theirsWithArrays.updated_at
         );
 
         finalYaml = resolveResult.content;

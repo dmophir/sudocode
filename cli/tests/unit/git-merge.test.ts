@@ -2,12 +2,17 @@
  * Unit tests for Git Merge-File Wrapper
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   mergeYamlContent,
+  readGitStage,
   type MergeInput,
   type MergeResult,
 } from "../../src/git-merge.js";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { execFileSync } from "child_process";
 
 describe("Git Merge-File Wrapper", () => {
   describe("mergeYamlContent", () => {

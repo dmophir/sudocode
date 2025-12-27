@@ -15,6 +15,7 @@ import {
 } from "../merge-resolver.js";
 import { readJSONL, writeJSONL, type JSONLEntity } from "../jsonl.js";
 import { importFromJSONL } from "../import.js";
+import { readGitStage } from "../git-merge.js";
 
 export interface CommandContext {
   db: Database.Database;
@@ -122,21 +123,95 @@ export async function handleResolveConflicts(
 /**
  * Resolve conflicts in a single JSONL file
  *
- * This function handles TWO-WAY merge scenarios where git conflict markers
- * have already isolated the conflicting sections. This is distinct from the
- * THREE-WAY merge used by the git merge driver.
+ * This function attempts TRUE THREE-WAY merge when possible by reading the
+ * base, ours, and theirs versions from git index stages. This enables
+ * line-level merging via the YAML three-way merge pipeline.
  *
- * Why resolveEntities (not mergeThreeWay)?
- * - Conflicts already isolated by git conflict markers
- * - No base version available (git index cleared after conflict)
- * - Simple UUID deduplication is sufficient and faster
- * - No benefit from YAML expansion overhead
+ * STRATEGY:
+ * 1. Try to read base/ours/theirs from git index (stages 1/2/3)
+ * 2. If all three available → use mergeThreeWay (YAML-based three-way merge)
+ * 3. If base unavailable → fall back to resolveEntities (two-way latest-wins)
+ *
+ * Why prefer three-way merge?
+ * - Line-level merging for multi-line text fields (description, content, feedback)
+ * - Auto-merges changes to different paragraphs/sections
+ * - Reduces conflicts to genuine same-line edits
+ * - Consistent behavior with git merge driver
+ *
+ * When does fallback to two-way happen?
+ * - Git index cleared (rare edge case)
+ * - Manual edits outside of git merge (no index stages)
  */
 async function resolveFile(
   filePath: string,
   entityType: "issue" | "spec",
   options: ResolveConflictsOptions
 ): Promise<ResolveFileResult> {
+  // Try to read from git index stages (base, ours, theirs)
+  const baseContent = readGitStage(filePath, 1); // stage 1 = base
+  const oursContent = readGitStage(filePath, 2); // stage 2 = ours
+  const theirsContent = readGitStage(filePath, 3); // stage 3 = theirs
+
+  // Parse JSONL content from git stages
+  const parseJSONLContent = (content: string | null): JSONLEntity[] => {
+    if (!content) return [];
+
+    const entities: JSONLEntity[] = [];
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          entities.push(JSON.parse(line));
+        } catch (e) {
+          console.warn(
+            chalk.yellow(
+              `Warning: Skipping malformed line: ${line.slice(0, 50)}...`
+            )
+          );
+        }
+      }
+    }
+
+    return entities;
+  };
+
+  // If we have base, ours, and theirs → use TRUE three-way merge
+  if (baseContent !== null && oursContent !== null && theirsContent !== null) {
+    const baseEntities = parseJSONLContent(baseContent);
+    const oursEntities = parseJSONLContent(oursContent);
+    const theirsEntities = parseJSONLContent(theirsContent);
+
+    if (options.verbose) {
+      console.log(chalk.cyan('  Using three-way merge (YAML-based)'));
+      console.log(chalk.cyan(`    Base: ${baseEntities.length} entities`));
+      console.log(chalk.cyan(`    Ours: ${oursEntities.length} entities`));
+      console.log(chalk.cyan(`    Theirs: ${theirsEntities.length} entities`));
+    }
+
+    const { entities: resolved, stats } = mergeThreeWay(
+      baseEntities,
+      oursEntities,
+      theirsEntities
+    );
+
+    // Write back if not dry-run
+    if (!options.dryRun) {
+      await writeJSONL(filePath, resolved);
+    }
+
+    return { stats, entityType };
+  }
+
+  // FALLBACK: No base available → use two-way merge (latest-wins)
+  if (options.verbose) {
+    console.log(
+      chalk.yellow(
+        '  Warning: Base version unavailable, falling back to two-way merge'
+      )
+    );
+  }
+
   // Read file with conflict markers
   const content = fs.readFileSync(filePath, "utf8");
 
@@ -180,7 +255,6 @@ async function resolveFile(
   }
 
   // Resolve conflicts using two-way merge (UUID-based deduplication)
-  // This is correct for manual conflict resolution - see function comment above
   const { entities: resolved, stats } = resolveEntities(allEntities, {
     verbose: options.verbose,
   });

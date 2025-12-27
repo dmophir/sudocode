@@ -171,3 +171,46 @@ export function mergeYamlContent(input: MergeInput): MergeResult {
     }
   }
 }
+
+/**
+ * Read content from a specific git index stage
+ *
+ * During a merge conflict, git maintains three versions in the index:
+ * - Stage 1: Base version (common ancestor)
+ * - Stage 2: Ours version (current branch)
+ * - Stage 3: Theirs version (incoming branch)
+ *
+ * @param filePath - Path to the file (relative to git root or absolute)
+ * @param stage - Git stage number (1=base, 2=ours, 3=theirs)
+ * @returns File content as string, or null if stage doesn't exist
+ *
+ * @example
+ * ```typescript
+ * const base = readGitStage('.sudocode/issues/issues.jsonl', 1);
+ * const ours = readGitStage('.sudocode/issues/issues.jsonl', 2);
+ * const theirs = readGitStage('.sudocode/issues/issues.jsonl', 3);
+ * ```
+ */
+export function readGitStage(filePath: string, stage: 1 | 2 | 3): string | null {
+  try {
+    // Use git show to read from index stage
+    // Format: ":stage:path"
+    const result = execFileSync('git', ['show', `:${stage}:${filePath}`], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'], // stdin, stdout, stderr
+    });
+
+    return result;
+  } catch (error: any) {
+    // Stage doesn't exist (e.g., file added in one branch, deleted in another)
+    // This is expected and not an error
+    if (error.status === 128) {
+      return null;
+    }
+
+    // Re-throw unexpected errors
+    throw new Error(
+      `Failed to read git stage ${stage} for ${filePath}: ${error.message}`
+    );
+  }
+}

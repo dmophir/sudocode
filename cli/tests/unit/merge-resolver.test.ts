@@ -1012,6 +1012,187 @@ describe('Merge Resolver', () => {
 
         expect(merged.map(e => e.id)).toEqual(['A', 'B', 'C']);
       });
+
+      it('should handle scalar field changes with proper three-way semantics', () => {
+        // Base: status = open
+        // Ours: status = in_progress (we changed it)
+        // Theirs: status = open (they left it unchanged)
+        // Expected: status = in_progress (our change wins via git three-way merge)
+        const base: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'open',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const ours: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'in_progress',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-02T00:00:00Z',
+          },
+        ];
+
+        const theirs: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'open',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const { entities: merged } = mergeThreeWay(base, ours, theirs);
+
+        expect(merged).toHaveLength(1);
+        // Git three-way merge should pick our change (one side changed, other didn't)
+        expect(merged[0].status).toBe('in_progress');
+      });
+
+      it('should detect conflicts when both sides change same scalar field', () => {
+        // Base: status = open
+        // Ours: status = in_progress
+        // Theirs: status = blocked
+        // Expected: CONFLICT, resolved by latest-wins
+        const base: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'open',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const ours: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'in_progress',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-02T00:00:00Z',
+          },
+        ];
+
+        const theirs: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'blocked',
+            title: 'Test Issue',
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-03T00:00:00Z',
+          },
+        ];
+
+        const { entities: merged, stats } = mergeThreeWay(base, ours, theirs);
+
+        expect(merged).toHaveLength(1);
+        // Should detect conflict and apply latest-wins
+        expect(merged[0].status).toBe('blocked'); // theirs is newer
+        // Should have a conflict recorded (YAML conflict resolved)
+        expect(stats.conflicts.some(c => c.action.includes('YAML conflicts'))).toBe(true);
+      });
+
+      it('should merge array fields while preserving scalar differences', () => {
+        // Base: tags = ['backend'], status = 'open'
+        // Ours: tags = ['backend', 'security'], status = 'in_progress'
+        // Theirs: tags = ['backend', 'api'], status = 'open'
+        // Expected: tags = ['backend', 'security', 'api'] (union)
+        //           status = 'in_progress' (our change wins via git)
+        const base: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'open',
+            tags: ['backend'],
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const ours: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'in_progress',
+            tags: ['backend', 'security'],
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-02T00:00:00Z',
+          },
+        ];
+
+        const theirs: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            status: 'open',
+            tags: ['backend', 'api'],
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const { entities: merged } = mergeThreeWay(base, ours, theirs);
+
+        expect(merged).toHaveLength(1);
+        // Array fields should be merged (union)
+        expect(merged[0].tags?.sort()).toEqual(['api', 'backend', 'security']);
+        // Scalar field should use git three-way merge (our change wins)
+        expect(merged[0].status).toBe('in_progress');
+      });
+
+      it('should preserve priority changes with three-way semantics', () => {
+        // Base: priority = 2
+        // Ours: priority = 1 (we increased priority)
+        // Theirs: priority = 2 (they left it unchanged)
+        // Expected: priority = 1 (our change wins)
+        const base: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            priority: 2,
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const ours: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            priority: 1,
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-02T00:00:00Z',
+          },
+        ];
+
+        const theirs: JSONLEntity[] = [
+          {
+            id: 'i-123',
+            uuid: 'uuid-1',
+            priority: 2,
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+        ];
+
+        const { entities: merged } = mergeThreeWay(base, ours, theirs);
+
+        expect(merged).toHaveLength(1);
+        expect(merged[0].priority).toBe(1);
+      });
     });
   });
 });
