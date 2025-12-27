@@ -121,6 +121,16 @@ export async function handleResolveConflicts(
 
 /**
  * Resolve conflicts in a single JSONL file
+ *
+ * This function handles TWO-WAY merge scenarios where git conflict markers
+ * have already isolated the conflicting sections. This is distinct from the
+ * THREE-WAY merge used by the git merge driver.
+ *
+ * Why resolveEntities (not mergeThreeWay)?
+ * - Conflicts already isolated by git conflict markers
+ * - No base version available (git index cleared after conflict)
+ * - Simple UUID deduplication is sufficient and faster
+ * - No benefit from YAML expansion overhead
  */
 async function resolveFile(
   filePath: string,
@@ -169,7 +179,8 @@ async function resolveFile(
     }
   }
 
-  // Resolve conflicts
+  // Resolve conflicts using two-way merge (UUID-based deduplication)
+  // This is correct for manual conflict resolution - see function comment above
   const { entities: resolved, stats } = resolveEntities(allEntities, {
     verbose: options.verbose,
   });
