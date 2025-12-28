@@ -193,9 +193,23 @@ export function mergeYamlContent(input: MergeInput): MergeResult {
  */
 export function readGitStage(filePath: string, stage: 1 | 2 | 3): string | null {
   try {
+    // Convert absolute path to relative path from repo root
+    // git show :stage:path requires a path relative to repo root
+    let relativePath = filePath;
+    if (path.isAbsolute(filePath)) {
+      // Get repo root
+      const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      // Convert to relative path
+      relativePath = path.relative(repoRoot, filePath);
+    }
+
     // Use git show to read from index stage
     // Format: ":stage:path"
-    const result = execFileSync('git', ['show', `:${stage}:${filePath}`], {
+    const result = execFileSync('git', ['show', `:${stage}:${relativePath}`], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'], // stdin, stdout, stderr
     });

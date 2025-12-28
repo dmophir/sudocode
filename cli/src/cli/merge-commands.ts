@@ -152,6 +152,14 @@ async function resolveFile(
   const oursContent = readGitStage(filePath, 2); // stage 2 = ours
   const theirsContent = readGitStage(filePath, 3); // stage 3 = theirs
 
+  // Debug logging
+  if (options.verbose) {
+    console.log(chalk.cyan(`  Attempting to read git stages for: ${filePath}`));
+    console.log(chalk.cyan(`  Base stage: ${baseContent !== null ? 'found' : 'not found'}`));
+    console.log(chalk.cyan(`  Ours stage: ${oursContent !== null ? 'found' : 'not found'}`));
+    console.log(chalk.cyan(`  Theirs stage: ${theirsContent !== null ? 'found' : 'not found'}`));
+  }
+
   // Parse JSONL content from git stages
   const parseJSONLContent = (content: string | null): JSONLEntity[] => {
     if (!content) return [];
