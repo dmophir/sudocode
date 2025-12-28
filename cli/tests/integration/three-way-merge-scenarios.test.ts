@@ -334,19 +334,18 @@ This is the UPDATED conclusion.`;
 
       expect(entities).toHaveLength(1);
 
-      // EXPECTED:
+      // EXPECTED (with field-level three-way merge):
       // - status: blocked (both changed, theirs newer via latest-wins)
-      // - priority: 2 (theirs, due to conflict block containing all fields)
+      // - priority: 1 (only ours changed, so ours wins via three-way merge)
       // - assignee: bob (both changed, theirs newer via latest-wins)
       //
-      // NOTE: When git merge-file detects ANY conflict in the entity,
-      // it creates conflict markers around the entire affected block.
-      // The yaml-conflict-resolver then applies latest-wins to the entire
-      // conflicting block, not field-by-field. This is a limitation of
-      // line-based merging for structured data.
+      // NOTE: With proper field-level three-way merge, each scalar field
+      // is merged independently. Only fields that conflict (both branches
+      // changed them) use latest-wins. Fields changed by only one branch
+      // get that branch's value.
       const merged = entities[0];
       expect(merged.status).toBe('blocked');
-      expect(merged.priority).toBe(2); // Changed from 1 - whole block gets latest-wins
+      expect(merged.priority).toBe(1); // Only ours changed - ours wins
       expect(merged.assignee).toBe('bob');
     });
 
@@ -859,12 +858,14 @@ ${JSON.stringify(theirsEntity)}
 
       expect(entities).toHaveLength(1);
 
-      // EXPECTED: Latest-wins applies to entire conflict block
-      // When ANY field conflicts, all fields in the block get latest-wins treatment
-      // Since theirs is newer (2025-01-03), all fields come from theirs
-      // NOTE: This is a limitation of line-based YAML merging
+      // EXPECTED (with field-level three-way merge):
+      // - assignee: 'alice' (only ours changed, so ours wins)
+      // - parent_id: 'i-parent' (only theirs changed, so theirs wins)
+      //
+      // NOTE: With proper field-level three-way merge, each field is evaluated
+      // independently. No need to apply latest-wins to the entire entity.
       const merged = entities[0];
-      expect(merged.assignee).toBe(undefined); // Changed from 'alice' - theirs wins
+      expect(merged.assignee).toBe('alice'); // Only ours changed - ours wins
       expect(merged.parent_id).toBe('i-parent');
     });
   });

@@ -1101,8 +1101,8 @@ describe('Merge Resolver', () => {
         expect(merged).toHaveLength(1);
         // Should detect conflict and apply latest-wins
         expect(merged[0].status).toBe('blocked'); // theirs is newer
-        // Should have a conflict recorded (YAML conflict resolved)
-        expect(stats.conflicts.some(c => c.action.includes('YAML conflicts'))).toBe(true);
+        // Should have a conflict recorded (scalar field conflict resolved)
+        expect(stats.conflicts.some(c => c.action.includes('conflicts'))).toBe(true);
       });
 
       it('should merge array fields while preserving scalar differences', () => {
