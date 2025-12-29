@@ -140,6 +140,7 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
   }, [executions])
 
   // Auto-select latest active or most recent execution on first load (if no user selection)
+  // If no executions exist or selected ID is invalid, default to null (new execution)
   useEffect(() => {
     if (!hasUserSelection && !selectedExecutionId && executions.length > 0) {
       const autoSelectId = latestActiveExecution?.id || mostRecentExecution?.id
@@ -147,7 +148,17 @@ export function ChatWidgetProvider({ children }: ChatWidgetProviderProps) {
         setSelectedExecutionId(autoSelectId)
       }
     }
-  }, [hasUserSelection, selectedExecutionId, executions.length, latestActiveExecution, mostRecentExecution])
+    // Reset to null (new execution) if:
+    // - No executions exist, or
+    // - Selected execution ID doesn't exist in the list or pending execution (stale/invalid)
+    if (selectedExecutionId !== null) {
+      const inExecutionsList = executions.some((e) => e.id === selectedExecutionId)
+      const isPendingExecution = pendingExecution?.id === selectedExecutionId
+      if (!inExecutionsList && !isPendingExecution) {
+        setSelectedExecutionId(null)
+      }
+    }
+  }, [hasUserSelection, selectedExecutionId, executions, pendingExecution, latestActiveExecution, mostRecentExecution])
 
   // The effective execution ID is simply the selected one
   const effectiveExecutionId = selectedExecutionId
