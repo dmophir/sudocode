@@ -523,11 +523,17 @@ export function resolveEntities<T extends JSONLEntity>(
 /**
  * Helper function to merge entities using YAML + git merge-file for line-level merging
  */
-function mergeYamlWithGit<T extends JSONLEntity>(versions: {
-  base?: T;
-  ours?: T;
-  theirs?: T;
-}): { success: boolean; entity: T; hadConflicts: boolean } {
+function mergeYamlWithGit<T extends JSONLEntity>(
+  versions: {
+    base?: T;
+    ours?: T;
+    theirs?: T;
+  },
+  originalTimestamps?: {
+    ours?: string;
+    theirs?: string;
+  }
+): { success: boolean; entity: T; hadConflicts: boolean } {
   const { base, ours, theirs } = versions;
 
   // Convert to YAML
@@ -549,7 +555,11 @@ function mergeYamlWithGit<T extends JSONLEntity>(versions: {
   } else if (mergeResult.hasConflicts) {
     // YAML has conflicts - resolve each conflict block individually
     // Determine which side is newer for latest-wins decision
-    const oursNewer = compareTimestamps(ours?.updated_at, theirs?.updated_at) > 0;
+    // Use original timestamps if provided (since versions may have updated_at stripped)
+    // When timestamps are identical, prefer ours for stability
+    const oursTimestamp = originalTimestamps?.ours ?? ours?.updated_at;
+    const theirsTimestamp = originalTimestamps?.theirs ?? theirs?.updated_at;
+    const oursNewer = compareTimestamps(oursTimestamp, theirsTimestamp) >= 0;
 
     // Resolve conflict blocks, preserving cleanly merged sections
     const resolvedYaml = resolveYamlConflicts(mergeResult.content, oursNewer);
@@ -764,7 +774,8 @@ export function mergeThreeWay<T extends JSONLEntity>(
         (fieldsMerged as any)[field] = oursValue;
       } else {
         // Conflict: both changed to different values -> latest wins
-        const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) > 0;
+        // When timestamps are identical, prefer ours for stability
+        const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) >= 0;
         (fieldsMerged as any)[field] = oursNewer ? oursValue : theirsValue;
         scalarConflicts.push(field);
       }
@@ -798,14 +809,19 @@ export function mergeThreeWay<T extends JSONLEntity>(
       };
 
       // Step 2f: Convert to YAML and run git merge-file for line-level merging
-      const yamlMergeResult = mergeYamlWithGit(versionsForYaml);
+      // Pass original timestamps for conflict resolution (since we stripped updated_at from versions)
+      const yamlMergeResult = mergeYamlWithGit(versionsForYaml, {
+        ours: oursEntity?.updated_at,
+        theirs: theirsEntity?.updated_at,
+      });
       hadYamlConflicts = yamlMergeResult.hadConflicts;
 
       if (yamlMergeResult.success) {
         mergedEntity = yamlMergeResult.entity;
       } else {
         // Fatal error during merge - fallback to latest-wins for entire entity
-        const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) > 0;
+        // When timestamps are identical, prefer ours for stability
+        const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) >= 0;
         mergedEntity = (oursNewer ? versionsForYaml.ours : versionsForYaml.theirs) as T;
       }
     }

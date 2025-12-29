@@ -149,7 +149,7 @@ describe("Issue i-76gk: Multi-line field merge bug", () => {
 
     // Should report YAML conflict
     const yamlConflicts = stats.conflicts.filter((c) =>
-      c.action.includes("YAML conflicts")
+      c.action.includes("YAML conflict")
     );
     expect(yamlConflicts.length).toBeGreaterThan(0);
   });
