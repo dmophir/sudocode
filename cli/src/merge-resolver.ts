@@ -9,6 +9,8 @@
 
 import * as fs from "fs";
 import type { IssueJSONL, SpecJSONL } from "./types.js";
+import { toYaml, fromYaml } from "./yaml-converter.js";
+import { mergeYamlContent } from "./git-merge.js";
 
 export type JSONLEntity = IssueJSONL | SpecJSONL | Record<string, any>;
 
@@ -477,8 +479,40 @@ export function resolveEntities<T extends JSONLEntity>(
 }
 
 /**
+ * Helper function to merge entities using YAML + git merge-file for line-level merging
+ */
+function mergeYamlWithGit<T extends JSONLEntity>(versions: {
+  base?: T;
+  ours?: T;
+  theirs?: T;
+}): { success: boolean; entity: T } {
+  const { base, ours, theirs } = versions;
+
+  // Convert to YAML
+  const baseYaml = base ? toYaml(base) : "";
+  const oursYaml = ours ? toYaml(ours!) : "";
+  const theirsYaml = theirs ? toYaml(theirs!) : "";
+
+  // Run git merge-file for line-level merging
+  const mergeResult = mergeYamlContent({
+    base: baseYaml,
+    ours: oursYaml,
+    theirs: theirsYaml,
+  });
+
+  if (mergeResult.success && !mergeResult.hasConflicts) {
+    // Clean merge - parse YAML back to JSON
+    const mergedEntity = fromYaml(mergeResult.content) as T;
+    return { success: true, entity: mergedEntity };
+  } else {
+    // Had conflicts - return failure (caller will use latest-wins)
+    return { success: false, entity: ours! }; // Placeholder, caller will override
+  }
+}
+
+/**
  * Three-way merge for git merge driver
- * Uses field-level three-way merge for all fields
+ * Uses hybrid approach: field-level merge for scalars + line-level merge for multi-line text
  *
  * USE CASE: THREE-WAY MERGE
  * - Git merge driver operations (automatic merge)
@@ -491,9 +525,10 @@ export function resolveEntities<T extends JSONLEntity>(
  * 1. Group entities by UUID across base/ours/theirs
  * 2. Handle deletion cases (modification wins over deletion)
  * 3. Merge array fields FIRST (tags, relationships, feedback) with union semantics
- * 4. Apply field-level three-way merge to ALL remaining fields
- * 5. Handle ID collisions (hash conflicts with .1, .2 suffixes)
- * 6. Sort by created_at (git-friendly)
+ * 4. Field-level three-way merge for SCALAR fields only (status, priority, etc.)
+ * 5. YAML + git merge-file for multi-line text fields (content, description)
+ * 6. Handle ID collisions (hash conflicts with .1, .2 suffixes)
+ * 7. Sort by created_at (git-friendly)
  *
  * Field-level three-way merge logic:
  * - If base == ours == theirs: use any value (no changes)
@@ -627,17 +662,36 @@ export function mergeThreeWay<T extends JSONLEntity>(
       }
     }
 
-    // Step 2d: Perform field-level three-way merge for ALL remaining fields
-    // This handles scalars AND multi-line text fields (description, content)
+    // Step 2d: Perform field-level three-way merge for SCALAR fields only
+    // Multi-line text fields (content, description) will be handled by git merge-file
     const fieldsMerged: Partial<T> = { ...arrayFieldsMerged };
-    const conflicts: string[] = [];
+    const scalarConflicts: string[] = [];
+
+    // Multi-line text fields that should go through git merge-file
+    const multiLineFields = new Set(['content', 'description']);
+
+    // updated_at always differs and causes spurious conflicts - extract latest value
+    const latestUpdatedAt = compareTimestamps(
+      oursEntity?.updated_at,
+      theirsEntity?.updated_at
+    ) > 0 ? oursEntity?.updated_at : theirsEntity?.updated_at;
 
     for (const field of allFields) {
+      // Skip multi-line text fields - they'll be handled by git merge-file
+      if (multiLineFields.has(field)) {
+        continue;
+      }
+
+      // Skip updated_at - we'll add it back at the end
+      if (field === 'updated_at') {
+        continue;
+      }
+
       const baseValue = baseEntity?.[field as keyof T];
       const oursValue = oursEntity?.[field as keyof T];
       const theirsValue = theirsEntity?.[field as keyof T];
 
-      // Three-way merge logic for this field:
+      // Three-way merge logic for scalar fields:
       // - If base == ours == theirs: use any value
       // - If base == ours && base != theirs: use theirs (they changed it)
       // - If base == theirs && base != ours: use ours (we changed it)
@@ -660,21 +714,50 @@ export function mergeThreeWay<T extends JSONLEntity>(
         // Conflict: both changed to different values -> latest wins
         const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) > 0;
         (fieldsMerged as any)[field] = oursNewer ? oursValue : theirsValue;
-        conflicts.push(field);
+        scalarConflicts.push(field);
       }
     }
 
-    // Create the merged entity
-    const mergedEntity = fieldsMerged as T;
+    // Step 2e: For multi-line fields, keep original values for YAML conversion
+    // Git merge-file will handle the line-level merge
+    // Remove updated_at to avoid spurious conflicts in YAML
+    const versionsForYaml = {
+      base: baseEntity ? { ...baseEntity, ...fieldsMerged, updated_at: undefined } : undefined,
+      ours: oursEntity ? { ...oursEntity, ...fieldsMerged, updated_at: undefined } : undefined,
+      theirs: theirsEntity ? { ...theirsEntity, ...fieldsMerged, updated_at: undefined } : undefined,
+    };
+
+    // Step 2f: Convert to YAML and run git merge-file for line-level merging
+    const yamlMergeResult = mergeYamlWithGit(versionsForYaml);
+
+    let mergedEntity: T;
+    if (yamlMergeResult.success) {
+      mergedEntity = yamlMergeResult.entity;
+    } else {
+      // Git merge-file had conflicts, use latest-wins
+      const oursNewer = compareTimestamps(oursEntity?.updated_at, theirsEntity?.updated_at) > 0;
+      mergedEntity = (oursNewer ? versionsForYaml.ours : versionsForYaml.theirs) as T;
+    }
+
+    // Add back the latest updated_at timestamp
+    mergedEntity.updated_at = latestUpdatedAt;
 
     // Record conflicts if any
-    if (conflicts.length > 0) {
+    if (scalarConflicts.length > 0 || !yamlMergeResult.success) {
+      const conflictParts = [];
+      if (scalarConflicts.length > 0) {
+        conflictParts.push(`${scalarConflicts.length} scalar field conflicts (${scalarConflicts.join(', ')})`);
+      }
+      if (!yamlMergeResult.success) {
+        conflictParts.push('YAML conflicts (latest-wins)');
+      }
+
       stats.conflicts.push({
         type: "same-uuid-same-id",
         uuid,
         originalIds: [baseEntity?.id || oursEntity?.id || theirsEntity?.id || "unknown"],
         resolvedIds: [mergedEntity.id || "unknown"],
-        action: `Resolved ${conflicts.length} field conflicts (${conflicts.join(', ')}) - latest-wins`,
+        action: `Resolved ${conflictParts.join(', ')}`,
       });
     }
 
