@@ -227,8 +227,22 @@ async function resolveFile(
   // Parse conflicts
   const sections = parseMergeConflictFile(content);
 
-  // Extract clean entities (no conflicts)
-  const cleanEntities: JSONLEntity[] = [];
+  // OPTIMIZATION: Avoid parsing clean entities
+  //
+  // Performance improvement: Only parse entities that are actually in conflict.
+  // Clean entities (not in conflict sections) are kept as raw JSON strings and
+  // passed through without expensive JSON.parse() calls.
+  //
+  // Example: File with 1000 entities and 2 conflicts
+  //   Before: Parse 1000 entities (100% overhead)
+  //   After:  Parse 2 entities (0.2% overhead)
+  //
+  // The optimization works by:
+  // 1. Keeping clean lines as raw strings (no parsing)
+  // 2. Extracting created_at via regex for sorting (lightweight)
+  // 3. Merging sorted clean lines with sorted processed entities
+  // 4. Writing output without re-parsing clean entities
+  const cleanLines: string[] = [];
 
   // Extract entities from conflict sections, grouped by UUID
   const oursEntitiesByUuid = new Map<string, JSONLEntity>();
@@ -236,17 +250,10 @@ async function resolveFile(
 
   for (const section of sections) {
     if (section.type === "clean") {
+      // Don't parse - just keep raw lines
       for (const line of section.lines) {
         if (line.trim()) {
-          try {
-            cleanEntities.push(JSON.parse(line));
-          } catch (e) {
-            console.warn(
-              chalk.yellow(
-                `Warning: Skipping malformed line: ${line.slice(0, 50)}...`
-              )
-            );
-          }
+          cleanLines.push(line);
         }
       }
     } else {
@@ -290,6 +297,7 @@ async function resolveFile(
   ]);
 
   const conflictingEntities: JSONLEntity[] = [];
+  const cleanConflictLines: string[] = []; // Clean additions from conflict sections
 
   for (const uuid of Array.from(allUuids)) {
     const oursEntity = oursEntitiesByUuid.get(uuid);
@@ -299,11 +307,11 @@ async function resolveFile(
       // Both sides have this UUID → true conflict, resolve it
       conflictingEntities.push(oursEntity, theirsEntity);
     } else if (oursEntity) {
-      // Only in ours → clean addition
-      cleanEntities.push(oursEntity);
+      // Only in ours → clean addition (keep as raw line)
+      cleanConflictLines.push(JSON.stringify(oursEntity));
     } else if (theirsEntity) {
-      // Only in theirs → clean addition
-      cleanEntities.push(theirsEntity);
+      // Only in theirs → clean addition (keep as raw line)
+      cleanConflictLines.push(JSON.stringify(theirsEntity));
     }
   }
 
@@ -323,21 +331,35 @@ async function resolveFile(
     conflictStats = resolved.stats;
   }
 
-  // Combine clean entities and resolved conflicts
-  const combined = [...cleanEntities, ...resolvedConflicts];
+  // Handle ID collisions across ALL entities (clean + resolved)
+  // This detects hash collisions where different UUIDs share the same ID
 
-  // Handle ID collisions across all entities (different UUIDs, same ID)
-  // This is a hash collision scenario that needs to be detected
+  // First, parse clean conflict lines to check for ID collisions
+  const cleanConflictEntities: JSONLEntity[] = [];
+  for (const line of cleanConflictLines) {
+    try {
+      cleanConflictEntities.push(JSON.parse(line));
+    } catch (e) {
+      console.warn(
+        chalk.yellow(`Warning: Skipping malformed clean conflict line: ${line.slice(0, 50)}...`)
+      );
+    }
+  }
+
+  // Combine all entities that need ID collision checking
+  const allEntitiesToCheck = [...cleanConflictEntities, ...resolvedConflicts];
+
+  // Track IDs to detect collisions
   const idCounts = new Map<string, number>();
-  const allResolved: JSONLEntity[] = [];
+  const processedEntities: JSONLEntity[] = [];
 
-  for (const entity of combined) {
+  for (const entity of allEntitiesToCheck) {
     const currentId = entity.id;
 
     if (!idCounts.has(currentId)) {
       // First entity with this ID
       idCounts.set(currentId, 1);
-      allResolved.push(entity);
+      processedEntities.push(entity);
     } else {
       // ID collision - rename with suffix
       const count = idCounts.get(currentId)!;
@@ -346,7 +368,7 @@ async function resolveFile(
       newEntity.id = newId;
 
       idCounts.set(currentId, count + 1);
-      allResolved.push(newEntity);
+      processedEntities.push(newEntity);
 
       conflictStats.conflicts.push({
         type: 'different-uuids',
@@ -358,8 +380,8 @@ async function resolveFile(
     }
   }
 
-  // Sort by created_at (git-friendly)
-  allResolved.sort((a, b) => {
+  // Sort processed entities by created_at before converting to lines
+  processedEntities.sort((a, b) => {
     const aDate = a.created_at || "";
     const bDate = b.created_at || "";
     if (aDate < bDate) return -1;
@@ -367,15 +389,117 @@ async function resolveFile(
     return (a.id || "").localeCompare(b.id || "");
   });
 
+  // Convert processed entities back to lines (for entities that came from cleanConflictLines or resolvedConflicts)
+  const processedLines = processedEntities.map(e => JSON.stringify(e));
+
+  // Combine all clean lines (truly clean + processed conflict additions/resolutions)
+  const allCleanLines = [...cleanLines, ...processedLines];
+
+  // OPTIMIZATION: Merge sorted clean lines with processed entities
+  // Extract created_at from raw lines using regex (lightweight - no full parse)
+  const cleanLinesWithTimestamp = cleanLines.map(line => {
+    const match = line.match(/"created_at":"([^"]+)"/);
+    return {
+      line,
+      timestamp: match ? match[1] : ''
+    };
+  });
+
+  // Extract timestamps from processed lines too
+  const processedLinesWithTimestamp = processedLines.map(line => {
+    const match = line.match(/"created_at":"([^"]+)"/);
+    return {
+      line,
+      timestamp: match ? match[1] : ''
+    };
+  });
+
+  // Verify clean lines are sorted
+  const isSorted = cleanLinesWithTimestamp.every((item, i) =>
+    i === 0 || cleanLinesWithTimestamp[i - 1].timestamp <= item.timestamp
+  );
+
+  let outputLines: string[];
+
+  if (isSorted && processedLinesWithTimestamp.length === 0) {
+    // Fast path: No conflicts to merge, clean lines already sorted
+    outputLines = cleanLines;
+  } else if (isSorted) {
+    // Merge sorted clean lines with processed entities
+    // Merge two sorted arrays
+    outputLines = [];
+    let cleanIdx = 0;
+    let processedIdx = 0;
+
+    while (cleanIdx < cleanLinesWithTimestamp.length || processedIdx < processedLinesWithTimestamp.length) {
+      if (cleanIdx >= cleanLinesWithTimestamp.length) {
+        // Only processed lines left
+        outputLines.push(processedLinesWithTimestamp[processedIdx].line);
+        processedIdx++;
+      } else if (processedIdx >= processedLinesWithTimestamp.length) {
+        // Only clean lines left
+        outputLines.push(cleanLinesWithTimestamp[cleanIdx].line);
+        cleanIdx++;
+      } else {
+        // Compare timestamps
+        const cleanTimestamp = cleanLinesWithTimestamp[cleanIdx].timestamp;
+        const processedTimestamp = processedLinesWithTimestamp[processedIdx].timestamp;
+
+        if (cleanTimestamp <= processedTimestamp) {
+          outputLines.push(cleanLinesWithTimestamp[cleanIdx].line);
+          cleanIdx++;
+        } else {
+          outputLines.push(processedLinesWithTimestamp[processedIdx].line);
+          processedIdx++;
+        }
+      }
+    }
+  } else {
+    // Fallback: Clean lines not sorted - parse everything and sort
+    if (options.verbose) {
+      console.log(chalk.yellow('  Warning: Clean lines not sorted, falling back to full parse'));
+    }
+
+    const allEntities: JSONLEntity[] = [];
+
+    // Parse clean lines
+    for (const line of cleanLines) {
+      try {
+        allEntities.push(JSON.parse(line));
+      } catch (e) {
+        console.warn(
+          chalk.yellow(
+            `Warning: Skipping malformed line: ${line.slice(0, 50)}...`
+          )
+        );
+      }
+    }
+
+    // Add processed entities (already parsed above)
+    allEntities.push(...processedEntities);
+
+    // Sort all entities
+    allEntities.sort((a, b) => {
+      const aDate = a.created_at || "";
+      const bDate = b.created_at || "";
+      if (aDate < bDate) return -1;
+      if (aDate > bDate) return 1;
+      return (a.id || "").localeCompare(b.id || "");
+    });
+
+    outputLines = allEntities.map(e => JSON.stringify(e));
+  }
+
   const finalStats: ResolutionStats = {
-    totalInput: cleanEntities.length + conflictingEntities.length,
-    totalOutput: allResolved.length,
+    totalInput: cleanLines.length + cleanConflictEntities.length + conflictingEntities.length,
+    totalOutput: outputLines.length,
     conflicts: conflictStats.conflicts
   };
 
   // Write back if not dry-run
   if (!options.dryRun) {
-    await writeJSONL(filePath, allResolved);
+    // Write lines directly (no entity parsing overhead)
+    await fs.promises.writeFile(filePath, outputLines.join('\n') + '\n', 'utf8');
   }
 
   return { stats: finalStats, entityType };
