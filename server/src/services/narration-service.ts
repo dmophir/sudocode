@@ -872,21 +872,32 @@ export class NarrationRateLimiter {
 // =============================================================================
 
 /**
- * Get narration configuration from environment variables
+ * Narration settings from voice config
  */
-export function getNarrationConfigFromEnv(): Partial<NarrationConfig> {
+interface NarrationSettingsConfig {
+  narrateToolUse?: boolean;
+  narrateToolResults?: boolean;
+  narrateAssistantMessages?: boolean;
+}
+
+/**
+ * Get narration configuration from voice settings config.
+ *
+ * @param voiceConfig - Optional narration settings from project config.json
+ */
+export function getNarrationConfig(voiceConfig?: { narration?: NarrationSettingsConfig }): Partial<NarrationConfig> {
   const config: Partial<NarrationConfig> = {};
 
-  // VOICE_NARRATE_TOOL_USE: Set to "false" to only narrate assistant_message and speak tool
-  const narrateToolUse = process.env.VOICE_NARRATE_TOOL_USE;
-  if (narrateToolUse !== undefined) {
-    config.narrateToolUse = narrateToolUse.toLowerCase() !== "false";
+  if (voiceConfig?.narration?.narrateToolUse !== undefined) {
+    config.narrateToolUse = voiceConfig.narration.narrateToolUse;
   }
 
-  // VOICE_NARRATE_TOOL_RESULTS: Set to "true" to also narrate tool completion
-  const narrateToolResults = process.env.VOICE_NARRATE_TOOL_RESULTS;
-  if (narrateToolResults !== undefined) {
-    config.narrateToolResults = narrateToolResults.toLowerCase() === "true";
+  if (voiceConfig?.narration?.narrateToolResults !== undefined) {
+    config.narrateToolResults = voiceConfig.narration.narrateToolResults;
+  }
+
+  if (voiceConfig?.narration?.narrateAssistantMessages !== undefined) {
+    config.narrateAssistantMessages = voiceConfig.narration.narrateAssistantMessages;
   }
 
   return config;
@@ -901,20 +912,24 @@ let narrationServiceInstance: NarrationService | null = null;
 /**
  * Get or create the global narration service instance
  *
- * Reads configuration from environment variables:
- * - VOICE_NARRATE_TOOL_USE: "false" to only narrate assistant_message and speak tool (default: true)
- * - VOICE_NARRATE_TOOL_RESULTS: "true" to also narrate tool completion (default: false)
+ * Configuration priority (highest to lowest):
+ * 1. config parameter (explicit override)
+ * 2. voiceConfig (from project config.json)
+ * 3. Environment variables (backwards compatibility)
+ * 4. Default values
  *
- * @param config - Optional configuration override (takes precedence over env vars)
+ * @param config - Optional configuration override (takes precedence over everything)
+ * @param voiceConfig - Optional voice settings from project config.json
  * @returns The narration service instance
  */
 export function getNarrationService(
-  config?: Partial<NarrationConfig>
+  config?: Partial<NarrationConfig>,
+  voiceConfig?: { narration?: NarrationSettingsConfig }
 ): NarrationService {
   if (!narrationServiceInstance) {
-    // Merge env config with provided config (provided takes precedence)
-    const envConfig = getNarrationConfigFromEnv();
-    narrationServiceInstance = new NarrationService({ ...envConfig, ...config });
+    // Merge: voiceConfig/env < provided config
+    const baseConfig = getNarrationConfig(voiceConfig);
+    narrationServiceInstance = new NarrationService({ ...baseConfig, ...config });
   }
   return narrationServiceInstance;
 }

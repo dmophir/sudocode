@@ -61,14 +61,24 @@ export interface TTSServiceConfig {
 }
 
 /**
- * Get TTS configuration from environment variables
+ * Default TTS configuration values
  */
-export function getTTSConfig(): TTSServiceConfig {
+const DEFAULT_TTS_CONFIG: TTSServiceConfig = {
+  defaultProvider: "browser",
+  kokoroUrl: "http://localhost:8880/v1",
+  defaultVoice: "nova",
+};
+
+/**
+ * Get TTS configuration from voice settings config.
+ *
+ * @param voiceConfig - Optional voice settings from project config.json
+ */
+export function getTTSConfig(voiceConfig?: { tts?: { provider?: TTSProviderType; kokoroUrl?: string; defaultVoice?: string } }): TTSServiceConfig {
   return {
-    defaultProvider:
-      (process.env.VOICE_TTS_PROVIDER as TTSProviderType) || "browser",
-    kokoroUrl: process.env.VOICE_KOKORO_URL || "http://localhost:8880/v1",
-    defaultVoice: process.env.VOICE_TTS_VOICE || "nova",
+    defaultProvider: voiceConfig?.tts?.provider || DEFAULT_TTS_CONFIG.defaultProvider,
+    kokoroUrl: voiceConfig?.tts?.kokoroUrl || DEFAULT_TTS_CONFIG.kokoroUrl,
+    defaultVoice: voiceConfig?.tts?.defaultVoice || DEFAULT_TTS_CONFIG.defaultVoice,
   };
 }
 

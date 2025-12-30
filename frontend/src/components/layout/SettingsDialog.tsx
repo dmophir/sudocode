@@ -21,6 +21,7 @@ import {
   RotateCcw,
   ArrowRight,
   Mic,
+  Volume2,
 } from 'lucide-react'
 import type { ColorTheme } from '@/themes'
 import { cn } from '@/lib/utils'
@@ -112,7 +113,7 @@ const SECTIONS: Section[] = [
   { id: 'integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
 ]
 
-// Voice settings interface
+// Voice settings interface (server-side config)
 interface VoiceSettings {
   enabled?: boolean
   stt?: {
@@ -122,8 +123,32 @@ interface VoiceSettings {
   }
   tts?: {
     provider?: 'browser' | 'kokoro' | 'openai'
+    kokoroUrl?: string
+    defaultVoice?: string
+  }
+  narration?: {
+    narrateToolUse?: boolean
+    narrateToolResults?: boolean
+    narrateAssistantMessages?: boolean
   }
 }
+
+// Voice preferences interface (client-side localStorage)
+interface VoicePreferences {
+  narrationEnabled: boolean
+  ttsVoice: string
+  narrationSpeed: number
+  narrationVolume: number
+}
+
+const DEFAULT_VOICE_PREFERENCES: VoicePreferences = {
+  narrationEnabled: false,
+  ttsVoice: '',
+  narrationSpeed: 1.0,
+  narrationVolume: 1.0,
+}
+
+const VOICE_PREFERENCES_KEY = 'sudocode:voicePreferences'
 
 // Theme preview swatch component
 function ThemePreviewSwatch({ theme }: { theme: ColorTheme }) {
@@ -164,12 +189,17 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [selectedPreset, setSelectedPreset] = useState<string>('')
   const [installing, setInstalling] = useState(false)
 
-  // Voice settings state
+  // Voice settings state (server-side config)
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({})
   const [loadingVoice, setLoadingVoice] = useState(false)
   const [savingVoice, setSavingVoice] = useState(false)
   const voiceSettingsLoadedRef = useRef(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Voice preferences state (client-side localStorage)
+  const [voicePreferences, setVoicePreferences] = useState<VoicePreferences>(DEFAULT_VOICE_PREFERENCES)
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
+  const voicePreferencesLoadedRef = useRef(false)
 
   // Update check hooks
   const { updateInfo } = useUpdateCheck()
@@ -254,12 +284,65 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   useEffect(() => {
     if (!isOpen) {
       voiceSettingsLoadedRef.current = false
+      voicePreferencesLoadedRef.current = false
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
       }
     }
   }, [isOpen])
+
+  // Load voice preferences from localStorage when voice tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === 'voice') {
+      voicePreferencesLoadedRef.current = false
+      try {
+        const stored = localStorage.getItem(VOICE_PREFERENCES_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored) as Partial<VoicePreferences>
+          setVoicePreferences({ ...DEFAULT_VOICE_PREFERENCES, ...parsed })
+        }
+      } catch (error) {
+        console.error('Failed to load voice preferences:', error)
+      }
+      // Mark as loaded after a short delay to prevent immediate save
+      setTimeout(() => {
+        voicePreferencesLoadedRef.current = true
+      }, 100)
+    }
+  }, [isOpen, activeTab])
+
+  // Load available voices from Web Speech API
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'voice') return
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    const synth = window.speechSynthesis
+
+    const loadVoices = () => {
+      const voices = synth.getVoices()
+      setAvailableVoices(voices)
+    }
+
+    // Voices may be loaded asynchronously
+    loadVoices()
+    synth.addEventListener('voiceschanged', loadVoices)
+
+    return () => {
+      synth.removeEventListener('voiceschanged', loadVoices)
+    }
+  }, [isOpen, activeTab])
+
+  // Auto-save voice preferences to localStorage
+  useEffect(() => {
+    if (!voicePreferencesLoadedRef.current) return
+
+    try {
+      localStorage.setItem(VOICE_PREFERENCES_KEY, JSON.stringify(voicePreferences))
+    } catch (error) {
+      console.error('Failed to save voice preferences:', error)
+    }
+  }, [voicePreferences])
 
   // Auto-save voice settings with debounce
   const saveVoiceSettings = useCallback(async (settings: VoiceSettings) => {
@@ -310,6 +393,25 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       ...prev,
       stt: { ...prev.stt, ...updates },
     }))
+  }
+
+  const updateVoiceTTSSettings = (updates: Partial<NonNullable<VoiceSettings['tts']>>) => {
+    setVoiceSettings((prev) => ({
+      ...prev,
+      tts: { ...prev.tts, ...updates },
+    }))
+  }
+
+  const updateVoiceNarrationSettings = (updates: Partial<NonNullable<VoiceSettings['narration']>>) => {
+    setVoiceSettings((prev) => ({
+      ...prev,
+      narration: { ...prev.narration, ...updates },
+    }))
+  }
+
+  // Update voice preferences helper
+  const updateVoicePreferences = (updates: Partial<VoicePreferences>) => {
+    setVoicePreferences((prev) => ({ ...prev, ...updates }))
   }
 
   // Get options with defaults from schema applied
@@ -1079,6 +1181,223 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     )}
                   </div>
                 )}
+
+                {/* Voice Narration Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="text-base font-semibold">Voice Narration</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Configure text-to-speech settings for execution narration.
+                  </p>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Enable Narration */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Enable Voice Narration</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Speak execution progress and status updates aloud
+                      </p>
+                    </div>
+                    <Switch
+                      checked={voicePreferences.narrationEnabled}
+                      onCheckedChange={(checked) =>
+                        updateVoicePreferences({ narrationEnabled: checked })
+                      }
+                    />
+                  </div>
+
+                  {/* TTS Settings - only show when narration is enabled */}
+                  {voicePreferences.narrationEnabled && (
+                    <div className="space-y-4 border-t border-border pt-4">
+                      <h4 className="text-sm font-medium">Text-to-Speech Settings</h4>
+
+                      {/* Voice Selection */}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Voice</Label>
+                        <Select
+                          value={voicePreferences.ttsVoice || 'default'}
+                          onValueChange={(value) =>
+                            updateVoicePreferences({ ttsVoice: value === 'default' ? '' : value })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="System default" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="default">System default</SelectItem>
+                            {availableVoices
+                              .filter((v) => v.lang.startsWith('en'))
+                              .slice(0, 20) // Limit to prevent huge list
+                              .map((voice) => (
+                                <SelectItem key={voice.voiceURI} value={voice.name}>
+                                  {voice.name} ({voice.lang})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground">
+                          Voice used for narration (using browser Web Speech API)
+                        </p>
+                      </div>
+
+                      {/* Speech Rate */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Speech Speed</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {voicePreferences.narrationSpeed.toFixed(1)}x
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.0"
+                          step="0.1"
+                          value={voicePreferences.narrationSpeed}
+                          onChange={(e) =>
+                            updateVoicePreferences({ narrationSpeed: parseFloat(e.target.value) })
+                          }
+                          className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>0.5x (Slow)</span>
+                          <span>2.0x (Fast)</span>
+                        </div>
+                      </div>
+
+                      {/* Volume */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Volume</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {Math.round(voicePreferences.narrationVolume * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={voicePreferences.narrationVolume}
+                          onChange={(e) =>
+                            updateVoicePreferences({ narrationVolume: parseFloat(e.target.value) })
+                          }
+                          className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>0%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+
+                      {/* Test Button */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if ('speechSynthesis' in window) {
+                            const utterance = new SpeechSynthesisUtterance(
+                              'Voice narration is working correctly.'
+                            )
+                            utterance.rate = voicePreferences.narrationSpeed
+                            utterance.volume = voicePreferences.narrationVolume
+                            if (voicePreferences.ttsVoice) {
+                              const voice = availableVoices.find(
+                                (v) => v.name === voicePreferences.ttsVoice
+                              )
+                              if (voice) utterance.voice = voice
+                            }
+                            window.speechSynthesis.speak(utterance)
+                          }
+                        }}
+                      >
+                        Test Narration
+                      </Button>
+
+                      {/* Narration Content Settings */}
+                      <div className="mt-4 space-y-3 border-t border-border pt-4">
+                        <h4 className="text-sm font-medium">Narration Content</h4>
+                        <p className="text-[10px] text-muted-foreground">
+                          Choose what execution events are spoken aloud
+                        </p>
+
+                        {/* Narrate Tool Use */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs">Narrate tool actions</Label>
+                            <p className="text-[10px] text-muted-foreground">
+                              Read, Write, Bash, Grep, etc.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={voiceSettings.narration?.narrateToolUse !== false}
+                            onCheckedChange={(checked) =>
+                              updateVoiceNarrationSettings({ narrateToolUse: checked })
+                            }
+                          />
+                        </div>
+
+                        {/* Narrate Tool Results */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs">Narrate tool results</Label>
+                            <p className="text-[10px] text-muted-foreground">
+                              Announce when tools complete
+                            </p>
+                          </div>
+                          <Switch
+                            checked={voiceSettings.narration?.narrateToolResults === true}
+                            onCheckedChange={(checked) =>
+                              updateVoiceNarrationSettings({ narrateToolResults: checked })
+                            }
+                          />
+                        </div>
+
+                        {/* Narrate Assistant Messages */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs">Narrate agent responses</Label>
+                            <p className="text-[10px] text-muted-foreground">
+                              Speak the agent&apos;s text messages
+                            </p>
+                          </div>
+                          <Switch
+                            checked={voiceSettings.narration?.narrateAssistantMessages !== false}
+                            onCheckedChange={(checked) =>
+                              updateVoiceNarrationSettings({ narrateAssistantMessages: checked })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {/* Kokoro Server Settings - only show when kokoro is available */}
+                      {voiceSettings.tts?.provider === 'kokoro' && (
+                        <div className="mt-4 space-y-3 border-t border-border pt-4">
+                          <h4 className="text-sm font-medium">Kokoro Server</h4>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Server URL</Label>
+                            <Input
+                              value={voiceSettings.tts?.kokoroUrl || ''}
+                              onChange={(e) =>
+                                updateVoiceTTSSettings({ kokoroUrl: e.target.value })
+                              }
+                              placeholder="http://localhost:8880/v1"
+                              className="h-8 text-sm"
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                              URL of your local Kokoro TTS server
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

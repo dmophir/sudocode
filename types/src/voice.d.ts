@@ -59,6 +59,19 @@ export interface VoiceSettingsConfig {
   tts?: {
     /** Preferred TTS provider */
     provider?: TTSProvider;
+    /** URL for local Kokoro server (default: http://localhost:8880/v1) */
+    kokoroUrl?: string;
+    /** Default voice for TTS (default: nova) */
+    defaultVoice?: string;
+  };
+  /** Narration settings - controls what execution events get narrated */
+  narration?: {
+    /** Whether to narrate tool use events like Read, Write, Bash (default: true) */
+    narrateToolUse?: boolean;
+    /** Whether to narrate tool results/completion (default: false) */
+    narrateToolResults?: boolean;
+    /** Whether to narrate assistant messages (default: true) */
+    narrateAssistantMessages?: boolean;
   };
 }
 
