@@ -366,9 +366,15 @@ export function useVoiceNarration(options: UseVoiceNarrationOptions): UseVoiceNa
   useEffect(() => {
     const handlerId = `voice-narration-${executionId}`
 
+    console.log(`[useVoiceNarration] Setting up handler for ${executionId}, enabled: ${enabledRef.current}, synth: ${!!synth}`)
+
     const handleMessage = (message: WebSocketMessage) => {
+      console.log(`[useVoiceNarration] Received message:`, message.type)
       if (message.type !== 'voice_narration') return
-      if (!enabledRef.current) return
+      if (!enabledRef.current) {
+        console.log(`[useVoiceNarration] Narration disabled, skipping`)
+        return
+      }
 
       const data = message.data as VoiceNarrationEvent['executionId'] extends string
         ? Omit<VoiceNarrationEvent, 'type'>
@@ -382,12 +388,17 @@ export function useVoiceNarration(options: UseVoiceNarrationOptions): UseVoiceNa
         !('text' in data) ||
         !('priority' in data)
       ) {
+        console.log(`[useVoiceNarration] Invalid data structure:`, data)
         return
       }
 
       // Filter by executionId
-      if (data.executionId !== executionId) return
+      if (data.executionId !== executionId) {
+        console.log(`[useVoiceNarration] Execution ID mismatch: ${data.executionId} !== ${executionId}`)
+        return
+      }
 
+      console.log(`[useVoiceNarration] Queueing narration: "${data.text.substring(0, 50)}..."`)
       // Queue the narration
       speak(data.text, data.priority as NarrationPriority)
     }
@@ -401,7 +412,7 @@ export function useVoiceNarration(options: UseVoiceNarrationOptions): UseVoiceNa
       removeMessageHandler(handlerId)
       unsubscribe('execution', executionId)
     }
-  }, [executionId, addMessageHandler, removeMessageHandler, subscribe, unsubscribe, speak])
+  }, [executionId, addMessageHandler, removeMessageHandler, subscribe, unsubscribe, speak, synth])
 
   // Cleanup on unmount
   useEffect(() => {

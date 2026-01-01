@@ -138,19 +138,10 @@ export function createConfigRouter(): Router {
     }
   });
 
-  // GET /api/config/voice - returns voice settings section
-  router.get("/voice", (req: Request, res: Response) => {
-    try {
-      const config = readConfig(req.project!.sudocodeDir);
-      const voice = (config.voice || {}) as VoiceSettingsConfig;
-      res.status(200).json({ success: true, data: voice });
-    } catch (error) {
-      console.error("Failed to read voice config:", error);
-      res.status(500).json({ success: false, message: "Failed to read voice config" });
-    }
-  });
+  // Note: Voice settings are READ via /api/voice/config (combined endpoint)
+  // but WRITTEN via this endpoint to update config.json
 
-  // PUT /api/config/voice - update voice settings
+  // PUT /api/config/voice - update voice settings in config.json
   router.put("/voice", (req: Request, res: Response) => {
     try {
       const voice = req.body as VoiceSettingsConfig;

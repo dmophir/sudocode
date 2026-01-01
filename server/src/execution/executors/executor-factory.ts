@@ -7,14 +7,20 @@
  * @module execution/executors/executor-factory
  */
 
-import type { AgentType, BaseAgentConfig } from '@sudocode-ai/types/agents';
-import type Database from 'better-sqlite3';
-import type { ExecutionLifecycleService } from '../../services/execution-lifecycle.js';
-import type { ExecutionLogsStore } from '../../services/execution-logs-store.js';
-import type { TransportManager } from '../transport/transport-manager.js';
-import { agentRegistryService, AgentNotImplementedError } from '../../services/agent-registry.js';
-import { AgentExecutorWrapper, type AgentExecutorWrapperConfig } from './agent-executor-wrapper.js';
-import type { NarrationConfig } from '../../services/narration-service.js';
+import type { AgentType, BaseAgentConfig } from "@sudocode-ai/types/agents";
+import type Database from "better-sqlite3";
+import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
+import type { ExecutionLogsStore } from "../../services/execution-logs-store.js";
+import type { TransportManager } from "../transport/transport-manager.js";
+import {
+  agentRegistryService,
+  AgentNotImplementedError,
+} from "../../services/agent-registry.js";
+import {
+  AgentExecutorWrapper,
+  type AgentExecutorWrapperConfig,
+} from "./agent-executor-wrapper.js";
+import type { NarrationConfig } from "../../services/narration-service.js";
 
 /**
  * Error thrown when agent configuration validation fails
@@ -25,9 +31,9 @@ export class AgentConfigValidationError extends Error {
     public validationErrors: string[]
   ) {
     super(
-      `Agent '${agentType}' configuration validation failed: ${validationErrors.join(', ')}`
+      `Agent '${agentType}' configuration validation failed: ${validationErrors.join(", ")}`
     );
-    this.name = 'AgentConfigValidationError';
+    this.name = "AgentConfigValidationError";
   }
 }
 
@@ -87,7 +93,7 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
   agentConfig: TConfig,
   factoryConfig: ExecutorFactoryConfig
 ): ExecutorWrapper {
-  console.log('[ExecutorFactory] Creating executor', {
+  console.log("[ExecutorFactory] Creating executor", {
     agentType,
     workDir: factoryConfig.workDir,
   });

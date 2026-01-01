@@ -809,7 +809,7 @@ export function AgentConfigPanel({
   }
 
   return (
-    <div className="space-y-2 py-2">
+    <div className="space-y-2 px-2 py-2 xl:px-0">
       {/* Contextual Actions */}
       {!disableContextualActions && hasActions && (
         <div className="flex items-center justify-end gap-2">

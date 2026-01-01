@@ -32,6 +32,8 @@ import type { AgentType } from "@sudocode-ai/types/agents";
 import { PromptResolver } from "./prompt-resolver.js";
 import { execFileNoThrow } from "../utils/execFileNoThrow.js";
 import type { NarrationConfig } from "./narration-service.js";
+import { getNarrationConfig } from "./narration-service.js";
+import { readVoiceConfig, isVoiceBroadcastEnabled } from "../utils/voice-config.js";
 
 /**
  * MCP server configuration
@@ -438,6 +440,12 @@ export class ExecutionService {
       ...agentConfig
     } = mergedConfig;
 
+    // Read voice config to determine if voice narration broadcasts are enabled
+    // Also get narration settings (narrateToolUse, narrateAssistantMessages, etc.)
+    const voiceConfig = readVoiceConfig(this.repoPath);
+    const voiceEnabled = isVoiceBroadcastEnabled(voiceConfig);
+    const voiceNarrationSettings = getNarrationConfig(voiceConfig);
+
     const wrapper = createExecutorForAgent(
       agentType,
       {
@@ -451,7 +459,8 @@ export class ExecutionService {
         projectId: this.projectId,
         db: this.db,
         transportManager: this.transportManager,
-        narrationConfig,
+        // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
+        narrationConfig: { ...voiceNarrationSettings, ...narrationConfig, enabled: voiceEnabled },
       }
     );
 
@@ -698,6 +707,12 @@ ${feedback}`;
       ...parentAgentConfig
     } = parsedConfig;
 
+    // Read voice config to determine if voice narration broadcasts are enabled
+    // Also get narration settings (narrateToolUse, narrateAssistantMessages, etc.)
+    const voiceConfig = readVoiceConfig(this.repoPath);
+    const voiceEnabled = isVoiceBroadcastEnabled(voiceConfig);
+    const voiceNarrationSettings = getNarrationConfig(voiceConfig);
+
     const wrapper = createExecutorForAgent(
       agentType,
       {
@@ -711,7 +726,8 @@ ${feedback}`;
         projectId: this.projectId,
         db: this.db,
         transportManager: this.transportManager,
-        narrationConfig: parentNarrationConfig,
+        // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
+        narrationConfig: { ...voiceNarrationSettings, ...parentNarrationConfig, enabled: voiceEnabled },
       }
     );
 

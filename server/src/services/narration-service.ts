@@ -27,6 +27,12 @@ export interface NarrationResult {
  * Configuration for narration generation
  */
 export interface NarrationConfig {
+  /**
+   * Whether voice narration broadcasts are enabled.
+   * When false, no voice_narration events are broadcast to clients.
+   * Default: false
+   */
+  enabled: boolean;
   /** Maximum length for assistant messages before summarization (default: 100) */
   maxAssistantMessageLength: number;
   /** Maximum length for command display (default: 50) */
@@ -54,6 +60,7 @@ export interface NarrationConfig {
  * Default narration configuration
  */
 const DEFAULT_CONFIG: NarrationConfig = {
+  enabled: false,
   maxAssistantMessageLength: 100,
   maxCommandLength: 50,
   includeFilePaths: true,

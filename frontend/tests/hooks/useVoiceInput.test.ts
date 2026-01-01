@@ -12,10 +12,32 @@ vi.mock('@/lib/voice', () => ({
   isSpeechRecognitionSupported: vi.fn(() => false), // Default to false for existing tests
 }))
 
+// Default narration settings for mocks
+const defaultNarration = {
+  enabled: false,
+  voice: undefined,
+  speed: 1.0,
+  volume: 1.0,
+  narrateToolUse: true,
+  narrateToolResults: false,
+  narrateAssistantMessages: true,
+}
+
 // Mock useVoiceConfig - default to browser (no Web Speech in test env)
 vi.mock('@/hooks/useVoiceConfig', () => ({
   useVoiceConfig: vi.fn(() => ({
     config: null,
+    settings: null,
+    narration: {
+      enabled: false,
+      voice: undefined,
+      speed: 1.0,
+      volume: 1.0,
+      narrateToolUse: true,
+      narrateToolResults: false,
+      narrateAssistantMessages: true,
+    },
+    voiceEnabled: true,
     whisperAvailable: true,
     webSpeechSupported: false,
     sttAvailable: true,
@@ -652,6 +674,8 @@ describe('useVoiceInput', () => {
     it('should expose sttProvider from useVoiceConfig', () => {
       mockUseVoiceConfig.mockReturnValue({
         config: null,
+        settings: null,
+        narration: defaultNarration,
         voiceEnabled: true,
         whisperAvailable: false,
         webSpeechSupported: true,
@@ -670,6 +694,8 @@ describe('useVoiceInput', () => {
     it('should expose isConfigLoading from useVoiceConfig', () => {
       mockUseVoiceConfig.mockReturnValue({
         config: null,
+        settings: null,
+        narration: defaultNarration,
         voiceEnabled: true,
         whisperAvailable: false,
         webSpeechSupported: false,
@@ -688,6 +714,8 @@ describe('useVoiceInput', () => {
     it('should show browser as sttProvider when Whisper unavailable', () => {
       mockUseVoiceConfig.mockReturnValue({
         config: null,
+        settings: null,
+        narration: defaultNarration,
         voiceEnabled: true,
         whisperAvailable: false,
         webSpeechSupported: true,
@@ -706,6 +734,8 @@ describe('useVoiceInput', () => {
     it('should show null sttProvider when no provider available', () => {
       mockUseVoiceConfig.mockReturnValue({
         config: null,
+        settings: null,
+        narration: defaultNarration,
         voiceEnabled: true,
         whisperAvailable: false,
         webSpeechSupported: false,
@@ -727,6 +757,8 @@ describe('useVoiceInput', () => {
       // Configure for browser fallback mode
       mockUseVoiceConfig.mockReturnValue({
         config: null,
+        settings: null,
+        narration: defaultNarration,
         voiceEnabled: true,
         whisperAvailable: false,
         webSpeechSupported: true,

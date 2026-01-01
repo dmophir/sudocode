@@ -127,28 +127,15 @@ interface VoiceSettings {
     defaultVoice?: string
   }
   narration?: {
+    enabled?: boolean
+    voice?: string
+    speed?: number
+    volume?: number
     narrateToolUse?: boolean
     narrateToolResults?: boolean
     narrateAssistantMessages?: boolean
   }
 }
-
-// Voice preferences interface (client-side localStorage)
-interface VoicePreferences {
-  narrationEnabled: boolean
-  ttsVoice: string
-  narrationSpeed: number
-  narrationVolume: number
-}
-
-const DEFAULT_VOICE_PREFERENCES: VoicePreferences = {
-  narrationEnabled: false,
-  ttsVoice: '',
-  narrationSpeed: 1.0,
-  narrationVolume: 1.0,
-}
-
-const VOICE_PREFERENCES_KEY = 'sudocode:voicePreferences'
 
 // Theme preview swatch component
 function ThemePreviewSwatch({ theme }: { theme: ColorTheme }) {
@@ -196,10 +183,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const voiceSettingsLoadedRef = useRef(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Voice preferences state (client-side localStorage)
-  const [voicePreferences, setVoicePreferences] = useState<VoicePreferences>(DEFAULT_VOICE_PREFERENCES)
+  // Available voices from Web Speech API
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
-  const voicePreferencesLoadedRef = useRef(false)
 
   // Update check hooks
   const { updateInfo } = useUpdateCheck()
@@ -262,8 +247,11 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       setLoadingVoice(true)
       voiceSettingsLoadedRef.current = false
       try {
-        const data = await api.get<VoiceSettings, VoiceSettings>('/config/voice')
-        setVoiceSettings(data)
+        // Voice settings are now included in the combined /voice/config endpoint
+        const data = await api.get<{ settings: VoiceSettings }, { settings: VoiceSettings }>(
+          '/voice/config'
+        )
+        setVoiceSettings(data.settings || {})
         // Mark as loaded after a short delay to prevent immediate save
         setTimeout(() => {
           voiceSettingsLoadedRef.current = true
@@ -284,33 +272,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   useEffect(() => {
     if (!isOpen) {
       voiceSettingsLoadedRef.current = false
-      voicePreferencesLoadedRef.current = false
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
       }
     }
   }, [isOpen])
-
-  // Load voice preferences from localStorage when voice tab is opened
-  useEffect(() => {
-    if (isOpen && activeTab === 'voice') {
-      voicePreferencesLoadedRef.current = false
-      try {
-        const stored = localStorage.getItem(VOICE_PREFERENCES_KEY)
-        if (stored) {
-          const parsed = JSON.parse(stored) as Partial<VoicePreferences>
-          setVoicePreferences({ ...DEFAULT_VOICE_PREFERENCES, ...parsed })
-        }
-      } catch (error) {
-        console.error('Failed to load voice preferences:', error)
-      }
-      // Mark as loaded after a short delay to prevent immediate save
-      setTimeout(() => {
-        voicePreferencesLoadedRef.current = true
-      }, 100)
-    }
-  }, [isOpen, activeTab])
 
   // Load available voices from Web Speech API
   useEffect(() => {
@@ -332,17 +299,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       synth.removeEventListener('voiceschanged', loadVoices)
     }
   }, [isOpen, activeTab])
-
-  // Auto-save voice preferences to localStorage
-  useEffect(() => {
-    if (!voicePreferencesLoadedRef.current) return
-
-    try {
-      localStorage.setItem(VOICE_PREFERENCES_KEY, JSON.stringify(voicePreferences))
-    } catch (error) {
-      console.error('Failed to save voice preferences:', error)
-    }
-  }, [voicePreferences])
 
   // Auto-save voice settings with debounce
   const saveVoiceSettings = useCallback(async (settings: VoiceSettings) => {
@@ -407,11 +363,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       ...prev,
       narration: { ...prev.narration, ...updates },
     }))
-  }
-
-  // Update voice preferences helper
-  const updateVoicePreferences = (updates: Partial<VoicePreferences>) => {
-    setVoicePreferences((prev) => ({ ...prev, ...updates }))
   }
 
   // Get options with defaults from schema applied
@@ -1203,15 +1154,15 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                       </p>
                     </div>
                     <Switch
-                      checked={voicePreferences.narrationEnabled}
+                      checked={voiceSettings.narration?.enabled === true}
                       onCheckedChange={(checked) =>
-                        updateVoicePreferences({ narrationEnabled: checked })
+                        updateVoiceNarrationSettings({ enabled: checked })
                       }
                     />
                   </div>
 
                   {/* TTS Settings - only show when narration is enabled */}
-                  {voicePreferences.narrationEnabled && (
+                  {voiceSettings.narration?.enabled && (
                     <div className="space-y-4 border-t border-border pt-4">
                       <h4 className="text-sm font-medium">Text-to-Speech Settings</h4>
 
@@ -1219,9 +1170,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                       <div className="space-y-1">
                         <Label className="text-xs">Voice</Label>
                         <Select
-                          value={voicePreferences.ttsVoice || 'default'}
+                          value={voiceSettings.narration?.voice || 'default'}
                           onValueChange={(value) =>
-                            updateVoicePreferences({ ttsVoice: value === 'default' ? '' : value })
+                            updateVoiceNarrationSettings({ voice: value === 'default' ? '' : value })
                           }
                         >
                           <SelectTrigger className="h-8 text-sm">
@@ -1249,7 +1200,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         <div className="flex items-center justify-between">
                           <Label className="text-xs">Speech Speed</Label>
                           <span className="text-xs text-muted-foreground">
-                            {voicePreferences.narrationSpeed.toFixed(1)}x
+                            {(voiceSettings.narration?.speed ?? 1.0).toFixed(1)}x
                           </span>
                         </div>
                         <input
@@ -1257,9 +1208,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                           min="0.5"
                           max="2.0"
                           step="0.1"
-                          value={voicePreferences.narrationSpeed}
+                          value={voiceSettings.narration?.speed ?? 1.0}
                           onChange={(e) =>
-                            updateVoicePreferences({ narrationSpeed: parseFloat(e.target.value) })
+                            updateVoiceNarrationSettings({ speed: parseFloat(e.target.value) })
                           }
                           className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
                         />
@@ -1274,7 +1225,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         <div className="flex items-center justify-between">
                           <Label className="text-xs">Volume</Label>
                           <span className="text-xs text-muted-foreground">
-                            {Math.round(voicePreferences.narrationVolume * 100)}%
+                            {Math.round((voiceSettings.narration?.volume ?? 1.0) * 100)}%
                           </span>
                         </div>
                         <input
@@ -1282,9 +1233,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                           min="0"
                           max="1"
                           step="0.1"
-                          value={voicePreferences.narrationVolume}
+                          value={voiceSettings.narration?.volume ?? 1.0}
                           onChange={(e) =>
-                            updateVoicePreferences({ narrationVolume: parseFloat(e.target.value) })
+                            updateVoiceNarrationSettings({ volume: parseFloat(e.target.value) })
                           }
                           className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
                         />
@@ -1304,11 +1255,11 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                             const utterance = new SpeechSynthesisUtterance(
                               'Voice narration is working correctly.'
                             )
-                            utterance.rate = voicePreferences.narrationSpeed
-                            utterance.volume = voicePreferences.narrationVolume
-                            if (voicePreferences.ttsVoice) {
+                            utterance.rate = voiceSettings.narration?.speed ?? 1.0
+                            utterance.volume = voiceSettings.narration?.volume ?? 1.0
+                            if (voiceSettings.narration?.voice) {
                               const voice = availableVoices.find(
-                                (v) => v.name === voicePreferences.ttsVoice
+                                (v) => v.name === voiceSettings.narration?.voice
                               )
                               if (voice) utterance.voice = voice
                             }

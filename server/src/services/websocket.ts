@@ -700,6 +700,14 @@ export function broadcastVoiceNarration(
   },
   issueId?: string
 ): void {
+  console.log(`[websocket] broadcastVoiceNarration called:`, {
+    projectId,
+    executionId,
+    text: narrationData.text.substring(0, 50),
+    category: narrationData.category,
+    issueId,
+  });
+
   // Primary broadcast to execution subscribers
   websocketManager.broadcast(projectId, "execution", executionId, {
     type: "voice_narration",

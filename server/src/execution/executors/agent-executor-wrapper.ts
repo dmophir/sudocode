@@ -146,7 +146,7 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     string,
     { completed: boolean; exitCode: number }
   >;
-  /** Voice narration configuration for this execution */
+  /** Voice narration configuration for this execution (includes enabled flag) */
   private narrationConfig?: Partial<NarrationConfig>;
 
   constructor(config: AgentExecutorWrapperConfig<TConfig>) {
@@ -279,19 +279,14 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       const taskResume = (task.metadata as any)?.resume;
 
       // Debug: Log what we received in task metadata
-      console.log(
-        `[AgentExecutorWrapper] Task metadata for ${executionId}:`,
-        {
-          agentType: this.agentType,
-          hasMcpServers: !!taskMcpServers,
-          mcpServerNames: taskMcpServers
-            ? Object.keys(taskMcpServers)
-            : "none",
-          hasAppendSystemPrompt: !!taskAppendSystemPrompt,
-          dangerouslySkipPermissions: taskDangerouslySkipPermissions,
-          resume: taskResume,
-        }
-      );
+      console.log(`[AgentExecutorWrapper] Task metadata for ${executionId}:`, {
+        agentType: this.agentType,
+        hasMcpServers: !!taskMcpServers,
+        mcpServerNames: taskMcpServers ? Object.keys(taskMcpServers) : "none",
+        hasAppendSystemPrompt: !!taskAppendSystemPrompt,
+        dangerouslySkipPermissions: taskDangerouslySkipPermissions,
+        resume: taskResume,
+      });
 
       if (
         this.agentType === "claude-code" &&
@@ -734,6 +729,12 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
     const narrationService = new NarrationService(this.narrationConfig);
     const rateLimiter = new NarrationRateLimiter();
 
+    console.log(`[AgentExecutorWrapper] Voice narration config for ${executionId}:`, {
+      enabled: this.narrationConfig?.enabled ?? false,
+      narrateToolUse: this.narrationConfig?.narrateToolUse,
+      narrateAssistantMessages: this.narrationConfig?.narrateAssistantMessages,
+    });
+
     for await (const entry of normalized) {
       entryCount++;
 
@@ -772,21 +773,32 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
         // 2. Convert to AG-UI and broadcast for real-time streaming
         await normalizedAdapter.processEntry(entry);
 
-        // 3. Generate voice narration event if applicable
-        const narration = narrationService.summarizeForVoice(entry);
-        if (narration) {
-          const toEmit = rateLimiter.submit(narration);
-          if (toEmit) {
-            broadcastVoiceNarration(
-              this.projectId,
-              executionId,
-              {
-                text: toEmit.text,
-                category: toEmit.category,
-                priority: toEmit.priority,
-              },
-              issueId
-            );
+        // 3. Generate voice narration event if applicable (only if narration is enabled)
+        if (this.narrationConfig?.enabled) {
+          const narration = narrationService.summarizeForVoice(entry);
+          if (narration) {
+            console.log(`[AgentExecutorWrapper] Narration generated for ${executionId}:`, {
+              entryType: entry.type.kind,
+              text: narration.text.substring(0, 50) + (narration.text.length > 50 ? '...' : ''),
+              category: narration.category,
+              priority: narration.priority,
+            });
+            const toEmit = rateLimiter.submit(narration);
+            if (toEmit) {
+              console.log(`[AgentExecutorWrapper] Broadcasting voice narration for ${executionId}:`, toEmit.text.substring(0, 50));
+              broadcastVoiceNarration(
+                this.projectId,
+                executionId,
+                {
+                  text: toEmit.text,
+                  category: toEmit.category,
+                  priority: toEmit.priority,
+                },
+                issueId
+              );
+            } else {
+              console.log(`[AgentExecutorWrapper] Narration rate-limited for ${executionId}`);
+            }
           }
         }
       } catch (error) {
@@ -802,20 +814,22 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       }
     }
 
-    // Flush any pending narrations at the end of execution
-    while (rateLimiter.hasPending()) {
-      const pending = rateLimiter.flush();
-      if (pending) {
-        broadcastVoiceNarration(
-          this.projectId,
-          executionId,
-          {
-            text: pending.text,
-            category: pending.category,
-            priority: pending.priority,
-          },
-          issueId
-        );
+    // Flush any pending narrations at the end of execution (only if narration is enabled)
+    if (this.narrationConfig?.enabled) {
+      while (rateLimiter.hasPending()) {
+        const pending = rateLimiter.flush();
+        if (pending) {
+          broadcastVoiceNarration(
+            this.projectId,
+            executionId,
+            {
+              text: pending.text,
+              category: pending.category,
+              priority: pending.priority,
+            },
+            issueId
+          );
+        }
       }
     }
 
@@ -866,7 +880,9 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
 
       if (changesResult.available && changesResult.captured) {
         // Extract just the file paths from the changes
-        const filePaths = changesResult.captured.files.map((f: FileChangeStat) => f.path);
+        const filePaths = changesResult.captured.files.map(
+          (f: FileChangeStat) => f.path
+        );
         filesChangedJson = JSON.stringify(filePaths);
         console.log(
           `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for execution ${executionId}`
@@ -934,7 +950,9 @@ export class AgentExecutorWrapper<TConfig extends BaseAgentConfig> {
       const changesResult = await changesService.getChanges(executionId);
 
       if (changesResult.available && changesResult.captured) {
-        const filePaths = changesResult.captured.files.map((f: FileChangeStat) => f.path);
+        const filePaths = changesResult.captured.files.map(
+          (f: FileChangeStat) => f.path
+        );
         filesChangedJson = JSON.stringify(filePaths);
         console.log(
           `[AgentExecutorWrapper] Captured ${filePaths.length} file changes for failed execution ${executionId}`

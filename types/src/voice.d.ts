@@ -64,8 +64,16 @@ export interface VoiceSettingsConfig {
     /** Default voice for TTS (default: nova) */
     defaultVoice?: string;
   };
-  /** Narration settings - controls what execution events get narrated */
+  /** Narration settings - controls voice narration playback */
   narration?: {
+    /** Whether voice narration is enabled (default: false) */
+    enabled?: boolean;
+    /** Preferred voice name for TTS (default: system default) */
+    voice?: string;
+    /** Speech rate from 0.5 to 2.0 (default: 1.0) */
+    speed?: number;
+    /** Volume from 0 to 1 (default: 1.0) */
+    volume?: number;
     /** Whether to narrate tool use events like Read, Write, Bash (default: true) */
     narrateToolUse?: boolean;
     /** Whether to narrate tool results/completion (default: false) */
@@ -230,14 +238,19 @@ export interface TTSConfig {
 
 /**
  * Full voice configuration from GET /api/voice/config
+ *
+ * Combines runtime capabilities (provider availability) with
+ * user settings from config.json.
  */
 export interface VoiceConfig {
   /** Whether voice features are enabled for this project */
   enabled: boolean;
-  /** Speech-to-text configuration */
+  /** Speech-to-text configuration (runtime capabilities) */
   stt: STTConfig;
-  /** Text-to-speech configuration */
+  /** Text-to-speech configuration (runtime capabilities) */
   tts: TTSConfig;
+  /** User settings from config.json */
+  settings: VoiceSettingsConfig;
 }
 
 // =============================================================================

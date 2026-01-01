@@ -338,7 +338,10 @@ export function createVoiceRouter(): Router {
       const whisperAvailable =
         await sttService.isProviderAvailable("whisper-local");
 
-      // Build response
+      // Get user settings from config.json
+      const voiceSettings = readVoiceConfig(req.project.sudocodeDir);
+
+      // Build response - combines runtime capabilities with user settings
       const config: VoiceConfig = {
         enabled: voiceEnabled,
         stt: {
@@ -358,6 +361,8 @@ export function createVoiceRouter(): Router {
             openai: [],
           },
         },
+        // Include user settings from config.json
+        settings: voiceSettings || {},
       };
 
       return res.status(200).json({ success: true, data: config });

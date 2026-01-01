@@ -493,6 +493,20 @@ This is the actual content that should be narrated. It contains important inform
   });
 
   describe("configuration", () => {
+    it("should have enabled default to false", () => {
+      const config = service.getConfig();
+      expect(config.enabled).toBe(false);
+    });
+
+    it("should allow setting enabled to true", () => {
+      const enabledService = new NarrationService({
+        enabled: true,
+      });
+
+      const config = enabledService.getConfig();
+      expect(config.enabled).toBe(true);
+    });
+
     it("should respect maxAssistantMessageLength config", () => {
       const shortService = new NarrationService({
         maxAssistantMessageLength: 20,
