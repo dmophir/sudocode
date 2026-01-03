@@ -191,8 +191,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   // Available voices from Web Speech API
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
 
-  // Kokoro TTS hook for model management
-  const kokoroTTS = useKokoroTTS()
+  // Kokoro TTS hook for model management (uses server mode based on settings)
+  const kokoroTTS = useKokoroTTS({
+    useServer: voiceSettings.tts?.kokoroMode === 'server',
+  })
 
   // Update check hooks
   const { updateInfo } = useUpdateCheck()
