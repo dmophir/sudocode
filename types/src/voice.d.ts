@@ -63,6 +63,8 @@ export interface VoiceSettingsConfig {
     kokoroUrl?: string;
     /** Default voice for TTS (default: nova) */
     defaultVoice?: string;
+    /** Kokoro execution mode: 'browser' for WASM, 'server' for streaming via sidecar */
+    kokoroMode?: "browser" | "server";
   };
   /** Narration settings - controls voice narration playback */
   narration?: {

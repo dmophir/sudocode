@@ -129,6 +129,7 @@ interface VoiceSettings {
   tts?: {
     provider?: 'browser' | 'kokoro' | 'openai'
     defaultVoice?: string
+    kokoroMode?: 'browser' | 'server'
   }
   narration?: {
     enabled?: boolean
@@ -1193,13 +1194,39 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </Select>
                         <p className="text-[10px] text-muted-foreground">
                           {voiceSettings.tts?.provider === 'kokoro'
-                            ? 'High-quality 82M parameter model running in your browser'
+                            ? 'High-quality 82M parameter model for natural speech synthesis'
                             : 'Uses your browser\'s built-in speech synthesis'}
                         </p>
                       </div>
 
-                      {/* Kokoro Model Status - only show when Kokoro is selected */}
+                      {/* Kokoro Mode Selection - only show when Kokoro provider is selected */}
                       {voiceSettings.tts?.provider === 'kokoro' && (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Kokoro Mode</Label>
+                          <Select
+                            value={voiceSettings.tts?.kokoroMode || 'browser'}
+                            onValueChange={(value) =>
+                              updateVoiceTTSSettings({ kokoroMode: value as 'browser' | 'server' })
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="browser">Browser (WASM)</SelectItem>
+                              <SelectItem value="server">Server (Streaming)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] text-muted-foreground">
+                            {voiceSettings.tts?.kokoroMode === 'server'
+                              ? 'Uses server-side GPU for faster generation. Requires server to be running.'
+                              : 'Runs in your browser. Works offline but uses more browser resources.'}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Kokoro Model Status - only show when Kokoro is selected and browser mode */}
+                      {voiceSettings.tts?.provider === 'kokoro' && voiceSettings.tts?.kokoroMode !== 'server' && (
                         <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
                           <div className="flex items-center justify-between">
                             <Label className="text-xs">Kokoro Model</Label>
