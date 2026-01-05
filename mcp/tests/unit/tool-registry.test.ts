@@ -58,7 +58,7 @@ describe("tool-registry", () => {
       const tools = ALL_TOOLS.filter((t) => t.scope === "inspection");
       const names = tools.map((t) => t.name);
 
-      expect(names).toContain("execution_trajectory");
+      // Note: execution_trajectory is disabled (not yet implemented)
       expect(names).toContain("execution_changes");
       expect(names).toContain("execution_chain");
     });
@@ -132,10 +132,10 @@ describe("tool-registry", () => {
       const result = getToolsForScopes(new Set(["inspection"]));
       const names = result.map((t) => t.name);
 
-      expect(names).toContain("execution_trajectory");
+      // Note: execution_trajectory is disabled (not yet implemented)
       expect(names).toContain("execution_changes");
       expect(names).toContain("execution_chain");
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(2);
     });
 
     it("returns workflow tools for workflow scopes", () => {
@@ -214,8 +214,9 @@ describe("tool-registry", () => {
       const listExec = getToolByName("list_executions")!;
       expect(requiresApiClient(listExec)).toBe(true);
 
-      const trajectory = getToolByName("execution_trajectory")!;
-      expect(requiresApiClient(trajectory)).toBe(true);
+      // Note: execution_trajectory is disabled (not yet implemented)
+      const changes = getToolByName("execution_changes")!;
+      expect(requiresApiClient(changes)).toBe(true);
     });
 
     it("returns true for all workflow tools", () => {
@@ -269,12 +270,7 @@ describe("tool-registry", () => {
       expect(typeProperty.enum).toContain("references");
     });
 
-    it("execution_trajectory has optional max_entries", () => {
-      const tool = getToolByName("execution_trajectory")!;
-      expect(tool.inputSchema.properties).toHaveProperty("max_entries");
-      expect(tool.inputSchema.required).toContain("execution_id");
-      expect(tool.inputSchema.required).not.toContain("max_entries");
-    });
+    // Note: execution_trajectory test removed - tool is disabled (not yet implemented)
 
     it("execution_changes has optional include_diff", () => {
       const tool = getToolByName("execution_changes")!;

@@ -341,7 +341,7 @@ describe("Scope-based tool filtering", () => {
       const tools = getToolsForScopes(usableScopes);
 
       const names = tools.map((t) => t.name);
-      expect(names).toContain("execution_trajectory");
+      // Note: execution_trajectory is disabled (not yet implemented)
       expect(names).toContain("execution_changes");
       expect(names).toContain("execution_chain");
     });
@@ -398,8 +398,7 @@ describe("Scope-based tool filtering", () => {
       expect(names).toContain("start_execution");
       expect(names).toContain("cancel_execution");
 
-      // Inspection tools
-      expect(names).toContain("execution_trajectory");
+      // Inspection tools (note: execution_trajectory is disabled)
       expect(names).toContain("execution_changes");
       expect(names).toContain("execution_chain");
 
@@ -435,10 +434,9 @@ describe("Scope-based tool filtering", () => {
       expect(names).toContain("ready");
       expect(names).toContain("list_issues");
 
-      // Extended tools
+      // Extended tools (note: execution_trajectory is disabled)
       expect(names).toContain("project_status");
       expect(names).toContain("list_executions");
-      expect(names).toContain("execution_trajectory");
       expect(names).toContain("list_workflows");
     });
 

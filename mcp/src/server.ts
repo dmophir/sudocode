@@ -63,6 +63,9 @@ export class SudocodeMCPServer {
 
     // Create API client if server URL is configured and extended scopes are enabled
     if (this.config.serverUrl && hasExtendedScopes(this.usableScopes)) {
+      if (process.env.DEBUG_MCP) {
+        console.error(`[SudocodeMCPServer] Creating API client with projectId=${this.config.projectId}`);
+      }
       this.apiClient = new SudocodeAPIClient({
         serverUrl: this.config.serverUrl,
         projectId: this.config.projectId,
@@ -328,8 +331,7 @@ sudocode is a git-native spec and issue management system designed for AI-assist
         return this.apiClient.cancelExecution(args as any);
 
       // Inspection
-      case "execution_trajectory":
-        return this.apiClient.getExecutionTrajectory(args as any);
+      // TODO: execution_trajectory - not yet implemented (see tool-registry.ts)
       case "execution_changes":
         return this.apiClient.getExecutionChanges(args as any);
       case "execution_chain":
@@ -483,6 +485,29 @@ sudocode is a git-native spec and issue management system designed for AI-assist
 
     if (this.config.serverUrl) {
       console.error(`✓ Server URL: ${this.config.serverUrl}`);
+    }
+
+    // Auto-open project on server if we have an API client and working directory
+    if (this.apiClient && this.config.workingDir) {
+      try {
+        const workingDir = this.config.workingDir;
+        const absolutePath = workingDir.startsWith("/")
+          ? workingDir
+          : join(process.cwd(), workingDir);
+
+        console.error(`[mcp] Opening project at ${absolutePath}...`);
+        const result = await this.apiClient.openProject(absolutePath);
+        console.error(`✓ Project opened: ${result.id}`);
+
+        // Update projectId if it was auto-discovered differently
+        if (result.id !== this.config.projectId) {
+          console.error(`[mcp] Note: Server returned project ID ${result.id} (was: ${this.config.projectId})`);
+        }
+      } catch (error) {
+        // Log but don't fail - project might already be open or server might not be running
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[mcp] Warning: Could not open project on server: ${message}`);
+      }
     }
 
     const transport = new StdioServerTransport();

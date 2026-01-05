@@ -263,6 +263,11 @@ export class SudocodeAPIClient {
     this.projectId = config.projectId;
     this.executionId = config.executionId;
     this.timeout = config.timeout ?? 30000;
+
+    // Debug: Log configuration
+    if (process.env.DEBUG_MCP) {
+      console.error(`[SudocodeAPIClient] serverUrl=${this.serverUrl}, projectId=${this.projectId}`);
+    }
   }
 
   // ===========================================================================
@@ -287,6 +292,15 @@ export class SudocodeAPIClient {
       };
       if (this.projectId) {
         headers["X-Project-ID"] = this.projectId;
+      } else {
+        // Warn if projectId is missing - API will likely reject the request
+        console.error(`[SudocodeAPIClient] WARNING: No projectId set, X-Project-ID header will not be sent`);
+      }
+
+      // Debug: Log request details
+      if (process.env.DEBUG_MCP) {
+        console.error(`[SudocodeAPIClient] ${method} ${url}`);
+        console.error(`[SudocodeAPIClient] Headers: ${JSON.stringify(headers)}`);
       }
 
       const response = await fetch(url, {
@@ -367,6 +381,20 @@ export class SudocodeAPIClient {
       }
     }
     return parts.length > 0 ? `?${parts.join("&")}` : "";
+  }
+
+  // ===========================================================================
+  // Project Methods
+  // ===========================================================================
+
+  /**
+   * Open a project by path.
+   * This must be called before other API methods if the project isn't already open.
+   */
+  async openProject(projectPath: string): Promise<{ id: string; path: string }> {
+    return this.request<{ id: string; path: string }>("POST", "/api/projects/open", {
+      path: projectPath,
+    });
   }
 
   // ===========================================================================

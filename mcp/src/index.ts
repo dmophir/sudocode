@@ -10,8 +10,35 @@ import {
   resolveScopes,
   hasExtendedScopes,
   getMissingServerUrlScopes,
-  ALL_SCOPES,
 } from "./scopes.js";
+import { createHash } from "crypto";
+import { basename, resolve } from "path";
+
+/**
+ * Generate a deterministic project ID from a path.
+ * Uses the same algorithm as the server's ProjectRegistry.
+ * Format: <repo-name>-<8-char-hash>
+ */
+function generateProjectId(projectPath: string): string {
+  // Resolve to absolute path
+  const absolutePath = resolve(projectPath);
+
+  // Extract repo name from path
+  const repoName = basename(absolutePath);
+
+  // Create URL-safe version of repo name
+  const safeName = repoName
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") // Remove leading/trailing dashes
+    .slice(0, 32);
+
+  // Generate short hash for uniqueness
+  const hash = createHash("sha256").update(absolutePath).digest("hex").slice(0, 8);
+
+  return `${safeName}-${hash}`;
+}
 
 function parseArgs(): SudocodeMCPServerConfig {
   const config: SudocodeMCPServerConfig = {};
@@ -59,7 +86,7 @@ Options:
   --no-sync                 Skip initial sync on startup (default: sync enabled)
   -s, --scope <scopes>      Comma-separated list of scopes to enable (default: "default")
   --server-url <url>        Local server URL for extended tools (required if scope != default)
-  --project-id <id>         Project ID for API calls (auto-discovered if not provided)
+  --project-id <id>         Project ID for API calls (auto-discovered from working dir)
   -h, --help                Show this help message
 
 Scopes:
@@ -118,6 +145,16 @@ function validateConfig(config: SudocodeMCPServerConfig): void {
     config.serverUrl = process.env.SUDOCODE_SERVER_URL;
   }
 
+  // Auto-discover project ID from working directory if not specified
+  if (!config.projectId && config.workingDir) {
+    config.projectId = generateProjectId(config.workingDir);
+    console.error(`[mcp] Auto-discovered project ID: ${config.projectId}`);
+  } else if (!config.projectId) {
+    // Try current working directory as fallback
+    config.projectId = generateProjectId(process.cwd());
+    console.error(`[mcp] Auto-discovered project ID from cwd: ${config.projectId}`);
+  }
+
   try {
     // Validate and resolve scopes
     const scopeConfig = resolveScopes(
@@ -128,12 +165,16 @@ function validateConfig(config: SudocodeMCPServerConfig): void {
 
     // Check if extended scopes are enabled without server URL
     if (hasExtendedScopes(scopeConfig.enabledScopes) && !config.serverUrl) {
-      const missingScopes = getMissingServerUrlScopes(scopeConfig.enabledScopes);
+      const missingScopes = getMissingServerUrlScopes(
+        scopeConfig.enabledScopes
+      );
       console.error("");
       console.error(
         `⚠️  WARNING: Extended scopes require --server-url to be configured`
       );
-      console.error(`   The following scopes will be disabled: ${missingScopes.join(", ")}`);
+      console.error(
+        `   The following scopes will be disabled: ${missingScopes.join(", ")}`
+      );
       console.error(`   Only 'default' scope tools will be available.`);
       console.error("");
     }

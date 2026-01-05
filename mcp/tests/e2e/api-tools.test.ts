@@ -267,8 +267,7 @@ describe.skipIf(SKIP_E2E)("sudocode-mcp API Tools E2E", () => {
   // ===========================================================================
 
   describe("overview scope", () => {
-    // Note: project_status endpoint is not yet implemented in the server
-    it.skip("should get project status with ready issues", async () => {
+    it("should get project status with ready issues", async () => {
       insertTestData();
       const client = await spawnMCPServer("overview");
 
@@ -278,6 +277,8 @@ describe.skipIf(SKIP_E2E)("sudocode-mcp API Tools E2E", () => {
         expect(result).toBeDefined();
         expect(result.ready_issues).toBeDefined();
         expect(Array.isArray(result.ready_issues)).toBe(true);
+        // Should have 2 ready issues (i-test1 and i-test2 are open, i-test3 is in_progress)
+        expect(result.ready_issues.length).toBe(2);
       } finally {
         client.close();
       }
@@ -477,7 +478,7 @@ describe.skipIf(SKIP_E2E)("sudocode-mcp API Tools E2E", () => {
       }
     });
 
-    // Note: trajectory endpoint is not yet implemented in the server
+    // Note: execution_trajectory tool is disabled until GET /api/executions/:id/trajectory endpoint is implemented
     it.skip("should get execution trajectory", async () => {
       insertTestData();
       const client = await spawnMCPServer("executions,inspection");
@@ -674,7 +675,7 @@ describe.skipIf(SKIP_E2E)("sudocode-mcp API Tools E2E", () => {
       const client = await spawnMCPServer("all");
 
       try {
-        // Test execution tool (project_status not implemented yet)
+        // Test execution tool
         const execResult = await client.callTool("list_executions");
         expect(execResult).toBeDefined();
         expect(execResult.executions).toBeDefined();

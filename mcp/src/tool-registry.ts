@@ -526,28 +526,32 @@ const EXECUTION_WRITE_TOOLS: ToolDefinition[] = [
 // Inspection Tools
 // =============================================================================
 
+// TODO: Implement execution_trajectory tool once GET /api/executions/:id/trajectory
+// endpoint is added to the server. This tool would return the agent's tool calls
+// and actions during an execution, parsed from execution logs.
+// {
+//   name: "execution_trajectory",
+//   scope: "inspection",
+//   description:
+//     "Get the agent's actions and tool calls from an execution. " +
+//     "Useful for understanding what happened and debugging issues.",
+//   inputSchema: {
+//     type: "object",
+//     properties: {
+//       execution_id: {
+//         type: "string",
+//         description: "Execution ID to inspect",
+//       },
+//       max_entries: {
+//         type: "number",
+//         description: "Maximum entries to return (default: 50)",
+//       },
+//     },
+//     required: ["execution_id"],
+//   },
+// },
+
 const INSPECTION_TOOLS: ToolDefinition[] = [
-  {
-    name: "execution_trajectory",
-    scope: "inspection",
-    description:
-      "Get the agent's actions and tool calls from an execution. " +
-      "Useful for understanding what happened and debugging issues.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        execution_id: {
-          type: "string",
-          description: "Execution ID to inspect",
-        },
-        max_entries: {
-          type: "number",
-          description: "Maximum entries to return (default: 50)",
-        },
-      },
-      required: ["execution_id"],
-    },
-  },
   {
     name: "execution_changes",
     scope: "inspection",

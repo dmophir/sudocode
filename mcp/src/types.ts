@@ -68,7 +68,7 @@ export interface SudocodeMCPServerConfig extends SudocodeClientConfig {
   scope?: string;
   /** Server URL for extended tools */
   serverUrl?: string;
-  /** Project ID for API calls (auto-discovered if not provided) */
+  /** Project ID for API calls (auto-discovered from working dir if not provided) */
   projectId?: string;
 }
 
