@@ -33,7 +33,10 @@ import { PromptResolver } from "./prompt-resolver.js";
 import { execFileNoThrow } from "../utils/execFileNoThrow.js";
 import type { NarrationConfig } from "./narration-service.js";
 import { getNarrationConfig } from "./narration-service.js";
-import { readVoiceConfig, isVoiceBroadcastEnabled } from "../utils/voice-config.js";
+import {
+  readVoiceConfig,
+  isVoiceBroadcastEnabled,
+} from "../utils/voice-config.js";
 
 /**
  * MCP server configuration
@@ -71,6 +74,8 @@ export interface ExecutionConfig {
   resume?: string;
   /** Parent execution ID to link resumed/follow-up executions */
   parentExecutionId?: string;
+  /** Tags for categorizing executions (e.g., 'project-assistant' triggers MCP injection) */
+  tags?: string[];
   /**
    * Voice narration configuration for this execution.
    * Controls what gets narrated (e.g., only assistant_message and speak tool).
@@ -142,6 +147,7 @@ export class ExecutionService {
   private transportManager?: TransportManager;
   private logsStore: ExecutionLogsStore;
   private workerPool?: ExecutionWorkerPool;
+  private serverUrl?: string;
 
   /**
    * Create a new ExecutionService
@@ -171,6 +177,15 @@ export class ExecutionService {
     this.transportManager = transportManager;
     this.logsStore = logsStore || new ExecutionLogsStore(db);
     this.workerPool = workerPool;
+  }
+
+  /**
+   * Update the server URL after dynamic port discovery.
+   * Called by ProjectContext when the actual server port is known.
+   * Required for project-assistant MCP injection.
+   */
+  setServerUrl(serverUrl: string): void {
+    this.serverUrl = serverUrl;
   }
 
   /**
@@ -460,7 +475,11 @@ export class ExecutionService {
         db: this.db,
         transportManager: this.transportManager,
         // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
-        narrationConfig: { ...voiceNarrationSettings, ...narrationConfig, enabled: voiceEnabled },
+        narrationConfig: {
+          ...voiceNarrationSettings,
+          ...narrationConfig,
+          enabled: voiceEnabled,
+        },
       }
     );
 
@@ -727,7 +746,11 @@ ${feedback}`;
         db: this.db,
         transportManager: this.transportManager,
         // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
-        narrationConfig: { ...voiceNarrationSettings, ...parentNarrationConfig, enabled: voiceEnabled },
+        narrationConfig: {
+          ...voiceNarrationSettings,
+          ...parentNarrationConfig,
+          enabled: voiceEnabled,
+        },
       }
     );
 
@@ -1287,7 +1310,10 @@ ${feedback}`;
     // Uses json_each to check if any of the specified tags exist in config.tags array
     if (options.tags && options.tags.length > 0) {
       const tagConditions = options.tags
-        .map(() => "EXISTS (SELECT 1 FROM json_each(json_extract(config, '$.tags')) WHERE value = ?)")
+        .map(
+          () =>
+            "EXISTS (SELECT 1 FROM json_each(json_extract(config, '$.tags')) WHERE value = ?)"
+        )
         .join(" OR ");
       whereClauses.push(`(${tagConditions})`);
       params.push(...options.tags);
@@ -1425,19 +1451,19 @@ ${feedback}`;
     if (agentType === "cursor" && !mcpPresent) {
       throw new Error(
         "Cursor agent requires sudocode-mcp to be configured in .cursor/mcp.json.\n" +
-        "Please create .cursor/mcp.json in your project root with:\n\n" +
-        JSON.stringify(
-          {
-            mcpServers: {
-              "sudocode-mcp": {
-                command: "sudocode-mcp",
+          "Please create .cursor/mcp.json in your project root with:\n\n" +
+          JSON.stringify(
+            {
+              mcpServers: {
+                "sudocode-mcp": {
+                  command: "sudocode-mcp",
+                },
               },
             },
-          },
-          null,
-          2
-        ) +
-        "\n\nVisit: https://github.com/sudocode-ai/sudocode"
+            null,
+            2
+          ) +
+          "\n\nVisit: https://github.com/sudocode-ai/sudocode"
       );
     }
 
@@ -1450,16 +1476,56 @@ ${feedback}`;
     }
 
     // 4. Auto-inject sudocode-mcp if not configured and not already in userConfig
+    // When tagged with 'project-assistant', add extended scopes to the MCP server
+    const isProjectAssistant = userConfig.tags?.includes("project-assistant");
+
     if (!mcpPresent && !userConfig.mcpServers?.["sudocode-mcp"]) {
-      console.info(
-        "[ExecutionService] Adding sudocode-mcp to mcpServers (auto-injection)"
-      );
+      // Build args for sudocode-mcp based on tags and server availability
+      const mcpArgs: string[] = [];
+
+      if (isProjectAssistant) {
+        if (this.serverUrl) {
+          // Enable project-assistant scope with server URL for extended tools
+          mcpArgs.push(
+            "--scope",
+            "all", // "all" = default + project-assistant scopes
+            "--server-url",
+            this.serverUrl,
+            "--project-id",
+            this.projectId
+          );
+          console.info(
+            "[ExecutionService] Adding sudocode-mcp with project-assistant scopes (auto-injection)"
+          );
+        } else {
+          console.warn(
+            "[ExecutionService] Cannot enable project-assistant scopes: serverUrl not set. " +
+              "Only default scope will be available."
+          );
+          console.info(
+            "[ExecutionService] Adding sudocode-mcp with default scope (auto-injection)"
+          );
+        }
+      } else {
+        console.info(
+          "[ExecutionService] Adding sudocode-mcp with default scope (auto-injection)"
+        );
+      }
+
       mergedConfig.mcpServers = {
         ...(userConfig.mcpServers || {}),
         "sudocode-mcp": {
           command: "sudocode-mcp",
+          ...(mcpArgs.length > 0 ? { args: mcpArgs } : {}),
         },
       };
+
+      if (mcpArgs.length > 0) {
+        console.log(
+          "[ExecutionService] sudocode-mcp configured with args:",
+          mcpArgs.join(" ")
+        );
+      }
     } else if (mcpPresent) {
       console.info(
         "[ExecutionService] Removing sudocode-mcp from CLI config (using plugin instead)"
@@ -1467,7 +1533,17 @@ ${feedback}`;
       // Remove sudocode-mcp from mcpServers to avoid duplication with plugin
       if (userConfig.mcpServers) {
         const { "sudocode-mcp": _removed, ...rest } = userConfig.mcpServers;
-        mergedConfig.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+        mergedConfig.mcpServers =
+          Object.keys(rest).length > 0 ? rest : undefined;
+      }
+
+      // Note: When using the plugin, project-assistant scopes need to be configured
+      // in the plugin settings, not via CLI injection
+      if (isProjectAssistant) {
+        console.warn(
+          "[ExecutionService] project-assistant tag detected but sudocode plugin is active. " +
+            "Extended scopes must be configured in plugin settings."
+        );
       }
     } else if (userConfig.mcpServers?.["sudocode-mcp"]) {
       console.info(
@@ -1592,9 +1668,16 @@ ${feedback}`;
     if (agentType === "cursor") {
       try {
         // NOTE: .cursor/mcp.json is in project root, not home directory
-        const cursorConfigPath = path.join(this.repoPath, ".cursor", "mcp.json");
+        const cursorConfigPath = path.join(
+          this.repoPath,
+          ".cursor",
+          "mcp.json"
+        );
 
-        const configContent = await fsPromises.readFile(cursorConfigPath, "utf-8");
+        const configContent = await fsPromises.readFile(
+          cursorConfigPath,
+          "utf-8"
+        );
         const config = JSON.parse(configContent);
 
         // Check if any mcpServer has command "sudocode-mcp"
@@ -1605,7 +1688,9 @@ ${feedback}`;
         if (hasSudocodeMcp) {
           console.info("[ExecutionService] sudocode-mcp detected for cursor");
         } else {
-          console.info("[ExecutionService] sudocode-mcp not detected for cursor");
+          console.info(
+            "[ExecutionService] sudocode-mcp not detected for cursor"
+          );
         }
 
         return hasSudocodeMcp;
@@ -1656,7 +1741,9 @@ ${feedback}`;
         const config = TOML.parse(configContent);
 
         // Check if any mcp_servers section has command "sudocode-mcp"
-        const mcpServers = config.mcp_servers as Record<string, any> | undefined;
+        const mcpServers = config.mcp_servers as
+          | Record<string, any>
+          | undefined;
         const hasSudocodeMcp =
           mcpServers &&
           Object.values(mcpServers).some(
