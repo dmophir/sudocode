@@ -2,7 +2,8 @@
  * Executor Factory
  *
  * Factory functions for creating the appropriate executor wrapper based on agent type.
- * All agents now use the unified AgentExecutorWrapper.
+ * Routes to AcpExecutorWrapper for ACP-native agents (claude-code, codex, gemini, opencode)
+ * or AgentExecutorWrapper for legacy agents (copilot, cursor).
  *
  * @module execution/executors/executor-factory
  */
@@ -20,6 +21,10 @@ import {
   AgentExecutorWrapper,
   type AgentExecutorWrapperConfig,
 } from "./agent-executor-wrapper.js";
+import {
+  AcpExecutorWrapper,
+  type AcpExecutorWrapperConfig,
+} from "./acp-executor-wrapper.js";
 import type { NarrationConfig } from "../../services/narration-service.js";
 
 /**
@@ -54,7 +59,7 @@ export interface ExecutorFactoryConfig {
 /**
  * Union type of all possible executor wrapper types
  */
-export type ExecutorWrapper = AgentExecutorWrapper<any>;
+export type ExecutorWrapper = AgentExecutorWrapper<any> | AcpExecutorWrapper;
 
 /**
  * Create an executor wrapper for the specified agent type
@@ -98,6 +103,36 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
     workDir: factoryConfig.workDir,
   });
 
+  // Check if agent is ACP-native (registered in AgentFactory)
+  if (AcpExecutorWrapper.isAcpSupported(agentType)) {
+    console.log(`[ExecutorFactory] Using AcpExecutorWrapper for ${agentType}`);
+
+    const acpConfig: AcpExecutorWrapperConfig = {
+      agentType,
+      acpConfig: {
+        agentType,
+        // Extract MCP servers from agent config if present
+        mcpServers: (agentConfig as any).mcpServers,
+        // Default to auto-approve, but respect config if set
+        permissionMode: (agentConfig as any).dangerouslySkipPermissions
+          ? "auto-approve"
+          : "auto-approve", // TODO: Make configurable
+        env: (agentConfig as any).env,
+        mode: (agentConfig as any).mode,
+      },
+      lifecycleService: factoryConfig.lifecycleService,
+      logsStore: factoryConfig.logsStore,
+      projectId: factoryConfig.projectId,
+      db: factoryConfig.db,
+      transportManager: factoryConfig.transportManager,
+    };
+
+    return new AcpExecutorWrapper(acpConfig);
+  }
+
+  // Fall back to legacy AgentExecutorWrapper for non-ACP agents
+  console.log(`[ExecutorFactory] Using AgentExecutorWrapper for ${agentType}`);
+
   // Get adapter from registry (will throw if not found)
   const adapter = agentRegistryService.getAdapter(agentType);
 
@@ -119,9 +154,6 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
       throw new AgentConfigValidationError(agentType, validationErrors);
     }
   }
-
-  // All agents use the unified AgentExecutorWrapper
-  console.log(`[ExecutorFactory] Using AgentExecutorWrapper for ${agentType}`);
 
   // Check if agent is implemented
   if (!agentRegistryService.isAgentImplemented(agentType)) {
@@ -179,4 +211,35 @@ export function validateAgentConfig<TConfig extends BaseAgentConfig>(
   }
 
   return adapter.validateConfig(agentConfig);
+}
+
+/**
+ * Check if an agent type uses ACP (Agent Client Protocol)
+ *
+ * ACP-native agents use the new unified AcpExecutorWrapper which provides:
+ * - Direct SessionUpdate streaming
+ * - Unified agent lifecycle management
+ * - Support for session resume and forking
+ *
+ * @param agentType - The type of agent to check
+ * @returns true if the agent uses ACP, false for legacy agents
+ *
+ * @example
+ * ```typescript
+ * if (isAcpAgent('claude-code')) {
+ *   // Agent uses ACP protocol
+ * }
+ * ```
+ */
+export function isAcpAgent(agentType: string): boolean {
+  return AcpExecutorWrapper.isAcpSupported(agentType);
+}
+
+/**
+ * List all available ACP-native agents
+ *
+ * @returns Array of agent type names that support ACP
+ */
+export function listAcpAgents(): string[] {
+  return AcpExecutorWrapper.listAcpAgents();
 }

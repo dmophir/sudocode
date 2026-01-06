@@ -1,8 +1,11 @@
 /**
- * Integration Tests for Phase 1: Direct Execution Pattern
+ * Integration Tests for Phase 1: Direct Execution Pattern (Legacy Agents)
  *
  * Tests the integration of AgentExecutorWrapper, NormalizedEntryToAgUiAdapter,
- * and ExecutionLogsStore with real components.
+ * and ExecutionLogsStore with real components using legacy (non-ACP) agents.
+ *
+ * Note: ACP-native agents (claude-code, codex, gemini, opencode) use AcpExecutorWrapper
+ * and are tested separately in acp-executor-wrapper.test.ts.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -28,7 +31,7 @@ vi.mock('../../../src/services/websocket.js', () => ({
   broadcastVoiceNarration: vi.fn(),
 }));
 
-describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
+describe('Phase 1 Integration Tests - Direct Execution Pattern (Legacy Agents)', () => {
   let db: Database.Database;
   let lifecycleService: any;
   let logsStore: any;
@@ -47,9 +50,11 @@ describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
     // Create mock executor
     mockExecutor = createMockExecutor();
 
-    // Create wrapper using factory
+    // Create wrapper using factory with a legacy (non-ACP) agent
+    // Note: 'copilot' is a legacy agent that uses AgentExecutorWrapper
+    // ACP-native agents like 'claude-code' use AcpExecutorWrapper instead
     wrapper = createExecutorForAgent(
-      'claude-code',
+      'copilot',
       { workDir: '/tmp/test' },
       {
         workDir: '/tmp/test',
@@ -59,7 +64,7 @@ describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
         db,
         transportManager,
       }
-    );
+    ) as AgentExecutorWrapper<any>;
 
     // Replace the real executor with our mock
     (wrapper as any).executor = mockExecutor;
@@ -75,7 +80,7 @@ describe('Phase 1 Integration Tests - Direct Execution Pattern', () => {
       // 1. Create execution record (without issue_id to avoid foreign key constraint)
       createExecution(db, {
         id: 'exec-test-1',
-        agent_type: 'claude-code',
+        agent_type: 'copilot',
         mode: 'worktree',
         prompt: 'Test prompt',
       });
