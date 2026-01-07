@@ -110,7 +110,6 @@ async function initialize() {
         );
       }
     }
-
   } catch (error) {
     console.error("Failed to initialize server:", error);
     process.exit(1);
@@ -164,6 +163,83 @@ app.use("/api/agents", createAgentsRouter());
 
 // Voice endpoint - requires project context for config
 app.use("/api/voice", requireProject(projectManager), createVoiceRouter());
+
+// Project status endpoint - returns ready issues, active executions, running workflows
+app.get(
+  "/api/project/status",
+  requireProject(projectManager),
+  (req: Request, res: Response) => {
+    try {
+      const db = req.project!.db;
+
+      // Get ready issues (open, not blocked)
+      const readyIssues = db
+        .prepare(
+          `SELECT i.id, i.title, i.priority
+           FROM issues i
+           WHERE i.status = 'open'
+           AND i.archived = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM relationships r
+             WHERE r.to_id = i.id
+             AND r.relationship_type IN ('blocks', 'depends-on')
+             AND EXISTS (
+               SELECT 1 FROM issues blocker
+               WHERE blocker.id = r.from_id
+               AND blocker.status != 'closed'
+             )
+           )
+           ORDER BY i.priority ASC, i.created_at ASC
+           LIMIT 20`
+        )
+        .all() as Array<{ id: string; title: string; priority: number }>;
+
+      // Get active executions
+      const activeExecutions = db
+        .prepare(
+          `SELECT id, issue_id, status, agent_type
+           FROM executions
+           WHERE status IN ('running', 'pending', 'preparing')
+           ORDER BY created_at DESC
+           LIMIT 20`
+        )
+        .all() as Array<{
+        id: string;
+        issue_id: string | null;
+        status: string;
+        agent_type: string;
+      }>;
+
+      // Get running workflows
+      const runningWorkflows = db
+        .prepare(
+          `SELECT id, status, title
+           FROM workflows
+           WHERE status IN ('running', 'pending', 'paused')
+           ORDER BY created_at DESC
+           LIMIT 20`
+        )
+        .all() as Array<{ id: string; status: string; title: string | null }>;
+
+      res.json({
+        success: true,
+        data: {
+          ready_issues: readyIssues,
+          active_executions: activeExecutions,
+          running_workflows: runningWorkflows,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting project status:", error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        message: "Failed to get project status",
+        error_data: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+);
 
 // Mount execution routes
 // TODO: Make these all relative to /executions

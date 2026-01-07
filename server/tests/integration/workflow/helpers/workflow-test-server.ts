@@ -262,6 +262,83 @@ export async function createTestServer(
     res.json({ status: "ok", projectId });
   });
 
+  // Project status endpoint
+  app.get("/api/project/status", mockProjectContext, (req: Request, res: Response) => {
+    try {
+      const projectDb = (req as any).project.db;
+
+      // Get ready issues (open, not blocked)
+      const readyIssues = projectDb
+        .prepare(
+          `SELECT i.id, i.title, i.priority
+           FROM issues i
+           WHERE i.status = 'open'
+           AND (i.archived = 0 OR i.archived IS NULL)
+           AND NOT EXISTS (
+             SELECT 1 FROM relationships r
+             WHERE r.to_id = i.id
+             AND r.relationship_type IN ('blocks', 'depends-on')
+             AND EXISTS (
+               SELECT 1 FROM issues blocker
+               WHERE blocker.id = r.from_id
+               AND blocker.status != 'closed'
+             )
+           )
+           ORDER BY i.priority ASC, i.created_at ASC
+           LIMIT 20`
+        )
+        .all();
+
+      // Get active executions
+      const activeExecutions = projectDb
+        .prepare(
+          `SELECT id, issue_id, status, agent_type
+           FROM executions
+           WHERE status IN ('running', 'pending', 'preparing')
+           ORDER BY created_at DESC
+           LIMIT 20`
+        )
+        .all();
+
+      // Get running workflows
+      const runningWorkflows = projectDb
+        .prepare(
+          `SELECT id, status, title
+           FROM workflows
+           WHERE status IN ('running', 'pending', 'paused')
+           ORDER BY created_at DESC
+           LIMIT 20`
+        )
+        .all();
+
+      res.json({
+        success: true,
+        data: {
+          ready_issues: readyIssues,
+          active_executions: activeExecutions,
+          running_workflows: runningWorkflows,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        data: null,
+        message: "Failed to get project status",
+      });
+    }
+  });
+
+  // Projects open endpoint (for MCP auto-open)
+  app.post("/api/projects/open", (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        id: projectId,
+        path: options.repoPath,
+      },
+    });
+  });
+
   // Create HTTP server
   const server = http.createServer(app);
 

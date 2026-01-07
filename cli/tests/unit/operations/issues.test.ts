@@ -741,9 +741,10 @@ describe("Issue Operations", () => {
       // Should have a new auto-generated timestamp (different from the old one)
       expect(updated.updated_at).toBeTruthy();
       expect(updated.updated_at).not.toBe(oldTimestamp);
-      // Verify it's a recent timestamp (not the hardcoded 2024 value)
-      // SQLite uses UTC, so check that year is not the old test year
-      expect(updated.updated_at.startsWith("2024")).toBe(false);
+      // Verify it's a recent timestamp (not the old 2024 value)
+      // Use UTC year since SQLite CURRENT_TIMESTAMP uses UTC
+      const currentUtcYear = new Date().getUTCFullYear().toString();
+      expect(updated.updated_at.startsWith(currentUtcYear)).toBe(true);
     });
   });
 });
