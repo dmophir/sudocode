@@ -23,7 +23,6 @@ import type { ExecutionTask } from "agent-execution-engine/engine";
 import { createExecutorForAgent } from "../execution/executors/executor-factory.js";
 import { ExecutionLifecycleService } from "../services/execution-lifecycle.js";
 import { ExecutionLogsStore } from "../services/execution-logs-store.js";
-import { IpcTransportManager } from "../execution/transport/ipc-transport-manager.js";
 import { getExecution, updateExecution } from "../services/executions.js";
 import {
   readVoiceConfig,
@@ -252,18 +251,15 @@ async function runExecution(): Promise<void> {
     const lifecycleService = new ExecutionLifecycleService(db, REPO_PATH!);
     const logsStore = new ExecutionLogsStore(db);
 
-    // 7. Create IPC transport manager to forward AG-UI events
-    const ipcTransport = new IpcTransportManager(EXECUTION_ID!);
-
-    // 8. Determine agent type (default to claude-code for backwards compatibility)
+    // 7. Determine agent type (default to claude-code for backwards compatibility)
     const agentType = config.agentType || "claude-code";
 
-    // 9. Read voice config to determine if voice narration broadcasts are enabled
+    // 8. Read voice config to determine if voice narration broadcasts are enabled
     const voiceConfig = readVoiceConfig(REPO_PATH!);
     const voiceEnabled = isVoiceBroadcastEnabled(voiceConfig);
     const voiceNarrationSettings = getNarrationConfig(voiceConfig);
 
-    // 10. Create executor using factory
+    // 9. Create executor using factory
     const wrapper = createExecutorForAgent(
       agentType,
       { workDir: REPO_PATH!, ...config },
@@ -273,13 +269,12 @@ async function runExecution(): Promise<void> {
         logsStore,
         projectId: PROJECT_ID!,
         db,
-        transportManager: ipcTransport as any, // IpcTransportManager matches interface
         // Merge narration config: voiceSettings from config.json, then enabled flag
         narrationConfig: { ...voiceNarrationSettings, enabled: voiceEnabled },
       }
     );
 
-    // 11. Build execution task
+    // 10. Build execution task
     const task: ExecutionTask = {
       id: execution.id,
       type: "issue",

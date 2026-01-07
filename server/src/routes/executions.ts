@@ -8,8 +8,7 @@
 
 import { Router, Request, Response } from "express";
 import { execSync } from "child_process";
-import { NormalizedEntryToAgUiAdapter } from "../execution/output/normalized-to-ag-ui-adapter.js";
-import { AgUiEventAdapter } from "../execution/output/ag-ui-adapter.js";
+import { NormalizedEntryToAgUiAdapter, type AgUiEventEmitter } from "../execution/output/normalized-to-ag-ui-adapter.js";
 import { agentRegistryService } from "../services/agent-registry.js";
 import {
   AgentNotFoundError,
@@ -557,14 +556,15 @@ export function createExecutionsRouter(): Router {
         // Convert NormalizedEntry to AG-UI events on-demand
         const events: any[] = [];
 
-        // Create a temporary AG-UI adapter to collect events
-        const agUiAdapter = new AgUiEventAdapter(executionId);
-        agUiAdapter.onEvent((event) => {
-          events.push(event);
-        });
+        // Create an event collector that implements AgUiEventEmitter
+        const eventCollector: AgUiEventEmitter = {
+          emit: (event: any) => {
+            events.push(event);
+          },
+        };
 
         // Create normalized adapter to transform entries
-        const normalizedAdapter = new NormalizedEntryToAgUiAdapter(agUiAdapter);
+        const normalizedAdapter = new NormalizedEntryToAgUiAdapter(eventCollector);
 
         // Process all normalized entries through the adapter
         for (const entry of normalizedEntries) {

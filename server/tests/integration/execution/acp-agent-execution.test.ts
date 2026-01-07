@@ -93,7 +93,6 @@ describe('ACP Agent Integration Tests - Claude Code Execution', () => {
   let db: Database.Database;
   let lifecycleService: any;
   let logsStore: any;
-  let transportManager: any;
   let wrapper: AcpExecutorWrapper;
 
   beforeEach(async () => {
@@ -104,7 +103,6 @@ describe('ACP Agent Integration Tests - Claude Code Execution', () => {
     const services = createTestServices(db);
     lifecycleService = services.lifecycleService;
     logsStore = services.logsStore;
-    transportManager = services.transportManager;
 
     // Create wrapper using factory - should return AcpExecutorWrapper for claude-code
     wrapper = createExecutorForAgent(
@@ -116,7 +114,6 @@ describe('ACP Agent Integration Tests - Claude Code Execution', () => {
         logsStore,
         projectId: 'test-project',
         db,
-        transportManager,
       }
     ) as AcpExecutorWrapper;
   });
@@ -632,7 +629,6 @@ describe('ACP Agent Integration Tests - Claude Code Execution', () => {
           logsStore,
           projectId: 'test-project',
           db,
-          transportManager,
         }
       ) as AcpExecutorWrapper;
 

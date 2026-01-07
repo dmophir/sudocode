@@ -113,7 +113,6 @@ describe("LegacyShimExecutorWrapper", () => {
   let mockDb: any;
   let mockLogsStore: any;
   let mockLifecycleService: any;
-  let mockTransportManager: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -135,11 +134,6 @@ describe("LegacyShimExecutorWrapper", () => {
       setStatus: vi.fn(),
     };
 
-    mockTransportManager = {
-      connectAdapter: vi.fn(),
-      disconnectAdapter: vi.fn(),
-    };
-
     wrapper = new LegacyShimExecutorWrapper({
       agentType: "copilot",
       agentConfig: {
@@ -150,7 +144,6 @@ describe("LegacyShimExecutorWrapper", () => {
       logsStore: mockLogsStore,
       projectId: "test-project",
       db: mockDb,
-      transportManager: mockTransportManager,
     });
   });
 

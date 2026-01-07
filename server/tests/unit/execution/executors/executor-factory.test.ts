@@ -28,7 +28,6 @@ import { ExecutionLogsStore } from "../../../../src/services/execution-logs-stor
 const mockDb = {} as any;
 const mockLifecycleService = {} as any;
 const mockLogsStore = {} as any;
-const mockTransportManager = {} as any;
 
 const factoryConfig: ExecutorFactoryConfig = {
   workDir: "/tmp/test",
@@ -36,7 +35,6 @@ const factoryConfig: ExecutorFactoryConfig = {
   logsStore: mockLogsStore,
   projectId: "test-project",
   db: mockDb,
-  transportManager: mockTransportManager,
 };
 
 describe("ExecutorFactory", () => {

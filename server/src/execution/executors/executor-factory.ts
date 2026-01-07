@@ -14,7 +14,6 @@ import type { AgentType, BaseAgentConfig } from "@sudocode-ai/types/agents";
 import type Database from "better-sqlite3";
 import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 import type { ExecutionLogsStore } from "../../services/execution-logs-store.js";
-import type { TransportManager } from "../transport/transport-manager.js";
 import { agentRegistryService } from "../../services/agent-registry.js";
 import {
   AcpExecutorWrapper,
@@ -50,7 +49,6 @@ export interface ExecutorFactoryConfig {
   logsStore: ExecutionLogsStore;
   projectId: string;
   db: Database.Database;
-  transportManager?: TransportManager;
   /** Voice narration configuration for this execution */
   narrationConfig?: Partial<NarrationConfig>;
 }
@@ -88,7 +86,6 @@ export type ExecutorWrapper = AcpExecutorWrapper | LegacyShimExecutorWrapper;
  *     logsStore,
  *     projectId: 'my-project',
  *     db,
- *     transportManager,
  *   }
  * );
  *
@@ -126,7 +123,6 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
       logsStore: factoryConfig.logsStore,
       projectId: factoryConfig.projectId,
       db: factoryConfig.db,
-      transportManager: factoryConfig.transportManager,
     };
 
     return new AcpExecutorWrapper(acpConfig);
@@ -149,7 +145,6 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
       logsStore: factoryConfig.logsStore,
       projectId: factoryConfig.projectId,
       db: factoryConfig.db,
-      transportManager: factoryConfig.transportManager,
     };
 
     return new LegacyShimExecutorWrapper(shimConfig);

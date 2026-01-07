@@ -15,7 +15,6 @@ import type {
   ActionType,
   ToolResult,
 } from "agent-execution-engine/agents";
-import type { AgUiEventAdapter } from "./ag-ui-adapter.js";
 import {
   EventType,
   type TextMessageStartEvent,
@@ -29,6 +28,14 @@ import {
 } from "@ag-ui/core";
 
 /**
+ * Interface for objects that can emit AG-UI events.
+ * This provides a minimal contract for event emission.
+ */
+export interface AgUiEventEmitter {
+  emit(event: any): void;
+}
+
+/**
  * NormalizedEntryToAgUiAdapter
  *
  * Transforms normalized entries from agent executors into AG-UI protocol events.
@@ -36,8 +43,8 @@ import {
  *
  * @example
  * ```typescript
- * const agUiAdapter = new AgUiEventAdapter('run-123');
- * const normalizedAdapter = new NormalizedEntryToAgUiAdapter(agUiAdapter);
+ * const eventEmitter = { emit: (event) => events.push(event) };
+ * const normalizedAdapter = new NormalizedEntryToAgUiAdapter(eventEmitter);
  *
  * for await (const entry of normalizedStream) {
  *   await normalizedAdapter.processEntry(entry);
@@ -45,17 +52,17 @@ import {
  * ```
  */
 export class NormalizedEntryToAgUiAdapter {
-  private agUiAdapter: AgUiEventAdapter;
+  private eventEmitter: AgUiEventEmitter;
   private toolCallMap: Map<string, string> = new Map(); // toolId -> messageId
   private messageCounter: number = 0;
 
   /**
    * Create a new NormalizedEntryToAgUiAdapter
    *
-   * @param agUiAdapter - AG-UI event adapter to emit events through
+   * @param eventEmitter - Event emitter to emit AG-UI events through
    */
-  constructor(agUiAdapter: AgUiEventAdapter) {
-    this.agUiAdapter = agUiAdapter;
+  constructor(eventEmitter: AgUiEventEmitter) {
+    this.eventEmitter = eventEmitter;
   }
 
   /**
@@ -371,13 +378,9 @@ export class NormalizedEntryToAgUiAdapter {
   }
 
   /**
-   * Emit an event through the AG-UI adapter
-   *
-   * Uses the adapter's onEvent mechanism to emit events.
+   * Emit an event through the event emitter
    */
   private emitEvent<T>(event: T): void {
-    // Access the private emit method via the adapter's listener mechanism
-    // This is a workaround since AgUiEventAdapter doesn't expose public emit methods
-    (this.agUiAdapter as any).emit(event);
+    this.eventEmitter.emit(event);
   }
 }

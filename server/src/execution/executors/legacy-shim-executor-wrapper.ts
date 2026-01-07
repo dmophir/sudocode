@@ -19,7 +19,6 @@ import type { ExecutionTask } from "agent-execution-engine/engine";
 import type Database from "better-sqlite3";
 import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 import type { ExecutionLogsStore } from "../../services/execution-logs-store.js";
-import type { TransportManager } from "../transport/transport-manager.js";
 import {
   serializeCoalescedUpdate,
   type CoalescedSessionUpdate,
@@ -86,8 +85,6 @@ export interface LegacyShimExecutorWrapperConfig {
   projectId: string;
   /** Database connection */
   db: Database.Database;
-  /** Transport manager for SSE streaming */
-  transportManager?: TransportManager;
 }
 
 /**
@@ -142,7 +139,6 @@ export class LegacyShimExecutorWrapper {
   private readonly agentType: LegacyAgentType;
   private readonly agentConfig: LegacyAgentConfig;
   private readonly logsStore: ExecutionLogsStore;
-  private readonly transportManager?: TransportManager;
   private readonly projectId: string;
   private readonly db: Database.Database;
   private readonly executor: ILegacyExecutor;
@@ -154,7 +150,6 @@ export class LegacyShimExecutorWrapper {
     this.agentType = config.agentType;
     this.agentConfig = config.agentConfig;
     this.logsStore = config.logsStore;
-    this.transportManager = config.transportManager;
     this.projectId = config.projectId;
     this.db = config.db;
 
@@ -164,7 +159,6 @@ export class LegacyShimExecutorWrapper {
     console.log("[LegacyShimExecutorWrapper] Initialized", {
       agentType: this.agentType,
       projectId: this.projectId,
-      hasTransport: !!this.transportManager,
       hasLogsStore: !!this.logsStore,
     });
   }

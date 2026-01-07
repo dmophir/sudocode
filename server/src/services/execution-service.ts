@@ -23,7 +23,6 @@ import {
 import { randomUUID } from "crypto";
 import { execSync } from "child_process";
 import type { ExecutionTask } from "agent-execution-engine/engine";
-import type { TransportManager } from "../execution/transport/transport-manager.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { ExecutionWorkerPool } from "./execution-worker-pool.js";
 import { broadcastExecutionUpdate } from "./websocket.js";
@@ -139,7 +138,6 @@ export class ExecutionService {
   private projectId: string;
   private lifecycleService: ExecutionLifecycleService;
   private repoPath: string;
-  private transportManager?: TransportManager;
   private logsStore: ExecutionLogsStore;
   private workerPool?: ExecutionWorkerPool;
 
@@ -150,7 +148,6 @@ export class ExecutionService {
    * @param projectId - Project ID for WebSocket broadcasts
    * @param repoPath - Path to the git repository
    * @param lifecycleService - Optional execution lifecycle service (creates one if not provided)
-   * @param transportManager - Optional transport manager for SSE streaming
    * @param logsStore - Optional execution logs store (creates one if not provided)
    * @param workerPool - Optional worker pool for isolated execution processes
    */
@@ -159,7 +156,6 @@ export class ExecutionService {
     projectId: string,
     repoPath: string,
     lifecycleService?: ExecutionLifecycleService,
-    transportManager?: TransportManager,
     logsStore?: ExecutionLogsStore,
     workerPool?: ExecutionWorkerPool
   ) {
@@ -168,7 +164,6 @@ export class ExecutionService {
     this.repoPath = repoPath;
     this.lifecycleService =
       lifecycleService || new ExecutionLifecycleService(db, repoPath);
-    this.transportManager = transportManager;
     this.logsStore = logsStore || new ExecutionLogsStore(db);
     this.workerPool = workerPool;
   }
@@ -458,7 +453,6 @@ export class ExecutionService {
         logsStore: this.logsStore,
         projectId: this.projectId,
         db: this.db,
-        transportManager: this.transportManager,
         // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
         narrationConfig: { ...voiceNarrationSettings, ...narrationConfig, enabled: voiceEnabled },
       }
@@ -725,7 +719,6 @@ ${feedback}`;
         logsStore: this.logsStore,
         projectId: this.projectId,
         db: this.db,
-        transportManager: this.transportManager,
         // Merge narration config: voiceSettings from config.json, then execution overrides, then enabled flag
         narrationConfig: { ...voiceNarrationSettings, ...parentNarrationConfig, enabled: voiceEnabled },
       }

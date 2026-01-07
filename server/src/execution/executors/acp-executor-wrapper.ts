@@ -20,7 +20,6 @@ import {
 import type Database from "better-sqlite3";
 import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
 import type { ExecutionLogsStore } from "../../services/execution-logs-store.js";
-import type { TransportManager } from "../transport/transport-manager.js";
 import { SessionUpdateCoalescer } from "../output/session-update-coalescer.js";
 import { serializeCoalescedUpdate } from "../output/coalesced-types.js";
 import { updateExecution, getExecution } from "../../services/executions.js";
@@ -84,8 +83,6 @@ export interface AcpExecutorWrapperConfig {
   projectId: string;
   /** Database connection */
   db: Database.Database;
-  /** Transport manager for SSE streaming */
-  transportManager?: TransportManager;
 }
 
 /**
@@ -107,7 +104,6 @@ export interface AcpExecutorWrapperConfig {
  *   logsStore,
  *   projectId: "my-project",
  *   db,
- *   transportManager,
  * });
  *
  * await wrapper.executeWithLifecycle(executionId, task, workDir);
@@ -117,7 +113,6 @@ export class AcpExecutorWrapper {
   private readonly agentType: string;
   private readonly acpConfig: AcpExecutionConfig;
   private readonly logsStore: ExecutionLogsStore;
-  private readonly transportManager?: TransportManager;
   private readonly projectId: string;
   private readonly db: Database.Database;
 
@@ -130,14 +125,12 @@ export class AcpExecutorWrapper {
     this.agentType = config.agentType;
     this.acpConfig = config.acpConfig;
     this.logsStore = config.logsStore;
-    this.transportManager = config.transportManager;
     this.projectId = config.projectId;
     this.db = config.db;
 
     console.log("[AcpExecutorWrapper] Initialized", {
       agentType: this.agentType,
       projectId: this.projectId,
-      hasTransport: !!this.transportManager,
       hasLogsStore: !!this.logsStore,
     });
   }

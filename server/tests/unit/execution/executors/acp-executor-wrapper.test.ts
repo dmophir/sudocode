@@ -72,7 +72,6 @@ describe("AcpExecutorWrapper", () => {
   let mockDb: any;
   let mockLogsStore: any;
   let mockLifecycleService: any;
-  let mockTransportManager: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,11 +93,6 @@ describe("AcpExecutorWrapper", () => {
       setStatus: vi.fn(),
     };
 
-    mockTransportManager = {
-      connectAdapter: vi.fn(),
-      disconnectAdapter: vi.fn(),
-    };
-
     wrapper = new AcpExecutorWrapper({
       agentType: "claude-code",
       acpConfig: {
@@ -109,7 +103,6 @@ describe("AcpExecutorWrapper", () => {
       logsStore: mockLogsStore,
       projectId: "test-project",
       db: mockDb,
-      transportManager: mockTransportManager,
     });
   });
 
