@@ -1,21 +1,28 @@
 /**
  * AgentTrajectory Component
  *
- * Displays the execution trajectory of an AI agent, showing messages, thoughts, and tool calls
- * in chronological order, similar to Claude Code's native experience.
+ * Unified trajectory visualization for all AI agent executions.
+ * Uses terminal-style inline rendering with colored dots for a compact,
+ * Claude Code-like experience.
  *
- * Updated for ACP migration to consume SessionUpdate events via useSessionUpdateStream hook.
+ * Consumes SessionUpdate events via useSessionUpdateStream hook (ACP-native types).
  */
 
-import { useMemo } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Loader2, MessageSquare, Wrench, Brain } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { JsonView, defaultStyles, darkStyles } from 'react-json-view-lite'
 import 'react-json-view-lite/dist/index.css'
 import type { AgentMessage, ToolCall, AgentThought } from '@/hooks/useSessionUpdateStream'
+import { TodoTracker } from './TodoTracker'
+import { buildTodoHistoryFromToolCalls } from '@/utils/todoExtractor'
+import { DiffViewer } from './DiffViewer'
+import { parseClaudeToolArgs } from '@/utils/claude'
 import { useTheme } from '@/contexts/ThemeContext'
+
+const MAX_CHARS_BEFORE_TRUNCATION = 500
 
 export interface AgentTrajectoryProps {
   /**
@@ -29,7 +36,7 @@ export interface AgentTrajectoryProps {
   toolCalls: ToolCall[]
 
   /**
-   * Array of agent thoughts to display
+   * Array of agent thoughts to display (thinking blocks)
    */
   thoughts?: AgentThought[]
 
@@ -45,30 +52,213 @@ export interface AgentTrajectoryProps {
   hideSystemMessages?: boolean
 
   /**
+   * Whether to show the TodoTracker (default: true)
+   */
+  showTodoTracker?: boolean
+
+  /**
    * Custom class name
    */
   className?: string
 }
 
 /**
- * Trajectory item representing either a message, thought, or tool call
+ * Trajectory item representing a message, thought, or tool call
  */
 type TrajectoryItem =
   | {
       type: 'message'
       timestamp: number
+      index?: number
       data: AgentMessage
     }
   | {
       type: 'thought'
       timestamp: number
+      index?: number
       data: AgentThought
     }
   | {
       type: 'tool_call'
       timestamp: number
+      index?: number
       data: ToolCall
     }
+
+/**
+ * Format tool arguments for compact display
+ */
+function formatToolArgs(toolName: string, rawInput: unknown): string {
+  try {
+    const parsed = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput
+    if (!parsed || typeof parsed !== 'object') {
+      return typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput)
+    }
+
+    // For Bash, show the command
+    if (toolName === 'Bash' && parsed.command) {
+      return parsed.command
+    }
+
+    // For Read, show the file path
+    if (toolName === 'Read' && parsed.file_path) {
+      return parsed.file_path
+    }
+
+    // For Write, show file path
+    if (toolName === 'Write' && parsed.file_path) {
+      return parsed.file_path
+    }
+
+    // For Edit, show file path
+    if (toolName === 'Edit' && parsed.file_path) {
+      return parsed.file_path
+    }
+
+    // For Glob, show pattern and optional path
+    if (toolName === 'Glob') {
+      const parts: string[] = []
+      if (parsed.pattern) parts.push(`pattern: "${parsed.pattern}"`)
+      if (parsed.path) parts.push(`path: "${parsed.path}"`)
+      return parts.join(', ')
+    }
+
+    // For Search/Grep, show pattern and path
+    if ((toolName === 'Search' || toolName === 'Grep') && parsed.pattern) {
+      const parts: string[] = []
+      parts.push(`pattern: "${parsed.pattern}"`)
+      if (parsed.path) parts.push(`path: "${parsed.path}"`)
+      if (parsed.output_mode) parts.push(`output_mode: "${parsed.output_mode}"`)
+      return parts.join(', ')
+    }
+
+    // For WebSearch, show query
+    if (toolName === 'WebSearch' && parsed.query) {
+      return `query: "${parsed.query}"`
+    }
+
+    // For TodoWrite, show summary of todos
+    if (toolName === 'TodoWrite' && parsed.todos && Array.isArray(parsed.todos)) {
+      const count = parsed.todos.length
+      const statuses = parsed.todos.reduce((acc: Record<string, number>, todo: { status?: string }) => {
+        if (todo.status) {
+          acc[todo.status] = (acc[todo.status] || 0) + 1
+        }
+        return acc
+      }, {})
+      const parts: string[] = [`${count} todo${count !== 1 ? 's' : ''}`]
+      if (statuses.in_progress) parts.push(`${statuses.in_progress} in progress`)
+      if (statuses.completed) parts.push(`${statuses.completed} completed`)
+      return parts.join(', ')
+    }
+
+    // For TodoRead, show that it's reading the list
+    if (toolName === 'TodoRead') {
+      return 'reading todo list'
+    }
+
+    // For other tools, show first key-value pair
+    const keys = Object.keys(parsed)
+    if (keys.length > 0) {
+      const firstKey = keys[0]
+      const value = parsed[firstKey]
+      if (typeof value === 'string') {
+        return value.length > 60 ? value.slice(0, 60) + '...' : value
+      }
+    }
+
+    return JSON.stringify(parsed)
+  } catch {
+    const str = typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput)
+    return str.length > 60 ? str.slice(0, 60) + '...' : str
+  }
+}
+
+/**
+ * Format tool result summary for collapsed view
+ */
+function formatResultSummary(toolName: string, result: string, maxChars: number = 250): string | null {
+  try {
+    if (toolName === 'Bash') {
+      const lines = result.split('\n').filter((line) => line.trim())
+      if (lines.length === 0) return 'No output'
+      if (lines.length <= 2 && result.length < maxChars) return null
+      if (result.length > maxChars) return `${result.slice(0, maxChars)}...`
+      return `${lines.length} line${lines.length !== 1 ? 's' : ''}`
+    }
+
+    if (toolName === 'Read') {
+      const lines = result.split('\n')
+      return `Read ${lines.length} lines`
+    }
+
+    if (toolName === 'Write') {
+      if (result.includes('success') || result.includes('written') || result.includes('created')) {
+        return 'File written successfully'
+      }
+      return 'File created'
+    }
+
+    if (toolName === 'Edit') {
+      if (result.includes('success') || result.includes('updated') || result.includes('modified')) {
+        return 'File edited successfully'
+      }
+      return 'File updated'
+    }
+
+    if (toolName === 'Glob') {
+      const lines = result.split('\n').filter((line) => line.trim())
+      return `Found ${lines.length} file${lines.length !== 1 ? 's' : ''}`
+    }
+
+    if (toolName === 'Search' || toolName === 'Grep') {
+      const lines = result.split('\n').filter((line) => line.trim())
+      return `Found ${lines.length} match${lines.length !== 1 ? 'es' : ''}`
+    }
+
+    if (toolName === 'WebSearch') {
+      const resultMatch = result.match(/(\d+)\s+result/i)
+      if (resultMatch) return `Found ${resultMatch[1]} results`
+      return 'Search completed'
+    }
+
+    if (toolName === 'TodoWrite') {
+      try {
+        const parsed = JSON.parse(result)
+        if (parsed.todos && Array.isArray(parsed.todos)) {
+          return `Updated ${parsed.todos.length} todo${parsed.todos.length !== 1 ? 's' : ''}`
+        }
+      } catch {
+        // Fallback
+      }
+      return 'Todo list updated'
+    }
+
+    if (toolName === 'TodoRead') {
+      try {
+        const parsed = JSON.parse(result)
+        if (parsed.todos && Array.isArray(parsed.todos)) {
+          const pending = parsed.todos.filter((t: { status?: string }) => t.status === 'pending').length
+          const inProgress = parsed.todos.filter((t: { status?: string }) => t.status === 'in_progress').length
+          const completed = parsed.todos.filter((t: { status?: string }) => t.status === 'completed').length
+          const parts: string[] = []
+          if (pending) parts.push(`${pending} pending`)
+          if (inProgress) parts.push(`${inProgress} in progress`)
+          if (completed) parts.push(`${completed} completed`)
+          return parts.length > 0 ? parts.join(', ') : `${parsed.todos.length} todos`
+        }
+      } catch {
+        // Fallback
+      }
+      const lines = result.split('\n').filter((line) => line.trim())
+      return `${lines.length} todos`
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
 
 /**
  * Check if a string is valid JSON
@@ -83,66 +273,61 @@ function isValidJSON(text: string): boolean {
 }
 
 /**
- * Format unknown value as displayable string
+ * Truncate text with line count and character limit
  */
-function formatValue(value: unknown): string {
+function truncateText(
+  text: string,
+  maxLines: number = 2,
+  maxChars: number = MAX_CHARS_BEFORE_TRUNCATION
+): { truncated: string; hasMore: boolean; lineCount: number; charCount: number } {
+  const lines = text.split('\n')
+  const lineCount = lines.length
+  let truncated = text
+  let hasMore = false
+
+  const exceedsLineLimit = lineCount > maxLines
+  const exceedsCharLimit = text.length > maxChars
+
+  if (exceedsLineLimit) {
+    truncated = lines.slice(0, maxLines).join('\n')
+    hasMore = true
+  }
+
+  if (truncated.length > maxChars) {
+    let charTruncated = truncated.slice(0, maxChars)
+    const lastNewline = charTruncated.lastIndexOf('\n')
+    const lastSpace = charTruncated.lastIndexOf(' ')
+
+    if (lastNewline > maxChars * 0.7) {
+      charTruncated = charTruncated.slice(0, lastNewline)
+    } else if (lastSpace > maxChars * 0.7) {
+      charTruncated = charTruncated.slice(0, lastSpace)
+    }
+
+    truncated = charTruncated + '...'
+    hasMore = true
+  }
+
+  if (!hasMore && (exceedsLineLimit || exceedsCharLimit)) {
+    hasMore = true
+  }
+
+  return { truncated, hasMore, lineCount, charCount: text.length }
+}
+
+/**
+ * Convert unknown value to string for display
+ */
+function valueToString(value: unknown): string {
   if (value === undefined || value === null) return ''
   if (typeof value === 'string') return value
   return JSON.stringify(value)
 }
 
 /**
- * Render unknown value as JSON or pre-formatted text
- * Explicitly typed to return ReactNode to satisfy TypeScript
- */
-function renderUnknownValue(
-  value: unknown,
-  theme: 'dark' | 'light',
-  maxLevel = 2
-): React.ReactNode {
-  if (value === undefined || value === null) {
-    return null
-  }
-  if (typeof value === 'string' && isValidJSON(value)) {
-    return (
-      <JsonView
-        data={JSON.parse(value) as Record<string, unknown>}
-        shouldExpandNode={(level) => level < maxLevel}
-        style={theme === 'dark' ? darkStyles : defaultStyles}
-      />
-    )
-  }
-  if (typeof value === 'object' && value !== null) {
-    return (
-      <JsonView
-        data={value as Record<string, unknown>}
-        shouldExpandNode={(level) => level < maxLevel}
-        style={theme === 'dark' ? darkStyles : defaultStyles}
-      />
-    )
-  }
-  return <>{formatValue(value)}</>
-}
-
-/**
- * Map tool call status to badge variant
- */
-function getStatusVariant(status: ToolCall['status']): 'default' | 'destructive' | 'secondary' {
-  switch (status) {
-    case 'success':
-      return 'default'
-    case 'failed':
-      return 'destructive'
-    default:
-      return 'secondary'
-  }
-}
-
-/**
  * AgentTrajectory Component
  *
- * Merges messages, thoughts, and tool calls into a single chronological timeline
- * to show the agent's execution path.
+ * Unified terminal-style rendering for all agent executions.
  *
  * @example
  * ```tsx
@@ -152,7 +337,6 @@ function getStatusVariant(status: ToolCall['status']): 'default' | 'destructive'
  *   messages={messages}
  *   toolCalls={toolCalls}
  *   thoughts={thoughts}
- *   renderMarkdown
  * />
  * ```
  */
@@ -162,9 +346,11 @@ export function AgentTrajectory({
   thoughts = [],
   renderMarkdown = true,
   hideSystemMessages = true,
+  showTodoTracker = true,
   className = '',
 }: AgentTrajectoryProps) {
-  const { actualTheme } = useTheme()
+  // Extract todos from tool calls for TodoTracker
+  const todos = useMemo(() => buildTodoHistoryFromToolCalls(toolCalls), [toolCalls])
 
   // Merge messages, thoughts, and tool calls into a chronological timeline
   const trajectory = useMemo(() => {
@@ -172,14 +358,13 @@ export function AgentTrajectory({
 
     // Add messages (filtering out system messages if requested)
     messages.forEach((message) => {
-      // Skip system messages if hideSystemMessages is true
       if (hideSystemMessages && message.content.trim().startsWith('[System]')) {
         return
       }
-
       items.push({
         type: 'message',
         timestamp: message.timestamp.getTime(),
+        index: message.index,
         data: message,
       })
     })
@@ -189,6 +374,7 @@ export function AgentTrajectory({
       items.push({
         type: 'thought',
         timestamp: thought.timestamp.getTime(),
+        index: thought.index,
         data: thought,
       })
     })
@@ -198,19 +384,19 @@ export function AgentTrajectory({
       items.push({
         type: 'tool_call',
         timestamp: toolCall.timestamp.getTime(),
+        index: toolCall.index,
         data: toolCall,
       })
     })
 
-    // Sort by timestamp for chronological ordering
-    // Use index as secondary key for stable ordering when timestamps are equal
+    // Sort by timestamp, using index as secondary key for stable ordering
     return items.sort((a, b) => {
       const timeDiff = a.timestamp - b.timestamp
       if (timeDiff !== 0) return timeDiff
-      // Use index for tie-breaking when timestamps are equal
-      const aIndex = a.data.index ?? Number.MAX_SAFE_INTEGER
-      const bIndex = b.data.index ?? Number.MAX_SAFE_INTEGER
-      return aIndex - bIndex
+      if (a.index !== undefined && b.index !== undefined) {
+        return a.index - b.index
+      }
+      return 0
     })
   }, [messages, toolCalls, thoughts, hideSystemMessages])
 
@@ -219,178 +405,316 @@ export function AgentTrajectory({
   }
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      {trajectory.map((item, index) => {
+    <div className={`space-y-1 font-mono text-sm ${className}`}>
+      {trajectory.map((item, idx) => {
         if (item.type === 'message') {
-          const message = item.data
-          return (
-            <div key={`msg-${message.id}-${index}`} className="flex items-start gap-3">
-              {/* Icon */}
-              <div className="mt-1 flex-shrink-0">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    assistant
-                  </Badge>
-                  {message.isStreaming && (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                  {renderMarkdown ? (
-                    <ReactMarkdown
-                      className="prose prose-sm dark:prose-invert max-w-none"
-                      rehypePlugins={[rehypeHighlight]}
-                      components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                        code: ({ inline, children, ...props }: any) =>
-                          inline ? (
-                            <code className="rounded bg-background px-1 py-0.5 text-xs" {...props}>
-                              {children}
-                            </code>
-                          ) : (
-                            <pre className="overflow-x-auto rounded bg-background p-2">
-                              <code {...props}>{children}</code>
-                            </pre>
-                          ),
-                        ul: ({ children }) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
-                        ol: ({ children }) => (
-                          <ol className="mb-2 list-decimal pl-4">{children}</ol>
-                        ),
-                        li: ({ children }) => <li className="mb-1">{children}</li>,
-                        a: ({ children, href }) => (
-                          <a
-                            href={href}
-                            className="text-primary hover:underline"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {children}
-                          </a>
-                        ),
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
+          return <MessageItem key={`msg-${item.data.id}-${idx}`} message={item.data} renderMarkdown={renderMarkdown} />
         } else if (item.type === 'thought') {
-          // Agent thought/reasoning
-          const thought = item.data
-          return (
-            <div key={`thought-${thought.id}-${index}`} className="flex items-start gap-3">
-              {/* Icon */}
-              <div className="mt-1 flex-shrink-0">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-500/10">
-                  <Brain className="h-4 w-4 text-purple-500" />
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs text-purple-500 border-purple-500/50">
-                    thinking
-                  </Badge>
-                  {thought.isStreaming && (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <div className="rounded-lg bg-purple-500/5 border border-purple-500/20 p-3 text-sm italic text-muted-foreground">
-                  <div className="whitespace-pre-wrap">{thought.content}</div>
-                </div>
-              </div>
-            </div>
-          )
-        } else if (item.type === 'tool_call') {
-          // Tool call
-          const toolCall = item.data
-          const duration =
-            toolCall.completedAt && toolCall.timestamp
-              ? ((toolCall.completedAt.getTime() - toolCall.timestamp.getTime()) / 1000).toFixed(2)
-              : null
-          const hasRawInput = toolCall.rawInput !== undefined && toolCall.rawInput !== null
-
-          return (
-            <div key={`tool-${toolCall.id}-${index}`} className="flex items-start gap-3">
-              {/* Icon */}
-              <div className="mt-1 flex-shrink-0">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/10">
-                  <Wrench className="h-4 w-4 text-blue-500" />
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="min-w-0 flex-1">
-                <div className="rounded-lg border bg-card p-3 text-sm">
-                  {/* Header */}
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{toolCall.title}</span>
-                      <Badge variant={getStatusVariant(toolCall.status)} className="text-xs">
-                        {toolCall.status}
-                      </Badge>
-                      {toolCall.status === 'running' && (
-                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                      )}
-                    </div>
-                    {duration && (
-                      <span className="text-xs text-muted-foreground">{duration}s</span>
-                    )}
-                  </div>
-
-                  {/* Arguments / Raw Input */}
-                  {hasRawInput && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                        Arguments
-                      </summary>
-                      <div className="json-viewer-wrapper mt-1 rounded bg-muted/50 p-2 text-xs">
-                        {renderUnknownValue(toolCall.rawInput, actualTheme, 2)}
-                      </div>
-                    </details>
-                  )}
-
-                  {/* Result / Raw Output */}
-                  {(toolCall.result !== undefined || toolCall.rawOutput !== undefined) && (
-                    <details className="mt-2" open={toolCall.status === 'success'}>
-                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                        Result
-                      </summary>
-                      <div className="json-viewer-wrapper mt-1 max-h-40 overflow-auto rounded bg-muted/50 p-2 text-xs">
-                        {renderUnknownValue(toolCall.result ?? toolCall.rawOutput, actualTheme, 1)}
-                      </div>
-                    </details>
-                  )}
-
-                  {/* Error state */}
-                  {toolCall.status === 'failed' && toolCall.result !== undefined && toolCall.result !== null && (
-                    <div className="mt-2 rounded bg-destructive/10 p-2 text-xs text-destructive">
-                      {typeof toolCall.result === 'object'
-                        ? (toolCall.result as Record<string, unknown>).error as string || formatValue(toolCall.result)
-                        : formatValue(toolCall.result)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
+          return <ThoughtItem key={`thought-${item.data.id}-${idx}`} thought={item.data} />
         } else {
-          // Should not reach here with proper TrajectoryItem types
-          return null
+          return <ToolCallItem key={`tool-${item.data.id}-${idx}`} toolCall={item.data} />
         }
       })}
+
+      {/* Todo Tracker - show at bottom if enabled */}
+      {showTodoTracker && todos.length > 0 && (
+        <div className="mt-4">
+          <TodoTracker todos={todos} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * MessageItem - Terminal-style message rendering
+ */
+function MessageItem({ message, renderMarkdown }: { message: AgentMessage; renderMarkdown: boolean }) {
+  return (
+    <div className="group">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 select-none text-foreground">⏺</span>
+        <div className="min-w-0 flex-1 py-0.5">
+          {message.isStreaming && (
+            <Loader2 className="mb-1 inline h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+          {renderMarkdown ? (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              className="max-w-none font-light text-foreground/80 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              components={{
+                p: ({ children }) => <>{children}</>,
+                code: ({ inline, children, ...props }: any) => {
+                  let codeText = ''
+                  if (typeof children === 'string') {
+                    codeText = children
+                  } else if (Array.isArray(children)) {
+                    codeText = children.map((c) => (typeof c === 'string' ? c : '')).join('')
+                  } else {
+                    codeText = String(children)
+                  }
+                  const isShortInline =
+                    codeText.length < 100 && !codeText.includes('\n') && !codeText.includes('```')
+
+                  if (inline || isShortInline) {
+                    return (
+                      <code
+                        className="!inline rounded bg-muted px-1 py-0.5 font-mono text-xs"
+                        style={{ display: 'inline', whiteSpace: 'nowrap', width: 'auto', maxWidth: 'none' }}
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    )
+                  }
+                  return (
+                    <pre className="m-0 my-1 block overflow-x-auto rounded border text-xs">
+                      <code {...props}>{children}</code>
+                    </pre>
+                  )
+                },
+                ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
+                ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
+                li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                a: ({ children, href }) => (
+                  <a
+                    href={href}
+                    className="text-primary underline-offset-2 hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {children}
+                  </a>
+                ),
+                h1: ({ children }) => <h1 className="mb-1 mt-2 text-base font-bold">{children}</h1>,
+                h2: ({ children }) => <h2 className="mb-1 mt-2 text-sm font-semibold">{children}</h2>,
+                h3: ({ children }) => <h3 className="mb-1 mt-1 text-sm font-semibold">{children}</h3>,
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          ) : (
+            <div className="whitespace-pre-wrap text-xs leading-relaxed">{message.content}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ThoughtItem - Terminal-style thinking/reasoning rendering
+ */
+function ThoughtItem({ thought }: { thought: AgentThought }) {
+  return (
+    <div className="group">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 select-none text-purple-500">⏺</span>
+        <div className="min-w-0 flex-1 py-0.5">
+          {thought.isStreaming && (
+            <Loader2 className="mb-1 inline h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+          <div className="whitespace-pre-wrap text-xs italic leading-relaxed text-muted-foreground">
+            {thought.content}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ToolCallItem - Terminal-style tool call rendering
+ */
+function ToolCallItem({ toolCall }: { toolCall: ToolCall }) {
+  const { actualTheme } = useTheme()
+  const [showFullArgs, setShowFullArgs] = useState(false)
+  const [showFullResult, setShowFullResult] = useState(false)
+
+  const toolName = toolCall.title
+  const formattedArgs = formatToolArgs(toolName, toolCall.rawInput)
+  const argsString = valueToString(toolCall.rawInput)
+  const resultString = valueToString(toolCall.result ?? toolCall.rawOutput)
+
+  const argsData = argsString ? truncateText(argsString, 2) : null
+  const resultData = resultString ? truncateText(resultString, 2) : null
+
+  const isSuccess = toolCall.status === 'success'
+  const isError = toolCall.status === 'failed'
+  const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
+
+  const duration =
+    toolCall.completedAt && toolCall.timestamp
+      ? ((toolCall.completedAt.getTime() - toolCall.timestamp.getTime()) / 1000).toFixed(2)
+      : null
+
+  return (
+    <div className="group">
+      {/* Tool call header with colored dot */}
+      <div className="flex items-start gap-2">
+        <span
+          className={`mt-0.5 select-none ${isSuccess ? 'text-green-600' : isError ? 'text-red-600' : 'text-yellow-600'}`}
+        >
+          ⏺
+        </span>
+        <div className="min-w-0 flex-1">
+          {/* Tool name and args inline */}
+          <div className="flex items-start gap-2">
+            <span className="font-semibold">{toolName}</span>
+            <span className="text-muted-foreground">({formattedArgs})</span>
+            {isRunning && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            {duration && <span className="ml-auto text-xs text-muted-foreground">{duration}s</span>}
+          </div>
+
+          {/* Full args - expandable (hide for Edit/Write - diff viewer shows this) */}
+          {argsData && toolName !== 'Edit' && (
+            <div className="mt-0.5 flex items-start gap-2">
+              <span className="select-none text-muted-foreground">∟</span>
+              <div className="min-w-0 flex-1">
+                {!showFullArgs ? (
+                  <pre className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                    {argsData.truncated}
+                  </pre>
+                ) : isValidJSON(argsString) ? (
+                  <div className="json-viewer-wrapper my-1 rounded border border-border bg-background/50 p-2 text-xs">
+                    <JsonView
+                      data={JSON.parse(argsString)}
+                      clickToExpandNode={true}
+                      style={actualTheme === 'dark' ? darkStyles : defaultStyles}
+                    />
+                  </div>
+                ) : (
+                  <pre className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                    {argsString}
+                  </pre>
+                )}
+                {argsData.hasMore && (
+                  <button
+                    onClick={() => setShowFullArgs(!showFullArgs)}
+                    className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showFullArgs ? (
+                      <>
+                        {'> Hide ('}
+                        {argsData.lineCount > 2 ? `${argsData.lineCount} lines` : `${argsData.charCount} chars`}
+                        {')'}
+                      </>
+                    ) : argsData.lineCount > 2 ? (
+                      <>{'> +' + (argsData.lineCount - 2) + ' more lines'}</>
+                    ) : (
+                      <>{'> +' + (argsData.charCount - MAX_CHARS_BEFORE_TRUNCATION) + ' more chars'}</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Diff viewer for Edit tools */}
+          {toolName === 'Edit' &&
+            (() => {
+              try {
+                const { oldContent, newContent, filePath } = parseClaudeToolArgs(toolName, argsString)
+                return (
+                  <div className="mt-0.5 flex items-start gap-2">
+                    <span className="select-none text-muted-foreground">∟</span>
+                    <div className="min-w-0 flex-1">
+                      <DiffViewer
+                        oldContent={oldContent}
+                        newContent={newContent}
+                        filePath={filePath}
+                        className="my-1"
+                        maxLines={50}
+                      />
+                    </div>
+                  </div>
+                )
+              } catch {
+                return (
+                  <div className="mt-0.5 flex items-start gap-2">
+                    <span className="select-none text-muted-foreground">∟</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
+                        Unable to display diff
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+            })()}
+
+          {/* Tool result */}
+          {resultString && (
+            <div className="mt-0.5 flex items-start gap-2">
+              <span className="select-none text-muted-foreground">∟</span>
+              <div className="min-w-0 flex-1">
+                {isError ? (
+                  <div className="text-red-600">{resultString}</div>
+                ) : resultData ? (
+                  <div className="text-muted-foreground">
+                    {!showFullResult &&
+                      (() => {
+                        const summary = formatResultSummary(toolName, resultString)
+                        if (summary) {
+                          return <div className="text-xs leading-relaxed">{summary}</div>
+                        }
+                        return (
+                          <pre className="whitespace-pre-wrap text-xs leading-relaxed">{resultData.truncated}</pre>
+                        )
+                      })()}
+                    {showFullResult &&
+                      (() => {
+                        const hasSpecialRendering = toolName === 'Edit' || toolName === 'Write'
+                        const isJSON = !hasSpecialRendering && isValidJSON(resultString)
+
+                        if (isJSON) {
+                          try {
+                            const jsonData = JSON.parse(resultString)
+                            return (
+                              <div className="json-viewer-wrapper my-1 rounded border border-border bg-background/50 p-2 text-xs">
+                                <JsonView
+                                  data={jsonData}
+                                  clickToExpandNode={true}
+                                  style={actualTheme === 'dark' ? darkStyles : defaultStyles}
+                                />
+                              </div>
+                            )
+                          } catch {
+                            return (
+                              <pre className="whitespace-pre-wrap text-xs leading-relaxed">{resultString}</pre>
+                            )
+                          }
+                        }
+                        return <pre className="whitespace-pre-wrap text-xs leading-relaxed">{resultString}</pre>
+                      })()}
+                    {resultData.hasMore && (
+                      <button
+                        onClick={() => setShowFullResult(!showFullResult)}
+                        className="mt-0.5 inline-flex items-center gap-1 text-xs hover:text-foreground"
+                      >
+                        {showFullResult ? (
+                          <>
+                            {'> Hide ('}
+                            {resultData.lineCount > 2
+                              ? `${resultData.lineCount} lines`
+                              : `${resultData.charCount} chars`}
+                            {')'}
+                          </>
+                        ) : resultData.lineCount > 2 ? (
+                          <>{'> +' + (resultData.lineCount - 2) + ' more lines'}</>
+                        ) : (
+                          <>{'> +' + (resultData.charCount - MAX_CHARS_BEFORE_TRUNCATION) + ' more chars'}</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -202,10 +202,11 @@ describe('ExecutionMonitor', () => {
 
       renderWithTheme(<ExecutionMonitor executionId="test-exec-1" />)
 
-      // In the unified trajectory view, there's no "Messages" header
-      // Just verify the message content is displayed
-      expect(screen.getByText('assistant')).toBeInTheDocument()
+      // In the unified trajectory view, messages are displayed with colored dots
+      // Verify the message content is displayed
       expect(screen.getByText('Hello, this is a test message!')).toBeInTheDocument()
+      // New terminal-style UI uses colored dots, not text badges
+      expect(screen.getByText('⏺')).toBeInTheDocument()
     })
 
     it('should show spinner for incomplete messages', () => {
@@ -270,12 +271,11 @@ describe('ExecutionMonitor', () => {
 
       renderWithTheme(<ExecutionMonitor executionId="test-exec-1" />)
 
-      // In the unified trajectory view, there's no "Tool Calls" header
+      // In the unified trajectory view, tool calls are displayed with colored dots
       // Just verify the tool call is displayed
       expect(screen.getByText('Read')).toBeInTheDocument()
-      // Check for success status badge
-      const successBadges = screen.getAllByText('success')
-      expect(successBadges.length).toBeGreaterThan(0)
+      // New UI uses colored dots instead of text badges
+      expect(screen.getByText('⏺')).toBeInTheDocument()
       expect(screen.getByText('1.00s')).toBeInTheDocument()
     })
 
@@ -286,7 +286,7 @@ describe('ExecutionMonitor', () => {
           title: 'Write',
           rawInput: { file: 'test.ts' },
           status: 'failed',
-          result: { error: 'File not found' },
+          result: 'File not found',  // Error text as string
           timestamp: new Date(1000),
           completedAt: new Date(2000),
           index: 0,
@@ -309,9 +309,9 @@ describe('ExecutionMonitor', () => {
       const { container } = renderWithTheme(<ExecutionMonitor executionId="test-exec-1" />)
 
       expect(screen.getByText('Write')).toBeInTheDocument()
-      // Use a more specific selector for the error badge
-      const errorBadges = container.querySelectorAll('.bg-destructive')
-      expect(errorBadges.length).toBeGreaterThan(0)
+      // Error text is displayed in red
+      const errorText = container.querySelectorAll('.text-red-600')
+      expect(errorText.length).toBeGreaterThan(0)
       expect(screen.getByText('File not found')).toBeInTheDocument()
     })
   })
@@ -716,10 +716,8 @@ describe('ExecutionMonitor', () => {
 
       // Should display the tool call
       expect(screen.getByText('Read')).toBeInTheDocument()
-
-      // Should show success status (use getAllByText since "success" appears multiple times)
-      const successBadges = screen.getAllByText('success')
-      expect(successBadges.length).toBeGreaterThan(0)
+      // New UI uses colored dots instead of text badges
+      expect(screen.getByText('⏺')).toBeInTheDocument()
     })
 
     it('should handle multiple messages and tool calls from historical events', () => {
@@ -794,8 +792,8 @@ describe('ExecutionMonitor', () => {
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
       )
 
-      // Verify items are rendered in correct order
-      const items = container.querySelectorAll('.flex.gap-3.items-start')
+      // Verify items are rendered in correct order (each wrapped in .group)
+      const items = container.querySelectorAll('.group')
       expect(items.length).toBe(3)
 
       // First: message "First" (timestamp 1000)
@@ -832,8 +830,8 @@ describe('ExecutionMonitor', () => {
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
       )
 
-      // Verify all items rendered
-      const items = container.querySelectorAll('.flex.gap-3.items-start')
+      // Verify all items rendered (each wrapped in .group)
+      const items = container.querySelectorAll('.group')
       expect(items.length).toBe(3)
 
       // With index-based sorting, order should be:
@@ -1030,7 +1028,7 @@ describe('ExecutionMonitor', () => {
       expect(screen.getByText(/Let me think/)).toBeInTheDocument()
     })
 
-    it('should use AgentTrajectory for non-claude-code agent types', () => {
+    it('should use unified AgentTrajectory for non-claude-code agent types', () => {
       const messages: AgentMessage[] = [
         {
           id: 'msg-1',
@@ -1054,19 +1052,19 @@ describe('ExecutionMonitor', () => {
         })
       )
 
-      renderWithTheme(
+      const { container } = renderWithTheme(
         <ExecutionMonitor
           executionId="test-exec-1"
           execution={{ status: 'running', agent_type: 'codex' } as any}
         />
       )
 
-      // AgentTrajectory should show standard "assistant" badge (not "thinking")
-      expect(screen.getByText('assistant')).toBeInTheDocument()
-      expect(screen.queryByText('thinking')).not.toBeInTheDocument()
+      // Unified AgentTrajectory uses terminal-style dots
+      expect(container.textContent).toContain('⏺')
+      expect(screen.getByText(/Let me think/)).toBeInTheDocument()
     })
 
-    it('should use AgentTrajectory when agent_type is not specified', () => {
+    it('should use unified AgentTrajectory when agent_type is not specified', () => {
       const messages: AgentMessage[] = [
         {
           id: 'msg-1',
@@ -1090,12 +1088,12 @@ describe('ExecutionMonitor', () => {
         })
       )
 
-      renderWithTheme(
+      const { container } = renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'running' } as any} />
       )
 
-      // Should default to AgentTrajectory (standard rendering)
-      expect(screen.getByText('assistant')).toBeInTheDocument()
+      // Should use unified AgentTrajectory with terminal-style rendering
+      expect(container.textContent).toContain('⏺')
       expect(screen.getByText('Test message')).toBeInTheDocument()
     })
   })

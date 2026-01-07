@@ -73,12 +73,13 @@ describe('AgentTrajectory', () => {
   })
 
   describe('Message Display', () => {
-    it('should display messages with role badge', () => {
+    it('should display messages with colored dot indicator', () => {
       const messages = [createMessage('msg-1', 'Hello, this is a test message!')]
 
       renderWithTheme(<AgentTrajectory messages={messages} toolCalls={[]} />)
 
-      expect(screen.getByText('assistant')).toBeInTheDocument()
+      // New terminal-style UI uses colored dots, not text badges
+      expect(screen.getByText('⏺')).toBeInTheDocument()
       expect(screen.getByText('Hello, this is a test message!')).toBeInTheDocument()
     })
 
@@ -95,14 +96,15 @@ describe('AgentTrajectory', () => {
   })
 
   describe('Thought Display', () => {
-    it('should display thoughts with thinking badge', () => {
+    it('should display thoughts with purple dot indicator', () => {
       const thoughts = [createThought('thought-1', 'Let me think about this...')]
 
       renderWithTheme(
         <AgentTrajectory messages={[]} toolCalls={[]} thoughts={thoughts} />
       )
 
-      expect(screen.getByText('thinking')).toBeInTheDocument()
+      // New terminal-style UI uses purple dot for thoughts, not text badge
+      expect(screen.getByText('⏺')).toBeInTheDocument()
       expect(screen.getByText('Let me think about this...')).toBeInTheDocument()
     })
 
@@ -119,7 +121,7 @@ describe('AgentTrajectory', () => {
   })
 
   describe('Tool Call Display', () => {
-    it('should display tool calls with status badge', () => {
+    it('should display tool calls with colored dot and duration', () => {
       const toolCalls = [
         {
           ...createToolCall('tool-1', 'Read', 'success', 1000, 2000),
@@ -130,17 +132,19 @@ describe('AgentTrajectory', () => {
 
       renderWithTheme(<AgentTrajectory messages={[]} toolCalls={toolCalls} />)
 
+      // New terminal-style UI uses colored dots (green for success), not text badges
       expect(screen.getByText('Read')).toBeInTheDocument()
-      const successBadges = screen.getAllByText('success')
-      expect(successBadges.length).toBeGreaterThan(0)
       expect(screen.getByText('1.00s')).toBeInTheDocument()
+      // Green dot should be present (check via class name)
+      const dots = screen.getAllByText('⏺')
+      expect(dots.length).toBeGreaterThan(0)
     })
 
     it('should display tool call with error', () => {
       const toolCalls = [
         {
           ...createToolCall('tool-1', 'Write', 'failed', 1000, 2000),
-          result: { error: 'File not found' },
+          result: 'File not found',  // Error text as string
         },
       ]
 
@@ -164,8 +168,8 @@ describe('AgentTrajectory', () => {
         <AgentTrajectory messages={messages} toolCalls={toolCalls} />
       )
 
-      // Get all trajectory items in order
-      const items = container.querySelectorAll('.flex.gap-3.items-start')
+      // Get all trajectory items in order (each wrapped in .group)
+      const items = container.querySelectorAll('.group')
       expect(items.length).toBe(3)
 
       // Verify order: msg-1 (1000), tool-1 (2000), msg-2 (3000)
@@ -183,7 +187,7 @@ describe('AgentTrajectory', () => {
         <AgentTrajectory messages={messages} toolCalls={toolCalls} thoughts={thoughts} />
       )
 
-      const items = container.querySelectorAll('.flex.gap-3.items-start')
+      const items = container.querySelectorAll('.group')
       expect(items.length).toBe(3)
 
       expect(items[0].textContent).toContain('First message')
@@ -210,7 +214,7 @@ describe('AgentTrajectory', () => {
         <AgentTrajectory messages={messages} toolCalls={toolCalls} />
       )
 
-      const items = container.querySelectorAll('.flex.gap-3.items-start')
+      const items = container.querySelectorAll('.group')
       expect(items.length).toBe(3)
 
       // Verify correct chronological order
@@ -303,25 +307,30 @@ describe('AgentTrajectory', () => {
   })
 
   describe('Tool Status Variants', () => {
-    it('should show running indicator for running tool calls', () => {
+    it('should show spinner for running tool calls', () => {
       const toolCalls = [createToolCall('tool-1', 'Running Task', 'running')]
 
       const { container } = renderWithTheme(
         <AgentTrajectory messages={[]} toolCalls={toolCalls} />
       )
 
-      expect(screen.getByText('running')).toBeInTheDocument()
-      // Should have spinner for running state
+      // New UI shows yellow dot and spinner, not text badge
+      expect(screen.getByText('Running Task')).toBeInTheDocument()
       const spinners = container.querySelectorAll('.animate-spin')
       expect(spinners.length).toBeGreaterThan(0)
     })
 
-    it('should show pending badge for pending tool calls', () => {
+    it('should show spinner for pending tool calls', () => {
       const toolCalls = [createToolCall('tool-1', 'Pending Task', 'pending')]
 
-      renderWithTheme(<AgentTrajectory messages={[]} toolCalls={toolCalls} />)
+      const { container } = renderWithTheme(
+        <AgentTrajectory messages={[]} toolCalls={toolCalls} />
+      )
 
-      expect(screen.getByText('pending')).toBeInTheDocument()
+      // New UI shows yellow dot and spinner, not text badge
+      expect(screen.getByText('Pending Task')).toBeInTheDocument()
+      const spinners = container.querySelectorAll('.animate-spin')
+      expect(spinners.length).toBeGreaterThan(0)
     })
   })
 })

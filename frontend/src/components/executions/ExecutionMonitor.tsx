@@ -7,7 +7,7 @@
  *
  * Shows execution progress, metrics, messages, and tool calls.
  *
- * Updated for ACP migration to consume SessionUpdate events via useSessionUpdateStream hook.
+ * Consumes SessionUpdate events via useSessionUpdateStream hook (ACP-native).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -22,12 +22,11 @@ import { useExecutionLogs } from '@/hooks/useExecutionLogs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AgentTrajectory } from './AgentTrajectory'
-import { ClaudeCodeTrajectory } from './ClaudeCodeTrajectory'
 import { TodoTracker } from './TodoTracker'
-import { buildTodoHistory } from '@/utils/todoExtractor'
+import { buildTodoHistoryFromToolCalls } from '@/utils/todoExtractor'
 import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import type { Execution } from '@/types/execution'
-import type { MessageBuffer, ToolCallTracking } from '@/types/stream'
+import type { ToolCallTracking } from '@/types/stream'
 
 export interface ExecutionMonitorProps {
   /**
@@ -107,65 +106,32 @@ export function RunIndicator() {
 }
 
 /**
- * Convert AgentMessage array to MessageBuffer Map for ClaudeCodeTrajectory
- * This is a bridge function for backwards compatibility with ClaudeCodeTrajectory
- * TODO: Update ClaudeCodeTrajectory to use array-based types and remove this bridge
- */
-function convertMessagesToMap(messages: AgentMessage[]): Map<string, MessageBuffer> {
-  const map = new Map<string, MessageBuffer>()
-  messages.forEach((msg) => {
-    map.set(msg.id, {
-      messageId: msg.id,
-      role: 'assistant',
-      content: msg.content,
-      complete: !msg.isStreaming,
-      timestamp: msg.timestamp.getTime(),
-      index: msg.index,
-    })
-  })
-  return map
-}
-
-/**
- * Convert ToolCall array to ToolCallTracking Map for ClaudeCodeTrajectory
- * This is a bridge function for backwards compatibility with ClaudeCodeTrajectory
- * TODO: Update ClaudeCodeTrajectory to use array-based types and remove this bridge
+ * Convert ToolCall array to ToolCallTracking Map for onToolCallsUpdate callback
+ * Bridge function for backwards compatibility with consumers expecting Map format.
+ * TODO: Migrate consumers to use ToolCall[] and remove this bridge
  */
 function convertToolCallsToMap(toolCalls: ToolCall[]): Map<string, ToolCallTracking> {
   const map = new Map<string, ToolCallTracking>()
   toolCalls.forEach((tc) => {
+    const statusMap: Record<string, 'started' | 'executing' | 'completed' | 'error'> = {
+      success: 'completed',
+      failed: 'error',
+      running: 'executing',
+      pending: 'started',
+    }
     map.set(tc.id, {
       toolCallId: tc.id,
       toolCallName: tc.title,
       args: tc.rawInput ? (typeof tc.rawInput === 'string' ? tc.rawInput : JSON.stringify(tc.rawInput)) : '',
-      status: mapToolCallStatusToLegacy(tc.status),
+      status: statusMap[tc.status] || 'started',
       result: tc.result !== undefined ? (typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result)) : undefined,
-      error: tc.status === 'failed' && tc.result && typeof tc.result === 'object' ? (tc.result as any).error : undefined,
+      error: tc.status === 'failed' && tc.result && typeof tc.result === 'object' ? (tc.result as Record<string, unknown>).error as string : undefined,
       startTime: tc.timestamp.getTime(),
       endTime: tc.completedAt?.getTime(),
       index: tc.index,
     })
   })
   return map
-}
-
-/**
- * Map new ToolCall status to legacy ToolCallTracking status
- */
-function mapToolCallStatusToLegacy(
-  status: ToolCall['status']
-): 'started' | 'executing' | 'completed' | 'error' {
-  switch (status) {
-    case 'success':
-      return 'completed'
-    case 'failed':
-      return 'failed' as any // Legacy uses 'error' but type says 'completed' | 'started' | 'executing'
-    case 'running':
-      return 'executing'
-    case 'pending':
-    default:
-      return 'started'
-  }
 }
 
 
@@ -420,18 +386,11 @@ export function ExecutionMonitor({
   const completedToolCalls = toolCalls.filter((tc) => tc.status === 'success').length
   const messageCount = messages.length
 
-  // Convert to Maps for ClaudeCodeTrajectory and buildTodoHistory (backwards compat)
-  const messagesMap = useMemo(() => convertMessagesToMap(messages), [messages])
-  const toolCallsMap = useMemo(() => convertToolCallsToMap(toolCalls), [toolCalls])
+  // Get thoughts from WebSocket stream (logs don't have them yet)
+  const thoughts = wsStream.thoughts
 
-  // Extract todos from tool calls for TodoTracker (only for Claude Code agents)
-  const todos = useMemo(() => {
-    // Only extract todos for Claude Code agents
-    if (executionProp?.agent_type === 'claude-code') {
-      return buildTodoHistory(toolCallsMap)
-    }
-    return []
-  }, [toolCallsMap, executionProp?.agent_type])
+  // Extract todos from tool calls for TodoTracker
+  const todos = useMemo(() => buildTodoHistoryFromToolCalls(toolCalls), [toolCalls])
 
   // Render status badge
   const renderStatusBadge = () => {
@@ -527,22 +486,13 @@ export function ExecutionMonitor({
 
         {/* Agent Trajectory */}
         {(messageCount > 0 || toolCallCount > 0) && (
-          <>
-            {executionProp?.agent_type === 'claude-code' ? (
-              <ClaudeCodeTrajectory
-                messages={messagesMap}
-                toolCalls={toolCallsMap}
-                renderMarkdown
-                showTodoTracker={false}
-              />
-            ) : (
-              <AgentTrajectory
-                messages={messages}
-                toolCalls={toolCalls}
-                renderMarkdown
-              />
-            )}
-          </>
+          <AgentTrajectory
+            messages={messages}
+            toolCalls={toolCalls}
+            thoughts={thoughts}
+            renderMarkdown
+            showTodoTracker={false}
+          />
         )}
 
         {/* Empty state */}
@@ -612,24 +562,14 @@ export function ExecutionMonitor({
         )}
 
         {/* Agent Trajectory - unified messages and tool calls */}
-        {/* Use Claude Code-specific rendering for claude-code agent type */}
         {(messageCount > 0 || toolCallCount > 0) && (
-          <>
-            {executionProp?.agent_type === 'claude-code' ? (
-              <ClaudeCodeTrajectory
-                messages={messagesMap}
-                toolCalls={toolCallsMap}
-                renderMarkdown
-                showTodoTracker={false}
-              />
-            ) : (
-              <AgentTrajectory
-                messages={messages}
-                toolCalls={toolCalls}
-                renderMarkdown
-              />
-            )}
-          </>
+          <AgentTrajectory
+            messages={messages}
+            toolCalls={toolCalls}
+            thoughts={thoughts}
+            renderMarkdown
+            showTodoTracker={false}
+          />
         )}
 
         {/* Empty state */}

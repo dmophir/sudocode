@@ -4,13 +4,14 @@
  * Type definitions for execution streaming, used by trajectory components
  * and execution monitoring.
  *
- * These types support the legacy Map-based interface used by ClaudeCodeTrajectory
- * and other components that display execution history.
+ * Note: These Map-based types are legacy and retained for backwards compatibility
+ * with callback interfaces like onToolCallsUpdate. New code should use the array-based
+ * types from useSessionUpdateStream (AgentMessage[], ToolCall[]).
  */
 
 /**
- * Message buffer for streaming text messages (Map-based legacy interface)
- * Used by ClaudeCodeTrajectory and components that consume Map<string, MessageBuffer>
+ * Message buffer for streaming text messages (legacy Map-based interface)
+ * @deprecated Use AgentMessage from useSessionUpdateStream instead
  */
 export interface MessageBuffer {
   messageId: string
@@ -23,8 +24,9 @@ export interface MessageBuffer {
 }
 
 /**
- * Tool call tracking (Map-based legacy interface)
- * Used by ClaudeCodeTrajectory and components that consume Map<string, ToolCallTracking>
+ * Tool call tracking (legacy Map-based interface)
+ * @deprecated Use ToolCall from useSessionUpdateStream for new code.
+ * This type is retained for onToolCallsUpdate callback compatibility.
  */
 export interface ToolCallTracking {
   toolCallId: string
