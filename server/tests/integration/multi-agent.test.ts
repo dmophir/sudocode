@@ -21,6 +21,66 @@ import {
   vi,
 } from "vitest";
 
+// Mock agent-execution-engine to prevent spawning real legacy agent processes
+vi.mock("agent-execution-engine/agents", () => {
+  const createMockProcess = () => ({
+    process: {
+      pid: 12345,
+      kill: vi.fn(),
+      on: vi.fn((event: string, handler: Function) => {
+        // Auto-complete with exit code 0
+        if (event === "exit") {
+          setTimeout(() => handler(0), 100);
+        }
+      }),
+    },
+    streams: {
+      stdout: (async function* () {
+        // Empty stream
+      })(),
+      stderr: (async function* () {
+        // Empty stream
+      })(),
+    },
+  });
+
+  const createMockExecutor = () => ({
+    executeTask: vi.fn().mockResolvedValue({ process: createMockProcess() }),
+    normalizeOutput: vi.fn().mockImplementation(async function* () {
+      // Empty normalized output
+    }),
+    getCapabilities: vi.fn().mockReturnValue({
+      supportsSessionResume: false,
+      requiresSetup: false,
+      supportsApprovals: false,
+      supportsMcp: false,
+    }),
+  });
+
+  // AgentRegistry is a class that needs register, get, getAll methods
+  class MockAgentRegistry {
+    private adapters = new Map<string, any>();
+
+    register(adapter: any) {
+      this.adapters.set(adapter.metadata?.name || adapter.name, adapter);
+    }
+
+    get(name: string) {
+      return this.adapters.get(name);
+    }
+
+    getAll() {
+      return Array.from(this.adapters.values());
+    }
+  }
+
+  return {
+    CopilotExecutor: vi.fn().mockImplementation(() => createMockExecutor()),
+    CursorExecutor: vi.fn().mockImplementation(() => createMockExecutor()),
+    AgentRegistry: MockAgentRegistry,
+  };
+});
+
 // Mock acp-factory to prevent spawning real Claude processes
 vi.mock("acp-factory", () => {
   const createMockSession = () => ({
@@ -306,23 +366,22 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(wrapper.constructor.name).toBe("AcpExecutorWrapper");
     });
 
-    it("should create AgentExecutorWrapper for codex (legacy agent)", () => {
+    it("should throw for unsupported agent types (codex not yet registered)", () => {
       // Codex is defined in acp-factory source but not yet registered in npm
-      // Falls back to legacy AgentExecutorWrapper
-      const wrapper = createExecutorForAgent(
-        "codex",
-        { workDir: testDir },
-        {
-          workDir: testDir,
-          lifecycleService: executionService["lifecycleService"],
-          logsStore: executionService["logsStore"],
-          projectId: "test-project",
-          db,
-        }
-      );
-
-      expect(wrapper).toBeDefined();
-      expect(wrapper.constructor.name).toBe("AgentExecutorWrapper");
+      // Should throw since it's not in ACP or legacy agent lists
+      expect(() => {
+        createExecutorForAgent(
+          "codex",
+          { workDir: testDir },
+          {
+            workDir: testDir,
+            lifecycleService: executionService["lifecycleService"],
+            logsStore: executionService["logsStore"],
+            projectId: "test-project",
+            db,
+          }
+        );
+      }).toThrow(/Unknown agent type: codex/);
     });
 
     it("should create executor for copilot agent", () => {
@@ -360,22 +419,22 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(invalidErrors).toContain("workDir is required");
     });
 
-    it("should throw for invalid configuration (legacy agents only)", () => {
-      // ACP-native agents (claude-code) skip legacy validation - ACP factory handles config
-      // Test with a legacy agent (copilot) to verify validation still works
-      expect(() => {
-        createExecutorForAgent(
-          "copilot",
-          { workDir: "" },
-          {
-            workDir: testDir,
-            lifecycleService: executionService["lifecycleService"],
-            logsStore: executionService["logsStore"],
-            projectId: "test-project",
-            db,
-          }
-        );
-      }).toThrow(/configuration validation failed/);
+    it("should create LegacyShimExecutorWrapper for copilot (legacy agent)", () => {
+      // Copilot uses the legacy shim wrapper that converts NormalizedEntry to SessionUpdate
+      const wrapper = createExecutorForAgent(
+        "copilot",
+        { workDir: testDir },
+        {
+          workDir: testDir,
+          lifecycleService: executionService["lifecycleService"],
+          logsStore: executionService["logsStore"],
+          projectId: "test-project",
+          db,
+        }
+      );
+
+      expect(wrapper).toBeDefined();
+      expect(wrapper.constructor.name).toBe("LegacyShimExecutorWrapper");
     });
   });
 
@@ -407,17 +466,16 @@ describe("Multi-Agent Support - Phase 1 Integration", () => {
       expect(execution.agent_type).toBe("claude-code");
     });
 
-    it("should create execution with codex agent", async () => {
-
-      const execution = await executionService.createExecution(
-        testIssueId,
-        { mode: "worktree" as const },
-        issueContent,
-        "codex"
-      );
-
-      expect(execution).toBeDefined();
-      expect(execution.agent_type).toBe("codex");
+    it("should reject unsupported agent types (codex not yet registered)", async () => {
+      // Codex is not yet registered in acp-factory npm or legacy agents
+      await expect(
+        executionService.createExecution(
+          testIssueId,
+          { mode: "worktree" as const },
+          issueContent,
+          "codex"
+        )
+      ).rejects.toThrow(/Unknown agent type: codex/);
     });
 
     it("should create execution for copilot agent", async () => {

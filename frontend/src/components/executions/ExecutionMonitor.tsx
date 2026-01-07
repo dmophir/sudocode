@@ -220,90 +220,13 @@ export function ExecutionMonitor({
   // Also preload logs for active executions as a fallback in case WebSocket disconnects
   const logsResult = useExecutionLogs(executionId)
 
-  // Process logs events into AgentMessage/ToolCall format (array-based)
+  // Use pre-processed logs from hook (already converted from CoalescedSessionUpdate)
   const processedLogs = useMemo(() => {
-    const messagesMap = new Map<string, AgentMessage>()
-    const toolCallsMap = new Map<string, ToolCall>()
-
-    // Track sequence indices for stable ordering
-    let messageIndex = 0
-    let toolCallIndex = 0
-
-    // Process events from logs
-    if (logsResult.events && logsResult.events.length > 0) {
-      logsResult.events.forEach((event: any) => {
-        // Handle TEXT_MESSAGE events
-        if (event.type === 'TEXT_MESSAGE_START') {
-          messagesMap.set(event.messageId, {
-            id: event.messageId,
-            content: '',
-            timestamp: new Date(event.timestamp || Date.now()),
-            isStreaming: true,
-            index: messageIndex++,
-          })
-        } else if (event.type === 'TEXT_MESSAGE_CONTENT') {
-          const existing = messagesMap.get(event.messageId)
-          if (existing) {
-            messagesMap.set(event.messageId, {
-              ...existing,
-              content: existing.content + (event.delta || ''),
-            })
-          }
-        } else if (event.type === 'TEXT_MESSAGE_END') {
-          const existing = messagesMap.get(event.messageId)
-          if (existing) {
-            messagesMap.set(event.messageId, {
-              ...existing,
-              isStreaming: false,
-            })
-          }
-        }
-        // Handle TOOL_CALL events
-        else if (event.type === 'TOOL_CALL_START') {
-          toolCallsMap.set(event.toolCallId, {
-            id: event.toolCallId,
-            title: event.toolCallName || event.toolName,
-            status: 'running',
-            rawInput: '',
-            timestamp: new Date(event.timestamp || Date.now()),
-            index: toolCallIndex++,
-          })
-        } else if (event.type === 'TOOL_CALL_ARGS') {
-          const existing = toolCallsMap.get(event.toolCallId)
-          if (existing) {
-            const currentArgs = existing.rawInput || ''
-            toolCallsMap.set(event.toolCallId, {
-              ...existing,
-              rawInput: (typeof currentArgs === 'string' ? currentArgs : '') + (event.delta || ''),
-            })
-          }
-        } else if (event.type === 'TOOL_CALL_END') {
-          const existing = toolCallsMap.get(event.toolCallId)
-          if (existing) {
-            toolCallsMap.set(event.toolCallId, {
-              ...existing,
-              status: 'running',
-            })
-          }
-        } else if (event.type === 'TOOL_CALL_RESULT') {
-          const existing = toolCallsMap.get(event.toolCallId)
-          if (existing) {
-            toolCallsMap.set(event.toolCallId, {
-              ...existing,
-              status: 'success',
-              result: event.result || event.content,
-              completedAt: new Date(event.timestamp || Date.now()),
-            })
-          }
-        }
-      })
-    }
-
     return {
-      messages: Array.from(messagesMap.values()),
-      toolCalls: Array.from(toolCallsMap.values()),
+      messages: logsResult.processed.messages,
+      toolCalls: logsResult.processed.toolCalls,
     }
-  }, [logsResult.events])
+  }, [logsResult.processed])
 
   // Select the appropriate data source
   // Key insight: When transitioning from active to completed, keep showing WebSocket data
@@ -318,7 +241,7 @@ export function ExecutionMonitor({
       error: Error | null
       isConnected: boolean
     } => {
-      const logsLoaded = !logsResult.loading && logsResult.events && logsResult.events.length > 0
+      const logsLoaded = !logsResult.loading && logsResult.events.length > 0
       const hasWsData = wsStream.messages.length > 0 || wsStream.toolCalls.length > 0
       const hasLogsData = processedLogs.messages.length > 0 || processedLogs.toolCalls.length > 0
 

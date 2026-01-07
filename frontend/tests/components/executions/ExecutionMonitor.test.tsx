@@ -60,6 +60,27 @@ function createMockStreamResult(overrides: {
   }
 }
 
+// Helper to create mock result for useExecutionLogs
+function createMockLogsResult(overrides: {
+  events?: useExecutionLogsModule.CoalescedSessionUpdate[]
+  processed?: useExecutionLogsModule.ProcessedLogs
+  loading?: boolean
+  error?: Error | null
+  metadata?: useExecutionLogsModule.ExecutionLogMetadata | null
+  format?: 'acp' | 'normalized_entry' | 'empty' | null
+}): useExecutionLogsModule.UseExecutionLogsResult {
+  const events = overrides.events ?? []
+  const processed = overrides.processed ?? { messages: [], toolCalls: [], thoughts: [] }
+  return {
+    events,
+    processed,
+    loading: overrides.loading ?? false,
+    error: overrides.error ?? null,
+    metadata: overrides.metadata ?? null,
+    format: overrides.format ?? (events.length > 0 ? 'acp' : 'empty'),
+  }
+}
+
 describe('ExecutionMonitor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -68,12 +89,7 @@ describe('ExecutionMonitor', () => {
     mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
     // Default mock for useExecutionLogs (prevent actual fetch calls)
-    mockUseExecutionLogs.mockReturnValue({
-      events: [],
-      loading: false,
-      error: null,
-      metadata: null,
-    })
+    mockUseExecutionLogs.mockReturnValue(createMockLogsResult({}))
   })
 
   describe('Loading State', () => {
@@ -489,12 +505,7 @@ describe('ExecutionMonitor', () => {
   describe('Historical Execution Mode', () => {
     beforeEach(() => {
       // Mock useExecutionLogs to return empty initially
-      mockUseExecutionLogs.mockReturnValue({
-        events: [],
-        loading: false,
-        error: null,
-        metadata: null,
-      })
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({}))
     })
 
     it('should use WebSocket stream for active execution (running)', () => {
@@ -529,17 +540,14 @@ describe('ExecutionMonitor', () => {
     it('should use logs API for completed execution', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      mockUseExecutionLogs.mockReturnValue({
-        events: [],
-        loading: false,
-        error: null,
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         metadata: {
           lineCount: 10,
           byteSize: 5000,
           createdAt: '2025-01-01T00:00:00Z',
           updatedAt: '2025-01-01T00:10:00Z',
         },
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -563,12 +571,9 @@ describe('ExecutionMonitor', () => {
     it('should display loading state for historical execution', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      mockUseExecutionLogs.mockReturnValue({
-        events: [],
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         loading: true,
-        error: null,
-        metadata: null,
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -582,12 +587,9 @@ describe('ExecutionMonitor', () => {
     it('should display error state for historical execution', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      mockUseExecutionLogs.mockReturnValue({
-        events: [],
-        loading: false,
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         error: new Error('Failed to load execution logs'),
-        metadata: null,
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -627,45 +629,38 @@ describe('ExecutionMonitor', () => {
       })
     })
 
-    it('should process historical TEXT_MESSAGE events correctly', () => {
+    it('should display historical messages correctly', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      // Mock AG-UI events in the format returned by /logs API
-      mockUseExecutionLogs.mockReturnValue({
+      // Mock pre-processed logs returned by useExecutionLogs hook
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
           {
-            type: 'TEXT_MESSAGE_START',
-            timestamp: 1000,
-            messageId: 'msg-1',
-            role: 'assistant',
-          },
-          {
-            type: 'TEXT_MESSAGE_CONTENT',
-            timestamp: 1001,
-            messageId: 'msg-1',
-            delta: 'Hello ',
-          },
-          {
-            type: 'TEXT_MESSAGE_CONTENT',
-            timestamp: 1002,
-            messageId: 'msg-1',
-            delta: 'world!',
-          },
-          {
-            type: 'TEXT_MESSAGE_END',
-            timestamp: 1003,
-            messageId: 'msg-1',
+            sessionUpdate: 'agent_message_complete',
+            content: { type: 'text', text: 'Hello world!' },
+            timestamp: new Date('2025-01-01T00:00:00Z'),
           },
         ],
-        loading: false,
-        error: null,
+        processed: {
+          messages: [
+            {
+              id: 'msg-0',
+              content: 'Hello world!',
+              timestamp: new Date('2025-01-01T00:00:00Z'),
+              isStreaming: false,
+              index: 0,
+            },
+          ],
+          toolCalls: [],
+          thoughts: [],
+        },
         metadata: {
-          lineCount: 4,
-          byteSize: 200,
+          lineCount: 1,
+          byteSize: 50,
           createdAt: '2025-01-01T00:00:00Z',
           updatedAt: '2025-01-01T00:00:01Z',
         },
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -675,50 +670,45 @@ describe('ExecutionMonitor', () => {
       expect(screen.getByText('Hello world!')).toBeInTheDocument()
     })
 
-    it('should process historical TOOL_CALL events correctly', () => {
+    it('should display historical tool calls correctly', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      mockUseExecutionLogs.mockReturnValue({
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
           {
-            type: 'TOOL_CALL_START',
-            timestamp: 2000,
+            sessionUpdate: 'tool_call_complete',
             toolCallId: 'tool-1',
-            toolCallName: 'Read',
-          },
-          {
-            type: 'TOOL_CALL_ARGS',
-            timestamp: 2001,
-            toolCallId: 'tool-1',
-            delta: '{"file":',
-          },
-          {
-            type: 'TOOL_CALL_ARGS',
-            timestamp: 2002,
-            toolCallId: 'tool-1',
-            delta: '"test.ts"}',
-          },
-          {
-            type: 'TOOL_CALL_END',
-            timestamp: 2003,
-            toolCallId: 'tool-1',
-          },
-          {
-            type: 'TOOL_CALL_RESULT',
-            timestamp: 2004,
-            toolCallId: 'tool-1',
+            title: 'Read',
+            status: 'completed',
             result: 'File contents here',
+            rawInput: { file: 'test.ts' },
+            timestamp: new Date('2025-01-01T00:00:02Z'),
+            completedAt: new Date('2025-01-01T00:00:02Z'),
           },
         ],
-        loading: false,
-        error: null,
+        processed: {
+          messages: [],
+          toolCalls: [
+            {
+              id: 'tool-1',
+              title: 'Read',
+              status: 'success',
+              result: 'File contents here',
+              rawInput: { file: 'test.ts' },
+              timestamp: new Date('2025-01-01T00:00:02Z'),
+              completedAt: new Date('2025-01-01T00:00:02Z'),
+              index: 0,
+            },
+          ],
+          thoughts: [],
+        },
         metadata: {
-          lineCount: 5,
-          byteSize: 300,
+          lineCount: 1,
+          byteSize: 100,
           createdAt: '2025-01-01T00:00:00Z',
           updatedAt: '2025-01-01T00:00:02Z',
         },
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -735,46 +725,29 @@ describe('ExecutionMonitor', () => {
     it('should handle multiple messages and tool calls from historical events', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      mockUseExecutionLogs.mockReturnValue({
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
-          // First message
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-1', role: 'assistant' },
-          {
-            type: 'TEXT_MESSAGE_CONTENT',
-            timestamp: 1001,
-            messageId: 'msg-1',
-            delta: 'First message',
-          },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1002, messageId: 'msg-1' },
-          // Tool call
-          { type: 'TOOL_CALL_START', timestamp: 2000, toolCallId: 'tool-1', toolCallName: 'Write' },
-          {
-            type: 'TOOL_CALL_ARGS',
-            timestamp: 2001,
-            toolCallId: 'tool-1',
-            delta: '{"file":"test.txt"}',
-          },
-          { type: 'TOOL_CALL_END', timestamp: 2002, toolCallId: 'tool-1' },
-          { type: 'TOOL_CALL_RESULT', timestamp: 2003, toolCallId: 'tool-1', result: 'Success' },
-          // Second message
-          { type: 'TEXT_MESSAGE_START', timestamp: 3000, messageId: 'msg-2', role: 'assistant' },
-          {
-            type: 'TEXT_MESSAGE_CONTENT',
-            timestamp: 3001,
-            messageId: 'msg-2',
-            delta: 'Second message',
-          },
-          { type: 'TEXT_MESSAGE_END', timestamp: 3002, messageId: 'msg-2' },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'First message' }, timestamp: new Date(1000) },
+          { sessionUpdate: 'tool_call_complete', toolCallId: 'tool-1', title: 'Write', status: 'completed', timestamp: new Date(2000) },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Second message' }, timestamp: new Date(3000) },
         ],
-        loading: false,
-        error: null,
+        processed: {
+          messages: [
+            { id: 'msg-0', content: 'First message', timestamp: new Date(1000), isStreaming: false, index: 0 },
+            { id: 'msg-1', content: 'Second message', timestamp: new Date(3000), isStreaming: false, index: 1 },
+          ],
+          toolCalls: [
+            { id: 'tool-1', title: 'Write', status: 'success', timestamp: new Date(2000), index: 0 },
+          ],
+          thoughts: [],
+        },
         metadata: {
-          lineCount: 10,
-          byteSize: 500,
+          lineCount: 3,
+          byteSize: 200,
           createdAt: '2025-01-01T00:00:00Z',
           updatedAt: '2025-01-01T00:00:03Z',
         },
-      })
+      }))
 
       const { container } = renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -798,26 +771,24 @@ describe('ExecutionMonitor', () => {
     it('should preserve ordering with timestamps from historical events', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      // Events with proper timestamps for ordering
-      mockUseExecutionLogs.mockReturnValue({
+      // Events with proper timestamps for ordering via processed data
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
-          // First message at time 1000
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-1', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1000, messageId: 'msg-1', delta: 'First' },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1000, messageId: 'msg-1' },
-          // Tool call at time 2000
-          { type: 'TOOL_CALL_START', timestamp: 2000, toolCallId: 'tool-1', toolCallName: 'Read' },
-          { type: 'TOOL_CALL_END', timestamp: 2500, toolCallId: 'tool-1' },
-          { type: 'TOOL_CALL_RESULT', timestamp: 2500, toolCallId: 'tool-1', result: 'data' },
-          // Second message at time 3000
-          { type: 'TEXT_MESSAGE_START', timestamp: 3000, messageId: 'msg-2', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 3000, messageId: 'msg-2', delta: 'Second' },
-          { type: 'TEXT_MESSAGE_END', timestamp: 3000, messageId: 'msg-2' },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'First' }, timestamp: new Date(1000) },
+          { sessionUpdate: 'tool_call_complete', toolCallId: 'tool-1', title: 'Read', status: 'completed', timestamp: new Date(2000) },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Second' }, timestamp: new Date(3000) },
         ],
-        loading: false,
-        error: null,
-        metadata: null,
-      })
+        processed: {
+          messages: [
+            { id: 'msg-0', content: 'First', timestamp: new Date(1000), isStreaming: false, index: 0 },
+            { id: 'msg-1', content: 'Second', timestamp: new Date(3000), isStreaming: false, index: 1 },
+          ],
+          toolCalls: [
+            { id: 'tool-1', title: 'Read', status: 'success', timestamp: new Date(2000), index: 0 },
+          ],
+          thoughts: [],
+        },
+      }))
 
       const { container } = renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -838,24 +809,24 @@ describe('ExecutionMonitor', () => {
     it('should assign sequential indices for stable ordering when timestamps are equal', () => {
       mockUseSessionUpdateStream.mockReturnValue(createMockStreamResult({}))
 
-      // All events have same timestamp (simulating rapid processing)
-      mockUseExecutionLogs.mockReturnValue({
+      // All events have same timestamp (simulating rapid processing) - order preserved via index
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
-          // All at same timestamp - order should be preserved via index
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-1', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1000, messageId: 'msg-1', delta: 'Alpha' },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1000, messageId: 'msg-1' },
-          { type: 'TOOL_CALL_START', timestamp: 1000, toolCallId: 'tool-1', toolCallName: 'Bash' },
-          { type: 'TOOL_CALL_END', timestamp: 1000, toolCallId: 'tool-1' },
-          { type: 'TOOL_CALL_RESULT', timestamp: 1000, toolCallId: 'tool-1', result: 'ok' },
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-2', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1000, messageId: 'msg-2', delta: 'Beta' },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1000, messageId: 'msg-2' },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Alpha' }, timestamp: new Date(1000) },
+          { sessionUpdate: 'tool_call_complete', toolCallId: 'tool-1', title: 'Bash', status: 'completed', timestamp: new Date(1000) },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Beta' }, timestamp: new Date(1000) },
         ],
-        loading: false,
-        error: null,
-        metadata: null,
-      })
+        processed: {
+          messages: [
+            { id: 'msg-0', content: 'Alpha', timestamp: new Date(1000), isStreaming: false, index: 0 },
+            { id: 'msg-1', content: 'Beta', timestamp: new Date(1000), isStreaming: false, index: 1 },
+          ],
+          toolCalls: [
+            { id: 'tool-1', title: 'Bash', status: 'success', timestamp: new Date(1000), index: 0 },
+          ],
+          thoughts: [],
+        },
+      }))
 
       const { container } = renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -914,12 +885,9 @@ describe('ExecutionMonitor', () => {
       )
 
       // Logs are still loading
-      mockUseExecutionLogs.mockReturnValue({
-        events: [],
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         loading: true,
-        error: null,
-        metadata: null,
-      })
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -960,16 +928,19 @@ describe('ExecutionMonitor', () => {
       )
 
       // Logs have finished loading with different content
-      mockUseExecutionLogs.mockReturnValue({
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'log-msg-1', role: 'assistant' },
-          { type: 'TEXT_MESSAGE_CONTENT', timestamp: 1000, messageId: 'log-msg-1', delta: 'Logs message' },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1000, messageId: 'log-msg-1' },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Logs message' }, timestamp: new Date(1000) },
         ],
-        loading: false,
-        error: null,
-        metadata: { lineCount: 3, byteSize: 100, createdAt: '', updatedAt: '' },
-      })
+        processed: {
+          messages: [
+            { id: 'log-msg-1', content: 'Logs message', timestamp: new Date(1000), isStreaming: false, index: 0 },
+          ],
+          toolCalls: [],
+          thoughts: [],
+        },
+        metadata: { lineCount: 1, byteSize: 50, createdAt: '', updatedAt: '' },
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'completed' } as any} />
@@ -991,24 +962,22 @@ describe('ExecutionMonitor', () => {
       )
 
       // Saved logs have the execution history
-      mockUseExecutionLogs.mockReturnValue({
+      mockUseExecutionLogs.mockReturnValue(createMockLogsResult({
         events: [
-          { type: 'TEXT_MESSAGE_START', timestamp: 1000, messageId: 'msg-1', role: 'assistant' },
-          {
-            type: 'TEXT_MESSAGE_CONTENT',
-            timestamp: 1001,
-            messageId: 'msg-1',
-            delta: 'Saved message from logs',
-          },
-          { type: 'TEXT_MESSAGE_END', timestamp: 1002, messageId: 'msg-1' },
-          { type: 'TOOL_CALL_START', timestamp: 2000, toolCallId: 'tool-1', toolCallName: 'Read' },
-          { type: 'TOOL_CALL_END', timestamp: 2100, toolCallId: 'tool-1' },
-          { type: 'TOOL_CALL_RESULT', timestamp: 2100, toolCallId: 'tool-1', result: 'File contents' },
+          { sessionUpdate: 'agent_message_complete', content: { type: 'text', text: 'Saved message from logs' }, timestamp: new Date(1000) },
+          { sessionUpdate: 'tool_call_complete', toolCallId: 'tool-1', title: 'Read', status: 'completed', result: 'File contents', timestamp: new Date(2000) },
         ],
-        loading: false,
-        error: null,
-        metadata: { lineCount: 6, byteSize: 300, createdAt: '', updatedAt: '' },
-      })
+        processed: {
+          messages: [
+            { id: 'msg-1', content: 'Saved message from logs', timestamp: new Date(1000), isStreaming: false, index: 0 },
+          ],
+          toolCalls: [
+            { id: 'tool-1', title: 'Read', status: 'success', result: 'File contents', timestamp: new Date(2000), index: 0 },
+          ],
+          thoughts: [],
+        },
+        metadata: { lineCount: 2, byteSize: 100, createdAt: '', updatedAt: '' },
+      }))
 
       renderWithTheme(
         <ExecutionMonitor executionId="test-exec-1" execution={{ status: 'running' } as any} />

@@ -362,9 +362,11 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
         statusChanges.push(status)
       })
 
+      // Use mock worker that doesn't require Claude CLI
+      const mockWorkerPath = join(__dirname, 'fixtures/mock-worker.ts')
       pool = new ExecutionWorkerPool(
         'test-project',
-        { maxConcurrentWorkers: 1 },
+        { maxConcurrentWorkers: 1, workerScriptPath: mockWorkerPath },
         { onStatusChange }
       )
 
@@ -393,8 +395,8 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Worker Isolation Integration Tests', ()
       const worker = pool.getWorker(execution.id)
       expect(worker?.status).toMatch(/starting|running/)
 
-      // Wait for worker to complete
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      // Wait for worker to complete (mock worker completes in ~200ms)
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       // Worker should be removed after completion
       expect(pool.hasWorker(execution.id)).toBe(false)
