@@ -6,7 +6,7 @@
  * convert them into the generic TodoItem format expected by TodoTracker.
  */
 
-import type { ToolCallTracking } from '@/hooks/useAgUiStream'
+import type { ToolCallTracking } from '@/types/stream'
 import type { TodoItem } from '@/components/executions/TodoTracker'
 
 /**

@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ClaudeCodeTrajectory } from '@/components/executions/ClaudeCodeTrajectory'
-import type { MessageBuffer, ToolCallTracking } from '@/hooks/useAgUiStream'
+import type { MessageBuffer, ToolCallTracking } from '@/types/stream'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 
 // Helper to wrap component with ThemeProvider
