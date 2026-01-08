@@ -145,6 +145,24 @@ export class LegacyShimExecutorWrapper {
   /** Active executions for cancellation */
   private activeExecutions: Map<string, { cancel: () => void }> = new Map();
 
+  /**
+   * Track tool calls by a stable key (toolName + args hash) to generate
+   * consistent toolCallIds across multiple entries for the same logical tool call.
+   * Key: stable tool key, Value: assigned toolCallId
+   */
+  private toolCallIdMap: Map<string, string> = new Map();
+
+  /** Counter for generating unique tool call IDs */
+  private toolCallCounter: number = 0;
+
+  /**
+   * Track current assistant message to handle cumulative streaming updates.
+   * When content is a continuation, we emit with the same ID to update in place.
+   */
+  private currentMessageId: string | null = null;
+  private currentMessageContent: string = "";
+  private messageCounter: number = 0;
+
   constructor(config: LegacyShimExecutorWrapperConfig) {
     this.agentType = config.agentType;
     this.agentConfig = config.agentConfig;
@@ -208,6 +226,13 @@ export class LegacyShimExecutorWrapper {
         workDir,
       }
     );
+
+    // Reset tracking for new execution
+    this.toolCallIdMap.clear();
+    this.toolCallCounter = 0;
+    this.currentMessageId = null;
+    this.currentMessageContent = "";
+    this.messageCounter = 0;
 
     try {
       // 1. Update execution status to running
@@ -431,12 +456,44 @@ export class LegacyShimExecutorWrapper {
     const timestamp = entry.timestamp ?? new Date();
 
     switch (entry.type.kind) {
-      case "assistant_message":
+      case "assistant_message": {
+        const content = entry.content;
+
+        // Check if this is a continuation of the current message
+        // (PlainTextLogProcessor emits cumulative 'replace' patches)
+        const isContinuation =
+          this.currentMessageId &&
+          this.currentMessageContent &&
+          content.startsWith(this.currentMessageContent);
+
+        // Check if this is a completely new message
+        // (content doesn't extend current, and current exists)
+        const isNewMessage =
+          this.currentMessageId &&
+          this.currentMessageContent &&
+          !content.startsWith(this.currentMessageContent) &&
+          !this.currentMessageContent.startsWith(content);
+
+        if (isNewMessage) {
+          // Start a new message
+          this.currentMessageId = `msg-${++this.messageCounter}`;
+          this.currentMessageContent = content;
+        } else if (!this.currentMessageId) {
+          // First message
+          this.currentMessageId = `msg-${++this.messageCounter}`;
+          this.currentMessageContent = content;
+        } else if (isContinuation) {
+          // Update current message content
+          this.currentMessageContent = content;
+        }
+
         return {
           sessionUpdate: "agent_message_complete",
-          content: { type: "text", text: entry.content },
+          content: { type: "text", text: content },
           timestamp,
+          messageId: this.currentMessageId,
         } as AgentMessageComplete;
+      }
 
       case "thinking":
         return {
@@ -450,19 +507,36 @@ export class LegacyShimExecutorWrapper {
 
       case "tool_use": {
         const tool = entry.type.tool;
+
+        // Only emit tool_call_complete for terminal statuses
+        // This prevents duplicate entries for the same tool call
+        if (tool.status !== "success" && tool.status !== "failed") {
+          return null;
+        }
+
+        // Generate a stable key for this tool call based on toolName and args
+        // This ensures the same logical tool call gets the same ID
+        const rawInput = this.extractToolInput(tool);
+        const argsKey = JSON.stringify(rawInput);
+        const stableKey = `${tool.toolName}:${argsKey}`;
+
+        // Look up or create a consistent toolCallId
+        let toolCallId = this.toolCallIdMap.get(stableKey);
+        if (!toolCallId) {
+          toolCallId = `${tool.toolName}-${++this.toolCallCounter}`;
+          this.toolCallIdMap.set(stableKey, toolCallId);
+        }
+
         return {
           sessionUpdate: "tool_call_complete",
-          toolCallId: `${tool.toolName}-${entry.index}`,
+          toolCallId,
           title: this.getToolTitle(tool),
           status: this.mapToolStatus(tool.status),
           result: tool.result?.data,
-          rawInput: this.extractToolInput(tool),
+          rawInput,
           rawOutput: tool.result?.data,
           timestamp,
-          completedAt:
-            tool.status === "success" || tool.status === "failed"
-              ? new Date()
-              : undefined,
+          completedAt: new Date(),
         } as ToolCallComplete;
       }
 

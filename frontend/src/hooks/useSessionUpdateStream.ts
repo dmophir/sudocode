@@ -178,6 +178,8 @@ interface AgentMessageComplete {
   sessionUpdate: 'agent_message_complete'
   content: ContentBlock
   timestamp: string | Date
+  /** Optional stable message ID for deduplication (from legacy agents) */
+  messageId?: string
 }
 
 interface AgentThoughtComplete {
@@ -413,14 +415,15 @@ export function useSessionUpdateStream(
       // Coalesced: agent_message_complete
       case 'agent_message_complete': {
         const text = getTextFromContentBlock(update.content)
-        const messageId = currentMessageIdRef.current || generateStreamId('msg')
+        // Use provided messageId (from legacy agents) or current streaming ID or generate new
+        const messageId = update.messageId || currentMessageIdRef.current || generateStreamId('msg')
 
         setMessages((prev) => {
           const next = new Map(prev)
           const existing = next.get(messageId)
 
           if (existing) {
-            // Finalize streaming message
+            // Update existing message (for legacy agent cumulative updates)
             next.set(messageId, {
               ...existing,
               content: text || existing.content,
@@ -439,8 +442,11 @@ export function useSessionUpdateStream(
           return next
         })
 
-        // Reset current message tracking
-        currentMessageIdRef.current = null
+        // Only reset current message tracking if this wasn't a legacy agent update
+        // (legacy agents provide their own messageId and may send more updates)
+        if (!update.messageId) {
+          currentMessageIdRef.current = null
+        }
         setIsStreaming(false)
         break
       }
@@ -584,6 +590,54 @@ export function useSessionUpdateStream(
   }, [])
 
   /**
+   * Finalize all streaming messages and thoughts
+   * Called when execution enters a terminal state
+   */
+  const finalizeStreamingContent = useCallback(() => {
+    // Finalize any streaming messages
+    setMessages((prev) => {
+      const next = new Map(prev)
+      for (const [id, message] of next) {
+        if (message.isStreaming) {
+          next.set(id, { ...message, isStreaming: false })
+        }
+      }
+      return next
+    })
+
+    // Finalize any streaming thoughts
+    setThoughts((prev) => {
+      const next = new Map(prev)
+      for (const [id, thought] of next) {
+        if (thought.isStreaming) {
+          next.set(id, { ...thought, isStreaming: false })
+        }
+      }
+      return next
+    })
+
+    // Finalize any pending/running tool calls
+    setToolCalls((prev) => {
+      const next = new Map(prev)
+      for (const [id, toolCall] of next) {
+        if (toolCall.status === 'pending' || toolCall.status === 'running') {
+          next.set(id, {
+            ...toolCall,
+            status: 'failed',
+            completedAt: new Date(),
+          })
+        }
+      }
+      return next
+    })
+
+    // Reset streaming state
+    currentMessageIdRef.current = null
+    currentThoughtIdRef.current = null
+    setIsStreaming(false)
+  }, [])
+
+  /**
    * Handle execution lifecycle events
    */
   const handleExecutionEvent = useCallback(
@@ -605,6 +659,12 @@ export function useSessionUpdateStream(
         endTime: completedAt,
       })
 
+      // Finalize streaming content when execution enters terminal state
+      const terminalStatuses = ['completed', 'error', 'cancelled', 'stopped']
+      if (terminalStatuses.includes(newStatus)) {
+        finalizeStreamingContent()
+      }
+
       // Trigger callbacks
       if (newStatus === 'running' && onEventRef.current?.onExecutionStarted) {
         onEventRef.current.onExecutionStarted(exec)
@@ -616,7 +676,7 @@ export function useSessionUpdateStream(
         onEventRef.current.onExecutionError(exec, exec.error_message || 'Unknown error')
       }
     },
-    [executionId]
+    [executionId, finalizeStreamingContent]
   )
 
   /**

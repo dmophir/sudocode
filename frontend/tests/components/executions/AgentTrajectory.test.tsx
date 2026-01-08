@@ -83,15 +83,16 @@ describe('AgentTrajectory', () => {
       expect(screen.getByText('Hello, this is a test message!')).toBeInTheDocument()
     })
 
-    it('should show spinner for streaming messages', () => {
+    it('should show blinking dot for streaming messages', () => {
       const messages = [createMessage('msg-1', 'Streaming...', new Date(), true)]
 
       const { container } = renderWithTheme(
         <AgentTrajectory messages={messages} toolCalls={[]} />
       )
 
-      const spinners = container.querySelectorAll('.animate-spin')
-      expect(spinners.length).toBeGreaterThan(0)
+      // Streaming messages use animate-pulse on the dot
+      const blinkingDots = container.querySelectorAll('.animate-pulse')
+      expect(blinkingDots.length).toBeGreaterThan(0)
     })
   })
 
@@ -108,15 +109,16 @@ describe('AgentTrajectory', () => {
       expect(screen.getByText('Let me think about this...')).toBeInTheDocument()
     })
 
-    it('should show spinner for streaming thoughts', () => {
+    it('should show blinking dot for streaming thoughts', () => {
       const thoughts = [createThought('thought-1', 'Thinking...', new Date(), true)]
 
       const { container } = renderWithTheme(
         <AgentTrajectory messages={[]} toolCalls={[]} thoughts={thoughts} />
       )
 
-      const spinners = container.querySelectorAll('.animate-spin')
-      expect(spinners.length).toBeGreaterThan(0)
+      // Streaming thoughts use animate-pulse on the dot
+      const blinkingDots = container.querySelectorAll('.animate-pulse')
+      expect(blinkingDots.length).toBeGreaterThan(0)
     })
   })
 
@@ -307,30 +309,30 @@ describe('AgentTrajectory', () => {
   })
 
   describe('Tool Status Variants', () => {
-    it('should show spinner for running tool calls', () => {
+    it('should show blinking dot for running tool calls', () => {
       const toolCalls = [createToolCall('tool-1', 'Running Task', 'running')]
 
       const { container } = renderWithTheme(
         <AgentTrajectory messages={[]} toolCalls={toolCalls} />
       )
 
-      // New UI shows yellow dot and spinner, not text badge
+      // New UI shows yellow blinking dot for running status
       expect(screen.getByText('Running Task')).toBeInTheDocument()
-      const spinners = container.querySelectorAll('.animate-spin')
-      expect(spinners.length).toBeGreaterThan(0)
+      const blinkingDots = container.querySelectorAll('.animate-pulse')
+      expect(blinkingDots.length).toBeGreaterThan(0)
     })
 
-    it('should show spinner for pending tool calls', () => {
+    it('should show blinking dot for pending tool calls', () => {
       const toolCalls = [createToolCall('tool-1', 'Pending Task', 'pending')]
 
       const { container } = renderWithTheme(
         <AgentTrajectory messages={[]} toolCalls={toolCalls} />
       )
 
-      // New UI shows yellow dot and spinner, not text badge
+      // New UI shows yellow blinking dot for pending status
       expect(screen.getByText('Pending Task')).toBeInTheDocument()
-      const spinners = container.querySelectorAll('.animate-spin')
-      expect(spinners.length).toBeGreaterThan(0)
+      const blinkingDots = container.querySelectorAll('.animate-pulse')
+      expect(blinkingDots.length).toBeGreaterThan(0)
     })
   })
 })

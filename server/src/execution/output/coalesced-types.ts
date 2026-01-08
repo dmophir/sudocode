@@ -18,6 +18,12 @@ export interface AgentMessageComplete {
   content: ContentBlock;
   /** Timestamp of first chunk */
   timestamp: Date;
+  /**
+   * Optional stable message ID for deduplication.
+   * When provided, frontend should use this ID instead of generating a new one.
+   * This is used by legacy agents that emit multiple updates for the same message.
+   */
+  messageId?: string;
 }
 
 /**

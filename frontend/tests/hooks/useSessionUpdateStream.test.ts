@@ -790,4 +790,165 @@ describe('useSessionUpdateStream', () => {
       expect(result.current.toolCalls[0].completedAt).toBeInstanceOf(Date)
     })
   })
+
+  describe('Execution Lifecycle Finalization', () => {
+    it('should finalize streaming messages when execution completes', () => {
+      const { result } = renderHook(() => useSessionUpdateStream('exec-123'))
+
+      // Start streaming a message
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Streaming message...' },
+          })
+        )
+      })
+
+      expect(result.current.messages[0].isStreaming).toBe(true)
+
+      // Simulate execution completion
+      act(() => {
+        simulateMessage({
+          type: 'execution_status_changed',
+          data: {
+            id: 'exec-123',
+            status: 'completed',
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          },
+        })
+      })
+
+      // Message should be finalized (no longer streaming)
+      expect(result.current.messages[0].isStreaming).toBe(false)
+    })
+
+    it('should finalize streaming thoughts when execution completes', () => {
+      const { result } = renderHook(() => useSessionUpdateStream('exec-123'))
+
+      // Start streaming a thought
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'agent_thought_chunk',
+            content: { type: 'text', text: 'Thinking...' },
+          })
+        )
+      })
+
+      expect(result.current.thoughts[0].isStreaming).toBe(true)
+
+      // Simulate execution completion
+      act(() => {
+        simulateMessage({
+          type: 'execution_status_changed',
+          data: {
+            id: 'exec-123',
+            status: 'completed',
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          },
+        })
+      })
+
+      // Thought should be finalized
+      expect(result.current.thoughts[0].isStreaming).toBe(false)
+    })
+
+    it('should mark pending/running tool calls as failed when execution errors', () => {
+      const { result } = renderHook(() => useSessionUpdateStream('exec-123'))
+
+      // Start a tool call
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'tool_call',
+            toolCallId: 'tool-1',
+            title: 'Reading file',
+            status: 'in_progress',
+          })
+        )
+      })
+
+      expect(result.current.toolCalls[0].status).toBe('running')
+
+      // Simulate execution error
+      act(() => {
+        simulateMessage({
+          type: 'execution_status_changed',
+          data: {
+            id: 'exec-123',
+            status: 'failed',
+            error_message: 'Something went wrong',
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          },
+        })
+      })
+
+      // Tool call should be marked as failed
+      expect(result.current.toolCalls[0].status).toBe('failed')
+      expect(result.current.toolCalls[0].completedAt).toBeInstanceOf(Date)
+    })
+
+    it('should finalize all streaming content when execution is cancelled', () => {
+      const { result } = renderHook(() => useSessionUpdateStream('exec-123'))
+
+      // Start streaming message and thought
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Message...' },
+          })
+        )
+      })
+
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'agent_thought_chunk',
+            content: { type: 'text', text: 'Thought...' },
+          })
+        )
+      })
+
+      // Start a tool call
+      act(() => {
+        simulateMessage(
+          createSessionUpdateMessage('exec-123', {
+            sessionUpdate: 'tool_call',
+            toolCallId: 'tool-1',
+            title: 'Writing file',
+            status: 'in_progress',
+          })
+        )
+      })
+
+      expect(result.current.messages[0].isStreaming).toBe(true)
+      expect(result.current.thoughts[0].isStreaming).toBe(true)
+      expect(result.current.toolCalls[0].status).toBe('running')
+      expect(result.current.isStreaming).toBe(true)
+
+      // Simulate execution cancellation
+      act(() => {
+        simulateMessage({
+          type: 'execution_status_changed',
+          data: {
+            id: 'exec-123',
+            status: 'cancelled',
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          },
+        })
+      })
+
+      // All streaming content should be finalized
+      expect(result.current.messages[0].isStreaming).toBe(false)
+      expect(result.current.thoughts[0].isStreaming).toBe(false)
+      expect(result.current.toolCalls[0].status).toBe('failed')
+      expect(result.current.isStreaming).toBe(false)
+    })
+  })
 })

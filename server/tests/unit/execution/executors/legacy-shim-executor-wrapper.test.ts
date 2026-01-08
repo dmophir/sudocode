@@ -640,7 +640,7 @@ describe("LegacyShimExecutorWrapper", () => {
   });
 
   describe("tool status mapping", () => {
-    it("should map created status to working", async () => {
+    it("should skip non-terminal statuses and only emit completed tools", async () => {
       const { CopilotExecutor } = await import("agent-execution-engine/agents");
       const mockExecutorWithCreated = {
         executeTask: vi.fn().mockResolvedValue({
@@ -665,6 +665,7 @@ describe("LegacyShimExecutorWrapper", () => {
           },
         }),
         normalizeOutput: vi.fn().mockImplementation(async function* () {
+          // Non-terminal status should be skipped
           yield {
             index: 0,
             timestamp: new Date(),
@@ -677,6 +678,21 @@ describe("LegacyShimExecutorWrapper", () => {
               },
             },
             content: "Reading file",
+          };
+          // Terminal status should be emitted
+          yield {
+            index: 1,
+            timestamp: new Date(),
+            type: {
+              kind: "tool_use",
+              tool: {
+                toolName: "Read",
+                action: { kind: "file_read", path: "/test/file.ts" },
+                status: "success",
+                result: { data: "file contents" },
+              },
+            },
+            content: "File read complete",
           };
         }),
         getCapabilities: vi.fn().mockReturnValue({
@@ -711,10 +727,12 @@ describe("LegacyShimExecutorWrapper", () => {
         "/test/workdir"
       );
 
+      // Only terminal status (success) should be emitted
+      expect(createdLogsStore.appendRawLog).toHaveBeenCalledTimes(1);
       const firstCall = createdLogsStore.appendRawLog.mock.calls[0];
       const parsed = JSON.parse(firstCall[1]);
 
-      expect(parsed.status).toBe("working");
+      expect(parsed.status).toBe("completed");
     });
 
     it("should map failed status to failed", async () => {
@@ -957,7 +975,7 @@ describe("LegacyShimExecutorWrapper", () => {
       expect(secondCall.content.text).toBe(`Line 1\nLine 2 short\n${longAddition}`);
     });
 
-    it("should deduplicate tool_use entries based on status and result", async () => {
+    it("should only emit tool_use entries with terminal status (success/failed)", async () => {
       const { CopilotExecutor } = await import("agent-execution-engine/agents");
       const mockExecutorWithToolDupes = {
         executeTask: vi.fn().mockResolvedValue({
@@ -978,7 +996,7 @@ describe("LegacyShimExecutorWrapper", () => {
           },
         }),
         normalizeOutput: vi.fn().mockImplementation(async function* () {
-          // Tool call started
+          // Tool call started - non-terminal, should be skipped
           yield {
             index: 0,
             timestamp: new Date(),
@@ -993,7 +1011,7 @@ describe("LegacyShimExecutorWrapper", () => {
             },
             content: "Reading file",
           };
-          // Same tool call with same status - should be skipped
+          // Same tool call with same status - also skipped (non-terminal)
           yield {
             index: 0,
             timestamp: new Date(),
@@ -1008,7 +1026,7 @@ describe("LegacyShimExecutorWrapper", () => {
             },
             content: "Reading file",
           };
-          // Tool call completed with result - should be emitted
+          // Tool call completed with result - terminal, should be emitted
           yield {
             index: 0,
             timestamp: new Date(),
@@ -1049,14 +1067,11 @@ describe("LegacyShimExecutorWrapper", () => {
         "/test/workdir"
       );
 
-      // Should have 2 calls (duplicate running status was skipped)
-      expect(toolDedupeLogsStore.appendRawLog).toHaveBeenCalledTimes(2);
+      // Should have 1 call (only terminal status emitted, non-terminal skipped)
+      expect(toolDedupeLogsStore.appendRawLog).toHaveBeenCalledTimes(1);
 
       const firstCall = JSON.parse(toolDedupeLogsStore.appendRawLog.mock.calls[0][1]);
-      const secondCall = JSON.parse(toolDedupeLogsStore.appendRawLog.mock.calls[1][1]);
-
-      expect(firstCall.status).toBe("working"); // running maps to working
-      expect(secondCall.status).toBe("completed"); // success maps to completed
+      expect(firstCall.status).toBe("completed"); // success maps to completed
     });
 
     it("should not deduplicate different message indices", async () => {

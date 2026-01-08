@@ -9,7 +9,6 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -433,11 +432,8 @@ function MessageItem({ message, renderMarkdown }: { message: AgentMessage; rende
   return (
     <div className="group">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 select-none text-foreground">⏺</span>
+        <span className={`mt-0.5 select-none text-foreground ${message.isStreaming ? 'animate-pulse' : ''}`}>⏺</span>
         <div className="min-w-0 flex-1 py-0.5">
-          {message.isStreaming && (
-            <Loader2 className="mb-1 inline h-3 w-3 animate-spin text-muted-foreground" />
-          )}
           {renderMarkdown ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -510,11 +506,8 @@ function ThoughtItem({ thought }: { thought: AgentThought }) {
   return (
     <div className="group">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 select-none text-purple-500">⏺</span>
+        <span className={`mt-0.5 select-none text-purple-500 ${thought.isStreaming ? 'animate-pulse' : ''}`}>⏺</span>
         <div className="min-w-0 flex-1 py-0.5">
-          {thought.isStreaming && (
-            <Loader2 className="mb-1 inline h-3 w-3 animate-spin text-muted-foreground" />
-          )}
           <div className="whitespace-pre-wrap text-xs italic leading-relaxed text-muted-foreground">
             {thought.content}
           </div>
@@ -554,7 +547,7 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCall }) {
       {/* Tool call header with colored dot */}
       <div className="flex items-start gap-2">
         <span
-          className={`mt-0.5 select-none ${isSuccess ? 'text-green-600' : isError ? 'text-red-600' : 'text-yellow-600'}`}
+          className={`mt-0.5 select-none ${isSuccess ? 'text-green-600' : isError ? 'text-red-600' : 'text-yellow-600'} ${isRunning ? 'animate-pulse' : ''}`}
         >
           ⏺
         </span>
@@ -563,7 +556,6 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCall }) {
           <div className="flex items-start gap-2">
             <span className="font-semibold">{toolName}</span>
             <span className="text-muted-foreground">({formattedArgs})</span>
-            {isRunning && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             {duration && <span className="ml-auto text-xs text-muted-foreground">{duration}s</span>}
           </div>
 
