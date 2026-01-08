@@ -37,10 +37,12 @@ function createMockStreamResult(overrides: {
   messages?: AgentMessage[]
   toolCalls?: ToolCall[]
   thoughts?: useSessionUpdateStreamModule.AgentThought[]
+  permissionRequests?: useSessionUpdateStreamModule.UseSessionUpdateStreamResult['permissionRequests']
+  markPermissionResponded?: useSessionUpdateStreamModule.UseSessionUpdateStreamResult['markPermissionResponded']
   error?: Error | null
   isConnected?: boolean
   isStreaming?: boolean
-}) {
+}): useSessionUpdateStreamModule.UseSessionUpdateStreamResult {
   return {
     connectionStatus: overrides.connectionStatus ?? 'idle',
     execution: {
@@ -54,6 +56,8 @@ function createMockStreamResult(overrides: {
     messages: overrides.messages ?? [],
     toolCalls: overrides.toolCalls ?? [],
     thoughts: overrides.thoughts ?? [],
+    permissionRequests: overrides.permissionRequests ?? [],
+    markPermissionResponded: overrides.markPermissionResponded ?? vi.fn(),
     error: overrides.error ?? null,
     isConnected: overrides.isConnected ?? false,
     isStreaming: overrides.isStreaming ?? false,
@@ -1378,6 +1382,93 @@ describe('ExecutionMonitor', () => {
       // Use textContent to check the full text with preserved newlines
       const promptElement = container.querySelector('.whitespace-pre-wrap')
       expect(promptElement?.textContent).toBe(multilinePrompt)
+    })
+  })
+
+  describe('Skip All Permissions', () => {
+    it('should pass onSkipAllPermissions prop to AgentTrajectory when permission requests exist', () => {
+      const permissionRequests = [
+        {
+          requestId: 'perm-1',
+          sessionId: 'session-123',
+          toolCall: {
+            toolCallId: 'tool-1',
+            title: 'Bash',
+            status: 'pending',
+            rawInput: { command: 'npm test' },
+          },
+          options: [
+            { optionId: 'allow_once', name: 'Allow', kind: 'allow_once' as const },
+            { optionId: 'deny_once', name: 'Deny', kind: 'deny_once' as const },
+          ],
+          responded: false,
+          timestamp: new Date(),
+        },
+      ]
+
+      mockUseSessionUpdateStream.mockReturnValue(
+        createMockStreamResult({
+          connectionStatus: 'connected',
+          execution: {
+            runId: 'run-123',
+            status: 'running',
+            startTime: Date.now(),
+          },
+          permissionRequests,
+          isConnected: true,
+        })
+      )
+
+      renderWithTheme(
+        <ExecutionMonitor
+          executionId="test-exec-1"
+          onSkipAllPermissionsComplete={vi.fn()}
+        />
+      )
+
+      // Should render the permission request with Skip All button
+      expect(screen.getByText('Bash')).toBeInTheDocument()
+      expect(screen.getByText('awaiting permission')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Skip All' })).toBeInTheDocument()
+    })
+
+    it('should not render Skip All button when onSkipAllPermissionsComplete is not provided', () => {
+      const permissionRequests = [
+        {
+          requestId: 'perm-1',
+          sessionId: 'session-123',
+          toolCall: {
+            toolCallId: 'tool-1',
+            title: 'Bash',
+            status: 'pending',
+            rawInput: { command: 'npm test' },
+          },
+          options: [
+            { optionId: 'allow_once', name: 'Allow', kind: 'allow_once' as const },
+          ],
+          responded: false,
+          timestamp: new Date(),
+        },
+      ]
+
+      mockUseSessionUpdateStream.mockReturnValue(
+        createMockStreamResult({
+          connectionStatus: 'connected',
+          execution: {
+            runId: 'run-123',
+            status: 'running',
+            startTime: Date.now(),
+          },
+          permissionRequests,
+          isConnected: true,
+        })
+      )
+
+      renderWithTheme(<ExecutionMonitor executionId="test-exec-1" />)
+
+      // Should render permission request but NOT the Skip All button
+      expect(screen.getByText('Bash')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Skip All' })).not.toBeInTheDocument()
     })
   })
 })

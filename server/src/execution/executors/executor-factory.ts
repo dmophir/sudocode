@@ -106,17 +106,48 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
   if (AcpExecutorWrapper.isAcpSupported(agentType)) {
     console.log(`[ExecutorFactory] Using AcpExecutorWrapper for ${agentType}`);
 
+    // Build env vars, mapping model to agent-specific env var
+    const modelEnvVars: Record<string, string> = {};
+    const model = (agentConfig as any).model;
+    if (model) {
+      // Map model to agent-specific environment variable
+      if (agentType === "claude-code") {
+        modelEnvVars.ANTHROPIC_MODEL = model;
+      }
+      // Add other agent type mappings here as needed:
+      // else if (agentType === "codex") { modelEnvVars.OPENAI_MODEL = model; }
+    }
+
+    // Merge model env vars with any existing env config
+    const existingEnv = (agentConfig as any).env;
+    const mergedEnv =
+      Object.keys(modelEnvVars).length > 0 || existingEnv
+        ? { ...modelEnvVars, ...existingEnv }
+        : undefined;
+
+    // Check for dangerouslySkipPermissions in multiple locations for backwards compatibility:
+    // 1. Top-level (from destructured config)
+    // 2. Nested in agentConfig (from frontend's agentConfig object)
+    const skipPermissions =
+      (agentConfig as any).dangerouslySkipPermissions === true ||
+      (agentConfig as any).agentConfig?.dangerouslySkipPermissions === true;
+
+    console.log("[ExecutorFactory] Permission mode config:", {
+      topLevel: (agentConfig as any).dangerouslySkipPermissions,
+      nested: (agentConfig as any).agentConfig?.dangerouslySkipPermissions,
+      resolved: skipPermissions ? "auto-approve" : "interactive",
+    });
+
     const acpConfig: AcpExecutorWrapperConfig = {
       agentType,
       acpConfig: {
         agentType,
         // Extract MCP servers from agent config if present
         mcpServers: (agentConfig as any).mcpServers,
-        // Default to auto-approve, but respect config if set
-        permissionMode: (agentConfig as any).dangerouslySkipPermissions
-          ? "auto-approve"
-          : "auto-approve", // TODO: Make configurable
-        env: (agentConfig as any).env,
+        // Default to interactive mode for UI permission approval
+        // Only auto-approve when explicitly enabled via dangerouslySkipPermissions
+        permissionMode: skipPermissions ? "auto-approve" : "interactive",
+        env: mergedEnv,
         mode: (agentConfig as any).mode,
       },
       lifecycleService: factoryConfig.lifecycleService,

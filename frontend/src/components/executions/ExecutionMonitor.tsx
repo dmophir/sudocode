@@ -27,6 +27,7 @@ import { buildTodoHistoryFromToolCalls } from '@/utils/todoExtractor'
 import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import type { Execution } from '@/types/execution'
 import type { ToolCallTracking } from '@/types/stream'
+import api from '@/lib/api'
 
 export interface ExecutionMonitorProps {
   /**
@@ -65,6 +66,12 @@ export interface ExecutionMonitorProps {
    * Callback when execution is cancelled (ESC key pressed)
    */
   onCancel?: () => void
+
+  /**
+   * Callback when skip-all-permissions completes successfully
+   * Called with the new execution ID that was created
+   */
+  onSkipAllPermissionsComplete?: (newExecutionId: string) => void
 
   /**
    * Compact mode - removes card wrapper and header for inline display
@@ -163,6 +170,7 @@ export function ExecutionMonitor({
   onContentChange,
   onToolCallsUpdate,
   onCancel,
+  onSkipAllPermissionsComplete,
   compact = false,
   hideTodoTracker = false,
   showRunIndicator = false,
@@ -389,6 +397,41 @@ export function ExecutionMonitor({
   // Get thoughts from WebSocket stream (logs don't have them yet)
   const thoughts = wsStream.thoughts
 
+  // Get permission requests from WebSocket stream (only for active executions)
+  const permissionRequests = wsStream.permissionRequests
+  const markPermissionResponded = wsStream.markPermissionResponded
+
+  // Handle permission response - calls API and updates local state
+  const handlePermissionRespond = async (requestId: string, optionId: string) => {
+    try {
+      await api.post(`/executions/${executionId}/permission/${requestId}`, { optionId })
+      // Update local state to mark as responded
+      markPermissionResponded(requestId, optionId)
+    } catch (err) {
+      console.error('[ExecutionMonitor] Error responding to permission:', err)
+    }
+  }
+
+  // State for skip-all-permissions action
+  const [isSkippingAllPermissions, setIsSkippingAllPermissions] = useState(false)
+
+  // Handle skip-all-permissions - cancels current execution and creates follow-up with skip enabled
+  const handleSkipAllPermissions = async () => {
+    try {
+      setIsSkippingAllPermissions(true)
+      const response = await api.post(`/executions/${executionId}/skip-all-permissions`, {
+        feedback: 'Continue from where you left off.',
+      })
+      const newExecutionId = response.data?.data?.newExecution?.id
+      if (newExecutionId && onSkipAllPermissionsComplete) {
+        onSkipAllPermissionsComplete(newExecutionId)
+      }
+    } catch (err) {
+      console.error('[ExecutionMonitor] Error skipping all permissions:', err)
+      setIsSkippingAllPermissions(false)
+    }
+  }
+
   // Extract todos from tool calls for TodoTracker
   const todos = useMemo(() => buildTodoHistoryFromToolCalls(toolCalls), [toolCalls])
 
@@ -485,11 +528,15 @@ export function ExecutionMonitor({
         )}
 
         {/* Agent Trajectory */}
-        {(messageCount > 0 || toolCallCount > 0) && (
+        {(messageCount > 0 || toolCallCount > 0 || permissionRequests.length > 0) && (
           <AgentTrajectory
             messages={messages}
             toolCalls={toolCalls}
             thoughts={thoughts}
+            permissionRequests={permissionRequests}
+            onPermissionRespond={handlePermissionRespond}
+            onSkipAllPermissions={onSkipAllPermissionsComplete ? handleSkipAllPermissions : undefined}
+            isSkippingAllPermissions={isSkippingAllPermissions}
             renderMarkdown
             showTodoTracker={false}
           />
@@ -562,11 +609,15 @@ export function ExecutionMonitor({
         )}
 
         {/* Agent Trajectory - unified messages and tool calls */}
-        {(messageCount > 0 || toolCallCount > 0) && (
+        {(messageCount > 0 || toolCallCount > 0 || permissionRequests.length > 0) && (
           <AgentTrajectory
             messages={messages}
             toolCalls={toolCalls}
             thoughts={thoughts}
+            permissionRequests={permissionRequests}
+            onPermissionRespond={handlePermissionRespond}
+            onSkipAllPermissions={onSkipAllPermissionsComplete ? handleSkipAllPermissions : undefined}
+            isSkippingAllPermissions={isSkippingAllPermissions}
             renderMarkdown
             showTodoTracker={false}
           />

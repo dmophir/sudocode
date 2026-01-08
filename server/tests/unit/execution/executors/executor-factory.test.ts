@@ -392,5 +392,51 @@ describe("ExecutorFactory", () => {
       expect(executor).toBeInstanceOf(LegacyShimExecutorWrapper);
       expect((executor as any).agentConfig.model).toBe("gpt-4o");
     });
+
+    it("should pass ANTHROPIC_MODEL env var for claude-code agent model selection", () => {
+      const executor = createExecutorForAgent(
+        "claude-code",
+        { workDir: testDir, model: "claude-sonnet-4-20250514" },
+        factoryConfigWithDb
+      );
+
+      expect(executor).toBeInstanceOf(AcpExecutorWrapper);
+      // Model should be mapped to ANTHROPIC_MODEL env var
+      const acpConfig = (executor as any).acpConfig;
+      expect(acpConfig.env).toBeDefined();
+      expect(acpConfig.env.ANTHROPIC_MODEL).toBe("claude-sonnet-4-20250514");
+    });
+
+    it("should merge model env var with existing env config for ACP agents", () => {
+      const executor = createExecutorForAgent(
+        "claude-code",
+        {
+          workDir: testDir,
+          model: "claude-sonnet-4-20250514",
+          env: { CUSTOM_VAR: "custom-value" }
+        },
+        factoryConfigWithDb
+      );
+
+      expect(executor).toBeInstanceOf(AcpExecutorWrapper);
+      const acpConfig = (executor as any).acpConfig;
+      expect(acpConfig.env).toBeDefined();
+      // Both model env var and custom env should be present
+      expect(acpConfig.env.ANTHROPIC_MODEL).toBe("claude-sonnet-4-20250514");
+      expect(acpConfig.env.CUSTOM_VAR).toBe("custom-value");
+    });
+
+    it("should not set ANTHROPIC_MODEL if no model specified", () => {
+      const executor = createExecutorForAgent(
+        "claude-code",
+        { workDir: testDir },
+        factoryConfigWithDb
+      );
+
+      expect(executor).toBeInstanceOf(AcpExecutorWrapper);
+      const acpConfig = (executor as any).acpConfig;
+      // env might be undefined or not have ANTHROPIC_MODEL
+      expect(acpConfig.env?.ANTHROPIC_MODEL).toBeUndefined();
+    });
   });
 });

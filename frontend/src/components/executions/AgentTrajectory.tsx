@@ -14,12 +14,14 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { JsonView, defaultStyles, darkStyles } from 'react-json-view-lite'
 import 'react-json-view-lite/dist/index.css'
-import type { AgentMessage, ToolCall, AgentThought } from '@/hooks/useSessionUpdateStream'
+import type { AgentMessage, ToolCall, AgentThought, ToolCallContentItem } from '@/hooks/useSessionUpdateStream'
+import type { PermissionRequest as PermissionRequestType } from '@/types/permissions'
 import { TodoTracker } from './TodoTracker'
 import { buildTodoHistoryFromToolCalls } from '@/utils/todoExtractor'
 import { DiffViewer } from './DiffViewer'
 import { parseClaudeToolArgs } from '@/utils/claude'
 import { useTheme } from '@/contexts/ThemeContext'
+import { PermissionRequest } from './PermissionRequest'
 
 const MAX_CHARS_BEFORE_TRUNCATION = 500
 
@@ -56,13 +58,33 @@ export interface AgentTrajectoryProps {
   showTodoTracker?: boolean
 
   /**
+   * Array of pending permission requests
+   */
+  permissionRequests?: PermissionRequestType[]
+
+  /**
+   * Callback when user responds to a permission request
+   */
+  onPermissionRespond?: (requestId: string, optionId: string) => void
+
+  /**
+   * Callback when user wants to skip all remaining permissions
+   */
+  onSkipAllPermissions?: () => void
+
+  /**
+   * Whether skip-all action is in progress
+   */
+  isSkippingAllPermissions?: boolean
+
+  /**
    * Custom class name
    */
   className?: string
 }
 
 /**
- * Trajectory item representing a message, thought, or tool call
+ * Trajectory item representing a message, thought, tool call, or permission request
  */
 type TrajectoryItem =
   | {
@@ -82,6 +104,12 @@ type TrajectoryItem =
       timestamp: number
       index?: number
       data: ToolCall
+    }
+  | {
+      type: 'permission_request'
+      timestamp: number
+      index?: number
+      data: PermissionRequestType
     }
 
 /**
@@ -324,6 +352,42 @@ function valueToString(value: unknown): string {
 }
 
 /**
+ * Extract text content from ACP content array
+ * Prioritizes text content, falls back to describing other types
+ */
+function extractContentText(content: ToolCallContentItem[] | undefined): string | null {
+  if (!content || content.length === 0) return null
+
+  const textParts: string[] = []
+  for (const item of content) {
+    if (item.type === 'content' && item.content.type === 'text') {
+      textParts.push(item.content.text)
+    } else if (item.type === 'terminal') {
+      // Terminal content is displayed separately via rawOutput
+      continue
+    } else if (item.type === 'diff') {
+      // Diffs are rendered via DiffViewer
+      continue
+    }
+  }
+
+  return textParts.length > 0 ? textParts.join('\n') : null
+}
+
+/**
+ * Check if content array has a diff
+ */
+function getContentDiff(content: ToolCallContentItem[] | undefined): { path: string; oldText?: string | null; newText: string } | null {
+  if (!content) return null
+  for (const item of content) {
+    if (item.type === 'diff') {
+      return item
+    }
+  }
+  return null
+}
+
+/**
  * AgentTrajectory Component
  *
  * Unified terminal-style rendering for all agent executions.
@@ -343,6 +407,10 @@ export function AgentTrajectory({
   messages,
   toolCalls,
   thoughts = [],
+  permissionRequests = [],
+  onPermissionRespond,
+  onSkipAllPermissions,
+  isSkippingAllPermissions = false,
   renderMarkdown = true,
   hideSystemMessages = true,
   showTodoTracker = true,
@@ -388,16 +456,32 @@ export function AgentTrajectory({
       })
     })
 
-    // Sort by timestamp, using index as secondary key for stable ordering
+    // Add permission requests
+    permissionRequests.forEach((request) => {
+      items.push({
+        type: 'permission_request',
+        timestamp: request.timestamp.getTime(),
+        index: request.index,
+        data: request,
+      })
+    })
+
+    // Sort by index (primary) for stable ordering during streaming,
+    // falling back to timestamp for items without indices
     return items.sort((a, b) => {
-      const timeDiff = a.timestamp - b.timestamp
-      if (timeDiff !== 0) return timeDiff
+      // If both items have indices, use index as primary sort key
+      // This ensures stable ordering during streaming since index is assigned
+      // synchronously in order of event arrival
       if (a.index !== undefined && b.index !== undefined) {
         return a.index - b.index
       }
-      return 0
+      // Items with indices come before items without
+      if (a.index !== undefined) return -1
+      if (b.index !== undefined) return 1
+      // Fallback to timestamp for items without indices
+      return a.timestamp - b.timestamp
     })
-  }, [messages, toolCalls, thoughts, hideSystemMessages])
+  }, [messages, toolCalls, thoughts, permissionRequests, hideSystemMessages])
 
   if (trajectory.length === 0) {
     return null
@@ -410,6 +494,17 @@ export function AgentTrajectory({
           return <MessageItem key={`msg-${item.data.id}-${idx}`} message={item.data} renderMarkdown={renderMarkdown} />
         } else if (item.type === 'thought') {
           return <ThoughtItem key={`thought-${item.data.id}-${idx}`} thought={item.data} />
+        } else if (item.type === 'permission_request') {
+          return (
+            <PermissionRequest
+              key={`perm-${item.data.requestId}-${idx}`}
+              request={item.data}
+              onRespond={onPermissionRespond ?? (() => {})}
+              onSkipAll={onSkipAllPermissions}
+              isSkippingAll={isSkippingAllPermissions}
+              autoFocus={false}
+            />
+          )
         } else {
           return <ToolCallItem key={`tool-${item.data.id}-${idx}`} toolCall={item.data} />
         }
@@ -528,7 +623,13 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCall }) {
   const toolName = toolCall.title
   const formattedArgs = formatToolArgs(toolName, toolCall.rawInput)
   const argsString = valueToString(toolCall.rawInput)
-  const resultString = valueToString(toolCall.result ?? toolCall.rawOutput)
+
+  // Prefer content text over rawOutput for result display
+  const contentText = extractContentText(toolCall.content)
+  const resultString = contentText ?? valueToString(toolCall.result ?? toolCall.rawOutput)
+
+  // Check for structured diff in content
+  const contentDiff = getContentDiff(toolCall.content)
 
   const argsData = argsString ? truncateText(argsString, 2) : null
   const resultData = resultString ? truncateText(resultString, 2) : null
@@ -603,37 +704,60 @@ function ToolCallItem({ toolCall }: { toolCall: ToolCall }) {
             </div>
           )}
 
-          {/* Diff viewer for Edit tools */}
-          {toolName === 'Edit' &&
+          {/* Diff viewer for Edit tools - prefer ACP content diff if available */}
+          {(toolName === 'Edit' || contentDiff) &&
             (() => {
-              try {
-                const { oldContent, newContent, filePath } = parseClaudeToolArgs(toolName, argsString)
+              // Prefer ACP content diff if available
+              if (contentDiff) {
                 return (
                   <div className="mt-0.5 flex items-start gap-2">
                     <span className="select-none text-muted-foreground">∟</span>
                     <div className="min-w-0 flex-1">
                       <DiffViewer
-                        oldContent={oldContent}
-                        newContent={newContent}
-                        filePath={filePath}
+                        oldContent={contentDiff.oldText ?? ''}
+                        newContent={contentDiff.newText}
+                        filePath={contentDiff.path}
                         className="my-1"
                         maxLines={50}
                       />
                     </div>
                   </div>
                 )
-              } catch {
-                return (
-                  <div className="mt-0.5 flex items-start gap-2">
-                    <span className="select-none text-muted-foreground">∟</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
-                        Unable to display diff
+              }
+
+              // Fall back to parsing from rawInput for Edit tool
+              if (toolName === 'Edit') {
+                try {
+                  const { oldContent, newContent, filePath } = parseClaudeToolArgs(toolName, argsString)
+                  return (
+                    <div className="mt-0.5 flex items-start gap-2">
+                      <span className="select-none text-muted-foreground">∟</span>
+                      <div className="min-w-0 flex-1">
+                        <DiffViewer
+                          oldContent={oldContent}
+                          newContent={newContent}
+                          filePath={filePath}
+                          className="my-1"
+                          maxLines={50}
+                        />
                       </div>
                     </div>
-                  </div>
-                )
+                  )
+                } catch {
+                  return (
+                    <div className="mt-0.5 flex items-start gap-2">
+                      <span className="select-none text-muted-foreground">∟</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
+                          Unable to display diff
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
               }
+
+              return null
             })()}
 
           {/* Tool result */}

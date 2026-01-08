@@ -7,7 +7,7 @@
  * @module execution/output/coalesced-types
  */
 
-import type { ContentBlock, ToolCallStatus } from "acp-factory";
+import type { ContentBlock, ToolCallStatus, ToolCallContent } from "acp-factory";
 
 /**
  * A complete agent message (coalesced from multiple agent_message_chunk events)
@@ -54,6 +54,8 @@ export interface ToolCallComplete {
   rawInput?: unknown;
   /** Raw output from tool (if available) */
   rawOutput?: unknown;
+  /** Structured content produced by the tool call */
+  content?: ToolCallContent[];
   /** Timestamp of initial tool_call event */
   timestamp: Date;
   /** Timestamp when tool completed */

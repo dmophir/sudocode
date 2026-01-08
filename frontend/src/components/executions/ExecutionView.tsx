@@ -367,6 +367,25 @@ export function ExecutionView({ executionId, onFollowUpCreated, onStatusChange, 
     }
   }
 
+  // Handle skip-all-permissions - new execution was created, reload chain
+  const handleSkipAllPermissionsComplete = useCallback(
+    async (newExecutionId: string) => {
+      try {
+        // Reload chain to include the new execution
+        const data = await executionsApi.getChain(executionId)
+        setChainData(data)
+
+        // Notify parent if callback provided (for URL updates, etc.)
+        if (onFollowUpCreated) {
+          onFollowUpCreated(newExecutionId)
+        }
+      } catch (err) {
+        console.error('Failed to reload chain after skip-all-permissions:', err)
+      }
+    },
+    [executionId, onFollowUpCreated]
+  )
+
   // Handle follow-up submission - creates new execution and adds to chain
   const handleFollowUpStart = async (
     _config: ExecutionConfig,
@@ -739,6 +758,7 @@ export function ExecutionView({ executionId, onFollowUpCreated, onStatusChange, 
                           ? () => handleCancel(execution.id)
                           : undefined
                       }
+                      onSkipAllPermissionsComplete={handleSkipAllPermissionsComplete}
                       compact
                       hideTodoTracker
                     />
@@ -883,10 +903,11 @@ export function ExecutionView({ executionId, onFollowUpCreated, onStatusChange, 
                 model: rootExecution.model || undefined,
                 target_branch: rootExecution.target_branch || undefined,
                 agent_type: rootExecution.agent_type || undefined,
-                config: rootExecution.config
-                  ? typeof rootExecution.config === 'string'
-                    ? JSON.parse(rootExecution.config)
-                    : rootExecution.config
+                // Use lastExecution.config to reflect any config changes from skip-all-permissions
+                config: lastExecution.config
+                  ? typeof lastExecution.config === 'string'
+                    ? JSON.parse(lastExecution.config)
+                    : lastExecution.config
                   : undefined,
               }}
             />
