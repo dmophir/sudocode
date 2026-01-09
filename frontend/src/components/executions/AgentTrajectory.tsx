@@ -423,6 +423,13 @@ export function AgentTrajectory({
   const trajectory = useMemo(() => {
     const items: TrajectoryItem[] = []
 
+    // Build a set of tool call IDs that have pending permission requests
+    // These tool calls will be represented by their permission request instead
+    const toolCallsWithPermissions = new Set<string>()
+    permissionRequests.forEach((request) => {
+      toolCallsWithPermissions.add(request.toolCall.toolCallId)
+    })
+
     // Add messages (filtering out system messages if requested)
     messages.forEach((message) => {
       if (hideSystemMessages && message.content.trim().startsWith('[System]')) {
@@ -446,8 +453,12 @@ export function AgentTrajectory({
       })
     })
 
-    // Add tool calls
+    // Add tool calls (excluding those with pending permission requests)
     toolCalls.forEach((toolCall) => {
+      // Skip tool calls that have a permission request - they'll be shown as permission requests instead
+      if (toolCallsWithPermissions.has(toolCall.id)) {
+        return
+      }
       items.push({
         type: 'tool_call',
         timestamp: toolCall.timestamp.getTime(),

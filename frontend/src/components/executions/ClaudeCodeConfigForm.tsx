@@ -21,7 +21,7 @@ export interface ClaudeCodeConfig {
   model?: string
   dangerouslySkipPermissions?: boolean
   restrictToWorkDir?: boolean
-  permissionMode?: 'acceptEdits' | 'bypassPermissions' | 'default' | 'dontAsk' | 'plan'
+  permissionMode?: 'default' | 'plan' | 'bypassPermissions'
 }
 
 interface ClaudeCodeConfigFormProps {
@@ -37,10 +37,8 @@ const MODELS = [
 
 const PERMISSION_MODES = [
   { value: 'default', label: 'Default', description: 'Standard permission prompts' },
-  { value: 'acceptEdits', label: 'Accept Edits', description: 'Auto-accept file edits' },
-  { value: 'dontAsk', label: "Don't Ask", description: 'Minimal prompts' },
-  { value: 'plan', label: 'Plan Mode', description: 'Plan before executing' },
-  { value: 'bypassPermissions', label: 'Bypass Permissions', description: 'Skip all prompts' },
+  { value: 'plan', label: 'Plan Mode', description: 'Read-only planning before execution' },
+  { value: 'bypassPermissions', label: 'Bypass Permissions', description: 'Skip all prompts (YOLO mode)' },
 ]
 
 export function ClaudeCodeConfigForm({ config, onChange }: ClaudeCodeConfigFormProps) {

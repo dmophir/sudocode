@@ -132,10 +132,30 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
       (agentConfig as any).dangerouslySkipPermissions === true ||
       (agentConfig as any).agentConfig?.dangerouslySkipPermissions === true;
 
+    // Map frontend permissionMode values to ACP mode and permission settings
+    // Frontend sends: 'default' | 'acceptEdits' | 'dontAsk' | 'plan' | 'bypassPermissions'
+    const frontendPermissionMode =
+      (agentConfig as any).permissionMode ||
+      (agentConfig as any).agentConfig?.permissionMode;
+
+    // Determine session mode (ACP modes: "code", "ask", "plan", "architect")
+    let sessionMode: string | undefined = (agentConfig as any).mode;
+    if (!sessionMode && frontendPermissionMode === "plan") {
+      sessionMode = "plan";
+    }
+
+    // Determine ACP permission mode
+    // bypassPermissions = full auto-approve (YOLO mode)
+    // Other modes use interactive with frontend handling permission requests
+    const effectiveSkipPermissions =
+      skipPermissions || frontendPermissionMode === "bypassPermissions";
+
     console.log("[ExecutorFactory] Permission mode config:", {
       topLevel: (agentConfig as any).dangerouslySkipPermissions,
       nested: (agentConfig as any).agentConfig?.dangerouslySkipPermissions,
-      resolved: skipPermissions ? "auto-approve" : "interactive",
+      frontendPermissionMode,
+      sessionMode,
+      resolved: effectiveSkipPermissions ? "auto-approve" : "interactive",
     });
 
     const acpConfig: AcpExecutorWrapperConfig = {
@@ -145,10 +165,11 @@ export function createExecutorForAgent<TConfig extends BaseAgentConfig>(
         // Extract MCP servers from agent config if present
         mcpServers: (agentConfig as any).mcpServers,
         // Default to interactive mode for UI permission approval
-        // Only auto-approve when explicitly enabled via dangerouslySkipPermissions
-        permissionMode: skipPermissions ? "auto-approve" : "interactive",
+        // Only auto-approve when explicitly enabled via dangerouslySkipPermissions or bypassPermissions
+        permissionMode: effectiveSkipPermissions ? "auto-approve" : "interactive",
         env: mergedEnv,
-        mode: (agentConfig as any).mode,
+        // Session mode (e.g., "code", "plan", "ask")
+        mode: sessionMode,
       },
       lifecycleService: factoryConfig.lifecycleService,
       logsStore: factoryConfig.logsStore,
