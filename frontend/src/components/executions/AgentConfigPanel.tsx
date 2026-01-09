@@ -33,6 +33,8 @@ import { useWorktrees } from '@/hooks/useWorktrees'
 import { useVoiceConfig } from '@/hooks/useVoiceConfig'
 import type { CodexConfig } from './CodexConfigForm'
 import type { CopilotConfig } from './CopilotConfigForm'
+import type { GeminiConfig } from './GeminiConfigForm'
+import type { OpencodeConfig } from './OpencodeConfigForm'
 
 interface AgentConfigPanelProps {
   /**
@@ -155,11 +157,12 @@ const DEFAULT_AGENT_CONFIGS: Record<string, any> = {
     model: 'claude-sonnet-4.5',
   } as CopilotConfig,
   gemini: {
-    // Gemini CLI defaults
-  },
+    sandbox: false,
+    yolo: false,
+  } as GeminiConfig,
   opencode: {
-    // Opencode defaults
-  },
+    dangerouslySkipPermissions: false,
+  } as OpencodeConfig,
 }
 
 // localStorage keys for persisting config
