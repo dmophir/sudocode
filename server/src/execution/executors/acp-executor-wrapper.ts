@@ -18,6 +18,10 @@ import {
   type PermissionMode,
   type PermissionRequestUpdate,
 } from "acp-factory";
+import type {
+  SessionMode,
+  SessionEndModeConfig,
+} from "@sudocode-ai/types";
 import { PermissionManager } from "./permission-manager.js";
 import { FileHandler } from "../handlers/file-handler.js";
 import type Database from "better-sqlite3";
@@ -132,6 +136,36 @@ export interface AcpExecutionTask {
 }
 
 /**
+ * Options for execution lifecycle
+ */
+export interface ExecutionLifecycleOptions {
+  /** Session persistence mode (default: "discrete") */
+  sessionMode?: SessionMode;
+  /** How the persistent session ends (only when sessionMode: "persistent") */
+  sessionEndMode?: SessionEndModeConfig;
+}
+
+/**
+ * Internal state for tracking persistent sessions
+ */
+interface PersistentSessionState {
+  /** Session end mode configuration */
+  config: SessionEndModeConfig;
+  /** Number of prompts sent to this session */
+  promptCount: number;
+  /** Current state of the session */
+  state: "running" | "waiting" | "paused" | "ended";
+  /** When the last prompt completed */
+  lastPromptCompletedAt?: Date;
+  /** Active idle timeout handle */
+  idleTimeout?: NodeJS.Timeout;
+  /** Working directory for this session */
+  workDir: string;
+  /** Unregister function for disconnect callback */
+  unregisterDisconnectCallback?: () => void;
+}
+
+/**
  * Configuration for AcpExecutorWrapper
  */
 export interface AcpExecutorWrapperConfig {
@@ -188,6 +222,8 @@ export class AcpExecutorWrapper {
   private permissionManagers: Map<string, PermissionManager> = new Map();
   /** File handlers by execution ID */
   private fileHandlers: Map<string, FileHandler> = new Map();
+  /** Persistent session state by execution ID */
+  private persistentSessions: Map<string, PersistentSessionState> = new Map();
 
   constructor(config: AcpExecutorWrapperConfig) {
     this.agentType = config.agentType;
@@ -209,17 +245,40 @@ export class AcpExecutorWrapper {
    * @param executionId - Unique execution identifier
    * @param task - Task to execute
    * @param workDir - Working directory for execution
+   * @param options - Execution lifecycle options (sessionMode, sessionEndMode)
    */
   async executeWithLifecycle(
     executionId: string,
     task: AcpExecutionTask,
-    workDir: string
+    workDir: string,
+    options?: ExecutionLifecycleOptions
   ): Promise<void> {
+    const isPersistent = options?.sessionMode === "persistent";
+
     console.log(`[AcpExecutorWrapper] Starting execution ${executionId}`, {
       agentType: this.agentType,
       taskId: task.id,
       workDir,
+      sessionMode: options?.sessionMode ?? "discrete",
     });
+
+    // Initialize persistent session state if needed
+    if (isPersistent) {
+      const sessionConfig = options?.sessionEndMode ?? { explicit: true };
+      const persistentState: PersistentSessionState = {
+        config: sessionConfig,
+        promptCount: 0,
+        state: "running",
+        workDir,
+      };
+
+      // Register disconnect callback if endOnDisconnect is enabled
+      if (sessionConfig.endOnDisconnect) {
+        persistentState.unregisterDisconnectCallback = this.registerDisconnectHandler(executionId);
+      }
+
+      this.persistentSessions.set(executionId, persistentState);
+    }
 
     let agent: AgentHandle | null = null;
     let session: Session | null = null;
@@ -388,10 +447,17 @@ export class AcpExecutorWrapper {
 
       console.log(`[AcpExecutorWrapper] Prompt completed for ${executionId}`, {
         totalUpdates: updateCount,
+        isPersistent,
       });
 
-      // 8. Handle success
-      await this.handleSuccess(executionId, workDir);
+      // 8. Handle completion based on session mode
+      if (isPersistent) {
+        // Persistent mode: transition to waiting state
+        await this.transitionToWaiting(executionId);
+      } else {
+        // Discrete mode: complete the execution
+        await this.handleSuccess(executionId, workDir);
+      }
     } catch (error) {
       console.error(
         `[AcpExecutorWrapper] Execution failed for ${executionId}:`,
@@ -400,9 +466,19 @@ export class AcpExecutorWrapper {
       await this.handleError(executionId, error as Error, workDir);
       throw error;
     } finally {
-      // Cleanup
+      // Skip cleanup for persistent sessions that are still alive
+      const persistentState = this.persistentSessions.get(executionId);
+      if (persistentState && persistentState.state !== "ended") {
+        console.log(
+          `[AcpExecutorWrapper] Skipping cleanup for persistent session ${executionId} (state: ${persistentState.state})`
+        );
+        return;
+      }
+
+      // Cleanup for discrete sessions or ended persistent sessions
       this.activeSessions.delete(executionId);
       this.activeAgents.delete(executionId);
+      this.persistentSessions.delete(executionId);
 
       // Cancel any pending permissions
       const pm = this.permissionManagers.get(executionId);
@@ -964,6 +1040,238 @@ export class AcpExecutorWrapper {
     }
   }
 
+  // ============================================================================
+  // Persistent Session Methods
+  // ============================================================================
+
+  /**
+   * Send an additional prompt to a persistent session
+   *
+   * Only works for executions started with sessionMode: "persistent" that are
+   * currently in the "waiting" or "paused" state. Sending a prompt to a paused
+   * session will resume it.
+   *
+   * @param executionId - Execution ID with active persistent session
+   * @param prompt - The prompt to send
+   * @throws Error if no persistent session exists or session is not waiting/paused
+   */
+  async sendPrompt(executionId: string, prompt: string): Promise<void> {
+    const persistentState = this.persistentSessions.get(executionId);
+    if (!persistentState) {
+      throw new Error(`No persistent session found for execution ${executionId}`);
+    }
+
+    if (persistentState.state !== "waiting" && persistentState.state !== "paused") {
+      throw new Error(
+        `Cannot send prompt to session in state: ${persistentState.state}`
+      );
+    }
+
+    const wasResumingFromPaused = persistentState.state === "paused";
+    if (wasResumingFromPaused) {
+      console.log(
+        `[AcpExecutorWrapper] Resuming paused session ${executionId} with new prompt`
+      );
+    }
+
+    const session = this.activeSessions.get(executionId);
+    if (!session) {
+      throw new Error(`No active session for execution ${executionId}`);
+    }
+
+    console.log(
+      `[AcpExecutorWrapper] Sending prompt to persistent session ${executionId}`,
+      { promptNumber: persistentState.promptCount + 1 }
+    );
+
+    // Clear any idle timeout
+    this.clearIdleTimeout(executionId);
+
+    // Update state to running
+    persistentState.state = "running";
+
+    // Update execution status
+    updateExecution(this.db, executionId, { status: "running" });
+    const execution = getExecution(this.db, executionId);
+    if (execution) {
+      broadcastExecutionUpdate(
+        this.projectId,
+        executionId,
+        "status_changed",
+        execution,
+        execution.issue_id || undefined
+      );
+    }
+
+    // Stream prompt and process updates
+    const coalescer = new SessionUpdateCoalescer();
+    const permissionManager = this.permissionManagers.get(executionId);
+
+    try {
+      let updateCount = 0;
+      for await (const update of session.prompt(prompt)) {
+        updateCount++;
+
+        // Handle permission requests
+        if (update.sessionUpdate === "permission_request" && permissionManager) {
+          const permUpdate = update as PermissionRequestUpdate;
+          permissionManager.addPending({
+            requestId: permUpdate.requestId,
+            sessionId: permUpdate.sessionId,
+            toolCall: permUpdate.toolCall,
+            options: permUpdate.options,
+          });
+        }
+
+        // Broadcast to frontend
+        this.broadcastSessionUpdate(executionId, update);
+
+        // Coalesce for storage
+        const coalescedUpdates = coalescer.process(update as SessionUpdate);
+        for (const coalesced of coalescedUpdates) {
+          this.logsStore.appendRawLog(
+            executionId,
+            serializeCoalescedUpdate(coalesced)
+          );
+        }
+      }
+
+      // Flush remaining state
+      const remaining = coalescer.flush();
+      for (const coalesced of remaining) {
+        this.logsStore.appendRawLog(
+          executionId,
+          serializeCoalescedUpdate(coalesced)
+        );
+      }
+
+      console.log(
+        `[AcpExecutorWrapper] Prompt ${persistentState.promptCount + 1} completed for ${executionId}`,
+        { updateCount }
+      );
+
+      // Transition back to waiting
+      await this.transitionToWaiting(executionId);
+    } catch (error) {
+      console.error(
+        `[AcpExecutorWrapper] Error sending prompt to persistent session ${executionId}:`,
+        error
+      );
+      // Mark session as ended on error
+      persistentState.state = "ended";
+      await this.handleError(executionId, error as Error, persistentState.workDir);
+      throw error;
+    }
+  }
+
+  /**
+   * Explicitly end a persistent session
+   *
+   * Closes the agent, cleans up resources, and marks the execution as completed.
+   *
+   * @param executionId - Execution ID with active persistent session
+   */
+  async endSession(executionId: string): Promise<void> {
+    const persistentState = this.persistentSessions.get(executionId);
+    if (!persistentState) {
+      console.warn(
+        `[AcpExecutorWrapper] No persistent session found for ${executionId}`
+      );
+      return;
+    }
+
+    console.log(
+      `[AcpExecutorWrapper] Ending persistent session ${executionId}`,
+      { promptCount: persistentState.promptCount }
+    );
+
+    // Clear any idle timeout
+    this.clearIdleTimeout(executionId);
+
+    // Unregister disconnect callback if registered
+    if (persistentState.unregisterDisconnectCallback) {
+      persistentState.unregisterDisconnectCallback();
+      persistentState.unregisterDisconnectCallback = undefined;
+    }
+
+    // Mark as ended
+    persistentState.state = "ended";
+
+    // Complete the execution
+    await this.handleSuccess(executionId, persistentState.workDir);
+
+    // Cleanup
+    const agent = this.activeAgents.get(executionId);
+    if (agent?.isRunning()) {
+      try {
+        await agent.close();
+        console.log(`[AcpExecutorWrapper] Closed agent for ${executionId}`);
+      } catch (closeError) {
+        console.warn(
+          `[AcpExecutorWrapper] Error closing agent for ${executionId}:`,
+          closeError
+        );
+      }
+    }
+
+    // Remove from maps
+    this.activeSessions.delete(executionId);
+    this.activeAgents.delete(executionId);
+    this.persistentSessions.delete(executionId);
+
+    const pm = this.permissionManagers.get(executionId);
+    if (pm) {
+      pm.cancelAll();
+      this.permissionManagers.delete(executionId);
+    }
+
+    this.fileHandlers.delete(executionId);
+
+    // Broadcast session ended event
+    websocketManager.broadcast(this.projectId, "execution", executionId, {
+      type: "session_ended" as unknown as "execution_created",
+      data: { executionId, reason: "explicit" },
+    });
+  }
+
+  /**
+   * Get the current state of a persistent session
+   *
+   * @param executionId - Execution ID to check
+   * @returns Session state info or null if not a persistent session
+   */
+  getSessionState(executionId: string): {
+    mode: "persistent";
+    state: "running" | "waiting" | "paused" | "ended";
+    promptCount: number;
+    idleTimeMs?: number;
+  } | null {
+    const persistentState = this.persistentSessions.get(executionId);
+    if (!persistentState) {
+      return null;
+    }
+
+    return {
+      mode: "persistent",
+      state: persistentState.state,
+      promptCount: persistentState.promptCount,
+      idleTimeMs: persistentState.lastPromptCompletedAt
+        ? Date.now() - persistentState.lastPromptCompletedAt.getTime()
+        : undefined,
+    };
+  }
+
+  /**
+   * Check if an execution has an active persistent session
+   *
+   * @param executionId - Execution ID to check
+   * @returns true if execution has a persistent session that's not ended
+   */
+  isPersistentSession(executionId: string): boolean {
+    const state = this.persistentSessions.get(executionId);
+    return state !== undefined && state.state !== "ended";
+  }
+
   /**
    * Check if an agent type is supported via ACP
    *
@@ -1004,6 +1312,135 @@ export class AcpExecutorWrapper {
       type: "session_update" as unknown as "execution_created", // Type cast for internal use
       data: { update, executionId },
     });
+  }
+
+  /**
+   * Transition a persistent session to waiting or paused state
+   *
+   * Updates the session state, increments prompt count, starts idle timeout if configured,
+   * and broadcasts the state change to clients. If pauseOnCompletion is enabled, the session
+   * transitions to "paused" instead of "waiting".
+   */
+  private async transitionToWaiting(executionId: string): Promise<void> {
+    const persistentState = this.persistentSessions.get(executionId);
+    if (!persistentState) {
+      console.warn(
+        `[AcpExecutorWrapper] No persistent session found for ${executionId} during transition`
+      );
+      return;
+    }
+
+    // Update state - use "paused" if pauseOnCompletion is enabled
+    const targetState = persistentState.config.pauseOnCompletion ? "paused" : "waiting";
+    persistentState.state = targetState;
+    persistentState.promptCount++;
+    persistentState.lastPromptCompletedAt = new Date();
+
+    console.log(
+      `[AcpExecutorWrapper] Transitioned to ${targetState} state for ${executionId}`,
+      { promptCount: persistentState.promptCount }
+    );
+
+    // Start idle timeout if configured (only for waiting state, not paused)
+    if (
+      targetState === "waiting" &&
+      persistentState.config.idleTimeoutMs &&
+      persistentState.config.idleTimeoutMs > 0
+    ) {
+      persistentState.idleTimeout = setTimeout(async () => {
+        console.log(
+          `[AcpExecutorWrapper] Idle timeout reached for ${executionId}`
+        );
+        await this.endSession(executionId);
+        // Broadcast with timeout reason
+        websocketManager.broadcast(this.projectId, "execution", executionId, {
+          type: "session_ended" as unknown as "execution_created",
+          data: { executionId, reason: "timeout" },
+        });
+      }, persistentState.config.idleTimeoutMs);
+    }
+
+    // Update execution status
+    updateExecution(this.db, executionId, { status: targetState });
+    const execution = getExecution(this.db, executionId);
+    if (execution) {
+      broadcastExecutionUpdate(
+        this.projectId,
+        executionId,
+        "status_changed",
+        execution,
+        execution.issue_id || undefined
+      );
+    }
+
+    // Broadcast session state change event
+    const eventType = targetState === "paused" ? "session_paused" : "session_waiting";
+    websocketManager.broadcast(this.projectId, "execution", executionId, {
+      type: eventType as unknown as "execution_created",
+      data: { executionId, promptCount: persistentState.promptCount },
+    });
+  }
+
+  /**
+   * Clear the idle timeout for a persistent session
+   */
+  private clearIdleTimeout(executionId: string): void {
+    const persistentState = this.persistentSessions.get(executionId);
+    if (persistentState?.idleTimeout) {
+      clearTimeout(persistentState.idleTimeout);
+      persistentState.idleTimeout = undefined;
+    }
+  }
+
+  /**
+   * Register a disconnect handler for endOnDisconnect mode
+   *
+   * Returns an unregister function to be called during cleanup.
+   */
+  private registerDisconnectHandler(executionId: string): () => void {
+    const unregister = websocketManager.onDisconnect(
+      async (_clientId: string, subscriptions: Set<string>) => {
+        const persistentState = this.persistentSessions.get(executionId);
+        if (!persistentState || persistentState.state === "ended") {
+          return;
+        }
+
+        // Check if the disconnected client was subscribed to this execution
+        const executionSubscription = `${this.projectId}:execution:${executionId}`;
+        const allSubscription = `${this.projectId}:all`;
+        const typeSubscription = `${this.projectId}:execution:*`;
+
+        const wasSubscribed =
+          subscriptions.has(executionSubscription) ||
+          subscriptions.has(allSubscription) ||
+          subscriptions.has(typeSubscription);
+
+        if (!wasSubscribed) {
+          return;
+        }
+
+        // Check if there are still other subscribers
+        const hasOtherSubscribers = websocketManager.hasSubscribers(
+          this.projectId,
+          "execution",
+          executionId
+        );
+
+        if (!hasOtherSubscribers) {
+          console.log(
+            `[AcpExecutorWrapper] Last subscriber disconnected for ${executionId}, ending session`
+          );
+          await this.endSession(executionId);
+          // Broadcast with disconnect reason
+          websocketManager.broadcast(this.projectId, "execution", executionId, {
+            type: "session_ended" as unknown as "execution_created",
+            data: { executionId, reason: "disconnect" },
+          });
+        }
+      }
+    );
+
+    return unregister;
   }
 
   /**

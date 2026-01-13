@@ -1,0 +1,316 @@
+/**
+ * Unit tests for ExecutionService persistent session methods
+ *
+ * Tests:
+ * - sendPrompt()
+ * - endSession()
+ * - getSessionState()
+ */
+
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import type Database from "better-sqlite3";
+import { ExecutionService } from "../../../src/services/execution-service.js";
+import { AcpExecutorWrapper } from "../../../src/execution/executors/acp-executor-wrapper.js";
+
+// Mock the WebSocket module
+vi.mock("../../../src/services/websocket.js", () => ({
+  broadcastExecutionUpdate: vi.fn(),
+  websocketManager: {
+    broadcast: vi.fn(),
+    onDisconnect: vi.fn().mockReturnValue(() => {}),
+    hasSubscribers: vi.fn().mockReturnValue(false),
+  },
+}));
+
+// Mock the executor factory
+vi.mock("../../../src/execution/executors/executor-factory.js", () => ({
+  createExecutorForAgent: vi.fn(),
+  validateAgentConfig: vi.fn(() => []),
+}));
+
+// Mock executions service
+vi.mock("../../../src/services/executions.js", () => ({
+  getExecution: vi.fn(),
+  createExecution: vi.fn(),
+  updateExecution: vi.fn(),
+}));
+
+// Import the mocked getExecution
+import { getExecution } from "../../../src/services/executions.js";
+const mockGetExecution = vi.mocked(getExecution);
+
+describe("ExecutionService Persistent Session Methods", () => {
+  let service: ExecutionService;
+  let mockDb: Partial<Database.Database>;
+  let mockAcpWrapper: Partial<AcpExecutorWrapper>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Create mock database
+    mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        run: vi.fn(),
+        get: vi.fn(),
+        all: vi.fn(),
+      }),
+    };
+
+    // Create mock AcpExecutorWrapper
+    mockAcpWrapper = {
+      sendPrompt: vi.fn(),
+      endSession: vi.fn(),
+      getSessionState: vi.fn(),
+    };
+
+    // Create ExecutionService instance
+    service = new ExecutionService(
+      mockDb as Database.Database,
+      "test-project",
+      "/test/path"
+    );
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // ===========================================================================
+  // sendPrompt()
+  // ===========================================================================
+  describe("sendPrompt()", () => {
+    it("should throw error if no active executor found", async () => {
+      // No executor in activeExecutors map
+      await expect(
+        service.sendPrompt("exec-123", "Continue")
+      ).rejects.toThrow("No active executor found for execution exec-123");
+    });
+
+    it("should throw error if executor is not AcpExecutorWrapper", async () => {
+      // Add a non-AcpExecutorWrapper to activeExecutors
+      const nonAcpWrapper = {
+        executeWithLifecycle: vi.fn(),
+      };
+      (service as any).activeExecutors.set("exec-123", nonAcpWrapper);
+
+      await expect(
+        service.sendPrompt("exec-123", "Continue")
+      ).rejects.toThrow("does not support persistent sessions");
+    });
+
+    it("should call wrapper.sendPrompt for valid AcpExecutorWrapper", async () => {
+      // Create a mock that passes instanceof check
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.sendPrompt = vi.fn().mockResolvedValue(undefined);
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      await service.sendPrompt("exec-123", "Continue with the task");
+
+      expect(mockWrapper.sendPrompt).toHaveBeenCalledWith(
+        "exec-123",
+        "Continue with the task"
+      );
+    });
+
+    it("should propagate errors from wrapper.sendPrompt", async () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.sendPrompt = vi
+        .fn()
+        .mockRejectedValue(
+          new Error("Cannot send prompt to session in state: running")
+        );
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      await expect(
+        service.sendPrompt("exec-123", "Continue")
+      ).rejects.toThrow("Cannot send prompt to session in state: running");
+    });
+  });
+
+  // ===========================================================================
+  // endSession()
+  // ===========================================================================
+  describe("endSession()", () => {
+    it("should throw error if no active executor found", async () => {
+      await expect(service.endSession("exec-123")).rejects.toThrow(
+        "No active executor found for execution exec-123"
+      );
+    });
+
+    it("should throw error if executor is not AcpExecutorWrapper", async () => {
+      const nonAcpWrapper = {
+        executeWithLifecycle: vi.fn(),
+      };
+      (service as any).activeExecutors.set("exec-123", nonAcpWrapper);
+
+      await expect(service.endSession("exec-123")).rejects.toThrow(
+        "does not support persistent sessions"
+      );
+    });
+
+    it("should call wrapper.endSession for valid AcpExecutorWrapper", async () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.endSession = vi.fn().mockResolvedValue(undefined);
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      await service.endSession("exec-123");
+
+      expect(mockWrapper.endSession).toHaveBeenCalledWith("exec-123");
+    });
+
+    it("should propagate errors from wrapper.endSession", async () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.endSession = vi
+        .fn()
+        .mockRejectedValue(new Error("Session already ended"));
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      await expect(service.endSession("exec-123")).rejects.toThrow(
+        "Session already ended"
+      );
+    });
+  });
+
+  // ===========================================================================
+  // getSessionState()
+  // ===========================================================================
+  describe("getSessionState()", () => {
+    it("should throw error if execution not found and no active executor", () => {
+      mockGetExecution.mockReturnValue(null);
+
+      expect(() => service.getSessionState("exec-123")).toThrow(
+        "Execution exec-123 not found"
+      );
+    });
+
+    it("should return discrete mode for completed discrete execution", () => {
+      mockGetExecution.mockReturnValue({
+        id: "exec-123",
+        status: "completed",
+      } as any);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "discrete",
+        state: null,
+        promptCount: 1,
+      });
+    });
+
+    it("should return discrete mode for non-AcpExecutorWrapper", () => {
+      const nonAcpWrapper = {
+        executeWithLifecycle: vi.fn(),
+      };
+      (service as any).activeExecutors.set("exec-123", nonAcpWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "discrete",
+        state: null,
+        promptCount: 1,
+      });
+    });
+
+    it("should return discrete mode if AcpExecutorWrapper has no persistent session", () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.getSessionState = vi.fn().mockReturnValue(null);
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "discrete",
+        state: null,
+        promptCount: 1,
+      });
+    });
+
+    it("should return persistent session state from wrapper", () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.getSessionState = vi.fn().mockReturnValue({
+        mode: "persistent",
+        state: "waiting",
+        promptCount: 3,
+        idleTimeMs: 5000,
+      });
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "persistent",
+        state: "waiting",
+        promptCount: 3,
+        idleTimeMs: 5000,
+      });
+      expect(mockWrapper.getSessionState).toHaveBeenCalledWith("exec-123");
+    });
+
+    it("should return paused state from wrapper", () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.getSessionState = vi.fn().mockReturnValue({
+        mode: "persistent",
+        state: "paused",
+        promptCount: 1,
+        idleTimeMs: 12000,
+      });
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "persistent",
+        state: "paused",
+        promptCount: 1,
+        idleTimeMs: 12000,
+      });
+    });
+
+    it("should return running state from wrapper", () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.getSessionState = vi.fn().mockReturnValue({
+        mode: "persistent",
+        state: "running",
+        promptCount: 2,
+      });
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "persistent",
+        state: "running",
+        promptCount: 2,
+      });
+    });
+
+    it("should return ended state from wrapper", () => {
+      const mockWrapper = Object.create(AcpExecutorWrapper.prototype);
+      mockWrapper.getSessionState = vi.fn().mockReturnValue({
+        mode: "persistent",
+        state: "ended",
+        promptCount: 5,
+      });
+
+      (service as any).activeExecutors.set("exec-123", mockWrapper);
+
+      const state = service.getSessionState("exec-123");
+
+      expect(state).toEqual({
+        mode: "persistent",
+        state: "ended",
+        promptCount: 5,
+      });
+    });
+  });
+});

@@ -97,6 +97,16 @@ export interface ServerMessage {
 }
 
 /**
+ * Callback type for client disconnect events
+ * @param clientId - The disconnected client's ID
+ * @param subscriptions - Set of subscription strings the client had
+ */
+export type DisconnectCallback = (
+  clientId: string,
+  subscriptions: Set<string>
+) => void;
+
+/**
  * WebSocket server manager
  */
 class WebSocketManager {
@@ -104,6 +114,8 @@ class WebSocketManager {
   private clients: Map<string, Client> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  /** Callbacks to invoke when a client disconnects */
+  private disconnectCallbacks: Set<DisconnectCallback> = new Set();
 
   /**
    * Initialize the WebSocket server
@@ -193,8 +205,66 @@ class WebSocketManager {
           `[websocket] Client disconnected: ${clientId} (subscriptions: ${client.subscriptions.size})`
         );
       }
+
+      // Notify disconnect callbacks before removing the client
+      // Clone subscriptions since we're about to delete the client
+      const subscriptions = new Set(client.subscriptions);
+      for (const callback of this.disconnectCallbacks) {
+        try {
+          callback(clientId, subscriptions);
+        } catch (error) {
+          console.error(
+            `[websocket] Error in disconnect callback for ${clientId}:`,
+            error
+          );
+        }
+      }
+
       this.clients.delete(clientId);
     }
+  }
+
+  /**
+   * Register a callback to be invoked when a client disconnects
+   * @param callback - Function to call with clientId and subscriptions
+   * @returns Function to unregister the callback
+   */
+  onDisconnect(callback: DisconnectCallback): () => void {
+    this.disconnectCallbacks.add(callback);
+    return () => {
+      this.disconnectCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Check if any client is subscribed to a specific entity
+   * @param projectId - Project ID
+   * @param entityType - Entity type (execution, issue, etc.)
+   * @param entityId - Entity ID
+   * @returns true if at least one client is subscribed
+   */
+  hasSubscribers(
+    projectId: string,
+    entityType: "issue" | "spec" | "execution" | "workflow",
+    entityId: string
+  ): boolean {
+    const subscription = `${projectId}:${entityType}:${entityId}`;
+    const typeSubscription = `${projectId}:${entityType}:*`;
+    const allSubscription = `${projectId}:all`;
+
+    for (const client of this.clients.values()) {
+      if (client.ws.readyState !== WebSocket.OPEN) {
+        continue;
+      }
+      if (
+        client.subscriptions.has(subscription) ||
+        client.subscriptions.has(typeSubscription) ||
+        client.subscriptions.has(allSubscription)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
