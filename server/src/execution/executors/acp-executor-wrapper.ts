@@ -17,10 +17,8 @@ import {
   type McpServer,
   type PermissionMode,
   type PermissionRequestUpdate,
-  type CreateTerminalRequest,
 } from "acp-factory";
 import { PermissionManager } from "./permission-manager.js";
-import { TerminalHandler } from "../handlers/terminal-handler.js";
 import { FileHandler } from "../handlers/file-handler.js";
 import type Database from "better-sqlite3";
 import type { ExecutionLifecycleService } from "../../services/execution-lifecycle.js";
@@ -181,8 +179,6 @@ export class AcpExecutorWrapper {
   private activeSessions: Map<string, Session> = new Map();
   /** Permission managers by execution ID (for interactive mode) */
   private permissionManagers: Map<string, PermissionManager> = new Map();
-  /** Terminal handlers by execution ID */
-  private terminalHandlers: Map<string, TerminalHandler> = new Map();
   /** File handlers by execution ID */
   private fileHandlers: Map<string, FileHandler> = new Map();
 
@@ -225,10 +221,9 @@ export class AcpExecutorWrapper {
     const permissionManager = new PermissionManager();
     this.permissionManagers.set(executionId, permissionManager);
 
-    // Create terminal and file handlers for this execution
-    const terminalHandler = new TerminalHandler(workDir);
+    // Create file handler for this execution
+    // TODO: Set an explicit terminal handler if we need to explicitly manage terminals in the future.
     const fileHandler = new FileHandler(workDir);
-    this.terminalHandlers.set(executionId, terminalHandler);
     this.fileHandlers.set(executionId, fileHandler);
 
     try {
@@ -243,18 +238,7 @@ export class AcpExecutorWrapper {
       agent = await AgentFactory.spawn(this.agentType, {
         env: this.acpConfig.env,
         permissionMode,
-        // Terminal handlers
-        onTerminalCreate: (params: CreateTerminalRequest) =>
-          terminalHandler.onCreate(params),
-        onTerminalOutput: (terminalId: string) =>
-          terminalHandler.onOutput(terminalId),
-        onTerminalKill: (terminalId: string) =>
-          terminalHandler.onKill(terminalId),
-        onTerminalRelease: (terminalId: string) =>
-          terminalHandler.onRelease(terminalId),
-        onTerminalWaitForExit: (terminalId: string) =>
-          terminalHandler.onWaitForExit(terminalId),
-        // File handlers
+        // File handlers only - no terminal handlers means Claude Code uses native Bash
         onFileRead: (path: string) => fileHandler.onRead(path),
         onFileWrite: (path: string, content: string) =>
           fileHandler.onWrite(path, content),
@@ -266,10 +250,9 @@ export class AcpExecutorWrapper {
       const mcpServers = convertMcpServers(
         task.metadata?.mcpServers ?? this.acpConfig.mcpServers
       );
-      console.log(
-        `[AcpExecutorWrapper] Creating session for ${executionId}`,
-        { mcpServers: mcpServers.map((s) => s.name) }
-      );
+      console.log(`[AcpExecutorWrapper] Creating session for ${executionId}`, {
+        mcpServers: mcpServers.map((s) => s.name),
+      });
       session = await agent.createSession(workDir, {
         mcpServers,
         mode: this.acpConfig.mode,
@@ -295,10 +278,9 @@ export class AcpExecutorWrapper {
       // 4. Stream prompt and process SessionUpdate events
       const coalescer = new SessionUpdateCoalescer();
 
-      console.log(
-        `[AcpExecutorWrapper] Sending prompt for ${executionId}`,
-        { promptLength: task.prompt.length }
-      );
+      console.log(`[AcpExecutorWrapper] Sending prompt for ${executionId}`, {
+        promptLength: task.prompt.length,
+      });
 
       let updateCount = 0;
       for await (const update of session.prompt(task.prompt)) {
@@ -371,10 +353,9 @@ export class AcpExecutorWrapper {
         );
       }
 
-      console.log(
-        `[AcpExecutorWrapper] Prompt completed for ${executionId}`,
-        { totalUpdates: updateCount }
-      );
+      console.log(`[AcpExecutorWrapper] Prompt completed for ${executionId}`, {
+        totalUpdates: updateCount,
+      });
 
       // 8. Handle success
       await this.handleSuccess(executionId, workDir);
@@ -395,13 +376,6 @@ export class AcpExecutorWrapper {
       if (pm) {
         pm.cancelAll();
         this.permissionManagers.delete(executionId);
-      }
-
-      // Cleanup terminal handler
-      const th = this.terminalHandlers.get(executionId);
-      if (th) {
-        th.cleanup();
-        this.terminalHandlers.delete(executionId);
       }
 
       // Cleanup file handler
@@ -447,10 +421,8 @@ export class AcpExecutorWrapper {
     const permissionManager = new PermissionManager();
     this.permissionManagers.set(executionId, permissionManager);
 
-    // Create terminal and file handlers for this execution
-    const terminalHandler = new TerminalHandler(workDir);
+    // Create file handler for this execution (no terminal handlers - use native Bash)
     const fileHandler = new FileHandler(workDir);
-    this.terminalHandlers.set(executionId, terminalHandler);
     this.fileHandlers.set(executionId, fileHandler);
 
     try {
@@ -460,18 +432,7 @@ export class AcpExecutorWrapper {
       agent = await AgentFactory.spawn(this.agentType, {
         env: this.acpConfig.env,
         permissionMode,
-        // Terminal handlers
-        onTerminalCreate: (params: CreateTerminalRequest) =>
-          terminalHandler.onCreate(params),
-        onTerminalOutput: (terminalId: string) =>
-          terminalHandler.onOutput(terminalId),
-        onTerminalKill: (terminalId: string) =>
-          terminalHandler.onKill(terminalId),
-        onTerminalRelease: (terminalId: string) =>
-          terminalHandler.onRelease(terminalId),
-        onTerminalWaitForExit: (terminalId: string) =>
-          terminalHandler.onWaitForExit(terminalId),
-        // File handlers
+        // File handlers only - no terminal handlers means Claude Code uses native Bash
         onFileRead: (path: string) => fileHandler.onRead(path),
         onFileWrite: (path: string, content: string) =>
           fileHandler.onWrite(path, content),
@@ -567,10 +528,9 @@ export class AcpExecutorWrapper {
         );
       }
 
-      console.log(
-        `[AcpExecutorWrapper] Resume completed for ${executionId}`,
-        { totalUpdates: updateCount }
-      );
+      console.log(`[AcpExecutorWrapper] Resume completed for ${executionId}`, {
+        totalUpdates: updateCount,
+      });
 
       // 6. Handle success
       await this.handleSuccess(executionId, workDir);
@@ -590,13 +550,6 @@ export class AcpExecutorWrapper {
       if (pm) {
         pm.cancelAll();
         this.permissionManagers.delete(executionId);
-      }
-
-      // Cleanup terminal handler
-      const th = this.terminalHandlers.get(executionId);
-      if (th) {
-        th.cleanup();
-        this.terminalHandlers.delete(executionId);
       }
 
       // Cleanup file handler
@@ -701,13 +654,6 @@ export class AcpExecutorWrapper {
       this.permissionManagers.delete(executionId);
     }
 
-    // Cleanup terminal handler
-    const th = this.terminalHandlers.get(executionId);
-    if (th) {
-      th.cleanup();
-      this.terminalHandlers.delete(executionId);
-    }
-
     // Cleanup file handler
     this.fileHandlers.delete(executionId);
   }
@@ -734,9 +680,7 @@ export class AcpExecutorWrapper {
     const permissionManager = this.permissionManagers.get(executionId);
 
     if (!session) {
-      console.warn(
-        `[AcpExecutorWrapper] No active session for ${executionId}`
-      );
+      console.warn(`[AcpExecutorWrapper] No active session for ${executionId}`);
       return false;
     }
 
@@ -799,9 +743,7 @@ export class AcpExecutorWrapper {
     const session = this.activeSessions.get(executionId);
 
     if (!session) {
-      console.warn(
-        `[AcpExecutorWrapper] No active session for ${executionId}`
-      );
+      console.warn(`[AcpExecutorWrapper] No active session for ${executionId}`);
       return false;
     }
 
@@ -842,9 +784,7 @@ export class AcpExecutorWrapper {
     const session = this.activeSessions.get(executionId);
 
     if (!session) {
-      console.warn(
-        `[AcpExecutorWrapper] No active session for ${executionId}`
-      );
+      console.warn(`[AcpExecutorWrapper] No active session for ${executionId}`);
       return null;
     }
 
@@ -889,9 +829,7 @@ export class AcpExecutorWrapper {
     const session = this.activeSessions.get(executionId);
 
     if (!session) {
-      console.warn(
-        `[AcpExecutorWrapper] No active session for ${executionId}`
-      );
+      console.warn(`[AcpExecutorWrapper] No active session for ${executionId}`);
       return false;
     }
 
@@ -932,9 +870,7 @@ export class AcpExecutorWrapper {
     const session = this.activeSessions.get(executionId);
 
     if (!session) {
-      console.warn(
-        `[AcpExecutorWrapper] No active session for ${executionId}`
-      );
+      console.warn(`[AcpExecutorWrapper] No active session for ${executionId}`);
       return;
     }
 
