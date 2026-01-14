@@ -35,9 +35,12 @@ vi.mock("../../../src/services/executions.js", () => ({
   updateExecution: vi.fn(),
 }));
 
-// Import the mocked getExecution
-import { getExecution } from "../../../src/services/executions.js";
+// Import the mocked functions
+import { getExecution, updateExecution } from "../../../src/services/executions.js";
+import { broadcastExecutionUpdate } from "../../../src/services/websocket.js";
 const mockGetExecution = vi.mocked(getExecution);
+const mockUpdateExecution = vi.mocked(updateExecution);
+const mockBroadcastExecutionUpdate = vi.mocked(broadcastExecutionUpdate);
 
 describe("ExecutionService Persistent Session Methods", () => {
   let service: ExecutionService;
@@ -133,7 +136,74 @@ describe("ExecutionService Persistent Session Methods", () => {
   // endSession()
   // ===========================================================================
   describe("endSession()", () => {
-    it("should throw error if no active executor found", async () => {
+    it("should throw error if execution not found and no active executor", async () => {
+      mockGetExecution.mockReturnValue(null);
+
+      await expect(service.endSession("exec-123")).rejects.toThrow(
+        "Execution exec-123 not found"
+      );
+    });
+
+    it("should update stuck 'waiting' execution to 'stopped' when no active executor", async () => {
+      mockGetExecution.mockReturnValue({
+        id: "exec-123",
+        status: "waiting",
+      } as any);
+
+      await service.endSession("exec-123");
+
+      expect(mockUpdateExecution).toHaveBeenCalledWith(
+        expect.anything(),
+        "exec-123",
+        expect.objectContaining({
+          status: "stopped",
+          completed_at: expect.any(String),
+        })
+      );
+      expect(mockBroadcastExecutionUpdate).toHaveBeenCalledWith(
+        "test-project",
+        "exec-123",
+        "status_changed",
+        expect.objectContaining({
+          id: "exec-123",
+          status: "stopped",
+        })
+      );
+    });
+
+    it("should update stuck 'paused' execution to 'stopped' when no active executor", async () => {
+      mockGetExecution.mockReturnValue({
+        id: "exec-123",
+        status: "paused",
+      } as any);
+
+      await service.endSession("exec-123");
+
+      expect(mockUpdateExecution).toHaveBeenCalledWith(
+        expect.anything(),
+        "exec-123",
+        expect.objectContaining({
+          status: "stopped",
+          completed_at: expect.any(String),
+        })
+      );
+      expect(mockBroadcastExecutionUpdate).toHaveBeenCalledWith(
+        "test-project",
+        "exec-123",
+        "status_changed",
+        expect.objectContaining({
+          id: "exec-123",
+          status: "stopped",
+        })
+      );
+    });
+
+    it("should throw error for terminal execution with no active executor", async () => {
+      mockGetExecution.mockReturnValue({
+        id: "exec-123",
+        status: "completed",
+      } as any);
+
       await expect(service.endSession("exec-123")).rejects.toThrow(
         "No active executor found for execution exec-123"
       );

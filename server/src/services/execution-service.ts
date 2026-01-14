@@ -2254,7 +2254,38 @@ ${feedback}`;
    */
   async endSession(executionId: string): Promise<void> {
     const wrapper = this.activeExecutors.get(executionId);
+
     if (!wrapper) {
+      // No active executor - check if execution is stuck in waiting/paused state
+      const execution = getExecution(this.db, executionId);
+      if (!execution) {
+        throw new Error(`Execution ${executionId} not found`);
+      }
+
+      // If execution is stuck in waiting/paused without an active executor,
+      // update it to stopped state
+      if (execution.status === "waiting" || execution.status === "paused") {
+        console.log(
+          `[ExecutionService] No active executor for ${executionId} but status is ${execution.status}. ` +
+            `Updating to stopped.`
+        );
+        updateExecution(this.db, executionId, {
+          status: "stopped",
+          completed_at: new Date().toISOString(),
+        });
+        broadcastExecutionUpdate(
+          this.projectId,
+          executionId,
+          "status_changed",
+          {
+            id: executionId,
+            status: "stopped",
+          }
+        );
+        return;
+      }
+
+      // Execution is already in a terminal state
       throw new Error(
         `No active executor found for execution ${executionId}. ` +
           `The execution may have already completed.`

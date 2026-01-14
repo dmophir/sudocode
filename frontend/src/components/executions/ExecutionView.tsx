@@ -599,7 +599,22 @@ export function ExecutionView({ executionId, onFollowUpCreated, onStatusChange, 
         }
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to end session')
+      // If the executor is not found (404), the session has already ended.
+      // Reload the chain to get the actual status instead of showing an error.
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (errorMessage.includes('No active executor') || errorMessage.includes('not found')) {
+        // Session already ended - reload chain to get current status
+        try {
+          const data = await executionsApi.getChain(lastExecution.id)
+          setChainData(data)
+          chainExecutionIdsRef.current = new Set(data.executions.map((e) => e.id))
+        } catch (reloadErr) {
+          // If reload also fails, show the original error
+          setError(errorMessage)
+        }
+      } else {
+        setError(errorMessage)
+      }
     } finally {
       setEndingSession(false)
     }
