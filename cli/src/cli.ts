@@ -749,7 +749,8 @@ deploy
   .option("--idle-timeout <minutes>", "Idle timeout in minutes", parseInt)
   .option("--keep-alive-hours <hours>", "Keep-alive hours", parseInt)
   .option("--retention-period <days>", "Retention period in days", parseInt)
-  .option("--dev", "Deploy in development mode");
+  .option("--dev", "Deploy in development mode")
+  .option("--no-open", "Don't open browser automatically after deployment");
 
 // Parse arguments
 program.parse();

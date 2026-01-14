@@ -221,6 +221,7 @@ interface DeployOptions {
   keepAliveHours?: number;
   retentionPeriod?: number;
   dev?: boolean;
+  noOpen?: boolean;
 }
 
 /**
@@ -238,21 +239,8 @@ export async function handleDeploy(
 
     if (context.jsonOutput) {
       console.log(JSON.stringify(deployment, null, 2));
-    } else {
-      // Success message already printed by orchestrator
-      // Just print the URLs in a copy-pasteable format
-      console.log(chalk.bold('URLs:'));
-      if (deployment.urls?.web) {
-        console.log(chalk.cyan(`  Workspace: ${deployment.urls.web}`));
-      }
-      if (deployment.urls?.sudocode) {
-        console.log(chalk.cyan(`  Sudocode:  ${deployment.urls.sudocode}`));
-      }
-      if (deployment.urls?.ssh) {
-        console.log(chalk.gray(`  SSH:       ${deployment.urls.ssh}`));
-      }
-      console.log();
     }
+    // Success message and URLs already printed by orchestrator
   } catch (error) {
     if (context.jsonOutput) {
       console.error(JSON.stringify({ 

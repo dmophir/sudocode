@@ -8,7 +8,7 @@
  * 4. Returns deployment information
  */
 
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 import chalk from 'chalk';
 import { createProvider } from 'sudopod';
 import type { DeployOptions, Deployment, DeploymentStatus, DeploymentUrls, Provider } from 'sudopod';
@@ -36,6 +36,7 @@ export interface DeployCommandOptions {
   machine?: string;
   retentionPeriod?: number;
   dev?: boolean;
+  noOpen?: boolean;
 }
 
 export class DeployOrchestrator {
@@ -45,6 +46,32 @@ export class DeployOrchestrator {
   constructor(outputDir: string) {
     this.configManager = new DeployConfigManager(outputDir);
     this.provider = createProvider({ type: 'codespaces' });
+  }
+
+  /**
+   * Open a URL in the default browser (platform-agnostic)
+   * Fire and forget - doesn't block or throw errors
+   */
+  private openBrowser(url: string): void {
+    const platform = process.platform;
+    let command: string;
+
+    if (platform === 'darwin') {
+      command = `open "${url}"`;
+    } else if (platform === 'win32') {
+      command = `start "" "${url}"`;
+    } else {
+      // Linux and other Unix-like systems
+      command = `xdg-open "${url}"`;
+    }
+
+    // Fire and forget - don't block on browser open
+    exec(command, (error) => {
+      if (error) {
+        // Silently fail - browser open is nice-to-have, not critical
+        console.log(chalk.gray(`  (Could not auto-open browser: ${error.message})`));
+      }
+    });
   }
 
   /**
@@ -124,18 +151,35 @@ export class DeployOrchestrator {
         clearInterval(progressInterval);
         process.stdout.write('\n');
 
-        // Step 8: Show success message
+        // Step 8: Show success message with clear URL hierarchy
         console.log(chalk.green('\n✓ Deployment successful!\n'));
-        console.log(chalk.bold('Deployment Details:'));
+        
+        // Primary: Sudocode UI
+        if (deployment.urls?.sudocode) {
+          console.log(chalk.bold.cyan('🚀 Sudocode UI: ') + chalk.cyan(deployment.urls.sudocode));
+        }
+        
+        // Secondary: Workspace access (for IDE/terminal/files)
+        console.log();
+        if (deployment.urls?.workspace) {
+          console.log(chalk.gray('Codespace (IDE/Terminal/Files): ') + chalk.gray(deployment.urls.workspace));
+        }
+        
+        console.log();
+        console.log(chalk.bold('Deployment Info:'));
         console.log(`  Name: ${deployment.name}`);
         console.log(`  Status: ${deployment.status}`);
-        if (deployment.urls?.web) {
-          console.log(chalk.cyan(`  Web URL: ${deployment.urls.web}`));
-        }
-        if (deployment.urls?.ssh) {
-          console.log(`  SSH: ${deployment.urls.ssh}`);
-        }
         console.log();
+
+        // Step 9: Open browser to workspace URL (unless --no-open flag is set)
+        if (!options.noOpen && deployment.urls?.workspace) {
+          console.log(chalk.gray('Opening codespace in browser...\n'));
+          this.openBrowser(deployment.urls.workspace);
+        } else if (options.noOpen) {
+          // Important reminder when --no-open is used
+          console.log(chalk.yellow('⚠  Note: Open the codespace URL first before accessing the Sudocode UI.'));
+          console.log(chalk.gray('   The Sudocode UI requires the codespace to be running.\n'));
+        }
 
         return deployment;
       } catch (error: any) {
