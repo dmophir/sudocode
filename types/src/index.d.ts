@@ -287,6 +287,26 @@ export interface EditorConfig {
 }
 
 /**
+ * Deployment configuration for remote development environments
+ */
+export interface DeployConfig {
+  /** Deployment provider (currently only Codespaces supported) */
+  provider: 'codespaces';
+  /** Default branch to deploy from (optional) */
+  defaultBranch?: string;
+  /** Port number for the server (default: 3000) */
+  port: number;
+  /** Idle timeout in minutes before auto-shutdown */
+  idleTimeout: number;
+  /** Keep-alive duration in hours before auto-cleanup */
+  keepAliveHours: number;
+  /** Machine type/size (e.g., 'basicLinux32gb', 'premiumLinux') */
+  machine: string;
+  /** Retention period in days before cleanup */
+  retentionPeriod: number;
+}
+
+/**
  * Config metadata file structure (.sudocode/config.json)
  */
 export interface Config {
