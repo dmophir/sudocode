@@ -69,24 +69,13 @@ export class SpawnOrchestrator {
   }
 
   /**
-   * Spawn to a remote provider (alias for deploy)
+   * Spawn to a remote provider
    * 
    * @param options Spawn options with optional overrides
    * @returns Deployment information
    * @throws Error if deployment fails or prerequisites are not met
    */
   async spawn(options: SpawnOptions & { provider?: 'codespaces' | 'coder' }): Promise<DeploymentInfo> {
-    return this.deploy(options);
-  }
-
-  /**
-   * Deploy to a remote provider
-   * 
-   * @param options Spawn options with optional overrides
-   * @returns Deployment information
-   * @throws Error if deployment fails or prerequisites are not met
-   */
-  async deploy(options: SpawnOptions): Promise<DeploymentInfo> {
     // 1. Check GitHub CLI authentication
     console.log(chalk.blue('Checking GitHub authentication...'));
     this.checkGitHubAuth();
@@ -236,7 +225,10 @@ export class SpawnOrchestrator {
     const sudopod = await this.loadSudopod();
     const providerInstance = sudopod.createProvider({ type: provider });
     
-    const deployment = await providerInstance.getStatus(id);
+    // sudopod.getStatus() returns just the status string, not full deployment info
+    // So we need to list all deployments and find the one we're looking for
+    const deployments = await providerInstance.list();
+    const deployment = deployments.find((d: DeploymentInfo) => d.id === id || d.name === id);
     
     if (!deployment) {
       throw new Error(`Deployment not found: ${id}`);
