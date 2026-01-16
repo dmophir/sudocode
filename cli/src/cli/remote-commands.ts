@@ -6,8 +6,8 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import * as readline from "readline";
 import { SpawnConfigManager } from "../remote/config.js";
-import { SpawnOrchestrator } from "../remote/orchestrator.js";
-import type { DeploymentInfo } from "../remote/orchestrator.js";
+import { RemoteSpawnService } from "../remote/spawn-service.js";
+import type { DeploymentInfo } from "../remote/spawn-service.js";
 import {
   formatErrorMessage,
   ConfigurationError
@@ -56,10 +56,10 @@ export async function handleRemoteSpawn(
   provider: string,
   options: RemoteSpawnOptions
 ): Promise<void> {
-  const orchestrator = new SpawnOrchestrator(ctx.outputDir);
+  const spawnService = new RemoteSpawnService(ctx.outputDir);
 
   try {
-    const deployment = await orchestrator.spawn({
+    const deployment = await spawnService.spawn({
       provider: provider as 'codespaces' | 'coder',
       branch: options.branch,
       repo: options.repo,
@@ -274,10 +274,10 @@ export async function handleRemoteList(
   ctx: CommandContext,
   provider: string
 ): Promise<void> {
-  const orchestrator = new SpawnOrchestrator(ctx.outputDir);
+  const spawnService = new RemoteSpawnService(ctx.outputDir);
 
   try {
-    const deployments = await orchestrator.list(provider as 'codespaces' | 'coder');
+    const deployments = await spawnService.list(provider as 'codespaces' | 'coder');
 
     if (ctx.jsonOutput) {
       console.log(JSON.stringify(deployments, null, 2));
@@ -345,10 +345,10 @@ export async function handleRemoteStatus(
     process.exit(1);
   }
 
-  const orchestrator = new SpawnOrchestrator(ctx.outputDir);
+  const spawnService = new RemoteSpawnService(ctx.outputDir);
 
   try {
-    const deployment = await orchestrator.status(provider as 'codespaces' | 'coder', id);
+    const deployment = await spawnService.status(provider as 'codespaces' | 'coder', id);
 
     if (ctx.jsonOutput) {
       console.log(JSON.stringify(deployment, null, 2));
@@ -419,7 +419,7 @@ export async function handleRemoteStop(
     process.exit(1);
   }
 
-  const orchestrator = new SpawnOrchestrator(ctx.outputDir);
+  const spawnService = new RemoteSpawnService(ctx.outputDir);
 
   try {
     // Skip confirmation if --force flag is provided or in JSON mode
@@ -439,7 +439,7 @@ export async function handleRemoteStop(
     }
 
     console.log('Stopping deployment...\n');
-    await orchestrator.stop(provider as 'codespaces' | 'coder', id);
+    await spawnService.stop(provider as 'codespaces' | 'coder', id);
 
     if (ctx.jsonOutput) {
       console.log(JSON.stringify({ success: true, id }));
