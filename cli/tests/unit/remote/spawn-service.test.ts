@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SpawnOrchestrator } from '../../../src/remote/orchestrator.js';
-import type { DeploymentInfo } from '../../../src/remote/orchestrator.js';
+import { RemoteSpawnService } from '../../../src/remote/spawn-service.js';
+import type { DeploymentInfo } from '../../../src/remote/spawn-service.js';
 
 // Mock child_process
 vi.mock('child_process', () => ({
@@ -57,13 +57,13 @@ vi.mock('fs', async () => {
   };
 });
 
-describe('SpawnOrchestrator', () => {
-  let orchestrator: SpawnOrchestrator;
+describe('RemoteSpawnService', () => {
+  let spawnService: RemoteSpawnService;
   const mockSudocodeDir = '/test/.sudocode';
   let execSyncMock: any;
 
   beforeEach(async () => {
-    orchestrator = new SpawnOrchestrator(mockSudocodeDir);
+    spawnService = new RemoteSpawnService(mockSudocodeDir);
     
     // Setup execSync mock
     const childProcess = await import('child_process');
@@ -104,7 +104,7 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      const result = await orchestrator.list('codespaces');
+      const result = await spawnService.list('codespaces');
 
       expect(result).toEqual(mockDeployments);
       expect(createProvider).toHaveBeenCalledWith({ type: 'codespaces' });
@@ -119,20 +119,20 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      const result = await orchestrator.list('codespaces');
+      const result = await spawnService.list('codespaces');
 
       expect(result).toEqual([]);
       expect(mockProvider.list).toHaveBeenCalled();
     });
 
     it('should throw error for unsupported provider', async () => {
-      await expect(orchestrator.list('invalid' as any)).rejects.toThrow(
+      await expect(spawnService.list('invalid' as any)).rejects.toThrow(
         "Unknown provider 'invalid'"
       );
     });
 
     it('should throw error for coder provider (not yet supported)', async () => {
-      await expect(orchestrator.list('coder')).rejects.toThrow(
+      await expect(spawnService.list('coder')).rejects.toThrow(
         "Provider 'coder' is not yet supported"
       );
     });
@@ -167,7 +167,7 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      const result = await orchestrator.status('codespaces', 'codespace-abc123');
+      const result = await spawnService.status('codespaces', 'codespace-abc123');
 
       expect(result).toEqual(mockDeployment);
       expect(createProvider).toHaveBeenCalledWith({ type: 'codespaces' });
@@ -183,19 +183,19 @@ describe('SpawnOrchestrator', () => {
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
       await expect(
-        orchestrator.status('codespaces', 'nonexistent-id')
+        spawnService.status('codespaces', 'nonexistent-id')
       ).rejects.toThrow('Deployment not found: nonexistent-id');
     });
 
     it('should throw error for unsupported provider', async () => {
       await expect(
-        orchestrator.status('invalid' as any, 'some-id')
+        spawnService.status('invalid' as any, 'some-id')
       ).rejects.toThrow("Unknown provider 'invalid'");
     });
 
     it('should throw error for coder provider (not yet supported)', async () => {
       await expect(
-        orchestrator.status('coder', 'some-id')
+        spawnService.status('coder', 'some-id')
       ).rejects.toThrow("Provider 'coder' is not yet supported");
     });
   });
@@ -209,7 +209,7 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      await orchestrator.stop('codespaces', 'codespace-abc123');
+      await spawnService.stop('codespaces', 'codespace-abc123');
 
       expect(createProvider).toHaveBeenCalledWith({ type: 'codespaces' });
       expect(mockProvider.stop).toHaveBeenCalledWith('codespace-abc123');
@@ -224,19 +224,19 @@ describe('SpawnOrchestrator', () => {
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
       await expect(
-        orchestrator.stop('codespaces', 'nonexistent-id')
+        spawnService.stop('codespaces', 'nonexistent-id')
       ).rejects.toThrow('Deployment not found');
     });
 
     it('should throw error for unsupported provider', async () => {
       await expect(
-        orchestrator.stop('invalid' as any, 'some-id')
+        spawnService.stop('invalid' as any, 'some-id')
       ).rejects.toThrow("Unknown provider 'invalid'");
     });
 
     it('should throw error for coder provider (not yet supported)', async () => {
       await expect(
-        orchestrator.stop('coder', 'some-id')
+        spawnService.stop('coder', 'some-id')
       ).rejects.toThrow("Provider 'coder' is not yet supported");
     });
   });
@@ -251,24 +251,24 @@ describe('SpawnOrchestrator', () => {
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
       // Should not throw
-      await expect(orchestrator.list('codespaces')).resolves.toBeDefined();
+      await expect(spawnService.list('codespaces')).resolves.toBeDefined();
     });
 
     it('should throw error for unknown provider', async () => {
-      await expect(orchestrator.list('unknown' as any)).rejects.toThrow(
+      await expect(spawnService.list('unknown' as any)).rejects.toThrow(
         "Unknown provider 'unknown'"
       );
     });
 
     it('should throw error for coder provider with specific message', async () => {
-      await expect(orchestrator.list('coder')).rejects.toThrow(
+      await expect(spawnService.list('coder')).rejects.toThrow(
         "Provider 'coder' is not yet supported"
       );
     });
 
     it('should include supported providers in error message', async () => {
       try {
-        await orchestrator.list('invalid' as any);
+        await spawnService.list('invalid' as any);
         expect.fail('Should have thrown error');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
@@ -331,7 +331,7 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      const result = await orchestrator.spawn({ noOpen: true });
+      const result = await spawnService.spawn({ noOpen: true });
 
       // Verify GitHub auth was checked
       expect(execSyncMock).toHaveBeenCalledWith('gh auth status', { stdio: 'ignore' });
@@ -382,7 +382,7 @@ describe('SpawnOrchestrator', () => {
         throw new Error(`Unexpected command: ${cmd}`);
       });
 
-      await expect(orchestrator.spawn({})).rejects.toThrow(
+      await expect(spawnService.spawn({})).rejects.toThrow(
         'GitHub CLI is not authenticated'
       );
     });
@@ -398,7 +398,7 @@ describe('SpawnOrchestrator', () => {
         throw new Error(`Unexpected command: ${cmd}`);
       });
 
-      await expect(orchestrator.spawn({})).rejects.toThrow(
+      await expect(spawnService.spawn({})).rejects.toThrow(
         'Not in a git repository'
       );
     });
@@ -425,7 +425,7 @@ describe('SpawnOrchestrator', () => {
       const credentials = await import('../../../src/auth/credentials.js');
       vi.mocked(credentials.getClaudeToken).mockResolvedValue(null);
 
-      await expect(orchestrator.spawn({})).rejects.toThrow(
+      await expect(spawnService.spawn({})).rejects.toThrow(
         'Claude authentication failed'
       );
     });
@@ -482,7 +482,7 @@ describe('SpawnOrchestrator', () => {
       const { createProvider } = await import('sudopod');
       vi.mocked(createProvider).mockReturnValue(mockProvider as any);
 
-      await orchestrator.spawn({
+      await spawnService.spawn({
         branch: 'feature-x',
         port: 3001,
         machine: 'premiumLinux',

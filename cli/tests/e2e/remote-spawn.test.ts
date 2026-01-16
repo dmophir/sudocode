@@ -20,14 +20,14 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
-import { SpawnOrchestrator } from '../../src/remote/orchestrator.js';
+import { RemoteSpawnService } from '../../src/remote/spawn-service.js';
 import { getClaudeToken } from '../../src/auth/credentials.js';
 import type { DeploymentInfo } from '../../src/remote/types.js';
 
 const SKIP_SLOW_TESTS = process.env.RUN_SLOW_TESTS !== 'true';
 
 describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
-  let orchestrator: SpawnOrchestrator;
+  let spawnService: RemoteSpawnService;
   let deployment: DeploymentInfo | null = null;
 
   beforeAll(async () => {
@@ -73,8 +73,8 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
       );
     }
 
-    // Initialize orchestrator
-    orchestrator = new SpawnOrchestrator('.sudocode');
+    // Initialize spawn service
+    spawnService = new RemoteSpawnService('.sudocode');
     console.log('Prerequisites verified. Starting e2e test...\n');
   }, 30000); // 30 second timeout for prerequisites
 
@@ -83,7 +83,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
     if (deployment) {
       console.log(`\nCleaning up codespace: ${deployment.id}`);
       try {
-        await orchestrator.stop('codespaces', deployment.id);
+        await spawnService.stop('codespaces', deployment.id);
         console.log('✓ Codespace deleted successfully');
       } catch (error) {
         console.error('Failed to delete codespace:', error);
@@ -98,7 +98,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
     async () => {
       // Step 1: Spawn the codespace
       console.log('Step 1: Spawning codespace...');
-      deployment = await orchestrator.spawn({
+      deployment = await spawnService.spawn({
         noOpen: true, // Don't open browser in CI
       });
 
@@ -116,7 +116,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
 
       // Step 2: List deployments and verify ours is there
       console.log('\nStep 2: Listing deployments...');
-      const deployments = await orchestrator.list('codespaces');
+      const deployments = await spawnService.list('codespaces');
 
       expect(deployments).toBeInstanceOf(Array);
       const ourDeployment = deployments.find((d) => d.id === deployment!.id);
@@ -127,7 +127,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
 
       // Step 3: Get status and verify details
       console.log('\nStep 3: Checking deployment status...');
-      const status = await orchestrator.status('codespaces', deployment.id);
+      const status = await spawnService.status('codespaces', deployment.id);
 
       expect(status).toBeDefined();
       expect(status.id ?? status.name).toBe(deployment.id);
@@ -142,7 +142,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
 
       // Step 4: Stop the codespace
       console.log('\nStep 4: Stopping codespace...');
-      await orchestrator.stop('codespaces', deployment.id);
+      await spawnService.stop('codespaces', deployment.id);
 
       console.log(`✓ Codespace stopped: ${deployment.id}`);
 
@@ -151,7 +151,7 @@ describe.skipIf(SKIP_SLOW_TESTS)('Remote Spawn E2E', () => {
 
       // Step 5: Verify it's gone from the list
       console.log('\nStep 5: Verifying deletion...');
-      const deploymentsAfter = await orchestrator.list('codespaces');
+      const deploymentsAfter = await spawnService.list('codespaces');
       const deletedDeployment = deploymentsAfter.find((d) => d.id === status.id);
       expect(deletedDeployment).toBeUndefined();
 

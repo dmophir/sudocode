@@ -1,5 +1,5 @@
 /**
- * SpawnOrchestrator - Main orchestration service for remote deployments
+ * RemoteSpawnService - Main service for remote deployments
  * 
  * Coordinates the full deployment workflow:
  * 1. Check GitHub CLI authentication
@@ -29,9 +29,9 @@ import { SpawnConfigManager } from './config.js';
 import { ClaudeAuthIntegration } from './claude-auth.js';
 
 /**
- * Main orchestrator for remote deployments
+ * Main service for remote deployments
  */
-export class SpawnOrchestrator {
+export class RemoteSpawnService {
   private configManager: SpawnConfigManager;
   private gitDetector: GitContextDetector;
   private authIntegration: ClaudeAuthIntegration;
