@@ -161,7 +161,7 @@ interface PersistentSessionState {
   /** Number of prompts sent to this session */
   promptCount: number;
   /** Current state of the session */
-  state: "running" | "waiting" | "paused" | "ended";
+  state: "running" | "pending" | "paused" | "ended";
   /** When the last prompt completed */
   lastPromptCompletedAt?: Date;
   /** Active idle timeout handle */
@@ -479,7 +479,7 @@ export class AcpExecutorWrapper {
 
       // 8. Handle completion based on session mode
       if (isPersistent) {
-        // Persistent mode: transition to waiting state
+        // Persistent mode: transition to pending state
         await this.transitionToWaiting(executionId);
       } else {
         // Discrete mode: complete the execution
@@ -622,10 +622,11 @@ export class AcpExecutorWrapper {
           agentMeta,
         });
       } else {
-        // Agent doesn't support session loading (e.g., Gemini)
-        // Create a new session instead - conversation history won't be preserved
+        // Agent doesn't support session loading via ACP
+        // For agents like Copilot that use --resume <sessionId> CLI flag,
+        // the session ID is already passed to the CLI via agent-config-handlers
         console.log(
-          `[AcpExecutorWrapper] Agent doesn't support session loading, creating new session for ${executionId}`
+          `[AcpExecutorWrapper] Agent doesn't support session loading via ACP, creating new session for ${executionId}`
         );
         const mcpServers = convertMcpServers(
           task.metadata?.mcpServers ?? this.acpConfig.mcpServers
@@ -754,7 +755,7 @@ export class AcpExecutorWrapper {
 
       // 6. Handle completion based on session mode
       if (isPersistent) {
-        // Persistent mode: transition to waiting state
+        // Persistent mode: transition to pending state
         await this.transitionToWaiting(executionId);
       } else {
         // Discrete mode: complete the execution
@@ -1135,12 +1136,12 @@ export class AcpExecutorWrapper {
    * Send an additional prompt to a persistent session
    *
    * Only works for executions started with sessionMode: "persistent" that are
-   * currently in the "waiting" or "paused" state. Sending a prompt to a paused
+   * currently in the "pending" or "paused" state. Sending a prompt to a paused
    * session will resume it.
    *
    * @param executionId - Execution ID with active persistent session
    * @param prompt - The prompt to send
-   * @throws Error if no persistent session exists or session is not waiting/paused
+   * @throws Error if no persistent session exists or session is not pending/paused
    */
   async sendPrompt(executionId: string, prompt: string): Promise<void> {
     const persistentState = this.persistentSessions.get(executionId);
@@ -1151,7 +1152,7 @@ export class AcpExecutorWrapper {
     }
 
     if (
-      persistentState.state !== "waiting" &&
+      persistentState.state !== "pending" &&
       persistentState.state !== "paused"
     ) {
       throw new Error(
@@ -1262,7 +1263,7 @@ export class AcpExecutorWrapper {
         { updateCount }
       );
 
-      // Transition back to waiting
+      // Transition back to pending
       await this.transitionToWaiting(executionId);
     } catch (error) {
       console.error(
@@ -1361,7 +1362,7 @@ export class AcpExecutorWrapper {
    */
   getSessionState(executionId: string): {
     mode: "persistent";
-    state: "running" | "waiting" | "paused" | "ended";
+    state: "running" | "pending" | "paused" | "ended";
     promptCount: number;
     idleTimeMs?: number;
   } | null {
@@ -1434,11 +1435,11 @@ export class AcpExecutorWrapper {
   }
 
   /**
-   * Transition a persistent session to waiting or paused state
+   * Transition a persistent session to pending or paused state
    *
    * Updates the session state, increments prompt count, starts idle timeout if configured,
    * and broadcasts the state change to clients. If pauseOnCompletion is enabled, the session
-   * transitions to "paused" instead of "waiting".
+   * transitions to "paused" instead of "pending".
    */
   private async transitionToWaiting(executionId: string): Promise<void> {
     const persistentState = this.persistentSessions.get(executionId);
@@ -1452,7 +1453,7 @@ export class AcpExecutorWrapper {
     // Update state - use "paused" if pauseOnCompletion is enabled
     const targetState = persistentState.config.pauseOnCompletion
       ? "paused"
-      : "waiting";
+      : "pending";
     persistentState.state = targetState;
     persistentState.promptCount++;
     persistentState.lastPromptCompletedAt = new Date();
@@ -1462,9 +1463,9 @@ export class AcpExecutorWrapper {
       { promptCount: persistentState.promptCount }
     );
 
-    // Start idle timeout if configured (only for waiting state, not paused)
+    // Start idle timeout if configured (only for pending state, not paused)
     if (
-      targetState === "waiting" &&
+      targetState === "pending" &&
       persistentState.config.idleTimeoutMs &&
       persistentState.config.idleTimeoutMs > 0
     ) {
@@ -1491,7 +1492,7 @@ export class AcpExecutorWrapper {
 
     // Broadcast session state change event
     const eventType =
-      targetState === "paused" ? "session_paused" : "session_waiting";
+      targetState === "paused" ? "session_paused" : "session_pending";
     broadcastSessionEvent(this.projectId, executionId, eventType, {
       promptCount: persistentState.promptCount,
     });
