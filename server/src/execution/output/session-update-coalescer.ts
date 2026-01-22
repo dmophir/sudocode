@@ -96,7 +96,9 @@ export class SessionUpdateCoalescer {
    * @param update - The streaming SessionUpdate or ExtendedSessionUpdate event
    * @returns Coalesced event(s) if any are ready, otherwise empty array
    */
-  process(update: SessionUpdate | ExtendedSessionUpdate): CoalescedSessionUpdate[] {
+  process(
+    update: SessionUpdate | ExtendedSessionUpdate
+  ): CoalescedSessionUpdate[] {
     const results: CoalescedSessionUpdate[] = [];
 
     // Handle extended session update types (compaction, etc.) that aren't part of base SessionUpdate
@@ -176,7 +178,10 @@ export class SessionUpdateCoalescer {
           if (sessionUpdate.rawOutput !== undefined) {
             pending.rawOutput = sessionUpdate.rawOutput;
           }
-          if (sessionUpdate.content !== undefined && sessionUpdate.content !== null) {
+          if (
+            sessionUpdate.content !== undefined &&
+            sessionUpdate.content !== null
+          ) {
             pending.content = sessionUpdate.content;
           }
           if (sessionUpdate.title) {
@@ -202,7 +207,11 @@ export class SessionUpdateCoalescer {
         // Store plan update with entries - entries are directly on the update object
         const planUpdate = sessionUpdate as {
           sessionUpdate: "plan";
-          entries?: Array<{ content: string; status: string; priority: string }>;
+          entries?: Array<{
+            content: string;
+            status: string;
+            priority: string;
+          }>;
         };
         if (planUpdate.entries && planUpdate.entries.length > 0) {
           results.push({
