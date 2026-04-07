@@ -172,6 +172,16 @@ export default function SpecsPage() {
               className="h-9 w-64 pl-8"
             />
           </div>
+          <Select value={sortOption} onValueChange={handleSortChange}>
+            <SelectTrigger className="h-9 w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="priority">Priority</SelectItem>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="last-updated">Updated</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             onClick={() => navigate(paths.archivedSpecs())}
             variant="ghost"
@@ -211,19 +221,6 @@ export default function SpecsPage() {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden px-8 py-4">
-        <div className="mb-4 flex justify-end">
-          <Select value={sortOption} onValueChange={handleSortChange}>
-            <SelectTrigger className="h-9 w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="priority">Priority</SelectItem>
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="last-updated">Last Updated</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         <div className="flex-1 overflow-auto">
           <SpecList
             specs={filteredAndSortedSpecs}

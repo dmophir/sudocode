@@ -1,14 +1,25 @@
 import { useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useIssues, useIssueFeedback } from '@/hooks/useIssues'
 import { useProjectRoutes } from '@/hooks/useProjectRoutes'
 import type { Issue, IssueStatus } from '@/types/api'
 import IssueKanbanBoard from '@/components/issues/IssueKanbanBoard'
 import IssuePanel from '@/components/issues/IssuePanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { useIssueFeedback, useIssues } from '@/hooks/useIssues'
 import { ArrowLeft, Search } from 'lucide-react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
+
+type SortOption = 'priority' | 'newest' | 'last-updated'
+
+const SORT_STORAGE_KEY = 'sudocode:archivedIssues:sortOption'
 
 export default function ArchivedIssuesPage() {
   const navigate = useNavigate()
@@ -27,6 +38,27 @@ export default function ArchivedIssuesPage() {
   const [selectedIssue, setSelectedIssue] = useState<Issue | undefined>()
   const { feedback } = useIssueFeedback(selectedIssue?.id || '')
   const [filterText, setFilterText] = useState('')
+  const [sortOption, setSortOption] = useState<SortOption>(() => {
+    try {
+      const stored = localStorage.getItem(SORT_STORAGE_KEY)
+      if (stored && ['priority', 'newest', 'last-updated'].includes(stored)) {
+        return stored as SortOption
+      }
+    } catch (error) {
+      console.error('Failed to load sort preference from localStorage:', error)
+    }
+    return 'priority'
+  })
+
+  const handleSortChange = useCallback((value: string) => {
+    const newSortOption = value as SortOption
+    setSortOption(newSortOption)
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, newSortOption)
+    } catch (error) {
+      console.error('Failed to save sort preference to localStorage:', error)
+    }
+  }, [])
 
   // Group issues by status
   const groupedIssues = useMemo(() => {
@@ -55,36 +87,36 @@ export default function ArchivedIssuesPage() {
       if (groups[status]) {
         groups[status].push(issue)
       } else {
-        // Default to open if status is unknown
         groups.open.push(issue)
       }
     })
 
-    // Sort each group
+    // Sort each group based on the selected sort option
     Object.keys(groups).forEach((status) => {
       const statusKey = status as IssueStatus
-      if (statusKey === 'closed') {
-        // Sort closed issues by most recent closed_at date
-        groups[statusKey].sort((a, b) => {
-          const aDate = a.closed_at ? new Date(a.closed_at).getTime() : 0
-          const bDate = b.closed_at ? new Date(b.closed_at).getTime() : 0
-          return bDate - aDate // Descending (most recent first)
-        })
-      } else {
-        // Sort other statuses by priority (ascending), then by created_at (ascending)
-        groups[statusKey].sort((a, b) => {
-          // First compare by priority (0 is highest priority)
-          if (a.priority !== b.priority) {
-            return a.priority - b.priority
-          }
-          // If priority is the same, compare by created_at (oldest first)
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        })
-      }
+
+      groups[statusKey].sort((a, b) => {
+        switch (sortOption) {
+          case 'priority':
+            if (a.priority !== b.priority) {
+              return a.priority - b.priority
+            }
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+
+          case 'newest':
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+
+          case 'last-updated':
+            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+
+          default:
+            return 0
+        }
+      })
     })
 
     return groups
-  }, [issues, filterText])
+  }, [issues, filterText, sortOption])
 
   const handleViewIssueDetails = useCallback((issue: Issue) => {
     setSelectedIssue(issue)
@@ -151,15 +183,27 @@ export default function ArchivedIssuesPage() {
             <p className="text-sm text-muted-foreground">{issues.length} archived issues</p>
           </div>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Filter issues..."
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            className="h-9 w-64 pl-8"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Filter issues..."
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              className="h-9 w-64 pl-8"
+            />
+          </div>
+          <Select value={sortOption} onValueChange={handleSortChange}>
+            <SelectTrigger className="h-9 w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="priority">Priority</SelectItem>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="last-updated">Updated</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
