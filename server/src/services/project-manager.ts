@@ -1,34 +1,35 @@
+import {
+    isInitialized,
+    performInitialization,
+} from "@sudocode-ai/cli/dist/cli/init-commands.js";
+import { getConfig, isMarkdownFirst } from "@sudocode-ai/cli/dist/config.js";
+import { exportToJSONL } from "@sudocode-ai/cli/dist/export.js";
+import { importFromJSONL } from "@sudocode-ai/cli/dist/import.js";
+import { syncMarkdownToJSONL } from "@sudocode-ai/cli/dist/sync.js";
+import { discoverProject } from "@sudocode-ai/cli/project-discovery";
+import type Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
-import type Database from "better-sqlite3";
-import { ProjectRegistry } from "./project-registry.js";
-import { ProjectContext } from "./project-context.js";
-import { initDatabase } from "./db.js";
-import { ExecutionService } from "./execution-service.js";
-import { ExecutionLogsStore } from "./execution-logs-store.js";
-import { ExecutionLifecycleService } from "./execution-lifecycle.js";
-import { WorktreeManager } from "../execution/worktree/manager.js";
 import { getWorktreeConfig } from "../execution/worktree/config.js";
-import { startServerWatcher } from "./watcher.js";
+import { WorktreeManager } from "../execution/worktree/manager.js";
 import type { ProjectError, Result } from "../types/project.js";
-import { Ok, Err } from "../types/project.js";
-import { broadcastIssueUpdate, broadcastSpecUpdate } from "./websocket.js";
-import { getIssueById } from "./issues.js";
-import { getSpecById } from "./specs.js";
-import {
-  performInitialization,
-  isInitialized,
-} from "@sudocode-ai/cli/dist/cli/init-commands.js";
-import { importFromJSONL } from "@sudocode-ai/cli/dist/import.js";
-import { getConfig, isMarkdownFirst } from "@sudocode-ai/cli/dist/config.js";
-import { syncMarkdownToJSONL } from "@sudocode-ai/cli/dist/sync.js";
-import { exportToJSONL } from "@sudocode-ai/cli/dist/export.js";
-import { WorkflowEventEmitter } from "../workflow/workflow-event-emitter.js";
-import { createIntegrationSyncService } from "./integration-sync-service.js";
-import { SequentialWorkflowEngine } from "../workflow/engines/sequential-engine.js";
+import { Err, Ok } from "../types/project.js";
 import { OrchestratorWorkflowEngine } from "../workflow/engines/orchestrator-engine.js";
-import { WorkflowWakeupService } from "../workflow/services/wakeup-service.js";
+import { SequentialWorkflowEngine } from "../workflow/engines/sequential-engine.js";
 import { WorkflowPromptBuilder } from "../workflow/services/prompt-builder.js";
+import { WorkflowWakeupService } from "../workflow/services/wakeup-service.js";
+import { WorkflowEventEmitter } from "../workflow/workflow-event-emitter.js";
+import { initDatabase } from "./db.js";
+import { ExecutionLifecycleService } from "./execution-lifecycle.js";
+import { ExecutionLogsStore } from "./execution-logs-store.js";
+import { ExecutionService } from "./execution-service.js";
+import { createIntegrationSyncService } from "./integration-sync-service.js";
+import { getIssueById } from "./issues.js";
+import { ProjectContext } from "./project-context.js";
+import { ProjectRegistry } from "./project-registry.js";
+import { getSpecById } from "./specs.js";
+import { startServerWatcher } from "./watcher.js";
+import { broadcastIssueUpdate, broadcastSpecUpdate } from "./websocket.js";
 import { WorkflowBroadcastService } from "./workflow-broadcast-service.js";
 
 interface CachedDatabase {
@@ -102,8 +103,14 @@ export class ProjectManager {
       const db = await this.getOrCreateDatabase(projectId, projectPath);
 
       // 5. Initialize all services for this project
-      // Get sudocodeDir from registry (which handles SUDOCODE_DIR env var)
-      const registeredProject = this.registry.registerProject(projectPath);
+      // Use project discovery to find the correct sudocodeDir for this project,
+      // rather than relying on SUDOCODE_DIR env var which may point to a different
+      // project (e.g., the one the server was started in).
+      const discovery = discoverProject(projectPath);
+      const discoveredSudocodeDir = discovery.source !== "generated"
+        ? discovery.sudocodeDir
+        : undefined;
+      const registeredProject = this.registry.registerProject(projectPath, discoveredSudocodeDir);
       const sudocodeDir = registeredProject.sudocodeDir;
       const logsStore = new ExecutionLogsStore(db);
       const worktreeConfig = getWorktreeConfig(projectPath);

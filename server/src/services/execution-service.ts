@@ -7,44 +7,44 @@
  * @module services/execution-service
  */
 
+import * as TOML from "@iarna/toml";
+import type {
+    Execution,
+    ExecutionStatus,
+    SessionEndModeConfig,
+    SessionMode,
+} from "@sudocode-ai/types";
+import type { AgentType } from "@sudocode-ai/types/agents";
+import type { ExecutionTask } from "agent-execution-engine/engine";
+import type Database from "better-sqlite3";
+import { execSync } from "child_process";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import fsPromises from "fs/promises";
-import path from "path";
 import os from "os";
-import * as TOML from "@iarna/toml";
-import type Database from "better-sqlite3";
-import type {
-  Execution,
-  ExecutionStatus,
-  SessionMode,
-  SessionEndModeConfig,
-} from "@sudocode-ai/types";
-import { ExecutionLifecycleService } from "./execution-lifecycle.js";
+import path from "path";
+import { AcpExecutorWrapper } from "../execution/executors/acp-executor-wrapper.js";
 import {
-  createExecution,
-  getExecution,
-  updateExecution,
-} from "./executions.js";
-import { randomUUID } from "crypto";
-import { execSync } from "child_process";
-import type { ExecutionTask } from "agent-execution-engine/engine";
+    createExecutorForAgent,
+    type ExecutorWrapper,
+} from "../execution/executors/executor-factory.js";
+import { execFileNoThrow } from "../utils/execFileNoThrow.js";
+import {
+    isVoiceBroadcastEnabled,
+    readVoiceConfig,
+} from "../utils/voice-config.js";
+import { ExecutionLifecycleService } from "./execution-lifecycle.js";
 import { ExecutionLogsStore } from "./execution-logs-store.js";
 import { ExecutionWorkerPool } from "./execution-worker-pool.js";
-import { broadcastExecutionUpdate } from "./websocket.js";
 import {
-  createExecutorForAgent,
-  type ExecutorWrapper,
-} from "../execution/executors/executor-factory.js";
-import { AcpExecutorWrapper } from "../execution/executors/acp-executor-wrapper.js";
-import type { AgentType } from "@sudocode-ai/types/agents";
-import { PromptResolver } from "./prompt-resolver.js";
-import { execFileNoThrow } from "../utils/execFileNoThrow.js";
+    createExecution,
+    getExecution,
+    updateExecution,
+} from "./executions.js";
 import type { NarrationConfig } from "./narration-service.js";
 import { getNarrationConfig } from "./narration-service.js";
-import {
-  readVoiceConfig,
-  isVoiceBroadcastEnabled,
-} from "../utils/voice-config.js";
+import { PromptResolver } from "./prompt-resolver.js";
+import { broadcastExecutionUpdate } from "./websocket.js";
 
 /**
  * MCP server configuration
@@ -94,6 +94,8 @@ export interface ExecutionConfig {
   sessionMode?: SessionMode;
   /** How the persistent session ends (only when sessionMode: "persistent") */
   sessionEndMode?: SessionEndModeConfig;
+  /** Extra environment variables to pass to the agent process */
+  env?: Record<string, string>;
 }
 
 /**
@@ -563,6 +565,16 @@ export class ExecutionService {
       }
     }
 
+    // Inject SUDOCODE_DIR and SUDOCODE_WORKING_DIR into agent process environment.
+    // This ensures any MCP server — including agent-native plugins that bypass the
+    // auto-injected sudocode-mcp config — discovers the correct project instead of
+    // inheriting stale values from the server's process environment.
+    mergedConfig.env = {
+      ...(mergedConfig.env || {}),
+      SUDOCODE_DIR: this.sudocodeDir,
+      SUDOCODE_WORKING_DIR: workDir,
+    };
+
     // Build execution task (prompt already resolved above)
     const task: ExecutionTask = {
       id: execution.id,
@@ -915,6 +927,15 @@ ${feedback}`;
         );
       }
     }
+
+    // Inject SUDOCODE_DIR and SUDOCODE_WORKING_DIR into follow-up agent environment.
+    // This ensures any MCP server — including agent-native plugins — discovers the
+    // correct project instead of inheriting stale values from the server's environment.
+    parsedConfig.env = {
+      ...(parsedConfig.env || {}),
+      SUDOCODE_DIR: this.sudocodeDir,
+      SUDOCODE_WORKING_DIR: workDir,
+    };
 
     // Build execution task for follow-up (use resolved prompt for agent)
     // IMPORTANT: Inherit ALL config from parent execution

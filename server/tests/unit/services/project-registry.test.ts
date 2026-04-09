@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
-import * as path from 'path'
 import * as os from 'os'
+import * as path from 'path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ProjectRegistry } from '../../../src/services/project-registry.js'
 import type { ProjectsConfig } from '../../../src/types/project.js'
 
@@ -590,14 +590,16 @@ describe('ProjectRegistry', () => {
       expect(projectInfo.sudocodeDir).toBe(customDir)
     })
 
-    it('should use SUDOCODE_DIR env var when no customSudocodeDir provided', async () => {
+    it('should NOT use SUDOCODE_DIR env var for new projects (prevents cross-project contamination)', async () => {
       process.env.SUDOCODE_DIR = '/env/custom/.sudocode'
       await registry.load()
 
       const projectPath = '/Users/alex/repos/test-project'
       const projectInfo = registry.registerProject(projectPath)
 
-      expect(projectInfo.sudocodeDir).toBe('/env/custom/.sudocode')
+      // SUDOCODE_DIR should NOT be used for new projects because it may point
+      // to a different project (e.g., the one the server was started in)
+      expect(projectInfo.sudocodeDir).toBe(path.join(projectPath, '.sudocode'))
     })
 
     it('should default to <projectPath>/.sudocode when neither provided', async () => {
@@ -656,29 +658,27 @@ describe('ProjectRegistry', () => {
       await registry.load()
 
       const projectPath = '/Users/alex/repos/test-project'
-      
-      // Register with env var
-      process.env.SUDOCODE_DIR = '/initial/.sudocode'
-      const project1 = registry.registerProject(projectPath)
+
+      // Register with customSudocodeDir
+      const project1 = registry.registerProject(projectPath, '/initial/.sudocode')
       expect(project1.sudocodeDir).toBe('/initial/.sudocode')
 
-      // Re-register without env var - should keep original (sudocodeDir is write-once)
+      // Re-register without override - should keep original (sudocodeDir is write-once)
       delete process.env.SUDOCODE_DIR
       const project2 = registry.registerProject(projectPath)
       expect(project2.sudocodeDir).toBe('/initial/.sudocode')
     })
 
-    it('should handle SUDOCODE_DIR pointing outside project directory', async () => {
+    it('should NOT use SUDOCODE_DIR for paths outside project directory', async () => {
       process.env.SUDOCODE_DIR = '/completely/different/path/.sudocode'
       await registry.load()
 
       const projectPath = '/Users/alex/repos/test-project'
       const projectInfo = registry.registerProject(projectPath)
 
-      expect(projectInfo.sudocodeDir).toBe('/completely/different/path/.sudocode')
+      // SUDOCODE_DIR should NOT be used - falls back to default
+      expect(projectInfo.sudocodeDir).toBe(path.join(projectPath, '.sudocode'))
       expect(projectInfo.path).toBe(projectPath)
-      // sudocodeDir and project path are completely different
-      expect(projectInfo.sudocodeDir).not.toContain(projectInfo.path)
     })
 
     it('should handle paths with spaces in customSudocodeDir', async () => {
@@ -756,13 +756,14 @@ describe('ProjectRegistry', () => {
       expect(registry.getSudocodeDir(projectPath)).toBe(customDir)
     })
 
-    it('should return SUDOCODE_DIR env var for unregistered project', async () => {
+    it('should NOT use SUDOCODE_DIR env var for unregistered project (prevents contamination)', async () => {
       const projectPath = '/Users/alex/repos/unregistered-project'
-      
+
       process.env.SUDOCODE_DIR = '/env-var/.sudocode'
-      
-      // Project is not registered, so env var should be used
-      expect(registry.getSudocodeDir(projectPath)).toBe('/env-var/.sudocode')
+
+      // SUDOCODE_DIR should NOT be used for unregistered projects to prevent
+      // cross-project contamination when server manages multiple projects
+      expect(registry.getSudocodeDir(projectPath)).toBe(path.join(projectPath, '.sudocode'))
     })
 
     it('should return default path for unregistered project without env var', async () => {

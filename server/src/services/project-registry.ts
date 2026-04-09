@@ -1,9 +1,10 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
+import { discoverProject } from '@sudocode-ai/cli/project-discovery'
 import * as crypto from 'crypto'
-import type { ProjectInfo, ProjectsConfig, ProjectError, Result } from '../types/project.js'
-import { Ok, Err } from '../types/project.js'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import type { ProjectError, ProjectInfo, ProjectsConfig, Result } from '../types/project.js'
+import { Err, Ok } from '../types/project.js'
 
 function getDefaultConfig(): ProjectsConfig {
   return {
@@ -186,10 +187,24 @@ export class ProjectRegistry {
     }
 
     // Create new project info
-    // Priority for new projects: customSudocodeDir param > SUDOCODE_DIR env var > default
-    const sudocodeDir = customSudocodeDir || 
-                        process.env.SUDOCODE_DIR || 
-                        path.join(projectPath, '.sudocode')
+    // Priority for new projects: customSudocodeDir param > project discovery > default
+    // Note: SUDOCODE_DIR env var is NOT used here to avoid cross-project contamination
+    // when the server manages multiple projects with different sudocode directories.
+    let sudocodeDir: string;
+    let sudocodeDirSource: string;
+    if (customSudocodeDir) {
+      sudocodeDir = customSudocodeDir;
+      sudocodeDirSource = 'customSudocodeDir parameter';
+    } else {
+      const discovery = discoverProject(projectPath);
+      if (discovery.source !== 'generated') {
+        sudocodeDir = discovery.sudocodeDir;
+        sudocodeDirSource = `discovery (${discovery.source})`;
+      } else {
+        sudocodeDir = path.join(projectPath, '.sudocode');
+        sudocodeDirSource = 'default (<projectPath>/.sudocode)';
+      }
+    }
     
     const projectInfo: ProjectInfo = {
       id: projectId,
@@ -205,13 +220,7 @@ export class ProjectRegistry {
     this.addToRecent(projectId)
 
     console.log(`[registry] registerProject (new): projectId=${projectId}, workingDir=${projectPath}, sudocodeDir=${sudocodeDir}`)
-    if (customSudocodeDir) {
-      console.log(`[registry]   -> sudocodeDir from: customSudocodeDir parameter`)
-    } else if (process.env.SUDOCODE_DIR) {
-      console.log(`[registry]   -> sudocodeDir from: SUDOCODE_DIR env var`)
-    } else {
-      console.log(`[registry]   -> sudocodeDir from: default (<projectPath>/.sudocode)`)
-    }
+    console.log(`[registry]   -> sudocodeDir from: ${sudocodeDirSource}`)
 
     return projectInfo
   }
@@ -256,9 +265,13 @@ export class ProjectRegistry {
    * 
    * Priority (highest to lowest):
    * 1. Stored value in projects.json (if project is registered)
-   * 2. SUDOCODE_DIR environment variable
+   * 2. CLI project discovery (reads ~/.config/sudocode/projects.json)
    * 3. Default: <projectPath>/.sudocode
-   * 
+   *
+   * Note: SUDOCODE_DIR env var is NOT used here because it may point to a
+   * different project (e.g., the one the server was started in). Instead,
+   * we use CLI project discovery which reads the shared registry file.
+   *
    * This is the single source of truth for sudocodeDir resolution.
    * All code paths that need sudocodeDir should use this method.
    */
@@ -272,10 +285,16 @@ export class ProjectRegistry {
       return existing.sudocodeDir
     }
     
-    // Not registered yet - compute from env var or default
-    const sudocodeDir = process.env.SUDOCODE_DIR || path.join(projectPath, '.sudocode')
-    const source = process.env.SUDOCODE_DIR ? 'SUDOCODE_DIR env var' : 'default'
-    console.log(`[registry] getSudocodeDir: projectId=${projectId}, workingDir=${projectPath}, sudocodeDir=${sudocodeDir} (from ${source}, project not registered)`)
+    // Not registered yet - use project discovery instead of SUDOCODE_DIR env var
+    // to avoid cross-project contamination when server manages multiple projects
+    const discovery = discoverProject(projectPath)
+    if (discovery.source !== 'generated') {
+      console.log(`[registry] getSudocodeDir: projectId=${projectId}, workingDir=${projectPath}, sudocodeDir=${discovery.sudocodeDir} (from discovery: ${discovery.source})`)
+      return discovery.sudocodeDir
+    }
+
+    const sudocodeDir = path.join(projectPath, '.sudocode')
+    console.log(`[registry] getSudocodeDir: projectId=${projectId}, workingDir=${projectPath}, sudocodeDir=${sudocodeDir} (from default, project not registered)`)
     return sudocodeDir
   }
 
