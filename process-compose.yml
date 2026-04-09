@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/F1bonacc1/process-compose/main/schemas/process-compose-schema.json
+
+version: "0.5"
+is_strict: true
+ordered_shutdown: true
+log_level: info
+
+environment:
+  - "SUDOCODE_DIR=${SUDOCODE_DIR:-.sudocode}"
+  - "SUDOCODE_WORKING_DIR=${SUDOCODE_WORKING_DIR:-.}"
+  - "SUDOCODE_PORT=${SUDOCODE_PORT:-3000}"
+
+processes:
+  build:
+    command: npm run build
+    description: Build all workspace packages
+    availability:
+      restart: "no"
+
+  link:
+    command: npm run link
+    description: Link CLI, server, and MCP packages globally
+    depends_on:
+      build:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  server:
+    command: "sudocode server --port ${SUDOCODE_PORT:-3000}"
+    description: Run the sudocode local server
+    depends_on:
+      link:
+        condition: process_completed_successfully
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        port: "${SUDOCODE_PORT:-3000}"
+        path: /health
+        scheme: http
+      initial_delay_seconds: 3
+      period_seconds: 10
+      timeout_seconds: 5
+      failure_threshold: 3
+    availability:
+      restart: on_failure
+      backoff_seconds: 5
+      max_restarts: 3
+    shutdown:
+      signal: 15
+      timeout_seconds: 10
