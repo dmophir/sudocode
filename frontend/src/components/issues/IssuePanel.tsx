@@ -47,7 +47,6 @@ import { toast } from 'sonner'
 import { findLatestExecutionInChain } from '@/utils/executions'
 // Components and hooks for external link rendering
 import { ExternalLinkBadge, RefreshConflictDialog } from '@/components/import'
-// @ts-expect-error -- StaleLinkWarning used in subsequent workflow step
 import { StaleLinkWarning } from '@/components/import'
 import { useRefreshEntity } from '@/hooks/useRefreshEntity'
 import type { FieldChange } from '@/lib/api'
@@ -163,7 +162,7 @@ export function IssuePanel({
   // Refresh/external link state
   const [showRefreshConflictDialog, setShowRefreshConflictDialog] = useState(false)
   const [refreshConflictChanges, setRefreshConflictChanges] = useState<FieldChange[]>([])
-  const [_staleLinkDismissed, setStaleLinkDismissed] = useState(false)
+  const [staleLinkDismissed, setStaleLinkDismissed] = useState(false)
 
   // Refresh hook for external links
   const {
@@ -1119,6 +1118,20 @@ export function IssuePanel({
                 )}
               </div>
             </div>
+
+            {/* Stale Link Warning */}
+            {issue.external_links &&
+              issue.external_links.some((link) => link.metadata?.stale === true) &&
+              !staleLinkDismissed && (
+                <StaleLinkWarning
+                  link={issue.external_links.find((link) => link.metadata?.stale === true)!}
+                  onUnlink={() => {
+                    // TODO: Implement unlink functionality via API
+                    toast.info('Unlink functionality coming soon')
+                  }}
+                  onDismiss={() => setStaleLinkDismissed(true)}
+                />
+              )}
 
             {/* Metadata Row */}
             <div className="flex flex-wrap items-center gap-4">
