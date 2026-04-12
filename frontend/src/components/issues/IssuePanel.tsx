@@ -46,6 +46,11 @@ import type { IssueFeedback, WebSocketMessage } from '@/types/api'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { toast } from 'sonner'
 import { findLatestExecutionInChain } from '@/utils/executions'
+// Components and hooks for external link rendering (used in subsequent steps)
+// @ts-expect-error -- Components used in subsequent workflow steps
+import { ExternalLinkBadge, RefreshConflictDialog, StaleLinkWarning } from '@/components/import'
+import { useRefreshEntity } from '@/hooks/useRefreshEntity'
+import type { FieldChange } from '@/lib/api'
 
 const VIEW_MODE_STORAGE_KEY = 'sudocode:details:viewMode'
 const DESCRIPTION_COLLAPSED_STORAGE_KEY = 'sudocode:issue:descriptionCollapsed'
@@ -154,6 +159,36 @@ export function IssuePanel({
   // Auto-scroll state and refs (enabled when execution is running)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false)
   const [isScrollable, setIsScrollable] = useState(false)
+
+  // Refresh/external link state
+  const [_showRefreshConflictDialog, setShowRefreshConflictDialog] = useState(false)
+  const [_refreshConflictChanges, setRefreshConflictChanges] = useState<FieldChange[]>([])
+  const [_staleLinkDismissed, setStaleLinkDismissed] = useState(false)
+
+  // Refresh hook for external links
+  const {
+    refresh: _refreshIssue,
+    forceRefresh: _forceRefreshIssue,
+    isRefreshing: _isRefreshing,
+    isForceRefreshing: _isForceRefreshing,
+  } = useRefreshEntity({
+    entityId: issue.id || '',
+    entityType: 'issue',
+    onConflict: (result) => {
+      if (result.changes) {
+        setRefreshConflictChanges(result.changes)
+        setShowRefreshConflictDialog(true)
+      }
+    },
+    onStale: () => {
+      setStaleLinkDismissed(false)
+    },
+    onSuccess: () => {
+      setShowRefreshConflictDialog(false)
+      setRefreshConflictChanges([])
+    },
+  })
+
   const lastScrollTopRef = useRef(0)
   const isScrollingToTopRef = useRef(false)
 
