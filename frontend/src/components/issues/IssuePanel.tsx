@@ -161,16 +161,16 @@ export function IssuePanel({
   const [isScrollable, setIsScrollable] = useState(false)
 
   // Refresh/external link state
-  const [_showRefreshConflictDialog, setShowRefreshConflictDialog] = useState(false)
-  const [_refreshConflictChanges, setRefreshConflictChanges] = useState<FieldChange[]>([])
+  const [showRefreshConflictDialog, setShowRefreshConflictDialog] = useState(false)
+  const [refreshConflictChanges, setRefreshConflictChanges] = useState<FieldChange[]>([])
   const [_staleLinkDismissed, setStaleLinkDismissed] = useState(false)
 
   // Refresh hook for external links
   const {
     refresh: _refreshIssue,
-    forceRefresh: _forceRefreshIssue,
+    forceRefresh: forceRefreshIssue,
     isRefreshing: _isRefreshing,
-    isForceRefreshing: _isForceRefreshing,
+    isForceRefreshing,
   } = useRefreshEntity({
     entityId: issue.id || '',
     entityType: 'issue',
@@ -1486,6 +1486,22 @@ export function IssuePanel({
           onClose={() => setShowDeleteDialog(false)}
           onConfirm={handleDelete}
           isDeleting={isDeleting}
+        />
+
+        {/* Refresh Conflict Dialog */}
+        <RefreshConflictDialog
+          open={showRefreshConflictDialog}
+          changes={refreshConflictChanges}
+          onKeepLocal={() => {
+            setShowRefreshConflictDialog(false)
+            setRefreshConflictChanges([])
+          }}
+          onOverwrite={() => forceRefreshIssue()}
+          onCancel={() => {
+            setShowRefreshConflictDialog(false)
+            setRefreshConflictChanges([])
+          }}
+          isOverwriting={isForceRefreshing}
         />
       </div>
     </TooltipProvider>
