@@ -18,7 +18,6 @@ import {
   ChevronUp,
   ArrowDown,
   ArrowUp,
-  Link,
 } from 'lucide-react'
 import type { Issue, Relationship, EntityType, RelationshipType, IssueStatus } from '@/types/api'
 import { Card } from '@/components/ui/card'
@@ -46,9 +45,10 @@ import type { IssueFeedback, WebSocketMessage } from '@/types/api'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { toast } from 'sonner'
 import { findLatestExecutionInChain } from '@/utils/executions'
-// Components and hooks for external link rendering (used in subsequent steps)
-// @ts-expect-error -- Components used in subsequent workflow steps
-import { ExternalLinkBadge, RefreshConflictDialog, StaleLinkWarning } from '@/components/import'
+// Components and hooks for external link rendering
+import { ExternalLinkBadge, RefreshConflictDialog } from '@/components/import'
+// @ts-expect-error -- StaleLinkWarning used in subsequent workflow step
+import { StaleLinkWarning } from '@/components/import'
 import { useRefreshEntity } from '@/hooks/useRefreshEntity'
 import type { FieldChange } from '@/lib/api'
 
@@ -167,9 +167,9 @@ export function IssuePanel({
 
   // Refresh hook for external links
   const {
-    refresh: _refreshIssue,
+    refresh: refreshIssue,
     forceRefresh: forceRefreshIssue,
-    isRefreshing: _isRefreshing,
+    isRefreshing,
     isForceRefreshing,
   } = useRefreshEntity({
     entityId: issue.id || '',
@@ -1081,14 +1081,18 @@ export function IssuePanel({
             {/* Parent/children and save status */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {issue.external_links &&
-                  issue.external_links.length > 0 &&
-                  issue.external_links.map((link) => (
-                    <Badge key={`${link.provider}-${link.external_id}`} variant="issue">
-                      <Link className="mr-1 h-3 w-3" />
-                      {link.provider}: {link.external_id}
-                    </Badge>
-                  ))}
+                {issue.external_links && issue.external_links.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {issue.external_links.map((link) => (
+                      <ExternalLinkBadge
+                        key={`${link.provider}-${link.external_id}`}
+                        link={link}
+                        onRefresh={() => refreshIssue()}
+                        isRefreshing={isRefreshing || isForceRefreshing}
+                      />
+                    ))}
+                  </div>
+                )}
                 {issue.parent_id && (
                   <>
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
