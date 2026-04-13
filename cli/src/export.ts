@@ -2,6 +2,7 @@
  * Export SQLite data to JSONL files
  */
 
+import path from "node:path";
 import type Database from "better-sqlite3";
 import type {
   Spec,
@@ -248,8 +249,21 @@ export async function exportToJSONL(
   const issuesPath = `${outputDir}/${issuesFile}`;
 
   // Read existing external_links from JSONL files (to preserve them since SQLite doesn't store them)
-  const existingSpecLinks = readExistingExternalLinks<SpecJSONL>(specsPath);
-  const existingIssueLinks = readExistingExternalLinks<IssueJSONL>(issuesPath);
+  let existingSpecLinks = readExistingExternalLinks<SpecJSONL>(specsPath);
+  let existingIssueLinks = readExistingExternalLinks<IssueJSONL>(issuesPath);
+
+  // Fallback: if exporting to a non-canonical directory (e.g., temp dir),
+  // try reading external_links from the canonical .sudocode/ directory.
+  // db.name returns the database file path (e.g., /path/to/.sudocode/cache.db)
+  if (existingSpecLinks.size === 0 && existingIssueLinks.size === 0) {
+    const dbDir = path.dirname(db.name);
+    if (dbDir !== outputDir) {
+      const canonicalSpecLinks = readExistingExternalLinks<SpecJSONL>(`${dbDir}/${specsFile}`);
+      const canonicalIssueLinks = readExistingExternalLinks<IssueJSONL>(`${dbDir}/${issuesFile}`);
+      if (canonicalSpecLinks.size > 0) existingSpecLinks = canonicalSpecLinks;
+      if (canonicalIssueLinks.size > 0) existingIssueLinks = canonicalIssueLinks;
+    }
+  }
 
   // Export specs with preserved external_links
   const specs = exportSpecsToJSONL(db, options, existingSpecLinks);
