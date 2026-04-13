@@ -564,83 +564,88 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
 
   /**
    * Resolve a spec source to issue IDs.
-   * Finds all issues that implement the spec, plus their blocking dependencies.
+   * Finds all issues that implement the spec (including child specs),
+   * plus their blocking dependencies, depends-on targets, and parent_id children.
    */
   private resolveSpecSource(specId: string): string[] {
-    // Find issues that have "implements" relationship to this spec
-    const relationships = getIncomingRelationships(
-      this.db,
-      specId,
-      "spec",
-      "implements"
-    );
+    // Collect all spec IDs: the root spec plus all descendant specs via parent_id
+    const allSpecIds = new Set<string>();
+    this.collectChildSpecs(specId, allSpecIds);
 
-    // Filter to only issue sources
-    const rootIssueIds = relationships
-      .filter((rel) => rel.from_type === "issue")
-      .map((rel) => rel.from_id);
+    // Find issues that implement any of these specs
+    const rootIssueIds: string[] = [];
+    for (const sid of allSpecIds) {
+      const relationships = getIncomingRelationships(
+        this.db,
+        sid,
+        "spec",
+        "implements"
+      );
 
-    // If no issues implement the spec, return empty
+      for (const rel of relationships) {
+        if (rel.from_type === "issue") {
+          rootIssueIds.push(rel.from_id);
+        }
+      }
+    }
+
+    // If no issues implement the spec(s), return empty
     if (rootIssueIds.length === 0) {
       return [];
     }
 
-    // For each root issue, traverse blocking relationships to find all dependent issues
+    // For each implementing issue, traverse all relationships to find the full graph
     const allIssueIds = new Set<string>();
 
     for (const rootIssueId of rootIssueIds) {
-      this.collectBlockingIssues(rootIssueId, allIssueIds);
+      this.collectAllRelatedIssues(rootIssueId, allIssueIds);
     }
 
     return Array.from(allIssueIds);
   }
 
   /**
-   * Recursively collect all issues that block the given issue (including the issue itself).
-   * Traverses the "blocks" relationship graph.
+   * Recursively collect a spec and all its descendant specs via parent_id.
    */
-  private collectBlockingIssues(issueId: string, collected: Set<string>): void {
-    if (collected.has(issueId)) {
+  private collectChildSpecs(specId: string, collected: Set<string>): void {
+    if (collected.has(specId)) {
       return;
     }
 
-    collected.add(issueId);
+    collected.add(specId);
 
-    // Find issues that block this issue
-    // "blocks" relationship: from_id blocks to_id
-    // So we need incoming relationships where to_id = issueId
-    const blocksRels = getIncomingRelationships(
-      this.db,
-      issueId,
-      "issue",
-      "blocks"
-    );
+    const children = this.db
+      .prepare(`SELECT id FROM specs WHERE parent_id = ?`)
+      .all(specId) as Array<{ id: string }>;
 
-    for (const rel of blocksRels) {
-      if (rel.from_type === "issue") {
-        this.collectBlockingIssues(rel.from_id, collected);
-      }
+    for (const child of children) {
+      this.collectChildSpecs(child.id, collected);
     }
   }
 
   /**
-   * Resolve a root issue source to issue IDs.
-   * Returns the root issue plus all issues that block it (recursively).
+   * Collect all related issues from a starting issue using BFS.
+   * Traverses:
+   * - "blocks" relationships (incoming: what blocks this issue)
+   * - "depends-on" relationships (outgoing: what this issue depends on)
+   * - parent_id children (issues whose parent_id points to this issue)
    */
-  private resolveRootIssueSource(rootIssueId: string): string[] {
-    const issueIds = new Set<string>();
-    const queue = [rootIssueId];
+  private collectAllRelatedIssues(
+    startIssueId: string,
+    collected: Set<string>
+  ): void {
+    const queue = [startIssueId];
 
     while (queue.length > 0) {
       const issueId = queue.shift()!;
 
-      if (issueIds.has(issueId)) {
+      if (collected.has(issueId)) {
         continue;
       }
 
-      issueIds.add(issueId);
+      collected.add(issueId);
 
-      // Find issues that block this issue
+      // 1. Find issues that block this issue
       // "blocks" relationship: from_id blocks to_id
       const blocksRels = getIncomingRelationships(
         this.db,
@@ -650,14 +655,13 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
       );
 
       for (const rel of blocksRels) {
-        if (rel.from_type === "issue" && !issueIds.has(rel.from_id)) {
+        if (rel.from_type === "issue" && !collected.has(rel.from_id)) {
           queue.push(rel.from_id);
         }
       }
 
-      // Find issues this issue depends on
+      // 2. Find issues this issue depends on
       // "depends-on" relationship: from_id depends on to_id
-      // We need outgoing depends-on relationships
       const dependsOnRels = this.db
         .prepare(
           `
@@ -672,12 +676,32 @@ export abstract class BaseWorkflowEngine implements IWorkflowEngine {
       }>;
 
       for (const rel of dependsOnRels) {
-        if (rel.to_type === "issue" && !issueIds.has(rel.to_id)) {
+        if (rel.to_type === "issue" && !collected.has(rel.to_id)) {
           queue.push(rel.to_id);
         }
       }
-    }
 
+      // 3. Find child issues (issues whose parent_id is this issue)
+      const children = this.db
+        .prepare(`SELECT id FROM issues WHERE parent_id = ?`)
+        .all(issueId) as Array<{ id: string }>;
+
+      for (const child of children) {
+        if (!collected.has(child.id)) {
+          queue.push(child.id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve a root issue source to issue IDs.
+   * Returns the root issue plus all related issues discovered by traversing
+   * blocks, depends-on relationships, and parent_id children.
+   */
+  private resolveRootIssueSource(rootIssueId: string): string[] {
+    const issueIds = new Set<string>();
+    this.collectAllRelatedIssues(rootIssueId, issueIds);
     return Array.from(issueIds);
   }
 

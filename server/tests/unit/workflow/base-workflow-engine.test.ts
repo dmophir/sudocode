@@ -17,7 +17,7 @@ import type {
   WorkflowStep,
   DependencyGraph,
 } from "@sudocode-ai/types";
-import { WORKFLOWS_TABLE, EXECUTIONS_TABLE } from "@sudocode-ai/types/schema";
+import { WORKFLOWS_TABLE, EXECUTIONS_TABLE, ISSUES_TABLE, SPECS_TABLE } from "@sudocode-ai/types/schema";
 import { BaseWorkflowEngine } from "../../../src/workflow/base-workflow-engine.js";
 import {
   WorkflowEventEmitter,
@@ -189,19 +189,25 @@ describe("BaseWorkflowEngine", () => {
     // Create workflows table
     db.exec(WORKFLOWS_TABLE);
 
+    // Create issues table (needed for parent_id child lookups)
+    db.exec(ISSUES_TABLE);
+
+    // Create specs table (needed for child spec lookups)
+    db.exec(SPECS_TABLE);
+
     // Create relationships table for source resolution tests
     db.exec(`
       CREATE TABLE IF NOT EXISTS relationships (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         from_id TEXT NOT NULL,
-        from_uuid TEXT,
+        from_uuid TEXT NOT NULL DEFAULT '',
         from_type TEXT NOT NULL,
         to_id TEXT NOT NULL,
-        to_uuid TEXT,
+        to_uuid TEXT NOT NULL DEFAULT '',
         to_type TEXT NOT NULL,
         relationship_type TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        metadata TEXT
+        metadata TEXT,
+        PRIMARY KEY (from_id, from_type, to_id, to_type, relationship_type)
       )
     `);
 
@@ -322,6 +328,194 @@ describe("BaseWorkflowEngine", () => {
         const result = await engine.testResolveSource(source);
 
         expect(result).toEqual([]);
+      });
+
+      it("should discover child issues linked via parent_id (no blocks relationship)", async () => {
+        // Spec s-spec is implemented by i-parent.
+        // i-child has parent_id = i-parent but NO "blocks" relationship.
+        // The workflow should discover both i-parent and i-child.
+        mockGetIncomingRelationships.mockImplementation((db, entityId, entityType, relType) => {
+          if (entityId === "s-spec" && relType === "implements") {
+            return [
+              {
+                from_id: "i-parent",
+                from_uuid: "uuid-parent",
+                from_type: "issue",
+                to_id: "s-spec",
+                to_uuid: "uuid-spec",
+                to_type: "spec",
+                relationship_type: "implements",
+                created_at: "2024-01-01T00:00:00.000Z",
+              },
+            ];
+          }
+          // No "blocks" relationships
+          return [];
+        });
+
+        // Insert the child issue with parent_id in the database
+        db.exec(`
+          INSERT INTO issues (id, uuid, title, content, parent_id)
+          VALUES ('i-parent', 'uuid-parent', 'Parent Issue', '', NULL),
+                 ('i-child', 'uuid-child', 'Child Issue', '', 'i-parent')
+        `);
+
+        const source: WorkflowSource = {
+          type: "spec",
+          specId: "s-spec",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-parent");
+        expect(result).toContain("i-child");
+        expect(result.length).toBe(2);
+      });
+
+      it("should discover issues linked via depends-on relationships", async () => {
+        // Spec s-spec is implemented by i-impl.
+        // i-impl depends-on i-dep (via depends-on relationship, NOT blocks).
+        mockGetIncomingRelationships.mockImplementation((db, entityId, entityType, relType) => {
+          if (entityId === "s-spec" && relType === "implements") {
+            return [
+              {
+                from_id: "i-impl",
+                from_uuid: "uuid-impl",
+                from_type: "issue",
+                to_id: "s-spec",
+                to_uuid: "uuid-spec",
+                to_type: "spec",
+                relationship_type: "implements",
+                created_at: "2024-01-01T00:00:00.000Z",
+              },
+            ];
+          }
+          // No "blocks" relationships
+          return [];
+        });
+
+        // Insert depends-on relationship in the database
+        db.exec(`
+          INSERT INTO relationships (from_id, from_type, to_id, to_type, relationship_type)
+          VALUES ('i-impl', 'issue', 'i-dep', 'issue', 'depends-on')
+        `);
+
+        const source: WorkflowSource = {
+          type: "spec",
+          specId: "s-spec",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-impl");
+        expect(result).toContain("i-dep");
+        expect(result.length).toBe(2);
+      });
+
+      it("should discover issues implementing child specs", async () => {
+        // Spec s-parent has child spec s-child (via parent_id).
+        // s-parent is implemented by i-parent-impl.
+        // s-child is implemented by i-child-impl.
+        // Workflow should discover both.
+        mockGetIncomingRelationships.mockImplementation((db, entityId, entityType, relType) => {
+          if (relType === "implements") {
+            if (entityId === "s-parent") {
+              return [
+                {
+                  from_id: "i-parent-impl",
+                  from_uuid: "uuid-pi",
+                  from_type: "issue",
+                  to_id: "s-parent",
+                  to_uuid: "uuid-sp",
+                  to_type: "spec",
+                  relationship_type: "implements",
+                  created_at: "2024-01-01T00:00:00.000Z",
+                },
+              ];
+            }
+            if (entityId === "s-child") {
+              return [
+                {
+                  from_id: "i-child-impl",
+                  from_uuid: "uuid-ci",
+                  from_type: "issue",
+                  to_id: "s-child",
+                  to_uuid: "uuid-sc",
+                  to_type: "spec",
+                  relationship_type: "implements",
+                  created_at: "2024-01-01T00:00:00.000Z",
+                },
+              ];
+            }
+          }
+          return [];
+        });
+
+        // Insert child spec with parent_id = s-parent
+        db.exec(`
+          INSERT INTO specs (id, uuid, title, file_path, content, parent_id)
+          VALUES ('s-parent', 'uuid-sp', 'Parent Spec', '/specs/parent.md', '', NULL),
+                 ('s-child', 'uuid-sc', 'Child Spec', '/specs/child.md', '', 's-parent')
+        `);
+
+        const source: WorkflowSource = {
+          type: "spec",
+          specId: "s-parent",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-parent-impl");
+        expect(result).toContain("i-child-impl");
+        expect(result.length).toBe(2);
+      });
+
+      it("should discover deeply nested child specs and their issues", async () => {
+        // s-root -> s-mid -> s-leaf (each has parent_id pointing to parent)
+        // Each spec has one implementing issue.
+        mockGetIncomingRelationships.mockImplementation((db, entityId, entityType, relType) => {
+          if (relType === "implements") {
+            const specToIssue: Record<string, string> = {
+              "s-root": "i-root-impl",
+              "s-mid": "i-mid-impl",
+              "s-leaf": "i-leaf-impl",
+            };
+            if (specToIssue[entityId]) {
+              return [
+                {
+                  from_id: specToIssue[entityId],
+                  from_uuid: `uuid-${specToIssue[entityId]}`,
+                  from_type: "issue",
+                  to_id: entityId,
+                  to_uuid: `uuid-${entityId}`,
+                  to_type: "spec",
+                  relationship_type: "implements",
+                  created_at: "2024-01-01T00:00:00.000Z",
+                },
+              ];
+            }
+          }
+          return [];
+        });
+
+        db.exec(`
+          INSERT INTO specs (id, uuid, title, file_path, content, parent_id)
+          VALUES ('s-root', 'uuid-s-root', 'Root Spec', '/specs/root.md', '', NULL),
+                 ('s-mid', 'uuid-s-mid', 'Mid Spec', '/specs/mid.md', '', 's-root'),
+                 ('s-leaf', 'uuid-s-leaf', 'Leaf Spec', '/specs/leaf.md', '', 's-mid')
+        `);
+
+        const source: WorkflowSource = {
+          type: "spec",
+          specId: "s-root",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-root-impl");
+        expect(result).toContain("i-mid-impl");
+        expect(result).toContain("i-leaf-impl");
+        expect(result.length).toBe(3);
       });
 
       it("should filter out non-issue sources", async () => {
@@ -477,6 +671,106 @@ describe("BaseWorkflowEngine", () => {
         expect(result).toContain("i-a");
         expect(result).toContain("i-b");
         expect(result.length).toBe(2);
+      });
+
+      it("should discover child issues linked via parent_id", async () => {
+        // i-root has two children (i-child1 and i-child2) via parent_id.
+        // No "blocks" or "depends-on" relationships exist.
+        mockGetIncomingRelationships.mockReturnValue([]);
+
+        // Insert root and children in the database
+        db.exec(`
+          INSERT INTO issues (id, uuid, title, content, parent_id)
+          VALUES ('i-root', 'uuid-root', 'Root Issue', '', NULL),
+                 ('i-child1', 'uuid-child1', 'Child 1', '', 'i-root'),
+                 ('i-child2', 'uuid-child2', 'Child 2', '', 'i-root')
+        `);
+
+        const source: WorkflowSource = {
+          type: "root_issue",
+          issueId: "i-root",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-root");
+        expect(result).toContain("i-child1");
+        expect(result).toContain("i-child2");
+        expect(result.length).toBe(3);
+      });
+
+      it("should discover deeply nested children via parent_id", async () => {
+        // i-root -> i-child -> i-grandchild (each via parent_id)
+        mockGetIncomingRelationships.mockReturnValue([]);
+
+        db.exec(`
+          INSERT INTO issues (id, uuid, title, content, parent_id)
+          VALUES ('i-root', 'uuid-root', 'Root', '', NULL),
+                 ('i-child', 'uuid-child', 'Child', '', 'i-root'),
+                 ('i-grandchild', 'uuid-gc', 'Grandchild', '', 'i-child')
+        `);
+
+        const source: WorkflowSource = {
+          type: "root_issue",
+          issueId: "i-root",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-root");
+        expect(result).toContain("i-child");
+        expect(result).toContain("i-grandchild");
+        expect(result.length).toBe(3);
+      });
+
+      it("should combine blocks, depends-on, and parent_id traversal", async () => {
+        // i-root is blocked by i-blocker.
+        // i-root depends-on i-dep.
+        // i-root has child i-child via parent_id.
+        // All four should be discovered.
+        mockGetIncomingRelationships.mockImplementation((db, issueId, entityType, relType) => {
+          if (relType === "blocks" && issueId === "i-root") {
+            return [
+              {
+                from_id: "i-blocker",
+                from_uuid: "uuid-blocker",
+                from_type: "issue",
+                to_id: "i-root",
+                to_uuid: "uuid-root",
+                to_type: "issue",
+                relationship_type: "blocks",
+                created_at: "2024-01-01T00:00:00.000Z",
+              },
+            ];
+          }
+          return [];
+        });
+
+        // depends-on relationship
+        db.exec(`
+          INSERT INTO relationships (from_id, from_type, to_id, to_type, relationship_type)
+          VALUES ('i-root', 'issue', 'i-dep', 'issue', 'depends-on')
+        `);
+
+        // parent_id child
+        db.exec(`
+          INSERT INTO issues (id, uuid, title, content, parent_id)
+          VALUES ('i-root', 'uuid-root', 'Root', '', NULL),
+                 ('i-child', 'uuid-child', 'Child', '', 'i-root')
+        `);
+
+        const source: WorkflowSource = {
+          type: "root_issue",
+          issueId: "i-root",
+        };
+
+        const result = await engine.testResolveSource(source);
+
+        expect(result).toContain("i-root");
+        expect(result).toContain("i-blocker");
+        expect(result).toContain("i-dep");
+        expect(result).toContain("i-child");
+        expect(result.length).toBe(4);
       });
     });
 
