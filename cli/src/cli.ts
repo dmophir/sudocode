@@ -29,6 +29,13 @@ import {
   handleIssueDelete,
 } from "./cli/issue-commands.js";
 import { handleLink } from "./cli/relationship-commands.js";
+import {
+  handleExternalLinkAdd,
+  handleExternalLinkUpdate,
+  handleExternalLinkList,
+  handleExternalLinkRemove,
+  handleExternalLinkFind,
+} from "./cli/external-link-commands.js";
 import { handleAddReference } from "./cli/reference-commands.js";
 import { handleReady, handleBlocked } from "./cli/query-commands.js";
 import { handleSync, handleExport, handleImport } from "./cli/sync-commands.js";
@@ -402,6 +409,75 @@ program
   .option("-t, --type <type>", "Relationship type", "references")
   .action(async (from, to, options) => {
     await handleLink(getContext(), from, to, options);
+  });
+
+// ============================================================================
+// EXTERNAL LINK COMMANDS
+// ============================================================================
+
+const externalLink = program
+  .command("external-link")
+  .alias("el")
+  .description("Manage external links");
+
+externalLink
+  .command("add <entity-id>")
+  .description("Add an external link to a spec or issue")
+  .requiredOption("--provider <name>", "Integration provider name")
+  .requiredOption("--external-id <id>", "Unique ID in external system")
+  .option("--external-url <url>", "URL to view in external system")
+  .option(
+    "--sync-direction <direction>",
+    "Sync direction: inbound, outbound, or bidirectional",
+    "bidirectional"
+  )
+  .option("--sync-enabled", "Enable sync (default: true)")
+  .option("--content-hash <hash>", "Content hash for change detection")
+  .option("--metadata <json>", "JSON string of provider-specific metadata")
+  .action(async (entityId, options) => {
+    await handleExternalLinkAdd(getContext(), entityId, options);
+  });
+
+externalLink
+  .command("update <entity-id>")
+  .description("Update an existing external link")
+  .requiredOption("--external-id <id>", "External ID of the link to update")
+  .option("--last-synced-at <iso>", "Update last sync timestamp (ISO 8601)")
+  .option(
+    "--external-updated-at <iso>",
+    "Update external system timestamp (ISO 8601)"
+  )
+  .option("--sync-enabled", "Enable sync")
+  .option("--no-sync-enabled", "Disable sync")
+  .option("--content-hash <hash>", "Update content hash")
+  .option("--external-url <url>", "Update external URL")
+  .option("--metadata <json>", "Replace metadata (JSON object)")
+  .action(async (entityId, options) => {
+    await handleExternalLinkUpdate(getContext(), entityId, options);
+  });
+
+externalLink
+  .command("list <entity-id>")
+  .description("List all external links for a spec or issue")
+  .action(async (entityId) => {
+    await handleExternalLinkList(getContext(), entityId);
+  });
+
+externalLink
+  .command("remove <entity-id>")
+  .description("Remove an external link")
+  .requiredOption("--external-id <id>", "External ID of the link to remove")
+  .action(async (entityId, options) => {
+    await handleExternalLinkRemove(getContext(), entityId, options);
+  });
+
+externalLink
+  .command("find")
+  .description("Find entities by external link")
+  .requiredOption("--provider <name>", "Integration provider name")
+  .requiredOption("--external-id <id>", "External ID to search for")
+  .action(async (options) => {
+    await handleExternalLinkFind(getContext(), options);
   });
 
 // ============================================================================
