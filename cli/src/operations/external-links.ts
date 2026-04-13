@@ -132,7 +132,12 @@ export function updateSpecExternalLinkSync(
   updates: Partial<
     Pick<
       ExternalLink,
-      "last_synced_at" | "external_updated_at" | "sync_enabled"
+      | "last_synced_at"
+      | "external_updated_at"
+      | "sync_enabled"
+      | "content_hash"
+      | "metadata"
+      | "external_url"
     >
   >
 ): SpecJSONL {
@@ -272,7 +277,12 @@ export function updateIssueExternalLinkSync(
   updates: Partial<
     Pick<
       ExternalLink,
-      "last_synced_at" | "external_updated_at" | "sync_enabled"
+      | "last_synced_at"
+      | "external_updated_at"
+      | "sync_enabled"
+      | "content_hash"
+      | "metadata"
+      | "external_url"
     >
   >
 ): IssueJSONL {
