@@ -229,11 +229,10 @@ export async function handleConfigShow(
  * Returns the project ID for a given path (defaults to current directory)
  */
 export async function handleConfigProjectId(
-  ctx: CommandContext,
   inputPath: string | undefined,
   options: { jsonOutput?: boolean }
 ): Promise<void> {
-  const jsonOutput = options.jsonOutput || ctx.jsonOutput;
+  const jsonOutput = options.jsonOutput;
   const targetPath = inputPath ? path.resolve(inputPath) : process.cwd();
   const projectId = generateProjectId(targetPath);
 

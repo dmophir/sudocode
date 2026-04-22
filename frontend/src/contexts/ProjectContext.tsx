@@ -77,7 +77,7 @@ export function ProjectProvider({
         if (!isOpen) {
           // Project is no longer open, try to fetch project info and re-open it
           try {
-            const projectInfo = await projectsApi.getById(currentProjectId)
+            await projectsApi.getById(currentProjectId)
             // Project exists but isn't open - open it by ID
             await projectsApi.open({ projectId: currentProjectId })
           } catch (error) {

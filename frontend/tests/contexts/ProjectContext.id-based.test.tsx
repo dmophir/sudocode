@@ -39,7 +39,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-const mockProjectsApi = api.projectsApi as {
+const mockProjectsApi = api.projectsApi as unknown as {
   getOpen: ReturnType<typeof vi.fn>
   getById: ReturnType<typeof vi.fn>
   open: ReturnType<typeof vi.fn>

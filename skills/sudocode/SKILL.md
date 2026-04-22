@@ -13,7 +13,9 @@ All sudocode operations are scoped to a **project**. Projects are registered in 
 
 ### MCP Tools
 
-MCP tools (`ready`, `show_issue`, `upsert_spec`, etc.) handle project context automatically — the MCP server resolves it from its `--project-id` startup argument. No extra steps needed.
+MCP tools (`ready`, `show_issue`, `upsert_spec`, etc.) handle project context automatically — the MCP client is started with a `--project-id` argument and sends it with every request. No extra steps needed when using MCP tools.
+
+The sudocode **server** does not require a `project_id` to start — it receives `project_id` per-request via the `X-Project-ID` header from API/MCP clients, or from the UI when the user selects a project.
 
 ### CLI Commands
 
@@ -29,7 +31,7 @@ sudocode --project-id <id> spec show s-xxxx
 sudocode --project-id <id> ready
 ```
 
-**Exempt commands** (work without `--project-id`): `init`, `config project-id`, `config get`, `config set`, `config show`, `merge-driver`, `init-merge-driver`, `remove-merge-driver`, `update`.
+**Exempt commands** (work without `--project-id`): `init`, `server`, `config project-id`, `config get`, `config set`, `config show`, `merge-driver`, `init-merge-driver`, `remove-merge-driver`, `update`.
 
 ### Resolving project_id
 

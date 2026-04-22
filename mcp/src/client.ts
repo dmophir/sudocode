@@ -101,6 +101,13 @@ export class SudocodeClient {
    * Get the sudocode directory.
    * Resolved from --project-id registry lookup at startup.
    */
+  /**
+   * Get the active working directory.
+   */
+  async getActiveWorkDir(): Promise<string> {
+    return this.workingDir;
+  }
+
   getSudocodeDir(): string {
     if (this.sudocodeDir) {
       return this.sudocodeDir;

@@ -55,7 +55,6 @@ async function getServerAvailability(): Promise<"binary" | "package" | null> {
  * Start the sudocode local server
  */
 export async function handleServerStart(
-  ctx: CommandContext,
   options: ServerStartOptions
 ): Promise<void> {
   // Check for updates before starting server
@@ -96,7 +95,6 @@ export async function handleServerStart(
   // Set up environment variables
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    SUDOCODE_DIR: ctx.outputDir,
   };
 
   // Only set SUDOCODE_PORT if explicitly provided - otherwise let server scan for available ports
