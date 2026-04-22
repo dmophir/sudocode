@@ -566,6 +566,10 @@ export class ExecutionService {
     }
 
     // Inject SUDOCODE_DIR and SUDOCODE_WORKING_DIR into agent process environment.
+    // IMPORTANT: These are DERIVED OUTPUT context (set from the open project), NOT
+    // selection input. They tell spawned child processes which project to work with,
+    // but do NOT influence how the server itself resolves project context.
+    // Project context resolution on the server uses project_id from the registry only.
     // This ensures any MCP server — including agent-native plugins that bypass the
     // auto-injected sudocode-mcp config — discovers the correct project instead of
     // inheriting stale values from the server's process environment.
@@ -929,6 +933,10 @@ ${feedback}`;
     }
 
     // Inject SUDOCODE_DIR and SUDOCODE_WORKING_DIR into follow-up agent environment.
+    // IMPORTANT: These are DERIVED OUTPUT context (set from the open project), NOT
+    // selection input. They tell spawned child processes which project to work with,
+    // but do NOT influence how the server itself resolves project context.
+    // Project context resolution on the server uses project_id from the registry only.
     // This ensures any MCP server — including agent-native plugins — discovers the
     // correct project instead of inheriting stale values from the server's environment.
     parsedConfig.env = {

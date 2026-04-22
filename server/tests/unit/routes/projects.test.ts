@@ -253,6 +253,46 @@ describe("Projects API Routes", () => {
     });
   });
 
+  describe("POST /api/projects/open (by projectId)", () => {
+    it("should open a registered project by projectId", async () => {
+      // Register the project first
+      const projectInfo = registry.registerProject(testProjectPath1);
+      await registry.save();
+
+      const response = await request(app)
+        .post("/api/projects/open")
+        .send({ projectId: projectInfo.id });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty("id", projectInfo.id);
+      expect(response.body.data).toHaveProperty("path", testProjectPath1);
+    });
+
+    it("should return 404 for non-existent projectId", async () => {
+      const response = await request(app)
+        .post("/api/projects/open")
+        .send({ projectId: "non-existent-id" });
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error_data).toBe("PROJECT_NOT_FOUND");
+    });
+
+    it("should prefer projectId over path when both provided", async () => {
+      const projectInfo = registry.registerProject(testProjectPath1);
+      await registry.save();
+
+      const response = await request(app)
+        .post("/api/projects/open")
+        .send({ projectId: projectInfo.id, path: "/some/other/path" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty("path", testProjectPath1);
+    });
+  });
+
   describe("POST /api/projects/:projectId/close", () => {
     it("should return 404 when project is not open", async () => {
       const response = await request(app).post(

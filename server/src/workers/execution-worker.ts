@@ -275,7 +275,12 @@ async function runExecution(): Promise<void> {
         newArgs.push("-w", workDir);
       }
       
-      // Derive sudocodeDir from DB_PATH (DB is at <sudocodeDir>/cache.db) or use SUDOCODE_DIR env var
+      // Derive sudocodeDir from DB_PATH (DB is at <sudocodeDir>/cache.db) or use SUDOCODE_DIR env var.
+      // IMPORTANT: These are DERIVED OUTPUT context injected by the parent process
+      // (execution-service.ts), NOT selection input. The worker receives these values
+      // from the already-resolved open project context. They tell spawned MCP processes
+      // which project to work with, but do NOT participate in server-side project
+      // context resolution (which uses project_id from the registry only).
       const sudocodeDir = process.env.SUDOCODE_DIR || (DB_PATH ? path.dirname(DB_PATH) : null);
       
       // Always add -d if not already specified by user and we can determine the sudocodeDir

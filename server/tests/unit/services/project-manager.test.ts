@@ -580,6 +580,62 @@ describe("ProjectManager", () => {
     });
   });
 
+  describe("openProjectById", () => {
+    it("should open a registered project by its ID", async () => {
+      // Register the project first
+      const projectInfo = registry.registerProject(testProjectPath);
+      await registry.save();
+
+      const result = await manager.openProjectById(projectInfo.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.id).toBe(projectInfo.id);
+        expect(result.value.path).toBe(testProjectPath);
+        expect(manager.isProjectOpen(projectInfo.id)).toBe(true);
+      }
+    });
+
+    it("should return error for non-existent project ID", async () => {
+      const result = await manager.openProjectById("non-existent-id");
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe("PROJECT_NOT_FOUND");
+      }
+    });
+
+    it("should return existing context if project is already open", async () => {
+      const projectInfo = registry.registerProject(testProjectPath);
+      await registry.save();
+
+      const result1 = await manager.openProjectById(projectInfo.id);
+      expect(result1.ok).toBe(true);
+
+      const result2 = await manager.openProjectById(projectInfo.id);
+      expect(result2.ok).toBe(true);
+
+      if (result1.ok && result2.ok) {
+        expect(result1.value.id).toBe(result2.value.id);
+        expect(manager.getAllOpenProjects()).toHaveLength(1);
+      }
+    });
+
+    it("should not use path-based discovery for switching", async () => {
+      // openProjectById resolves path from registry, not from caller
+      const projectInfo = registry.registerProject(testProjectPath);
+      await registry.save();
+
+      const result = await manager.openProjectById(projectInfo.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Path should come from registry, not from any discovery
+        expect(result.value.path).toBe(testProjectPath);
+      }
+    });
+  });
+
   describe("updateServerUrl", () => {
     it("should update server URL for all open projects", async () => {
       // Create a second test project

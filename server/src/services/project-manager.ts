@@ -6,7 +6,6 @@ import { getConfig, isMarkdownFirst } from "@sudocode-ai/cli/dist/config.js";
 import { exportToJSONL } from "@sudocode-ai/cli/dist/export.js";
 import { importFromJSONL } from "@sudocode-ai/cli/dist/import.js";
 import { syncMarkdownToJSONL } from "@sudocode-ai/cli/dist/sync.js";
-import { discoverProject } from "@sudocode-ai/cli/project-discovery";
 import type Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
@@ -103,14 +102,9 @@ export class ProjectManager {
       const db = await this.getOrCreateDatabase(projectId, projectPath);
 
       // 5. Initialize all services for this project
-      // Use project discovery to find the correct sudocodeDir for this project,
-      // rather than relying on SUDOCODE_DIR env var which may point to a different
-      // project (e.g., the one the server was started in).
-      const discovery = discoverProject(projectPath);
-      const discoveredSudocodeDir = discovery.source !== "generated"
-        ? discovery.sudocodeDir
-        : undefined;
-      const registeredProject = this.registry.registerProject(projectPath, discoveredSudocodeDir);
+      // Use registry to resolve sudocodeDir — the registry handles discovery
+      // internally and stores the result. No direct discoverProject() call needed.
+      const registeredProject = this.registry.registerProject(projectPath);
       const sudocodeDir = registeredProject.sudocodeDir;
       const logsStore = new ExecutionLogsStore(db);
       const worktreeConfig = getWorktreeConfig(projectPath);
@@ -369,6 +363,28 @@ export class ProjectManager {
         message: error.message || String(error),
       });
     }
+  }
+
+  /**
+   * Open a project by its registry ID (project_id-only context resolution).
+   * Resolves the project path from the registry — no path-based discovery or fallback.
+   * This is the preferred method for switching/opening projects by ID.
+   * @param projectId - Project ID that must exist in the registry
+   * @returns ProjectContext for the opened project
+   */
+  async openProjectById(
+    projectId: string
+  ): Promise<Result<ProjectContext, ProjectError>> {
+    const projectInfo = this.registry.getProjectById(projectId);
+    if (!projectInfo) {
+      return Err({
+        type: "PROJECT_NOT_FOUND",
+        message: `Project not found in registry: ${projectId}`,
+      });
+    }
+
+    // Delegate to openProject using the registry-resolved path
+    return this.openProject(projectInfo.path);
   }
 
   /**

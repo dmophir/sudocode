@@ -40,6 +40,7 @@ export interface ProjectsConfig {
 export type ProjectError =
   | { type: 'PATH_NOT_FOUND'; path: string }
   | { type: 'INVALID_PROJECT'; message: string }
+  | { type: 'PROJECT_NOT_FOUND'; message: string }
   | { type: 'PERMISSION_DENIED'; path: string }
   | { type: 'CONFIG_CORRUPTED'; message: string }
   | { type: 'UNKNOWN'; message: string }

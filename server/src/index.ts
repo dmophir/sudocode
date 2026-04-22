@@ -60,56 +60,12 @@ async function initialize() {
       watchEnabled: WATCH_ENABLED,
     });
 
-    // Auto-open strategy:
-    // 1. If current directory has .sudocode, open it (highest priority)
-    // 2. Otherwise, open the most recently opened project (if available)
-    const currentDir = process.cwd();
-    const sudocodeDir = path.join(currentDir, ".sudocode");
-    const hasLocalProject = existsSync(sudocodeDir);
-
-    if (hasLocalProject) {
-      console.log(
-        `Found .sudocode in current directory, opening: ${currentDir}`
-      );
-      const openResult = await projectManager.openProject(currentDir);
-      if (!openResult.ok) {
-        const errorMsg =
-          "message" in openResult.error!
-            ? openResult.error!.message
-            : `${openResult.error!.type}`;
-        console.warn(`Failed to open local project: ${errorMsg}`);
-        console.log("Server will start with no projects open");
-      } else {
-        const projectInfo = projectRegistry.getProject(openResult.value!.id);
-        console.log(
-          `Auto-opened local project: ${projectInfo?.name || path.basename(currentDir)}`
-        );
-      }
-    } else {
-      // No local project, try most recent
-      const recentProjects = projectRegistry.getRecentProjects();
-      if (recentProjects.length > 0) {
-        const mostRecent = recentProjects[0];
-        console.log(
-          `Auto-opening most recent project: ${mostRecent.name} (${mostRecent.path})`
-        );
-        const openResult = await projectManager.openProject(mostRecent.path);
-        if (!openResult.ok) {
-          const errorMsg =
-            "message" in openResult.error!
-              ? openResult.error!.message
-              : `${openResult.error!.type}`;
-          console.warn(`Failed to auto-open most recent project: ${errorMsg}`);
-          console.log("Server will start with no projects open");
-        } else {
-          console.log(`Auto-opened project: ${mostRecent.name}`);
-        }
-      } else {
-        console.log(
-          "No recent projects found. Server will start with no projects open"
-        );
-      }
-    }
+    // Server starts with zero open projects.
+    // Projects are opened explicitly via API calls with project_id.
+    // No auto-open from cwd detection or most-recent-project heuristics.
+    console.log(
+      "Server initialized with no projects open. Use API to open projects by project_id."
+    );
   } catch (error) {
     console.error("Failed to initialize server:", error);
     process.exit(1);

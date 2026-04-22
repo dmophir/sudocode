@@ -721,6 +721,35 @@ describe('ProjectRegistry', () => {
     })
   })
 
+  describe('getProjectById', () => {
+    it('should return project info for a registered project', async () => {
+      await registry.load()
+
+      const projectPath = '/Users/alex/repos/test-project'
+      const registered = registry.registerProject(projectPath)
+
+      const found = registry.getProjectById(registered.id)
+      expect(found).not.toBeNull()
+      expect(found?.id).toBe(registered.id)
+      expect(found?.path).toBe(projectPath)
+      expect(found?.sudocodeDir).toBe(registered.sudocodeDir)
+    })
+
+    it('should return null for a non-existent project ID', async () => {
+      await registry.load()
+
+      const found = registry.getProjectById('non-existent-id')
+      expect(found).toBeNull()
+    })
+
+    it('should return null for an empty project ID', async () => {
+      await registry.load()
+
+      const found = registry.getProjectById('')
+      expect(found).toBeNull()
+    })
+  })
+
   describe('getSudocodeDir', () => {
     beforeEach(async () => {
       delete process.env.SUDOCODE_DIR

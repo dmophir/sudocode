@@ -258,15 +258,58 @@ export function createProjectsRouter(
 
   /**
    * POST /api/projects/open
-   * Open a project by path
+   * Open a project by projectId (preferred) or path (for init/register flows only)
    *
-   * Body: { path: string }
+   * Body: { projectId?: string, path?: string }
+   * - projectId: Opens a registered project by ID (preferred for context switching)
+   * - path: Opens a project by filesystem path (reserved for init/register flows)
+   * - If both provided, projectId takes precedence
    * Response: { project: ProjectInfo }
    */
   router.post("/open", async (req: Request, res: Response) => {
     try {
-      const { path } = req.body;
+      const { projectId, path } = req.body;
 
+      // Prefer projectId-based open (project_id-only context resolution)
+      if (projectId) {
+        const result = await projectManager.openProjectById(projectId);
+
+        if (!result.ok) {
+          const statusCode =
+            result.error!.type === "PROJECT_NOT_FOUND"
+              ? 404
+              : result.error!.type === "PATH_NOT_FOUND"
+                ? 404
+                : result.error!.type === "INVALID_PROJECT"
+                  ? 400
+                  : 500;
+
+          const errorMessage =
+            "message" in result.error!
+              ? result.error!.message
+              : `Failed to open project: ${result.error!.type}`;
+
+          return res.status(statusCode).json({
+            success: false,
+            data: null,
+            error_data: result.error!.type,
+            message: errorMessage,
+          });
+        }
+
+        const projectInfo = registry.getProject(result.value!.id);
+        const summary = result.value!.getSummary();
+
+        return res.json({
+          success: true,
+          data: {
+            ...projectInfo,
+            ...summary,
+          },
+        });
+      }
+
+      // Fall back to path-based open (for init/register flows)
       if (!path) {
         return res.status(400).json({
           success: false,

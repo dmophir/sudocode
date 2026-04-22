@@ -248,6 +248,19 @@ export class ProjectRegistry {
   }
 
   /**
+   * Get project info by ID (explicit lookup for project_id-only context resolution).
+   * This is the preferred method for resolving project context from a project_id.
+   * Returns null if the project is not registered.
+   */
+  getProjectById(projectId: string): ProjectInfo | null {
+    if (!projectId) {
+      console.log(`[registry] getProjectById: empty projectId`)
+      return null
+    }
+    return this.getProject(projectId)
+  }
+
+  /**
    * Get project info by ID
    */
   getProject(projectId: string): ProjectInfo | null {
