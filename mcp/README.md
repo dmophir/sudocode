@@ -54,22 +54,27 @@ If you've installed via npm, add to your Claude Code configuration:
 {
   "mcpServers": {
     "sudocode": {
-      "command": "sudocode-mcp"
+      "command": "sudocode-mcp",
+      "args": ["--project-id", "<your-project-id>"]
     }
   }
 }
 ```
 
+Find your project ID with: `sudocode config project-id /path/to/your/project`
+
 ### Custom Configuration
+
+Project context is resolved via `--project-id` from the project registry (`~/.config/sudocode/projects.json`). Find your project ID with `sudocode config project-id /path/to/your/project`.
 
 ```json
 {
   "mcpServers": {
     "sudocode": {
       "command": "sudocode-mcp",
+      "args": ["--project-id", "<your-project-id>"],
       "env": {
-        "SUDOCODE_WORKING_DIR": "/path/to/your/project",
-        "SUDOCODE_PATH": "sudocode",
+        "SUDOCODE_PATH": "sudocode"
       }
     }
   }
@@ -79,9 +84,9 @@ If you've installed via npm, add to your Claude Code configuration:
 ## Environment Variables
 
 - `SUDOCODE_PATH` - Path to `sudocode` CLI executable (default: `sudocode`)
-- `SUDOCODE_WORKING_DIR` - Working directory for sudocode (default: current directory)
-- `SUDOCODE_DB` - Custom database path (default: `.sudocode/cache.db`)
 - `SUDOCODE_ACTOR` - Actor name for operations (default: system username)
+
+> **Removed**: `SUDOCODE_WORKING_DIR`, `SUDOCODE_DB`, and `SUDOCODE_DIR` are no longer used for project selection. Use `--project-id` instead. See the [Migration Guide](../docs/mcp.md#migration-guide) for details.
 
 ## Available Tools
 
@@ -200,8 +205,8 @@ If you get "CLI not found" errors:
 If you get database errors:
 
 1. Run `sudocode init` in your project directory first
-2. Ensure the working directory is set correctly
-3. Check that `.sudocode/cache.db` exists
+2. Ensure `--project-id` is set correctly in your MCP config
+3. Check that `.sudocode/cache.db` exists in the project directory
 
 ### Permission Errors
 

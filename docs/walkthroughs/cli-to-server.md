@@ -410,12 +410,12 @@ async function initialize() {
 
 > **Note**: As of the explicit `--project-id` migration, the CLI and MCP server no longer use cwd-based autodiscovery or environment variables to select a project. The `--project-id` flag is required, and project paths are resolved from the project registry (`~/.config/sudocode/projects.json`).
 >
-> The server's auto-open behavior (shown below) still applies when the server starts without a specific project request — it opens the most recently used project from the registry.
+> The server's auto-open behavior shown in the code listing below is **legacy** and scheduled for removal. The intended behavior is for the server to open the project specified by `--project-id` from the CLI, with no cwd or most-recent fallback.
 
-The server uses the following strategy on startup:
+The server currently uses the following legacy strategy on startup (to be replaced by `--project-id` lookup):
 
-1. If the current working directory contains `.sudocode/`, that project is opened
-2. Otherwise, the most recently opened project from the registry is used
+1. ~~If the current working directory contains `.sudocode/`, that project is opened~~
+2. ~~Otherwise, the most recently opened project from the registry is used~~
 3. If no projects exist, the server starts with no project open
 
 Let's see the rest of the initialization:
