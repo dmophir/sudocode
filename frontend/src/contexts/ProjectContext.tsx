@@ -78,8 +78,8 @@ export function ProjectProvider({
           // Project is no longer open, try to fetch project info and re-open it
           try {
             const projectInfo = await projectsApi.getById(currentProjectId)
-            // Project exists but isn't open - open it
-            await projectsApi.open({ path: projectInfo.path })
+            // Project exists but isn't open - open it by ID
+            await projectsApi.open({ projectId: currentProjectId })
           } catch (error) {
             // Project doesn't exist or can't be opened, clear it
             console.warn('Stored project no longer available, clearing:', currentProjectId)

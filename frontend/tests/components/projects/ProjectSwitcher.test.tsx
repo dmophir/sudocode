@@ -329,7 +329,7 @@ describe('ProjectSwitcher', () => {
     // Verify that the project was opened before switching
     await waitFor(() => {
       expect(api.projectsApi.getOpen).toHaveBeenCalled()
-      expect(api.projectsApi.open).toHaveBeenCalledWith({ path: '/path/to/project2' })
+      expect(api.projectsApi.open).toHaveBeenCalledWith({ projectId: 'project-2' })
     })
   })
 

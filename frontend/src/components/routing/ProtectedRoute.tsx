@@ -47,7 +47,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       // Check if open, open if needed
       const openProjects = await projectsApi.getOpen()
       if (!openProjects.some((p) => p.id === projectId)) {
-        await projectsApi.open({ path: project.path })
+        await projectsApi.open({ projectId })
       }
 
       // Update context (which also updates API client header)

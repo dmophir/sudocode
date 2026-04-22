@@ -194,6 +194,47 @@ export function findContainingProject(
 }
 
 /**
+ * Result of resolving a project by explicit ID from the registry.
+ */
+export interface ResolvedProject {
+  projectId: string;
+  path: string;
+  sudocodeDir: string;
+  dbPath: string;
+  projectInfo: ProjectInfo;
+}
+
+/**
+ * Resolve a project by explicit ID from the registry.
+ * Returns null if the project ID is not found in the registry.
+ *
+ * This is the primary project resolution mechanism for project-scoped operations.
+ * No fallback to cwd, env vars, or path discovery.
+ */
+export function resolveProjectById(
+  projectId: string,
+  configPath?: string
+): ResolvedProject | null {
+  const registry = loadRegistry(configPath);
+  if (!registry) {
+    return null;
+  }
+
+  const project = registry[projectId];
+  if (!project) {
+    return null;
+  }
+
+  return {
+    projectId: project.id,
+    path: project.path,
+    sudocodeDir: project.sudocodeDir,
+    dbPath: path.join(project.sudocodeDir, "cache.db"),
+    projectInfo: project,
+  };
+}
+
+/**
  * Discover project from any path.
  * Single call returns projectId, sudocodeDir, and projectPath.
  *

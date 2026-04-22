@@ -35,7 +35,10 @@ export interface ValidateProjectResponse {
 }
 
 export interface OpenProjectRequest {
-  path: string
+  /** Project ID from registry (preferred for context switching) */
+  projectId?: string
+  /** Filesystem path (reserved for init/register flows) */
+  path?: string
 }
 
 export interface InitProjectRequest {

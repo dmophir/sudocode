@@ -16,7 +16,7 @@ The sudocode project is organized as a monorepo with several packages:
 
 When you run `sudocode server`, the following chain of events occurs:
 
-1. CLI parses the command and resolves project directories
+1. CLI parses the command and resolves project via `--project-id`
 2. CLI spawns the server process (either binary or via npx)
 3. Server initializes ProjectRegistry and ProjectManager
 4. Server opens the current project, initializing database and services
@@ -406,9 +406,13 @@ async function initialize() {
     // 2. Otherwise, open the most recently opened project (if available)
 ```
 
-### Project Discovery Strategy
+### Project Resolution
 
-The server uses a smart project discovery strategy:
+> **Note**: As of the explicit `--project-id` migration, the CLI and MCP server no longer use cwd-based autodiscovery or environment variables to select a project. The `--project-id` flag is required, and project paths are resolved from the project registry (`~/.config/sudocode/projects.json`).
+>
+> The server's auto-open behavior (shown below) still applies when the server starts without a specific project request — it opens the most recently used project from the registry.
+
+The server uses the following strategy on startup:
 
 1. If the current working directory contains `.sudocode/`, that project is opened
 2. Otherwise, the most recently opened project from the registry is used
@@ -889,7 +893,7 @@ The execution flow from CLI to running server:
 ┌─────────────────────────────────────────────────────────────────────┐
 │  cli/src/cli.ts                                                      │
 │  - Commander.js parses "server" command                             │
-│  - resolveDirectories() finds .sudocode/                            │
+│  - resolveProjectById() looks up project from registry              │
 │  - handleServerStart() spawns server process                        │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
@@ -971,9 +975,9 @@ The `SUDOCODE_DIR` environment variable points to the local `.sudocode/` directo
 
 This walkthrough traced the execution path from the `sudocode server` command through:
 
-1. **CLI parsing** - Commander.js processes the command
+1. **CLI parsing** - Commander.js processes the command with `--project-id`
 2. **Server spawning** - Child process or npx launches the server
-3. **Project discovery** - Finds and opens the appropriate project
+3. **Project resolution** - Looks up the project by ID from the registry
 4. **Service initialization** - Creates per-project services
 5. **Express setup** - Configures REST API routes
 6. **Server startup** - HTTP and WebSocket servers begin listening

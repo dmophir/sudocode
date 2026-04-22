@@ -503,22 +503,12 @@ sudocode is a git-native spec and issue management system designed for AI-assist
       console.error(`✓ Server URL: ${this.config.serverUrl}`);
     }
 
-    // Auto-open project on server if we have an API client and working directory
-    if (this.apiClient && this.config.workingDir) {
+    // Auto-open project on server if we have an API client and project ID
+    if (this.apiClient && this.config.projectId) {
       try {
-        const workingDir = this.config.workingDir;
-        const absolutePath = workingDir.startsWith("/")
-          ? workingDir
-          : join(process.cwd(), workingDir);
-
-        console.error(`[mcp] Opening project at ${absolutePath}...`);
-        const result = await this.apiClient.openProject(absolutePath);
+        console.error(`[mcp] Opening project by ID: ${this.config.projectId}...`);
+        const result = await this.apiClient.openProject(this.config.projectId);
         console.error(`✓ Project opened: ${result.id}`);
-
-        // Update projectId if it was auto-discovered differently
-        if (result.id !== this.config.projectId) {
-          console.error(`[mcp] Note: Server returned project ID ${result.id} (was: ${this.config.projectId})`);
-        }
       } catch (error) {
         // Log but don't fail - project might already be open or server might not be running
         const message = error instanceof Error ? error.message : String(error);
