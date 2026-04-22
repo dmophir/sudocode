@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   useProjects,
   useOpenProjects,
@@ -35,12 +35,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed, Pencil, Folder } from 'lucide-react'
+import { FolderOpen, Trash2, Plus, Check, Loader2, X, FolderClosed, Pencil, Folder, AlertCircle, Copy } from 'lucide-react'
 import type { ProjectInfo } from '@/types/project'
 import { DirectoryBrowser } from '@/components/projects/DirectoryBrowser'
 
 export default function ProjectsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const navigationError = (location.state as { error?: string } | null)?.error
   const { data: projects, isLoading, isError } = useProjects()
   const { data: openProjects } = useOpenProjects()
   const { data: recentProjects } = useRecentProjects()
@@ -103,7 +105,7 @@ export default function ProjectsPage() {
         return
       }
 
-      // If valid, open the project - MCP servers dynamically lookup current project via getActiveWorkDir()
+      // If valid, open the project by path (register/init flow — project may not yet be in registry)
       const project = await openProject.mutateAsync({ path: projectPath.trim() })
       setCurrentProjectId(project.id)
       setOpenDialogOpen(false)
@@ -206,6 +208,14 @@ export default function ProjectsPage() {
           </Button>
         </div>
       </div>
+
+      {navigationError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{navigationError}</span>
+          <span className="text-muted-foreground">— Please select a project below.</span>
+        </div>
+      )}
 
       {!projects || projects.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-12 text-center">
@@ -614,9 +624,30 @@ function ProjectCard({ project, isOpen, isCurrent, onOpen, onClose, onDelete }: 
           {project.favorite && <span className="text-lg text-yellow-500">★</span>}
         </div>
         <p className="mt-1 truncate text-sm text-muted-foreground">{project.path}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Last opened: {new Date(project.lastOpenedAt).toLocaleDateString()}
-        </p>
+        <div className="mt-1 flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigator.clipboard.writeText(project.id)
+                  }}
+                >
+                  {project.id}
+                  <Copy className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Copy project ID (for CLI/MCP config)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <span className="text-xs text-muted-foreground">
+            Last opened: {new Date(project.lastOpenedAt).toLocaleDateString()}
+          </span>
+        </div>
       </div>
       <div className="ml-4 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {!isOpen && (

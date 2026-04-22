@@ -462,7 +462,7 @@ export const projectsApi = {
   validate: (data: ValidateProjectRequest) =>
     post<ValidateProjectResponse>('/projects/validate', data),
 
-  // Open a project by path
+  // Open a project by ID (preferred for context switching) or by path (init/register only)
   open: (data: OpenProjectRequest) => post<ProjectInfo>('/projects/open', data),
 
   // Close a project
