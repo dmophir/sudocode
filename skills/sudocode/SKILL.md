@@ -7,44 +7,6 @@ description: ALWAYS use this skill for ALL sudocode spec and issue operations. U
 
 Spec-driven development and issue management system. Work persists across sessions, specs guide implementation, dependency graphs ensure correct execution order, feedback loops close requirements gaps.
 
-## Project Context (Required)
-
-All sudocode operations are scoped to a **project**. Projects are registered in `~/.config/sudocode/projects.json` and identified by a deterministic `project_id`.
-
-### MCP Tools
-
-MCP tools (`ready`, `show_issue`, `upsert_spec`, etc.) handle project context automatically — the MCP server resolves it from its `--project-id` startup argument. No extra steps needed.
-
-### CLI Commands
-
-CLI commands **require `--project-id`** for all project-scoped operations. Without it, commands will fail.
-
-```bash
-# Get the project_id for the current directory
-sudocode config project-id
-
-# Pass it to any command
-sudocode --project-id <id> issue list
-sudocode --project-id <id> spec show s-xxxx
-sudocode --project-id <id> ready
-```
-
-**Exempt commands** (work without `--project-id`): `init`, `config project-id`, `config get`, `config set`, `config show`, `merge-driver`, `init-merge-driver`, `remove-merge-driver`, `update`.
-
-### Resolving project_id
-
-- **MCP tool:** Use `get_project_id` tool (returns ID for current or specified path)
-- **CLI:** Run `sudocode config project-id` in the project directory
-- **Programmatic:** Read `~/.config/sudocode/projects.json` — each entry has `id` and `path`
-
-The registry file is read directly from disk (offline-first) — no server needed for resolution.
-
-### Important
-
-- Never rely on `cwd`, env vars, or path ancestor matching to determine project context
-- Always use an explicit `project_id` from the registry
-- The `project_id` is stable even if the project directory is renamed/moved (it is updated in the registry)
-
 ## Core Concepts
 
 - **Specs**: Requirements/design documents (markdown in `.sudocode/specs/`) - user-initiated, capture intent
@@ -60,7 +22,6 @@ The registry file is read directly from disk (offline-first) — no server neede
 ### Two Ways to Modify Specs/Issues
 
 **Option 1: Direct Markdown Editing** (For content-heavy edits)
-
 - Edit markdown files in `.sudocode/specs/` or `.sudocode/issues/`
 - Frontmatter contains metadata (id, title, status, relationships, tags)
 - Content after frontmatter is the body
@@ -68,13 +29,11 @@ The registry file is read directly from disk (offline-first) — no server neede
 - Use direct markdown editing when possible to maintain file structure and reduce content churn
 
 **Option 2: MCP Tools** (Recommended for structured operations)
-
 - Use `upsert_issue`, `upsert_spec`, `link`, `add_feedback` tools
 - Automatically syncs to markdown/sqlite/jsonl
 - Validates relationships and IDs
 
 **When to use each:**
-
 - **MCP tools:** Status changes, creating entities, adding relationships, adding feedback
 - **Direct editing:** Writing detailed content, refactoring descriptions, bulk editing
 
@@ -93,7 +52,6 @@ With relationship type:
 Must complete [[i-7x9m]]{ blocks } first
 
 Formats supported:
-
 - [[s-14sh]] - basic reference (creates "references" relationship)
 - [[i-x7k9]] or [[@i-x7k9]] - with @ prefix
 - [[s-3s542|Custom Text]] - with display text
@@ -104,76 +62,16 @@ Formats supported:
 **Relationship types in mentions:** `blocks`, `implements`, `depends-on`, `discovered-from`
 
 **Why use inline mentions:**
-
 - Bidirectionally links entities without separate `link` tool call
 - Colocate with informational context
 - Automatically creates relationships during sync
 - Makes content more readable
-
-## CLI Reference
-
-When MCP tools are unavailable, use the `sudocode` CLI directly via terminal.
-
-**All CLI commands require `--project-id`** (see Project Context section above). Examples below include it for clarity.
-
-### Issue Commands
-
-```bash
-# Get your project_id first
-PROJECT_ID=$(sudocode config project-id)
-
-# Create — title is POSITIONAL, use -d for description (NOT --body)
-sudocode --project-id $PROJECT_ID issue create '<title>' -p <0-4> -d '<description>' --tags '<comma,separated>' --parent <id>
-
-# List
-sudocode issue list                        # all issues
-sudocode issue list --status open          # filter by status
-
-# Show
-sudocode issue show <id>
-
-# Update — status can ONLY be set via update (not create)
-sudocode issue update <id> -s <status>     # open|in_progress|blocked|needs_review|closed
-sudocode issue update <id> --title '<new>' --description '<new>'
-
-# Close (shortcut for update --status closed)
-sudocode issue close <id> -r '<reason>'
-sudocode issue close <id1> <id2>           # close multiple
-
-# Relationships
-sudocode link <from-id> <to-id> -t <type>  # blocks|implements|depends-on|references|discovered-from
-```
-
-### Spec Commands
-
-```bash
-sudocode spec create '<title>' -p <0-4> -d '<description>' --tags '<tags>' --parent <id>
-sudocode spec list
-sudocode spec show <id>
-sudocode spec update <id> --title '<new>' -d '<new>' --tags '<tags>'
-```
-
-### Other Commands
-
-```bash
-sudocode ready                             # Show unblocked issues
-sudocode issue add-ref <entity-id> <ref-id>  # Add cross-reference
-```
-
-### CLI Gotchas
-
-- **Title is positional:** `sudocode issue create 'My title'` not `--title 'My title'`
-- **No --status on create:** Issues are created as `open`. Use `issue update <id> -s closed` after.
-- **Description flag is -d:** Not `--body` or `--content`
-- **Use single quotes** for shell arguments containing special characters (backticks, `!`, `$`, `"`)
-- **Cross-references in description:** Use `[[i-xxxx]]` syntax — it creates relationships on sync
 
 ## Quick Reference
 
 ### Session Start (Always Do This)
 
 ```
-- [ ] Resolve project_id (use get_project_id tool or `sudocode config project-id`)
 - [ ] Use ready tool to find unblocked work
 - [ ] Use list_issues with status=in_progress to see current work
 - [ ] Ask user which work to pursue (if not specified)
@@ -181,10 +79,9 @@ sudocode issue add-ref <entity-id> <ref-id>  # Add cross-reference
 
 If you were assigned an issue, work ONLY on implementing the requirements of the issue.
 
-### Essential Tools (MCP)
+### Essential Tools
 
 ```
-get_project_id       → Resolve project_id for current directory
 ready                → Find unblocked work
 show_issue/show_spec → Get details with relationships
 upsert_issue/spec    → Create/update (status, priority, parent)
@@ -194,17 +91,16 @@ add_feedback         → Document implementation results on specs
 
 ### Relationship Types
 
-| Type              | Purpose                   | Effect on ready                              |
-| ----------------- | ------------------------- | -------------------------------------------- |
-| `implements`      | Issue → Spec connection   | None (documentation)                         |
-| `blocks`          | Execution ordering        | Blocked issue not ready until blocker closes |
-| `parent-child`    | Hierarchical organization | None (hierarchy only)                        |
-| `discovered-from` | Provenance tracking       | None (documentation)                         |
+| Type | Purpose | Effect on ready |
+|------|---------|-----------------|
+| `implements` | Issue → Spec connection | None (documentation) |
+| `blocks` | Execution ordering | Blocked issue not ready until blocker closes |
+| `parent-child` | Hierarchical organization | None (hierarchy only) |
+| `discovered-from` | Provenance tracking | None (documentation) |
 
 ### Status Flow
 
 Standard flow:
-
 ```
 open → in_progress  → closed
   ↓         ↓            ↑
@@ -213,7 +109,6 @@ open → in_progress  → closed
 ```
 
 When requirements are not fully met or unforeseen issues arise during execution:
-
 ```
 in_progress → needs_review → closed
 ```
@@ -228,7 +123,6 @@ in_progress → needs_review → closed
 **Example:** "Implement authentication system"
 
 **Create hierarchy:**
-
 ```
 s-2a7c: Auth System (parent)
 ├── s-8h2k: OAuth (child)
@@ -242,7 +136,6 @@ i-5n7q: Implement auth (parent epic, implements s-2a7c)
 ```
 
 **Add execution order:**
-
 ```
 link: i-7x9m blocks i-3p6k (OAuth before sessions)
 link: i-3p6k blocks i-8w2n (sessions before permissions)
@@ -296,7 +189,6 @@ link: i-3p6k blocks i-8w2n (sessions before permissions)
 ### Feedback Pattern Example
 
 **Good feedback:**
-
 ```
 ✅ Requirements met: OAuth flow working per spec
 📝 Design decisions: Used Redis for tokens (horizontal scaling), added rate limiting
@@ -314,14 +206,12 @@ link: i-3p6k blocks i-8w2n (sessions before permissions)
 ### closed vs request_review
 
 **Close (status=closed) when:**
-
 - All requirements met
 - Tests passing with good coverage
 - Confident in approach
 - No blocking questions
 
 **Set needs_review when:**
-
 - Uncertain about approach (multiple valid options)
 - Partial completion (need priority guidance)
 - Quality concerns
@@ -329,7 +219,6 @@ link: i-3p6k blocks i-8w2n (sessions before permissions)
 - Trade-offs need approval
 
 **Self-check:** "Could another developer deploy this to production as-is?"
-
 - Yes confidently → Close
 - Yes with caveats → Close + flag concerns in feedback
 - Need guidance → Set needs_review + request clarification
