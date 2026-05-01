@@ -17,14 +17,14 @@ Sudocode MCP provides tools for:
 - **Runtime**: Node.js with TypeScript
 - **MCP Framework**: `@modelcontextprotocol/sdk` or `fastmcp` (if available for Node.js)
 - **CLI Integration**: Spawn `sudocode` CLI commands (similar to beads-mcp approach)
-- **Project Resolution**: Requires explicit `--project-id` flag (looked up from `~/.config/sudocode/projects.json`)
+- **Working Directory**: Use `SUDOCODE_WORKING_DIR` env var or `process.cwd()`
 
 ### Design Principles
 1. **CLI-First**: MCP server wraps existing CLI commands rather than duplicating logic
 2. **JSON Output**: Always use `--json` flag for structured, parseable responses
 3. **Error Handling**: Parse and return meaningful error messages from CLI
 4. **Context Preservation**: Maintain working directory across tool calls
-5. **Explicit Project Selection**: Project context is resolved via `--project-id` from the project registry; no autodiscovery or env-based fallbacks
+5. **Database Auto-Discovery**: Leverage CLI's built-in `.sudocode` discovery
 
 ## Resources
 
@@ -445,12 +445,13 @@ Sudocode is a git-native spec and issue management system designed for AI-assist
 
 ```typescript
 class SudocodeClient {
-  private projectId: string;
+  private workingDir: string;
   private cliPath: string;
 
-  constructor(config: {
-    projectId: string;
+  constructor(config?: {
+    workingDir?: string;
     cliPath?: string;
+    dbPath?: string;
   });
 
   private async exec(
@@ -468,66 +469,9 @@ class SudocodeClient {
 ### Environment Variables
 
 - `SUDOCODE_PATH`: Path to `sudocode` CLI (default: auto-discover from PATH)
+- `SUDOCODE_DB`: Path to database file (default: auto-discover)
+- `SUDOCODE_WORKING_DIR`: Working directory for commands (default: process.cwd())
 - `SUDOCODE_ACTOR`: Actor name for audit trail (default: process.env.USER)
-
-> **Removed**: `SUDOCODE_DB`, `SUDOCODE_WORKING_DIR`, and `SUDOCODE_DIR` are no longer used for project selection. Project context is resolved exclusively via `--project-id`.
-
-### Migration Guide
-
-With the move to explicit project IDs, environment variables and working-directory-based autodiscovery no longer select project context. Update your editor MCP configurations as follows:
-
-#### 1. Find your project ID
-
-```bash
-# From inside your project directory:
-sudocode config project-id
-
-# Or for any path:
-sudocode config project-id /path/to/your/project
-
-# If not yet registered, initialize first (outputs the new project_id):
-sudocode init
-```
-
-#### 2. Update MCP server configuration
-
-**Cursor (`.cursor/mcp.json`):**
-```json
-{
-  "mcpServers": {
-    "sudocode": {
-      "command": "npx",
-      "args": ["-y", "sudocode", "mcp", "--project-id", "<your-project-id>"]
-    }
-  }
-}
-```
-
-**VS Code (`.vscode/mcp.json`):**
-```json
-{
-  "servers": {
-    "sudocode": {
-      "command": "npx",
-      "args": ["-y", "sudocode", "mcp", "--project-id", "<your-project-id>"]
-    }
-  }
-}
-```
-
-**Claude Code:**
-```bash
-claude mcp add sudocode -- npx -y sudocode mcp --project-id <your-project-id>
-```
-
-#### 3. What changed
-
-| Before | After |
-|--------|-------|
-| `--working-dir /path/to/project` | `--project-id <id>` |
-| `SUDOCODE_WORKING_DIR` env var | `--project-id <id>` |
-| `SUDOCODE_DB` env var | `--project-id <id>` |
-| Autodiscovery from cwd | `--project-id <id>` |
 
 ### Error Handling
 

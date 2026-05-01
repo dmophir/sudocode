@@ -81,14 +81,10 @@ If you're up for it, you can even monitor all running agent trajectories at the 
 npm install -g sudocode
 
 # Initialize a sudocode project in your project directory.
-# This registers the project and outputs its project_id.
 sudocode init
 
-# Look up a project's ID from any path
-sudocode config project-id /path/to/your/project
-
-# Run the local sudocode server with an explicit project
-sudocode server --project-id <project_id>
+# Run the local sudocode server from anywhere
+sudocode server
 
 # To connect your agent directly to sudocode, install our plugin
 claude plugin marketplace add sudocode-ai/sudocode

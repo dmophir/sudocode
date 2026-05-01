@@ -47,13 +47,18 @@ describe("SudocodeClient", () => {
       expect(client).toBeDefined();
     });
 
-    it("should accept projectId in configuration", () => {
-      const client = new SudocodeClient({
-        projectId: "my-project-abc12345",
-        workingDir: "/project/path",
-        sudocodeDir: "/project/path/.sudocode",
-      });
+    it("should read from environment variables", () => {
+      process.env.SUDOCODE_WORKING_DIR = "/env/path";
+      process.env.SUDOCODE_PATH = "sudocode-custom";
+      process.env.SUDOCODE_DB = "/env/cache.db";
+
+      const client = new SudocodeClient();
       expect(client).toBeDefined();
+
+      // Cleanup
+      delete process.env.SUDOCODE_WORKING_DIR;
+      delete process.env.SUDOCODE_PATH;
+      delete process.env.SUDOCODE_DB;
     });
   });
 
@@ -464,45 +469,368 @@ describe("SudocodeClient", () => {
     });
   });
 
-  describe("getSudocodeDir", () => {
+  describe("getActiveWorkDir", () => {
+    let originalFetch: typeof global.fetch;
+
+    beforeEach(() => {
+      originalFetch = global.fetch;
+    });
+
     afterEach(() => {
+      global.fetch = originalFetch;
+      delete process.env.SUDOCODE_SERVER_URL;
+    });
+
+    it("should return explicit workingDir when provided via config", async () => {
+      const client = new SudocodeClient({ workingDir: "/explicit/path" });
+      expect(await client.getActiveWorkDir()).toBe("/explicit/path");
+    });
+
+    it("should not query server when workingDir is explicitly provided", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: "proj-1",
+              path: "/server/path",
+              name: "Test Project",
+              isCurrent: true,
+            },
+          ],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        workingDir: "/explicit/path",
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe("/explicit/path");
+      // fetch should not be called when workDir was explicitly provided
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should query server for current project path when no explicit workDir", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: "proj-1",
+              path: "/server/project/path",
+              name: "Test Project",
+              isCurrent: true,
+            },
+          ],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe("/server/project/path");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3002/api/projects/open",
+        expect.objectContaining({
+          method: "GET",
+          headers: { Accept: "application/json" },
+        })
+      );
+    });
+
+    it("should fall back to cached workingDir when server unavailable", async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new Error("Network error"));
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      // Should fall back to process.cwd() since no explicit workDir
+      expect(result).toBe(process.cwd());
+    });
+
+    it("should fall back when server returns non-ok response", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe(process.cwd());
+    });
+
+    it("should return first project when none marked as current", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: "proj-1",
+              path: "/first/project",
+              name: "First Project",
+            },
+            {
+              id: "proj-2",
+              path: "/second/project",
+              name: "Second Project",
+            },
+          ],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe("/first/project");
+    });
+
+    it("should prefer project marked as isCurrent", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: "proj-1",
+              path: "/first/project",
+              name: "First Project",
+              isCurrent: false,
+            },
+            {
+              id: "proj-2",
+              path: "/current/project",
+              name: "Current Project",
+              isCurrent: true,
+            },
+          ],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe("/current/project");
+    });
+
+    it("should fall back when server returns no serverUrl configured", async () => {
+      const client = new SudocodeClient();
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe(process.cwd());
+    });
+
+    it("should fall back when server returns empty data array", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+      });
+      const result = await client.getActiveWorkDir();
+      expect(result).toBe(process.cwd());
+    });
+  });
+
+  describe("getSudocodeDir", () => {
+    let originalFetch: typeof global.fetch;
+
+    beforeEach(() => {
+      originalFetch = global.fetch;
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
       delete process.env.SUDOCODE_DIR;
       delete process.env.SUDOCODE_SERVER_URL;
     });
 
-    it("should return explicit override when provided via config", () => {
+    it("should return explicit override when provided via config", async () => {
       const client = new SudocodeClient({ sudocodeDir: "/custom/.sudocode" });
-      expect(client.getSudocodeDir()).toBe("/custom/.sudocode");
+      expect(await client.getSudocodeDir()).toBe("/custom/.sudocode");
     });
 
-    it("should fall back to <workingDir>/.sudocode when no sudocodeDir config", () => {
-      const client = new SudocodeClient({ workingDir: "/project/path" });
+    it("should return SUDOCODE_DIR env var when no server configured (fallback)", async () => {
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      // No serverUrl configured - SUDOCODE_DIR acts as fallback
+      const client = new SudocodeClient();
+      expect(await client.getSudocodeDir()).toBe("/env/.sudocode");
+    });
+
+    it("should use local registry discovery for sudocodeDir by workingDir path", () => {
+      // Note: getSudocodeDir now uses local registry (discoverProject) instead of server queries
+      // Without a registry file, it falls back to <workingDir>/.sudocode
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/project/path",
+      });
       const result = client.getSudocodeDir();
+      // Falls back to workingDir/.sudocode when no registry entry exists
       expect(result).toBe("/project/path/.sudocode");
     });
 
-    it("should prioritize config override over workingDir fallback", () => {
+    it("should fall back to static when no registry entry exists", () => {
       const client = new SudocodeClient({
-        sudocodeDir: "/config/.sudocode",
-        workingDir: "/project/path",
+        workingDir: "/my/project",
+        serverUrl: "http://localhost:3002",
       });
+      const result = client.getSudocodeDir();
+      expect(result).toBe("/my/project/.sudocode");
+    });
+
+    it("should fall back to static when no matching entry in registry", () => {
+      const client = new SudocodeClient({
+        workingDir: "/my/project",
+        serverUrl: "http://localhost:3002",
+      });
+      const result = client.getSudocodeDir();
+      expect(result).toBe("/my/project/.sudocode");
+    });
+
+    it("should fall back to static when serverUrl is configured but no registry entry", () => {
+      const client = new SudocodeClient({
+        workingDir: "/my/project",
+        serverUrl: "http://localhost:3002",
+      });
+      const result = client.getSudocodeDir();
+      expect(result).toBe("/my/project/.sudocode");
+    });
+
+    it("should fall back to static when no server URL configured", () => {
+      const client = new SudocodeClient({
+        workingDir: "/my/project",
+      });
+      const result = client.getSudocodeDir();
+      expect(result).toBe("/my/project/.sudocode");
+    });
+
+    it("should prioritize config override over env var", () => {
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      const client = new SudocodeClient({ sudocodeDir: "/config/.sudocode" });
       expect(client.getSudocodeDir()).toBe("/config/.sudocode");
     });
 
+    it("should use SUDOCODE_DIR env var when set", () => {
+      // In the new implementation, SUDOCODE_DIR takes precedence over registry discovery
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/project/path",
+      });
+      const result = client.getSudocodeDir();
+      // SUDOCODE_DIR is used directly when set
+      expect(result).toBe("/env/.sudocode");
+    });
+
+    it("should use SUDOCODE_DIR when set", () => {
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/my/project",
+      });
+      const result = client.getSudocodeDir();
+      // SUDOCODE_DIR is returned when set
+      expect(result).toBe("/env/.sudocode");
+    });
+
+    it("should fall back to static path for nested workingDir when no registry entry", () => {
+      // Note: Without a registry file, discoverProject falls back to <workingDir>/.sudocode
+      // To test ancestor matching, we would need to mock the registry file
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/project-root/src/components",
+      });
+
+      const result = client.getSudocodeDir();
+      // Falls back to workingDir/.sudocode without registry
+      expect(result).toBe("/project-root/src/components/.sudocode");
+    });
+
     it("should return static path immediately (no network calls)", () => {
+      // getSudocodeDir is now synchronous and doesn't make network calls
       const client = new SudocodeClient({
         serverUrl: "http://localhost:3002",
         workingDir: "/my/project",
       });
 
       const result = client.getSudocodeDir();
+      
+      // Should fall back to static path when no registry entry
       expect(result).toBe("/my/project/.sudocode");
+    });
+
+    it("should use registry discovery (no longer depends on isCurrent)", () => {
+      // Note: The new implementation uses local registry file, not server
+      // Without a registry entry, it falls back to workingDir/.sudocode
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/project-1",
+      });
+
+      const result = client.getSudocodeDir();
+      
+      // Falls back to static path without registry entry
+      expect(result).toBe("/project-1/.sudocode");
+    });
+
+    it("should fall back to static path when no matching project found", () => {
+      // workingDir doesn't match any registered project (no registry in test)
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/unregistered/project",
+      });
+
+      const result = client.getSudocodeDir();
+      
+      // Should fall back to static <workingDir>/.sudocode
+      expect(result).toBe("/unregistered/project/.sudocode");
+    });
+
+    it("should fall back to static path when no registry entry for project path", () => {
+      // Without a registry entry, falls back to workingDir/.sudocode
+      const client = new SudocodeClient({
+        serverUrl: "http://localhost:3002",
+        workingDir: "/Users/dev/my-project",
+      });
+
+      const result = client.getSudocodeDir();
+      
+      // Falls back to workingDir/.sudocode
+      expect(result).toBe("/Users/dev/my-project/.sudocode");
     });
   });
 
   describe("dbPath resolution", () => {
-    it("should set dbPath from config sudocodeDir", async () => {
-      const client = new SudocodeClient({ sudocodeDir: "/custom/.sudocode" });
+    afterEach(() => {
+      delete process.env.SUDOCODE_DIR;
+      delete process.env.SUDOCODE_DB;
+    });
+
+    it("should set dbPath from SUDOCODE_DIR env var for project-specific databases", async () => {
+      // SUDOCODE_DIR env var provides the project-specific database location
+      // This is typically set by direnv or shell to point to the correct project
+      process.env.SUDOCODE_DIR = "/custom/.sudocode";
+      const client = new SudocodeClient();
 
       // Mock version check
       const versionProcess = new EventEmitter() as any;
@@ -524,7 +852,7 @@ describe("SudocodeClient", () => {
       await client.exec(["stats"]);
 
       const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
-      // dbPath should be derived from sudocodeDir
+      // dbPath should be set from SUDOCODE_DIR
       expect(lastCall[1]).toContain("--db");
       expect(lastCall[1]).toContain("/custom/.sudocode/cache.db");
     });
@@ -557,7 +885,8 @@ describe("SudocodeClient", () => {
     });
 
     it("should prioritize explicit dbPath over sudocodeDir", async () => {
-      const client = new SudocodeClient({ dbPath: "/explicit/cache.db", sudocodeDir: "/config/.sudocode" });
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      const client = new SudocodeClient({ dbPath: "/explicit/cache.db" });
 
       // Mock version check
       const versionProcess = new EventEmitter() as any;
@@ -583,12 +912,10 @@ describe("SudocodeClient", () => {
       expect(lastCall[1]).toContain("/explicit/cache.db");
     });
 
-    it("should use --project-id when projectId is configured", async () => {
-      const client = new SudocodeClient({
-        projectId: "my-project-abc12345",
-        workingDir: "/project/path",
-        sudocodeDir: "/project/path/.sudocode",
-      });
+    it("should prioritize SUDOCODE_DB env var over SUDOCODE_DIR", async () => {
+      process.env.SUDOCODE_DIR = "/env/.sudocode";
+      process.env.SUDOCODE_DB = "/env/custom.db";
+      const client = new SudocodeClient();
 
       // Mock version check
       const versionProcess = new EventEmitter() as any;
@@ -610,11 +937,13 @@ describe("SudocodeClient", () => {
       await client.exec(["stats"]);
 
       const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
-      expect(lastCall[1]).toContain("--project-id");
-      expect(lastCall[1]).toContain("my-project-abc12345");
+      expect(lastCall[1]).toContain("--db");
+      expect(lastCall[1]).toContain("/env/custom.db");
     });
 
-    it("should fall back to <workingDir>/.sudocode/cache.db when no config", async () => {
+    it("should dynamically resolve dbPath from getSudocodeDir when no explicit dbPath set", async () => {
+      // When no static dbPath is configured, exec() should dynamically resolve
+      // the dbPath from getSudocodeDir() to ensure the correct project database is used
       const client = new SudocodeClient({ workingDir: "/project" });
 
       // Mock version check
@@ -637,6 +966,8 @@ describe("SudocodeClient", () => {
       await client.exec(["stats"]);
 
       const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
+      // Should now ALWAYS add --db flag with dynamically resolved path
+      // Default fallback is <workingDir>/.sudocode/cache.db
       expect(lastCall[1]).toContain("--db");
       expect(lastCall[1]).toContain("/project/.sudocode/cache.db");
     });

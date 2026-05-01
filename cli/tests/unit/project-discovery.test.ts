@@ -13,7 +13,6 @@ import {
   generateProjectId,
   getConfigDir,
   getRegistryPath,
-  resolveProjectById,
   type ProjectInfo,
   type ProjectsConfig,
 } from "../../src/project-discovery.js";
@@ -382,59 +381,6 @@ describe("Project Discovery", () => {
         expect(result.source).toBe("registry-exact");
         expect(result.projectId).toBe("project-a-12345678");
       });
-    });
-  });
-
-  describe("resolveProjectById", () => {
-    beforeEach(() => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
-    });
-
-    it("should resolve a registered project by ID", () => {
-      const result = resolveProjectById("project-a-12345678");
-
-      expect(result).not.toBeNull();
-      expect(result!.projectId).toBe("project-a-12345678");
-      expect(result!.path).toBe("/Users/testuser/projects/project-a");
-      expect(result!.sudocodeDir).toBe("/Users/testuser/projects/project-a/.sudocode");
-      expect(result!.dbPath).toBe("/Users/testuser/projects/project-a/.sudocode/cache.db");
-      expect(result!.projectInfo).toEqual(mockProjects["project-a-12345678"]);
-    });
-
-    it("should return null for non-existent project ID", () => {
-      const result = resolveProjectById("nonexistent-project-00000000");
-
-      expect(result).toBeNull();
-    });
-
-    it("should return null when registry is unavailable", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      const result = resolveProjectById("project-a-12345678");
-
-      expect(result).toBeNull();
-    });
-
-    it("should return null for empty string project ID", () => {
-      const result = resolveProjectById("");
-
-      expect(result).toBeNull();
-    });
-
-    it("should resolve project with non-default sudocodeDir", () => {
-      const result = resolveProjectById("project-b-87654321");
-
-      expect(result).not.toBeNull();
-      expect(result!.sudocodeDir).toBe("/Users/testuser/shared-sudocode/project-b");
-      expect(result!.dbPath).toBe("/Users/testuser/shared-sudocode/project-b/cache.db");
-    });
-
-    it("should use custom config path when provided", () => {
-      const customPath = "/custom/path/projects.json";
-      resolveProjectById("project-a-12345678", customPath);
-
-      expect(fs.existsSync).toHaveBeenCalledWith(customPath);
     });
   });
 });

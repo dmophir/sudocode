@@ -3,9 +3,6 @@
  *
  * This module provides a client class that spawns `sudocode` CLI commands
  * and parses their JSON output for use in MCP tools.
- *
- * All project context is resolved from the explicit --project-id provided
- * at startup. No fallback to cwd, env vars, or discovery.
  */
 
 import { spawn } from "child_process";
@@ -13,32 +10,64 @@ import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { SudocodeClientConfig, SudocodeError } from "./types.js";
+import { discoverProject } from "@sudocode-ai/cli/project-discovery";
 
 export class SudocodeClient {
   private workingDir: string;
+  private workDirExplicit: boolean;
   private cliPath: string;
   private cliArgs: string[];
   private dbPath?: string;
   private serverUrl?: string;
   private versionChecked = false;
-  private sudocodeDir?: string;
-  private projectId?: string;
+  private sudocodeDirOverride?: string;
 
   constructor(config?: SudocodeClientConfig) {
-    // Project context is resolved from --project-id at MCP startup.
-    // workingDir, sudocodeDir, and dbPath are all set from registry lookup
-    // in index.ts validateConfig(), not from env vars or cwd fallback.
-    this.workingDir = config?.workingDir || process.cwd();
-    this.serverUrl = config?.serverUrl || process.env.SUDOCODE_SERVER_URL;
-    this.sudocodeDir = config?.sudocodeDir;
-    this.projectId = config?.projectId;
+    // Track if workDir was explicitly provided (via -w/--working-dir flag)
+    // If explicit, we respect it and don't dynamically lookup from server
+    this.workDirExplicit = !!config?.workingDir;
 
-    // Set dbPath from config (resolved from registry in validateConfig)
+    // Get working directory and expand variables if needed
+    let workingDir =
+      config?.workingDir || process.env.SUDOCODE_WORKING_DIR || process.cwd();
+
+    // Fix unexpanded ${workspaceFolder} variable - use PWD or cwd() instead
+    if (workingDir === "${workspaceFolder}" || workingDir.includes("${")) {
+      workingDir = process.env.PWD || process.cwd();
+    }
+
+    this.workingDir = workingDir;
+    this.serverUrl = config?.serverUrl || process.env.SUDOCODE_SERVER_URL;
+    
+    // Store explicit sudocodeDir override from config (NOT from SUDOCODE_DIR env var)
+    // SUDOCODE_DIR is only used as fallback when server is unavailable
+    // Priority: config.sudocodeDir > server dynamic > SUDOCODE_DIR env > static fallback
+    this.sudocodeDirOverride = config?.sudocodeDir;
+    
+    // Resolve dbPath with priority:
+    // 1. Explicit config.dbPath
+    // 2. SUDOCODE_DB env var
+    // 3. Explicit config.sudocodeDir
+    // 4. SUDOCODE_DIR env var (for project-specific databases)
+    // 5. Dynamic resolution at runtime (via getDbPath()) - NOT set statically here
+    // When serverUrl is configured and none of the above are set, we defer dbPath
+    // resolution to avoid using stale values
     if (config?.dbPath) {
       this.dbPath = config.dbPath;
-    } else if (this.sudocodeDir) {
-      this.dbPath = join(this.sudocodeDir, "cache.db");
+    } else if (process.env.SUDOCODE_DB) {
+      this.dbPath = process.env.SUDOCODE_DB;
+    } else if (this.sudocodeDirOverride) {
+      // Explicit config.sudocodeDir was provided
+      this.dbPath = join(this.sudocodeDirOverride, "cache.db");
+    } else if (process.env.SUDOCODE_DIR) {
+      // SUDOCODE_DIR env var provides project-specific directory
+      // This is typically set by direnv or the shell to point to the correct
+      // project database (e.g., .sudocode/projects/<project-id>/cache.db)
+      this.dbPath = join(process.env.SUDOCODE_DIR, "cache.db");
     }
+    // Note: When serverUrl is set and no explicit dbPath/sudocodeDir, we DON'T
+    // set this.dbPath. This allows getSudocodeDir() to dynamically resolve and
+    // the CLI to use its own resolution based on the working directory
 
     // Auto-discover CLI path from node_modules or use configured/env path
     const cliInfo = this.findCliPath();
@@ -98,16 +127,114 @@ export class SudocodeClient {
   }
 
   /**
-   * Get the sudocode directory.
-   * Resolved from --project-id registry lookup at startup.
+   * Get the active working directory from the sudocode server.
+   * 
+   * This queries the server for the UI's currently selected project and returns
+   * its path. Falls back to the cached workingDir if the server is unavailable
+   * or no project is selected.
+   * 
+   * This enables the MCP server to correctly target the project the user
+   * is currently working on in the UI, even if it changed after MCP startup.
+   * 
+   * Note: If workDir was explicitly provided via -w/--working-dir flag,
+   * this returns the explicit path without querying the server.
    */
-  getSudocodeDir(): string {
-    if (this.sudocodeDir) {
-      return this.sudocodeDir;
+  async getActiveWorkDir(): Promise<string> {
+    // If workDir was explicitly provided, respect it
+    if (this.workDirExplicit) {
+      return this.workingDir;
     }
 
-    // Fallback: derive from workingDir (should not happen with proper config)
-    return join(this.workingDir, ".sudocode");
+    if (!this.serverUrl) {
+      return this.workingDir;
+    }
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/projects/open`, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+        },
+        signal: AbortSignal.timeout(2000), // Quick timeout - don't block CLI ops
+      });
+
+      if (!response.ok) {
+        // Server returned an error - fall back to cached workingDir
+        return this.workingDir;
+      }
+
+      const result = await response.json() as {
+        success: boolean;
+        currentProjectId?: string;
+        data: Array<{
+          id: string;
+          path: string;
+          name: string;
+          isCurrent?: boolean;
+          openedAt?: string;
+        }>;
+      };
+
+      if (result.success && result.data && result.data.length > 0) {
+        // Find the UI's current project (marked with isCurrent or first in sorted list)
+        const currentProject = result.data.find(p => p.isCurrent) || result.data[0];
+        if (currentProject.path && currentProject.path !== this.workingDir) {
+          console.error(
+            `[SudocodeClient] Using UI's current project path: ${currentProject.path} (was: ${this.workingDir})`
+          );
+          return currentProject.path;
+        }
+        return currentProject.path || this.workingDir;
+      }
+    } catch (error) {
+      // Server not available or timeout - fall back silently
+      // This is expected when running without the local server
+      if (process.env.DEBUG_MCP) {
+        console.error(
+          `[SudocodeClient] Could not get active project from server: ${error instanceof Error ? error.message : error}`
+        );
+      }
+    }
+
+    return this.workingDir;
+  }
+
+  /**
+   * Get the sudocode directory with dynamic resolution based on working directory.
+   * 
+   * Resolution priority:
+   * 1. Explicit config override (config.sudocodeDir)
+   * 2. SUDOCODE_DIR env var
+   * 3. Project discovery from registry (offline-first, reads ~/.config/sudocode/projects.json)
+   * 4. Fallback: join(workingDir, ".sudocode")
+   * 
+   * IMPORTANT: This resolves based on the working directory using local registry lookup,
+   * NOT server queries. This is faster and works offline.
+   */
+  getSudocodeDir(): string {
+    // 1. Explicit config override takes highest precedence
+    if (this.sudocodeDirOverride) {
+      return this.sudocodeDirOverride;
+    }
+
+    // 2. SUDOCODE_DIR env var 
+    if (process.env.SUDOCODE_DIR) {
+      if (process.env.DEBUG_MCP) {
+        console.error(
+          `[SudocodeClient] Using SUDOCODE_DIR: ${process.env.SUDOCODE_DIR}`
+        );
+      }
+      return process.env.SUDOCODE_DIR;
+    }
+
+    // 3. Use CLI's project discovery (reads local registry file)
+    const discovery = discoverProject(this.workingDir);
+    if (process.env.DEBUG_MCP) {
+      console.error(
+        `[SudocodeClient] Project discovery for ${this.workingDir}: source=${discovery.source}, sudocodeDir=${discovery.sudocodeDir}`
+      );
+    }
+    return discovery.sudocodeDir;
   }
 
   /**
@@ -128,18 +255,30 @@ export class SudocodeClient {
       cmdArgs.push("--json");
     }
 
-    // Add --project-id if available (preferred over --db for project context)
-    if (this.projectId && !cmdArgs.includes("--project-id")) {
-      cmdArgs.push("--project-id", this.projectId);
-    } else if (!cmdArgs.includes("--db") && !cmdArgs.includes("--project-id")) {
-      // Fallback: use --db if no project-id available
-      const dbPath = this.dbPath || join(this.getSudocodeDir(), "cache.db");
-      cmdArgs.push("--db", dbPath);
+    // Add --db flag - use static dbPath or dynamically resolve from getSudocodeDir()
+    // This ensures the correct project-specific database is used even when the
+    // MCP server is shared across multiple projects
+    if (!cmdArgs.includes("--db")) {
+      if (this.dbPath) {
+        // Use statically configured dbPath
+        cmdArgs.push("--db", this.dbPath);
+      } else {
+        // Dynamically resolve database path from current project's sudocodeDir
+        const sudocodeDir = this.getSudocodeDir();
+        const dynamicDbPath = join(sudocodeDir, "cache.db");
+        cmdArgs.push("--db", dynamicDbPath);
+        if (process.env.DEBUG_MCP) {
+          console.error(`[SudocodeClient] Using dynamic dbPath: ${dynamicDbPath}`);
+        }
+      }
     }
+
+    // Get the active working directory (may query server if configured)
+    const workDir = await this.getActiveWorkDir();
 
     return new Promise((resolve, reject) => {
       const proc = spawn(this.cliPath, cmdArgs, {
-        cwd: this.workingDir,
+        cwd: workDir,
         env: {
           ...process.env,
           SUDOCODE_DISABLE_UPDATE_CHECK: "true",

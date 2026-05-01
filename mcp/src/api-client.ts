@@ -388,17 +388,13 @@ export class SudocodeAPIClient {
   // ===========================================================================
 
   /**
-   * Open a project by ID (preferred) or path (for init/register flows only).
+   * Open a project by path.
+   * This must be called before other API methods if the project isn't already open.
    */
-  async openProject(projectIdOrPath: string): Promise<{ id: string; path: string }> {
-    // If it looks like a path (contains / or \), use path-based open
-    // Otherwise, use projectId-based open
-    const isPath = projectIdOrPath.includes("/") || projectIdOrPath.includes("\\");
-    const body = isPath
-      ? { path: projectIdOrPath }
-      : { projectId: projectIdOrPath };
-
-    return this.request<{ id: string; path: string }>("POST", "/api/projects/open", body);
+  async openProject(projectPath: string): Promise<{ id: string; path: string }> {
+    return this.request<{ id: string; path: string }>("POST", "/api/projects/open", {
+      path: projectPath,
+    });
   }
 
   /**

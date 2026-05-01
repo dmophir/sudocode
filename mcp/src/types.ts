@@ -60,10 +60,8 @@ export interface SudocodeClientConfig {
   cliPath?: string;
   dbPath?: string;
   syncOnStartup?: boolean;
-  /** Server URL for extended tools */
+  /** Server URL for dynamic working directory resolution */
   serverUrl?: string;
-  /** Project ID from registry (required for project-bound operations) */
-  projectId?: string;
 }
 
 /**
@@ -72,6 +70,10 @@ export interface SudocodeClientConfig {
 export interface SudocodeMCPServerConfig extends SudocodeClientConfig {
   /** Comma-separated scope string (default: "default") */
   scope?: string;
+  /** Server URL for extended tools */
+  serverUrl?: string;
+  /** Project ID for API calls (auto-discovered from working dir if not provided) */
+  projectId?: string;
 }
 
 // ============================================================================

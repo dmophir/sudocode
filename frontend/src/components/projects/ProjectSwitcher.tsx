@@ -68,7 +68,7 @@ export function ProjectSwitcher({ className, collapsed = false }: ProjectSwitche
 
         // If not open, open it before switching
         if (!isOpen) {
-          await projectsApi.open({ projectId })
+          await projectsApi.open({ path: targetProject.path })
         }
       }
 

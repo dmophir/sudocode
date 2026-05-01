@@ -12,10 +12,12 @@ import {
   getMissingServerUrlScopes,
 } from "./scopes.js";
 import {
+  fixUnexpandedVariables,
   parseArgs,
 } from "./cli-utils.js";
 import {
-  resolveProjectById,
+  discoverProject,
+  generateProjectId,
 } from "@sudocode-ai/cli/project-discovery";
 
 function showHelp(): void {
@@ -25,12 +27,14 @@ sudocode MCP Server
 Usage: sudocode-mcp [options]
 
 Options:
-  --project-id <id>         Project ID from registry (required for project-bound operations)
-  -d, --sudocode-dir <path> Override sudocode data directory (resolved from project-id by default)
+  -w, --working-dir <path>  Working directory (default: cwd or SUDOCODE_WORKING_DIR)
+  -d, --sudocode-dir <path> Override sudocode data directory (default: from server or <working-dir>/.sudocode)
   --cli-path <path>         Path to sudocode CLI (default: 'sudocode' or SUDOCODE_PATH)
+  --db-path <path>          Database path (default: auto-discover or SUDOCODE_DB)
   --no-sync                 Skip initial sync on startup (default: sync enabled)
   -s, --scope <scopes>      Comma-separated list of scopes to enable (default: "default")
   --server-url <url>        Local server URL for extended tools (required if scope != default)
+  --project-id <id>         Project ID for API calls (auto-discovered from working dir)
   -h, --help                Show this help message
 
 Scopes:
@@ -50,27 +54,26 @@ Meta-scopes:
   all                       default + project-assistant
 
 Examples:
-  # Project-bound operation (required --project-id)
-  sudocode-mcp --project-id my-project-abc12345
+  # Default behavior (original 10 tools)
+  sudocode-mcp --working-dir /path/to/repo
 
   # Enable execution monitoring
-  sudocode-mcp --project-id my-project-abc12345 --scope default,executions:read --server-url http://localhost:3000
+  sudocode-mcp -w /path/to/repo --scope default,executions:read --server-url http://localhost:3000
 
   # Full project assistant mode
-  sudocode-mcp --project-id my-project-abc12345 --scope all --server-url http://localhost:3000
-
-  # Find your project ID
-  sudocode config project-id /path/to/repo
+  sudocode-mcp -w /path/to/repo --scope all --server-url http://localhost:3000
 
 Environment Variables:
+  SUDOCODE_WORKING_DIR      Default working directory
+  SUDOCODE_DIR              Fallback sudocode directory (used when server unavailable)
   SUDOCODE_PATH             Default CLI path
+  SUDOCODE_DB               Default database path
   SUDOCODE_SERVER_URL       Default server URL for extended tools
       `);
 }
 
 /**
  * Validate configuration and resolve scopes.
- * Requires --project-id for project-bound operations.
  */
 function validateConfig(config: SudocodeMCPServerConfig): void {
   // Default scope if not specified
@@ -81,43 +84,34 @@ function validateConfig(config: SudocodeMCPServerConfig): void {
     config.serverUrl = process.env.SUDOCODE_SERVER_URL;
   }
 
-  // Require --project-id for project-bound operations
+  // Fix unexpanded VS Code variables BEFORE generating project ID
+  // This ensures both workingDir and projectId are consistent
+  config.workingDir = fixUnexpandedVariables(config.workingDir);
+
+  // Use project discovery to resolve projectId and sudocodeDir
+  const effectiveWorkDir = config.workingDir || process.cwd();
+  const sudocodeDirOverride = config.sudocodeDir || process.env.SUDOCODE_DIR;
+  
+  const discovery = discoverProject(effectiveWorkDir, undefined, sudocodeDirOverride);
+  
+  // Auto-discover project ID from working directory if not specified
   if (!config.projectId) {
-    console.error(
-      "Error: --project-id is required for project-bound MCP operations.\n" +
-      "  Use 'sudocode config project-id [path]' to find your project ID.\n" +
-      "  Use 'sudocode init' to create a new project."
-    );
-    process.exit(1);
+    config.projectId = discovery.projectId;
+    console.error(`[mcp] Discovered project: id=${discovery.projectId}, source=${discovery.source}`);
   }
-
-  // Resolve project from registry
-  const resolved = resolveProjectById(config.projectId);
-  if (!resolved) {
-    console.error(
-      `Error: Project not found in registry: ${config.projectId}\n` +
-      "  Use 'sudocode config project-id [path]' to find valid project IDs.\n" +
-      "  Use 'sudocode init' to register a new project."
-    );
-    process.exit(1);
-  }
-
-  // Set sudocodeDir from registry if not explicitly overridden
+  
+  // Set sudocodeDir if not explicitly provided
   if (!config.sudocodeDir) {
-    config.sudocodeDir = resolved.sudocodeDir;
+    config.sudocodeDir = discovery.sudocodeDir;
+    if (process.env.DEBUG_MCP) {
+      console.error(`[mcp] Using sudocodeDir: ${discovery.sudocodeDir}`);
+    }
   }
-
-  // Set workingDir from registry for CLI operations
-  if (!config.workingDir) {
-    config.workingDir = resolved.path;
+  
+  // Log warning if any
+  if (discovery.warning) {
+    console.error(`[mcp] Warning: ${discovery.warning}`);
   }
-
-  // Set dbPath from registry
-  if (!config.dbPath) {
-    config.dbPath = resolved.dbPath;
-  }
-
-  console.error(`[mcp] Resolved project: id=${resolved.projectId}, path=${resolved.path}`);
 
   try {
     // Validate and resolve scopes

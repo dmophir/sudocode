@@ -68,8 +68,8 @@ export default function ProjectsPage() {
 
   const handleOpenProject = async (project: ProjectInfo) => {
     try {
-      // Open project by ID (preferred for context switching)
-      await openProject.mutateAsync({ projectId: project.id })
+      // Open project - MCP servers dynamically lookup current project via getActiveWorkDir()
+      await openProject.mutateAsync({ path: project.path })
       setCurrentProjectId(project.id)
       navigate(buildProjectPath(project.id, '/issues'))
     } catch (error) {
