@@ -24,6 +24,12 @@ vi.mock("../../../src/update-checker.js", () => ({
 }));
 
 describe("Server Commands", () => {
+  const mockContext = {
+    db: {},
+    outputDir: "/test/.sudocode",
+    jsonOutput: false,
+  };
+
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -51,7 +57,7 @@ describe("Server Commands", () => {
       const execSyncMock = vi.mocked(childProcess.execSync);
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true });
+      await handleServerStart(mockContext, { detach: true });
 
       expect(getUpdateNotificationMock).toHaveBeenCalledOnce();
     });
@@ -66,7 +72,7 @@ describe("Server Commands", () => {
       const execSyncMock = vi.mocked(childProcess.execSync);
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true });
+      await handleServerStart(mockContext, { detach: true });
 
       expect(consoleLogSpy).toHaveBeenCalledWith();
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -83,7 +89,7 @@ describe("Server Commands", () => {
       const execSyncMock = vi.mocked(childProcess.execSync);
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true });
+      await handleServerStart(mockContext, { detach: true });
 
       // Should still call console.log for server startup messages
       expect(consoleLogSpy).toHaveBeenCalled();
@@ -106,7 +112,7 @@ describe("Server Commands", () => {
       // Mock binary as available (first check succeeds)
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true, port: "3001" });
+      await handleServerStart(mockContext, { detach: true, port: "3001" });
 
       // Should check if binary is available
       expect(execSyncMock).toHaveBeenCalledWith(
@@ -122,6 +128,7 @@ describe("Server Commands", () => {
           detached: true,
           stdio: "ignore",
           env: expect.objectContaining({
+            SUDOCODE_DIR: "/test/.sudocode",
             SUDOCODE_PORT: "3001",
           }),
         })
@@ -144,7 +151,7 @@ describe("Server Commands", () => {
         })
         .mockReturnValueOnce("0.1.0" as any);
 
-      await handleServerStart({ detach: true, port: "3001" });
+      await handleServerStart(mockContext, { detach: true, port: "3001" });
 
       // Should check for binary first, then package
       expect(execSyncMock).toHaveBeenCalledWith(
@@ -164,6 +171,7 @@ describe("Server Commands", () => {
           detached: true,
           stdio: "ignore",
           env: expect.objectContaining({
+            SUDOCODE_DIR: "/test/.sudocode",
             SUDOCODE_PORT: "3001",
           }),
         })
@@ -189,7 +197,7 @@ describe("Server Commands", () => {
       });
 
       await expect(
-        handleServerStart({ detach: true })
+        handleServerStart(mockContext, { detach: true })
       ).rejects.toThrow("process.exit called");
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -209,14 +217,14 @@ describe("Server Commands", () => {
       const execSyncMock = vi.mocked(childProcess.execSync);
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true });
+      await handleServerStart(mockContext, { detach: true });
 
       const call = spawnMock.mock.calls[0];
       const options = call?.[2] as any;
       expect(options?.env?.SUDOCODE_PORT).toBeUndefined();
     });
 
-    it("should not pass SUDOCODE_DIR environment variable (server is project-agnostic)", async () => {
+    it("should pass SUDOCODE_DIR environment variable", async () => {
       const getUpdateNotificationMock = vi.mocked(
         updateChecker.getUpdateNotification
       );
@@ -226,12 +234,11 @@ describe("Server Commands", () => {
       const execSyncMock = vi.mocked(childProcess.execSync);
       execSyncMock.mockReturnValue("0.1.0" as any);
 
-      await handleServerStart({ detach: true });
+      await handleServerStart(mockContext, { detach: true });
 
       const call = spawnMock.mock.calls[0];
       const options = call?.[2] as any;
-      // Server receives project_id per-request, not at startup
-      expect(options?.env?.SUDOCODE_DIR).toBeUndefined();
+      expect(options?.env?.SUDOCODE_DIR).toBe("/test/.sudocode");
     });
 
     it("should handle update check failures gracefully", async () => {
@@ -246,7 +253,7 @@ describe("Server Commands", () => {
 
       // Should not throw
       await expect(
-        handleServerStart({ detach: true })
+        handleServerStart(mockContext, { detach: true })
       ).resolves.not.toThrow();
     });
   });

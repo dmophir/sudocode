@@ -173,34 +173,23 @@ program
   .version(VERSION)
   .option("--project-id <id>", "Project ID from registry (required for project-scoped commands)")
   .option("--json", "Output in JSON format")
-  .hook("preAction", (thisCommand: Command, actionCommand: Command) => {
+  .hook("preAction", (thisCommand: Command) => {
     // Get global options
     const opts = thisCommand.optsWithGlobals();
     if (opts.json) jsonOutput = true;
 
-    // Commands exempt from --project-id requirement.
-    // Uses full command path to avoid collisions with subcommands
-    // (e.g. top-level "update" vs "issue update").
-    const exemptCommands = new Set([
+    // Commands exempt from --project-id requirement
+    const exemptCommands = [
       "init",
-      "server",
-      "config project-id",
+      "project-id", // config project-id subcommand
       "merge-driver",
       "init-merge-driver",
       "remove-merge-driver",
       "update",
-    ]);
+    ];
+    const commandName = thisCommand.name();
 
-    // Build full command path (e.g. "issue update", "config project-id")
-    const parts: string[] = [];
-    let cmd: Command | null = actionCommand;
-    while (cmd && cmd !== thisCommand) {
-      parts.unshift(cmd.name());
-      cmd = cmd.parent;
-    }
-    const fullCommandPath = parts.join(" ");
-
-    if (!exemptCommands.has(fullCommandPath)) {
+    if (!exemptCommands.includes(commandName)) {
       // Resolve directories using explicit project-id registry lookup
       resolveDirectories({ projectId: opts.projectId });
       initDB();
@@ -534,7 +523,7 @@ config
   .command("project-id [path]")
   .description("Get the project ID for a path (defaults to current directory)")
   .action(async (inputPath) => {
-    await handleConfigProjectId(inputPath, { jsonOutput });
+    await handleConfigProjectId(getContext(), inputPath, { jsonOutput });
   });
 
 // ============================================================================
@@ -646,7 +635,7 @@ program
   .option("-p, --port <port>", "Port to run server on")
   .option("-d, --detach", "Run server in background")
   .action(async (options) => {
-    await handleServerStart(options);
+    await handleServerStart(getContext(), options);
   });
 
 // ============================================================================

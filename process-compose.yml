@@ -6,6 +6,8 @@ ordered_shutdown: true
 log_level: info
 
 environment:
+  - "SUDOCODE_DIR=${SUDOCODE_DIR:-.sudocode}"
+  - "SUDOCODE_WORKING_DIR=${SUDOCODE_WORKING_DIR:-.}"
   - "SUDOCODE_PORT=${SUDOCODE_PORT:-3000}"
 
 processes:

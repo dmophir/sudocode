@@ -42,7 +42,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
     try {
       // Validate project exists
-      await projectsApi.getById(projectId)
+      const project = await projectsApi.getById(projectId)
 
       // Check if open, open if needed
       const openProjects = await projectsApi.getOpen()
