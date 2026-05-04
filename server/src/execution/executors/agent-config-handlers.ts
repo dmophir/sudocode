@@ -460,6 +460,57 @@ export const copilotHandler: AgentConfigHandler = {
 };
 
 // =============================================================================
+// OpenCode Handler
+// =============================================================================
+
+/**
+ * Configuration handler for OpenCode agent
+ *
+ * Handles:
+ * - OPENCODE_CONFIG_CONTENT environment variable for model selection
+ * - Permission handling
+ * - Session mode
+ */
+export const opencodeHandler: AgentConfigHandler = {
+  processConfig(
+    rawConfig: RawAgentConfig,
+    _context: AgentConfigContext
+  ): ProcessedAgentConfig {
+    // Build model environment variable
+    const configEnvVars: Record<string, string> = {};
+    const model = rawConfig.model || rawConfig.agentConfig?.model;
+    if (model && model !== "default") {
+      configEnvVars.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model });
+    }
+
+    // Merge environment variables
+    const existingEnv = rawConfig.env || rawConfig.agentConfig?.env;
+    const env =
+      Object.keys(configEnvVars).length > 0 || existingEnv
+        ? { ...configEnvVars, ...existingEnv }
+        : undefined;
+
+    // Check for dangerouslySkipPermissions toggle
+    const dangerouslySkipPermissions =
+      rawConfig.dangerouslySkipPermissions === true ||
+      rawConfig.agentConfig?.dangerouslySkipPermissions === true;
+
+    // Session mode
+    const sessionMode = rawConfig.mode || rawConfig.agentConfig?.mode;
+
+    return {
+      env,
+      acpPermissionMode: dangerouslySkipPermissions
+        ? "auto-approve"
+        : "interactive",
+      skipPermissions: dangerouslySkipPermissions,
+      sessionMode,
+      mcpServers: rawConfig.mcpServers,
+    };
+  },
+};
+
+// =============================================================================
 // Default Handler
 // =============================================================================
 
@@ -500,6 +551,7 @@ const handlers: Record<string, AgentConfigHandler> = {
   gemini: geminiHandler,
   codex: codexHandler,
   copilot: copilotHandler,
+  opencode: opencodeHandler,
 };
 
 /**
