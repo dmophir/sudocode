@@ -46,6 +46,7 @@ import type {
   PendingEscalationResponse,
   EscalationResponseRequest,
 } from '@/types/workflow'
+import type { LocalConfig } from '@sudocode-ai/types'
 
 // Default timeout: 10 minutes
 // Extended to handle long running agent executions
@@ -579,6 +580,22 @@ export const workflowsApi = {
       `/workflows/${id}/escalation/respond`,
       response
     ),
+}
+
+/**
+ * Config API
+ */
+export const configApi = {
+  // Get local config
+  getLocal: () => get<LocalConfig>('/config/local'),
+
+  // Update local config
+  updateLocal: (config: Partial<LocalConfig>) =>
+    put<void>('/config/local', config),
+
+  // Update workflow model specifically
+  updateWorkflowModel: (model: string | undefined) =>
+    put<void>('/config/local/workflowModel', { workflowModel: model }),
 }
 
 /**
