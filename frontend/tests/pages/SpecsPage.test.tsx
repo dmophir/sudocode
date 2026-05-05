@@ -299,8 +299,8 @@ describe('SpecsPage', () => {
       const sortTrigger = screen.getByRole('combobox')
       await user.click(sortTrigger)
 
-      // Select "Last Updated"
-      const lastUpdatedOption = screen.getByRole('option', { name: 'Last Updated' })
+      // Select "Updated"
+      const lastUpdatedOption = screen.getByRole('option', { name: 'Updated' })
       await user.click(lastUpdatedOption)
 
       // Check order by updated_at descending

@@ -9,6 +9,7 @@ import {
   claudeCodeHandler,
   geminiHandler,
   codexHandler,
+  opencodeHandler,
   defaultHandler,
   getAgentConfigHandler,
   processAgentConfig,
@@ -703,9 +704,9 @@ describe("Agent Config Handlers", () => {
       expect(handler).toBe(defaultHandler);
     });
 
-    it("should return defaultHandler for opencode (not explicitly registered)", () => {
+    it("should return opencodeHandler for opencode", () => {
       const handler = getAgentConfigHandler("opencode");
-      expect(handler).toBe(defaultHandler);
+      expect(handler).toBe(opencodeHandler);
     });
   });
 
