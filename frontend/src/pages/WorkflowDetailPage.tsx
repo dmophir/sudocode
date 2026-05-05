@@ -161,7 +161,7 @@ export default function WorkflowDetailPage() {
         const modelsResponse = await fetch('/api/agents/opencode/models')
         if (modelsResponse.ok) {
           const data = await modelsResponse.json()
-          if (Array.isArray(data)) {
+          if (data.models && Array.isArray(data.models)) {
             const models: ModelOption[] = data
               .filter((m: string) => m !== 'default')
               .map((modelId: string) => ({
