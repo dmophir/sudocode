@@ -83,7 +83,7 @@ const LOCAL_CONFIG_FIELDS: (keyof LocalConfig)[] = [
 
 **File**: `server/src/routes/config.ts`
 
-Add endpoints to read/write the local config file:
+Add endpoints to read/write the local config file (insert before `return router` on line 186):
 
 ```typescript
 /**
@@ -192,6 +192,8 @@ export { configApi, ... };
 ### Step 4: Update CreateWorkflowDialog
 
 **File**: `frontend/src/components/workflows/CreateWorkflowDialog.tsx`
+
+**Prerequisite**: Step 3 must be completed first (add `configApi` to `frontend/src/lib/api.ts`)
 
 **Changes**:
 
@@ -342,6 +344,8 @@ interface ModelOption {
 
 **Changes**:
 
+Insert model selector in header after line 356 (after branch info badge), before worktree controls on line 360:
+
 1. **Add state for models**:
 ```typescript
 const [availableModels, setAvailableModels] = useState<ModelOption[]>([DEFAULT_MODEL_OPTION])
@@ -438,22 +442,38 @@ function formatModelName(modelId: string): string {
 
 ### Step 6: Backend - Execution Service Reads Local Config
 
+**File**: `server/src/utils/config.ts` (new file)
+
+Create utility to read local config:
+
+```typescript
+import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
+import type { LocalConfig } from '@sudocode-ai/types';
+
+export function readLocalConfig(sudocodeDir: string): LocalConfig {
+  const configPath = path.join(sudocodeDir, 'config.local.json');
+  if (!existsSync(configPath)) {
+    return {};
+  }
+  return JSON.parse(readFileSync(configPath, 'utf-8'));
+}
+```
+
 **File**: `server/src/services/execution-service.ts`
 
-Add logic to read local config when creating execution for opencode agent:
+Add logic to read local config when creating execution for opencode agent (apply to **all** opencode executions, not just orchestrator):
 
 ```typescript
 // At the top of the file, add import
-import { readLocalConfig } from '../utils/config.js'; // or create new utility
+import { readLocalConfig } from '../utils/config.js';
 
-// In createExecution method, when building execution config:
-// After determining agentType and before creating execution:
-
+// In createExecution method, early in the function (before line 236):
 // For opencode agent, read workflowModel from local config if not explicitly set
 let finalModel = config.model;
 if (!finalModel && agentType === 'opencode') {
   try {
-    const localConfig = readLocalConfig(project.sudocodeDir);
+    const localConfig = readLocalConfig(this.sudocodeDir);
     if (localConfig.workflowModel) {
       finalModel = localConfig.workflowModel;
       console.log(`[ExecutionService] Using workflowModel from local config: ${finalModel}`);
@@ -469,22 +489,6 @@ const executionConfig = {
   model: finalModel,
   // ... other fields
 };
-```
-
-**Alternative**: If `readLocalConfig` doesn't exist as a utility, create it in `server/src/utils/config.ts`:
-
-```typescript
-import { existsSync, readFileSync } from 'fs';
-import * as path from 'path';
-import type { LocalConfig } from '@sudocode-ai/types';
-
-export function readLocalConfig(sudocodeDir: string): LocalConfig {
-  const configPath = path.join(sudocodeDir, 'config.local.json');
-  if (!existsSync(configPath)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(configPath, 'utf-8'));
-}
 ```
 
 ---
@@ -533,18 +537,18 @@ orchestratorModel?: string;
 
 ---
 
-## Files to Modify
+## Files to Modify (in order)
 
 | File | Lines | Change | Priority |
 |------|-------|--------|----------|
 | `types/src/index.d.ts` | ~382 | Add `workflowModel` to LocalConfig | High |
-| `cli/src/config.ts` | ~47 | Add `workflowModel` to LOCAL_CONFIG_FIELDS | Low |
-| `server/src/routes/config.ts` | +60 lines | Add GET/PUT /api/config/local endpoints | High |
+| `server/src/routes/config.ts` | +60 lines | Add GET/PUT /api/config/local endpoints (before line 186) | High |
+| `server/src/utils/config.ts` | +10 lines | Create with `readLocalConfig` utility | High |
+| `server/src/services/execution-service.ts` | +20 lines | Read local config for opencode model (apply to all opencode executions) | High |
 | `frontend/src/lib/api.ts` | +10 lines | Add configApi methods | High |
 | `frontend/src/components/workflows/CreateWorkflowDialog.tsx` | +80 lines | Model selector UI, fetching, saving | High |
-| `frontend/src/pages/WorkflowDetailPage.tsx` | +50 lines | Model selector in header | Medium |
-| `server/src/services/execution-service.ts` | +20 lines | Read local config for opencode model | High |
-| `server/src/utils/config.ts` | +10 lines | Add readLocalConfig utility (if needed) | Medium |
+| `frontend/src/pages/WorkflowDetailPage.tsx` | +50 lines | Model selector in header (after line 356) | Medium |
+| `cli/src/config.ts` | ~47 | Add `workflowModel` to LOCAL_CONFIG_FIELDS | Low |
 | `types/src/workflows.d.ts` | 215-217 | Update documentation | Low |
 | **Test files** | +150 lines | Add comprehensive tests | Medium |
 
@@ -573,7 +577,8 @@ orchestratorModel?: string;
 3. **Default behavior**: New workflows default to local config workflowModel, or `__default__` if not set
 4. **Always visible selector**: Model selector in header is always visible but disabled when workflow is running
 5. **Reuses existing model fetching**: Uses the same `/api/agents/opencode/models` endpoint as AgentSettingsDialog
-6. **Execution service handles fallback**: Only for opencode agent, reads local config when model is undefined
+6. **Execution service handles fallback**: For **all** opencode agent executions (not just orchestrator), reads local config when model is undefined
+7. **Utility file approach**: `readLocalConfig` extracted to `server/src/utils/config.ts` for clean separation
 
 ---
 
