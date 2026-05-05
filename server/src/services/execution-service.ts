@@ -29,6 +29,7 @@ import {
     type ExecutorWrapper,
 } from "../execution/executors/executor-factory.js";
 import { execFileNoThrow } from "../utils/execFileNoThrow.js";
+import { readLocalConfig } from "../utils/config.js";
 import {
     isVoiceBroadcastEnabled,
     readVoiceConfig,
@@ -228,6 +229,25 @@ export class ExecutionService {
     // 1. Validate
     if (!prompt.trim()) {
       throw new Error("Prompt cannot be empty");
+    }
+
+    // Model fallback: use workflowModel from local config if config.model is not set
+    let finalModel = config.model;
+    if (!finalModel && agentType === "opencode") {
+      try {
+        const localConfig = readLocalConfig(this.sudocodeDir);
+        if (localConfig.workflowModel) {
+          finalModel = localConfig.workflowModel;
+          console.log(
+            `[ExecutionService] Using workflowModel from local config: ${finalModel}`
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "[ExecutionService] Failed to read local config for workflowModel:",
+          error
+        );
+      }
     }
 
     // 2. Build execution config with auto-injected MCP servers
@@ -590,7 +610,7 @@ export class ExecutionService {
         timeout: mergedConfig.timeout,
       },
       metadata: {
-        model: mergedConfig.model || "default",
+        model: finalModel || "default",
         captureFileChanges: mergedConfig.captureFileChanges ?? true,
         captureToolCalls: mergedConfig.captureToolCalls ?? true,
         issueId: issueId ?? undefined,
