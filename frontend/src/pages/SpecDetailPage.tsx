@@ -224,7 +224,6 @@ Example dependency structure:
 - i-sub1 (no deps) blocks i-sub2
 - i-sub2 blocks i-sub3  
 - i-sub3 blocks i-root
-- i-sub4 (parallel work) blocks i-root
 
 This ensures workflows can discover all issues by following the blocks relationship graph.
 `
