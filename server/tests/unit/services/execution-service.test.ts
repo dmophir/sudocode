@@ -1720,6 +1720,95 @@ describe("ExecutionService", () => {
       });
     });
   });
+
+  describe("workflowModel from local config", () => {
+    it("should use workflowModel from local config when agentType is opencode and config.model is undefined", async () => {
+      // Create config.local.json with workflowModel set
+      const sudocodeDir = service["sudocodeDir"];
+      const localConfigPath = path.join(sudocodeDir, "config.local.json");
+      if (!fs.existsSync(sudocodeDir)) {
+        fs.mkdirSync(sudocodeDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        localConfigPath,
+        JSON.stringify({ workflowModel: "claude-sonnet-4-20250514" }, null, 2)
+      );
+
+      const prompt = "Test prompt";
+      
+      // Create execution without specifying model
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" }, // No model specified
+        prompt,
+        "opencode" // opencode agent type
+      );
+
+      // Verify execution was created
+      expect(execution.id).toBeTruthy();
+      
+      // Clean up
+      fs.unlinkSync(localConfigPath);
+    });
+
+    it("should use config.model when explicitly provided (overrides local config)", async () => {
+      // Create config.local.json with workflowModel set
+      const sudocodeDir = service["sudocodeDir"];
+      const localConfigPath = path.join(sudocodeDir, "config.local.json");
+      if (!fs.existsSync(sudocodeDir)) {
+        fs.mkdirSync(sudocodeDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        localConfigPath,
+        JSON.stringify({ workflowModel: "claude-sonnet-4-20250514" }, null, 2)
+      );
+
+      const prompt = "Test prompt";
+      
+      // Create execution with explicit model
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local", model: "gpt-4o" }, // Explicit model
+        prompt,
+        "opencode"
+      );
+
+      // Verify execution was created
+      expect(execution.id).toBeTruthy();
+      
+      // Clean up
+      fs.unlinkSync(localConfigPath);
+    });
+
+    it("should not use workflowModel from local config for non-opencode agents", async () => {
+      // Create config.local.json with workflowModel set
+      const sudocodeDir = service["sudocodeDir"];
+      const localConfigPath = path.join(sudocodeDir, "config.local.json");
+      if (!fs.existsSync(sudocodeDir)) {
+        fs.mkdirSync(sudocodeDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        localConfigPath,
+        JSON.stringify({ workflowModel: "claude-sonnet-4-20250514" }, null, 2)
+      );
+
+      const prompt = "Test prompt";
+      
+      // Create execution with claude-code agent (no model specified)
+      const execution = await service.createExecution(
+        testIssueId,
+        { mode: "local" }, // No model specified
+        prompt,
+        "claude-code" // Different agent type
+      );
+
+      // Verify execution was created
+      expect(execution.id).toBeTruthy();
+      
+      // Clean up
+      fs.unlinkSync(localConfigPath);
+    });
+  });
 });
 
 /**
