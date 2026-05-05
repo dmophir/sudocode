@@ -483,5 +483,119 @@ describe("Config Router", () => {
         })
       );
     });
-  })
+  });
+
+  describe("GET /local", () => {
+    it("should return empty object when config.local.json does not exist", async () => {
+      const { req, res } = createMockReqRes();
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const handler = router.stack.find(
+        (layer) => layer.route?.path === "/local" && layer.route?.methods.get
+      )?.route?.stack[0].handle;
+
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({});
+    });
+
+    it("should return full local config when file exists", async () => {
+      const { req, res } = createMockReqRes();
+      const mockLocalConfig = {
+        workflowModel: "gpt-4",
+        editor: { theme: "dark" },
+        voice: { enabled: true },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockLocalConfig));
+
+      const handler = router.stack.find(
+        (layer) => layer.route?.path === "/local" && layer.route?.methods.get
+      )?.route?.stack[0].handle;
+
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockLocalConfig);
+    });
+  });
+
+  describe("PUT /local", () => {
+    it("should write full local config and return it", async () => {
+      const { req, res } = createMockReqRes({
+        body: {
+          workflowModel: "claude-3",
+          editor: { theme: "light" },
+        },
+      });
+
+      const handler = router.stack.find(
+        (layer) => layer.route?.path === "/local" && layer.route?.methods.put
+      )?.route?.stack[0].handle;
+
+      await handler!(req, res, () => {});
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        "/test/project/.sudocode/config.local.json",
+        JSON.stringify(req.body, null, 2) + "\n",
+        "utf-8"
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        workflowModel: "claude-3",
+        editor: { theme: "light" },
+      });
+    });
+  });
+
+  describe("PUT /local/workflowModel", () => {
+    it("should update only workflowModel field", async () => {
+      const { req, res } = createMockReqRes({
+        body: { workflowModel: "gpt-4-turbo" },
+      });
+
+      const existingConfig = {
+        editor: { theme: "dark" },
+        voice: { enabled: true },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(existingConfig));
+
+      const handler = router.stack.find(
+        (layer) => layer.route?.path === "/local/workflowModel" && layer.route?.methods.put
+      )?.route?.stack[0].handle;
+
+      await handler!(req, res, () => {});
+
+      // Verify writeFileSync was called with merged config
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls[0];
+      const writtenConfig = JSON.parse(writeCall[1] as string);
+
+      expect(writtenConfig.editor).toEqual({ theme: "dark" });
+      expect(writtenConfig.voice).toEqual({ enabled: true });
+      expect(writtenConfig.workflowModel).toBe("gpt-4-turbo");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ workflowModel: "gpt-4-turbo" });
+    });
+
+    it("should handle undefined workflowModel", async () => {
+      const { req, res } = createMockReqRes({
+        body: {},
+      });
+
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const handler = router.stack.find(
+        (layer) => layer.route?.path === "/local/workflowModel" && layer.route?.methods.put
+      )?.route?.stack[0].handle;
+
+      await handler!(req, res, () => {});
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ workflowModel: undefined });
+    });
+  });
 });

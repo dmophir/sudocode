@@ -3,11 +3,13 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
 import type { IntegrationsConfig } from "@sudocode-ai/types";
 import type { VoiceSettingsConfig } from "@sudocode-ai/types/voice";
+import type { LocalConfig } from "@sudocode-ai/types";
 import {
   validateIntegrationsConfig,
   testProviderConnection as pluginTestConnection,
   type ValidationResult,
 } from "@sudocode-ai/cli/dist/integrations/index.js";
+import { readLocalConfig, writeLocalConfig, updateLocalConfig } from "../utils/config.js";
 
 /**
  * Helper to read config.json
@@ -135,6 +137,41 @@ export function createConfigRouter(): Router {
     } catch (error) {
       console.error("Failed to test provider:", error);
       res.status(500).json({ error: "Failed to test provider" });
+    }
+  });
+
+  // GET /api/config/local - read local config
+  router.get("/local", (req: Request, res: Response) => {
+    try {
+      const config = readLocalConfig(req.project!.sudocodeDir);
+      res.status(200).json(config);
+    } catch (error) {
+      console.error("Failed to read local config:", error);
+      res.status(500).json({ error: "Failed to read local config" });
+    }
+  });
+
+  // PUT /api/config/local - update local config (full write)
+  router.put("/local", (req: Request, res: Response) => {
+    try {
+      const config = req.body as LocalConfig;
+      writeLocalConfig(req.project!.sudocodeDir, config);
+      res.status(200).json(config);
+    } catch (error) {
+      console.error("Failed to update local config:", error);
+      res.status(500).json({ error: "Failed to update local config" });
+    }
+  });
+
+  // PUT /api/config/local/workflowModel - update only workflowModel field
+  router.put("/local/workflowModel", (req: Request, res: Response) => {
+    try {
+      const { workflowModel } = req.body as { workflowModel?: string };
+      const updated = updateLocalConfig(req.project!.sudocodeDir, { workflowModel });
+      res.status(200).json({ workflowModel: updated.workflowModel });
+    } catch (error) {
+      console.error("Failed to update workflowModel:", error);
+      res.status(500).json({ error: "Failed to update workflowModel" });
     }
   });
 
