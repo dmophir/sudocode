@@ -73,11 +73,6 @@ describe('CreateWorkflowDialog Model Selector', () => {
     'claude-opus-4-20250514',
   ]
 
-  // Mock successful local config response
-  const mockLocalConfig = {
-    workflowModel: 'claude-sonnet-4-20250514',
-  }
-
   it('fetches models from API when dialog opens', async () => {
     // Mock API responses
     mockFetch
@@ -123,7 +118,7 @@ describe('CreateWorkflowDialog Model Selector', () => {
         json: async () => ({}),
       })
 
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation()
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { render } = await import('@testing-library/react')
     render(
