@@ -403,7 +403,7 @@ export function CreateWorkflowDialog({
         if (modelsResponse.ok) {
           const data = await modelsResponse.json()
           if (isMounted && data.models && Array.isArray(data.models)) {
-            const models: ModelOption[] = data
+            const models: ModelOption[] = data.models
               .filter((m: string) => m !== 'default')
               .map((modelId: string) => ({
                 value: modelId,
