@@ -48,6 +48,7 @@ const LOCAL_CONFIG_FIELDS: (keyof LocalConfig)[] = [
   "worktree",
   "editor",
   "voice",
+  "workflowModel",
   "telemetry",
 ];
 

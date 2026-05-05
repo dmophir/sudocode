@@ -386,6 +386,8 @@ export interface LocalConfig {
   editor?: EditorConfig;
   /** Voice configuration (personal preference) */
   voice?: VoiceSettingsConfig;
+  /** Default model for workflow executions (machine-specific) */
+  workflowModel?: string;
   /** Telemetry configuration (machine-specific, gitignored) */
   telemetry?: {
     /** OTLP endpoint URL (e.g., Grafana Cloud OTLP gateway) */
