@@ -213,6 +213,7 @@ export interface WorkflowConfig {
 
   /**
    * Model for the orchestrator agent
+   * If not set, execution service reads from local config workflowModel (for opencode agent)
    */
   orchestratorModel?: string;
 
