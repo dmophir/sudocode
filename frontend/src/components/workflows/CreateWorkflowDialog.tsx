@@ -27,7 +27,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
-import { repositoryApi } from '@/lib/api'
+import { repositoryApi, configApi } from '@/lib/api'
 import { BranchSelector } from '@/components/executions/BranchSelector'
 import { useWorktrees } from '@/hooks/useWorktrees'
 import { useIssues } from '@/hooks/useIssues'
@@ -153,6 +153,42 @@ function savePersistedSettings(settings: PersistedWorkflowSettings): void {
 }
 
 // =============================================================================
+// Model Helper Types and Functions
+// =============================================================================
+
+const DEFAULT_MODEL_VALUE = '__default__'
+
+interface ModelOption {
+  value: string
+  label: string
+}
+
+const DEFAULT_MODEL_OPTION: ModelOption = {
+  value: DEFAULT_MODEL_VALUE,
+  label: 'Default',
+}
+
+/**
+ * Format model ID to friendly name
+ */
+function formatModelName(modelId: string): string {
+  const knownModels: Record<string, string> = {
+    'gpt-4o': 'GPT-4o',
+    'gpt-4o-mini': 'GPT-4o Mini',
+    'claude-sonnet-4-20250514': 'Claude Sonnet 4',
+    'claude-opus-4-20250514': 'Claude Opus 4',
+    'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+    'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
+  }
+
+  if (knownModels[modelId]) {
+    return knownModels[modelId]
+  }
+
+  return modelId.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -275,6 +311,8 @@ export function CreateWorkflowDialog({
   const [availableBranches, setAvailableBranches] = useState<string[]>([])
   const [currentBranch, setCurrentBranch] = useState<string>('')
   const [loadingBranches, setLoadingBranches] = useState(false)
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([DEFAULT_MODEL_OPTION])
+  const [modelsLoading, setModelsLoading] = useState(false)
 
   // Fetch worktrees for branch selector
   const { worktrees } = useWorktrees()
@@ -351,6 +389,58 @@ export function CreateWorkflowDialog({
     }
   }, [open, worktrees])
 
+  // Fetch models and local config on dialog open
+  useEffect(() => {
+    if (!open) return
+
+    let isMounted = true
+
+    const loadModelsAndConfig = async () => {
+      setModelsLoading(true)
+      try {
+        // Fetch available models from API
+        const modelsResponse = await fetch('/api/agents/opencode/models')
+        if (modelsResponse.ok) {
+          const data = await modelsResponse.json()
+          if (isMounted && Array.isArray(data)) {
+            const models: ModelOption[] = data
+              .filter((m: string) => m !== 'default')
+              .map((modelId: string) => ({
+                value: modelId,
+                label: formatModelName(modelId),
+              }))
+            setAvailableModels([DEFAULT_MODEL_OPTION, ...models])
+          }
+        }
+
+        // Fetch local config to get saved workflow model
+        const config = await configApi.getLocal()
+        if (isMounted && config) {
+          const savedModel = config.workflowModel || DEFAULT_MODEL_VALUE
+          setForm((prev) => ({
+            ...prev,
+            orchestratorModel: savedModel,
+          }))
+        }
+      } catch (error) {
+        console.warn('Failed to fetch models or config:', error)
+        if (isMounted) {
+          setAvailableModels([DEFAULT_MODEL_OPTION])
+        }
+      } finally {
+        if (isMounted) {
+          setModelsLoading(false)
+        }
+      }
+    }
+
+    loadModelsAndConfig()
+
+    return () => {
+      isMounted = false
+    }
+  }, [open])
+
   // Update form field
   const updateForm = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -391,12 +481,10 @@ export function CreateWorkflowDialog({
       reuseWorktreePath: form.reuseWorktreePath,
     }
 
-    // Add orchestrator-specific options when using orchestrator engine
-    if (form.engineType === 'orchestrator') {
-      config.autonomyLevel = form.autonomyLevel
-      if (form.orchestratorModel.trim()) {
-        config.orchestratorModel = form.orchestratorModel.trim()
-      }
+    // Add orchestrator-specific options
+    config.autonomyLevel = form.autonomyLevel
+    if (form.orchestratorModel && form.orchestratorModel !== DEFAULT_MODEL_VALUE) {
+      config.orchestratorModel = form.orchestratorModel.trim()
     }
 
     return config
@@ -423,6 +511,15 @@ export function CreateWorkflowDialog({
       reuseWorktreePath: form.reuseWorktreePath,
       executionMode: form.executionMode,
     })
+
+    // Save workflow model to local config if explicitly set
+    if (form.orchestratorModel && form.orchestratorModel !== DEFAULT_MODEL_VALUE) {
+      try {
+        await configApi.updateWorkflowModel(form.orchestratorModel.trim())
+      } catch (error) {
+        console.warn('Failed to save workflow model to local config:', error)
+      }
+    }
 
     await onCreate?.(options)
     onOpenChange(false)
@@ -661,24 +758,48 @@ export function CreateWorkflowDialog({
                 </Select>
               </div>
 
-              {/* Agent Type */}
-              <div className="space-y-2">
-                <Label>Default Agent</Label>
-                <Select value={form.agentType} onValueChange={(v) => updateForm('agentType', v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="claude-code">Claude Code</SelectItem>
-                    <SelectItem value="codex">Codex</SelectItem>
-                    <SelectItem value="copilot">Copilot</SelectItem>
-                    <SelectItem value="cursor">Cursor</SelectItem>
-                    <SelectItem value="opencode">Opencode</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+{/* Agent Type */}
+               <div className="space-y-2">
+                 <Label>Default Agent</Label>
+                 <Select value={form.agentType} onValueChange={(v) => updateForm('agentType', v)}>
+                   <SelectTrigger>
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="claude-code">Claude Code</SelectItem>
+                     <SelectItem value="codex">Codex</SelectItem>
+                     <SelectItem value="copilot">Copilot</SelectItem>
+                     <SelectItem value="cursor">Cursor</SelectItem>
+                     <SelectItem value="opencode">Opencode</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
 
-              {/* Orchestrator-specific options - hidden while orchestrator is disabled */}
+               {/* Model Selector */}
+               <div className="space-y-2">
+                 <Label>Model</Label>
+                 <Select
+                   value={form.orchestratorModel}
+                   onValueChange={(v) => updateForm('orchestratorModel', v)}
+                   disabled={modelsLoading}
+                 >
+                   <SelectTrigger>
+                     <SelectValue placeholder={modelsLoading ? 'Loading models...' : 'Select model...'} />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {availableModels.map((model) => (
+                       <SelectItem key={model.value} value={model.value}>
+                         {model.label}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+                 <p className="text-xs text-muted-foreground">
+                   Model used for workflow step executions
+                 </p>
+               </div>
+
+               {/* Orchestrator-specific options - hidden while orchestrator is disabled */}
 
               {/* Auto-commit */}
               <div className="flex items-center gap-2">
