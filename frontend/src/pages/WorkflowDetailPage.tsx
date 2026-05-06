@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 import {
   ArrowLeft,
@@ -24,7 +25,6 @@ import {
 import { useProjectRoutes } from '@/hooks/useProjectRoutes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   WorkflowDAG,
@@ -36,6 +36,7 @@ import {
 } from '@/components/workflows'
 import { InlineExecutionView } from '@/components/executions/InlineExecutionView'
 import { SyncPreviewDialog } from '@/components/executions/SyncPreviewDialog'
+import { OpencodeConfigForm } from '@/components/executions/OpencodeConfigForm'
 import { IssuePanel } from '@/components/issues/IssuePanel'
 import { useIssues } from '@/hooks/useIssues'
 import {
@@ -50,48 +51,8 @@ import { executionsApi, configApi } from '@/lib/api'
 import { WORKFLOW_STATUS_COLORS, WORKFLOW_STATUS_LABELS } from '@/types/workflow'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 type DetailTab = 'steps' | 'orchestrator'
-
-// =============================================================================
-// Model Helper Types and Functions
-// =============================================================================
-
-const DEFAULT_MODEL_VALUE = '__default__'
-
-interface ModelOption {
-  value: string
-  label: string
-}
-
-const DEFAULT_MODEL_OPTION: ModelOption = {
-  value: DEFAULT_MODEL_VALUE,
-  label: 'Default (Agent Decides)',
-}
-
-function formatModelName(modelId: string): string {
-  const knownModels: Record<string, string> = {
-    'gpt-4o': 'GPT-4o',
-    'gpt-4o-mini': 'GPT-4o Mini',
-    'claude-sonnet-4-20250514': 'Claude Sonnet 4',
-    'claude-opus-4-20250514': 'Claude Opus 4',
-    'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-    'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
-  }
-
-  if (knownModels[modelId]) {
-    return knownModels[modelId]
-  }
-
-  return modelId.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 export default function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -101,9 +62,7 @@ export default function WorkflowDetailPage() {
   const { start, pause, resume, cancel, isStarting, isResuming } = useWorkflowMutations()
   const [showResumeDialog, setShowResumeDialog] = useState(false)
   const progress = useWorkflowProgress(workflow)
-
-  const [availableModels, setAvailableModels] = useState<ModelOption[]>([DEFAULT_MODEL_OPTION])
-  const [modelsLoading, setModelsLoading] = useState(false)
+  const queryClient = useQueryClient()
 
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DetailTab>('steps')
@@ -152,35 +111,6 @@ export default function WorkflowDetailPage() {
     performSync,
     isPreviewing,
   } = useExecutionSync()
-
-  // Fetch models on component mount
-  useEffect(() => {
-    const fetchModels = async () => {
-      setModelsLoading(true)
-      try {
-        const modelsResponse = await fetch('/api/agents/opencode/models')
-        if (modelsResponse.ok) {
-          const data = await modelsResponse.json()
-          if (data.models && Array.isArray(data.models)) {
-            const models: ModelOption[] = data.models
-              .filter((m: string) => m !== 'default')
-              .map((modelId: string) => ({
-                value: modelId,
-                label: formatModelName(modelId),
-              }))
-            setAvailableModels([DEFAULT_MODEL_OPTION, ...models])
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch models:', err)
-        setAvailableModels([DEFAULT_MODEL_OPTION])
-      } finally {
-        setModelsLoading(false)
-      }
-    }
-
-    fetchModels()
-  }, [])
 
   // Check worktree status when workflow loads
   useEffect(() => {
@@ -427,35 +357,26 @@ export default function WorkflowDetailPage() {
                   <span className="font-mono text-xs">{workflow.branchName}</span>
                 </span>
               )}
-              <div className="flex items-center gap-2">
-                <Label htmlFor="model-selector" className="text-xs">
-                  Model
-                </Label>
-                <Select
-                  value={workflow.config?.orchestratorModel || DEFAULT_MODEL_VALUE}
-                  onValueChange={async (value) => {
-                    try {
-                      await configApi.updateWorkflowModel(value === DEFAULT_MODEL_VALUE ? undefined : value)
-                      toast.success(`Model updated to ${value === DEFAULT_MODEL_VALUE ? 'Default (Agent Decides)' : value}`)
-                    } catch (err) {
-                      console.error('Failed to update workflow model:', err)
-                      toast.error('Failed to update model')
-                    }
-                  }}
-                  disabled={modelsLoading || workflow.status === 'running'}
-                >
-                  <SelectTrigger className="h-8 w-48" id="model-selector">
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableModels.map((model) => (
-                      <SelectItem key={model.value} value={model.value}>
-                        {model.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {workflow.config?.defaultAgentType === 'opencode' && (
+                <div className="space-y-2">
+                  <OpencodeConfigForm
+                    config={{ model: workflow.config?.orchestratorModel || undefined }}
+                    onChange={async (config) => {
+                      try {
+                        await configApi.updateWorkflowModel(config.model)
+                        // Trigger refetch of workflow
+                        queryClient.invalidateQueries({ queryKey: ['workflow', id] })
+                      } catch (err) {
+                        console.error('Failed to update workflow model:', err)
+                        toast.error('Failed to update model')
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Model used for workflow step executions
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
