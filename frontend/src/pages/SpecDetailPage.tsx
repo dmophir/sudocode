@@ -202,7 +202,7 @@ export default function SpecDetailPage() {
 
 First review the spec content and the existing codebase. Ask clarifying questions if there are any ambiguities.
 
-Create actionable issues that implement its requirements. Each issue should be specific, well-scoped, and include clear acceptance criteria. Make sure to link each issue back to the spec and capture anly blocking dependencies.
+Create actionable issues that implement its requirements. Each issue should be specific, well-scoped, and include clear acceptance criteria. Each issue has a final acceptance criteria to add feedback to the spec as a very last step. Make sure to link each issue back to the spec and capture any blocking dependencies.
 
 Then create a structured implementation plan:
 
@@ -212,6 +212,7 @@ Then create a structured implementation plan:
 
 2. **Break down into sub-issues** with the root issue as their parent:
    - Each sub-issue should be specific, well-scoped, and include clear acceptance criteria
+   - Each sub-issue has a final acceptance criteria to add feedback to the spec as a very last step.
    - Set \`parent\` to the root issue ID when creating sub-issues
 
 3. **Create blocking relationships** using the \`link\` tool with type="blocks":
