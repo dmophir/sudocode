@@ -5,6 +5,7 @@
  */
 
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ export interface OpencodeConfig {
 interface OpencodeConfigFormProps {
   config: OpencodeConfig
   onChange: (config: OpencodeConfig) => void
+  inline?: boolean
 }
 
 // Special value for "let agent decide" - will be converted to undefined when saving
@@ -60,7 +62,7 @@ interface ModelOption {
   label: string
 }
 
-export function OpencodeConfigForm({ config, onChange }: OpencodeConfigFormProps) {
+export function OpencodeConfigForm({ config, onChange, inline }: OpencodeConfigFormProps) {
   const [models, setModels] = useState<ModelOption[]>([DEFAULT_MODEL_OPTION])
   const [modelsLoading, setModelsLoading] = useState(true)
 
@@ -112,9 +114,9 @@ export function OpencodeConfigForm({ config, onChange }: OpencodeConfigFormProps
   }
 
   return (
-    <div className="space-y-4">
+    <div className={inline ? 'flex items-center gap-4' : 'space-y-4'}>
       {/* Model Selection */}
-      <div className="space-y-2">
+      <div className={inline ? 'flex items-center gap-2' : 'space-y-2'}>
         <Label htmlFor="opencode-model" className="text-xs flex items-center gap-1">
           Model
           {modelsLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
@@ -125,7 +127,7 @@ export function OpencodeConfigForm({ config, onChange }: OpencodeConfigFormProps
             updateConfig({ model: value === DEFAULT_MODEL_VALUE ? undefined : value })
           }
         >
-          <SelectTrigger id="opencode-model" className="h-8 text-xs">
+          <SelectTrigger id="opencode-model" className={cn('h-8 text-xs', inline && 'w-40')}>
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
@@ -139,15 +141,10 @@ export function OpencodeConfigForm({ config, onChange }: OpencodeConfigFormProps
       </div>
 
       {/* Skip Permissions */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="opencode-skip-permissions" className="text-xs font-medium">
-            Skip Permission Prompts
-          </Label>
-          <p className="text-[10px] text-muted-foreground">
-            Auto-approve all tool operations (faster but less safe)
-          </p>
-        </div>
+      <div className={cn('flex items-center gap-2', inline && 'text-xs')}>
+        <Label htmlFor="opencode-skip-permissions" className={inline ? 'text-xs' : 'text-xs font-medium'}>
+          Skip Permission Prompts
+        </Label>
         <Switch
           id="opencode-skip-permissions"
           checked={config.dangerouslySkipPermissions ?? false}

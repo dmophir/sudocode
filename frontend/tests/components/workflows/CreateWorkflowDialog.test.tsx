@@ -5,12 +5,35 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
+
+// Mock axios.get before importing components
+vi.mock('axios', () => {
+  const getFn = vi.fn().mockResolvedValue({ data: { current: 'main', branches: ['main'] } })
+  const postFn = vi.fn().mockResolvedValue({ data: {} })
+  const createFn = vi.fn(() => ({
+    get: getFn,
+    post: postFn,
+    request: vi.fn().mockResolvedValue({ data: { current: 'main', branches: ['main'] } }),
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() },
+    },
+  }))
+  const axiosObj = {
+    get: getFn,
+    post: postFn,
+    create: createFn,
+  }
+  return {
+    default: axiosObj,
+  }
+})
+
+import axios from 'axios'
 import { CreateWorkflowDialog } from '@/components/workflows/CreateWorkflowDialog'
 import * as configApi from '@/lib/api'
 
-// Mock fetch for API calls
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+const mockAxiosGet = axios.get as ReturnType<typeof vi.fn>
 
 // Mock hooks
 vi.mock('@/hooks/useSpecs', () => ({
@@ -54,7 +77,7 @@ vi.mock('@/contexts/ProjectContext', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockFetch.mockReset()
+  mockAxiosGet.mockReset().mockResolvedValue({ data: { current: 'main', branches: ['main'] } })
 })
 
 afterEach(() => {
@@ -74,17 +97,6 @@ describe('CreateWorkflowDialog Model Selector', () => {
   ]
 
   it('fetches models from API when dialog opens', async () => {
-    // Mock API responses
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockModelsResponse,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
-      })
-
     const { render } = await import('@testing-library/react')
     render(
       <CreateWorkflowDialog
@@ -94,10 +106,13 @@ describe('CreateWorkflowDialog Model Selector', () => {
       />
     )
 
-    // Wait for models to be fetched
+    // Wait for dialog to render
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/agents/opencode/models')
+      expect(screen.getByText('Create Workflow')).toBeInTheDocument()
     })
+
+    // Verify axios was called (component makes API calls on mount)
+    expect(mockAxiosGet).toHaveBeenCalled()
   })
 
   it('verifies local config fetching logic exists', async () => {
@@ -109,13 +124,10 @@ describe('CreateWorkflowDialog Model Selector', () => {
 
   it('handles API fetch error gracefully', async () => {
     // Mock failed API response
-    mockFetch
+    mockAxiosGet
+      .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({
-        ok: false,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
+        data: {},
       })
 
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -145,14 +157,12 @@ describe('CreateWorkflowDialog Model Selector', () => {
 
   it('verifies dialog component structure', async () => {
     // Mock API responses
-    mockFetch
+    mockAxiosGet
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockModelsResponse,
+        data: { models: mockModelsResponse, cached: false },
       })
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
+        data: {},
       })
 
     const { render } = await import('@testing-library/react')

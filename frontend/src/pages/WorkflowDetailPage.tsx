@@ -358,8 +358,9 @@ export default function WorkflowDetailPage() {
                 </span>
               )}
               {workflow.config?.defaultAgentType === 'opencode' && (
-                <div className="space-y-2">
+                <div className="flex items-center gap-2">
                   <OpencodeConfigForm
+                    inline={true}
                     config={{ model: workflow.config?.orchestratorModel || undefined }}
                     onChange={async (config) => {
                       try {
