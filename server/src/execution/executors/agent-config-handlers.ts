@@ -120,7 +120,7 @@ export const claudeCodeHandler: AgentConfigHandler = {
   ): ProcessedAgentConfig {
     // Build model environment variable
     const modelEnvVars: Record<string, string> = {};
-    const model = rawConfig.model || rawConfig.agentConfig?.model;
+    const model = rawConfig.agentConfig?.model || rawConfig.model;
     if (model && model !== "default") {
       modelEnvVars.ANTHROPIC_MODEL = model;
     }
@@ -294,7 +294,7 @@ export const codexHandler: AgentConfigHandler = {
   ): ProcessedAgentConfig {
     // Build model environment variable
     const modelEnvVars: Record<string, string> = {};
-    const model = rawConfig.model || rawConfig.agentConfig?.model;
+    const model = rawConfig.agentConfig?.model || rawConfig.model;
     if (model) {
       modelEnvVars.OPENAI_MODEL = model;
     }
@@ -478,7 +478,7 @@ export const opencodeHandler: AgentConfigHandler = {
   ): ProcessedAgentConfig {
     // Build model environment variable
     const configEnvVars: Record<string, string> = {};
-    const model = rawConfig.model || rawConfig.agentConfig?.model;
+    const model = rawConfig.agentConfig?.model || rawConfig.model;
     if (model && model !== "default") {
       configEnvVars.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model });
     }

@@ -97,6 +97,8 @@ export interface ExecutionConfig {
   sessionEndMode?: SessionEndModeConfig;
   /** Extra environment variables to pass to the agent process */
   env?: Record<string, string>;
+  /** Agent-specific configuration (e.g., model, flags, settings) */
+  agentConfig?: Record<string, unknown>;
 }
 
 /**
@@ -231,8 +233,8 @@ export class ExecutionService {
       throw new Error("Prompt cannot be empty");
     }
 
-    // Model fallback: use workflowModel from local config if config.model is not set
-    let finalModel = config.model;
+    // Model fallback: check agentConfig.model, then config.model, then workflowModel from local config
+    let finalModel = (config.agentConfig as { model?: string })?.model || config.model;
     if (!finalModel && agentType === "opencode") {
       try {
         const localConfig = readLocalConfig(this.sudocodeDir);
@@ -249,6 +251,11 @@ export class ExecutionService {
         );
       }
     }
+    console.log("[ExecutionService] Model selection:", {
+      configModel: config.model,
+      agentConfigModel: (config.agentConfig as { model?: string })?.model,
+      finalModel,
+    });
 
     // 2. Build execution config with auto-injected MCP servers
     const mergedConfig = await this.buildExecutionConfig(agentType, config);
